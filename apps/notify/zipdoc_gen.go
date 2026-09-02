@@ -7,14 +7,14 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/notify/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/notify GET /v1/notify/health", zip.Doc{
 		Description: "Reports that the notify send surface is mounted.\n\nIt is a pure liveness probe: it answers 200 whenever this subsystem is mounted\nand checks nothing downstream, so an \"ok\" here says the routes are reachable, not\nthat any provider credential is configured. The body is notifyd's verbatim, so\nprobes and clients that keyed on the standalone service keep working unchanged.",
 		Fields: map[string]string{
 			"notifyHealth.service": "Service names the subsystem answering — always \"notify\".",
 			"notifyHealth.status":  "Status is \"ok\"; the route answers 200 whenever the subsystem is mounted.",
 		},
 	})
-	zip.Describe("POST /notify/send", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/notify POST /notify/send", zip.Doc{
 		Fields: map[string]string{
 			"Send.body":    "the message, sent verbatim",
 			"Send.channel": "\"sms\" or \"email\"",
@@ -23,7 +23,7 @@ func init() {
 			"Send.to":      "phone number for sms, address for email",
 		},
 	})
-	zip.Describe("POST /v1/notify/send", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/notify POST /v1/notify/send", zip.Doc{
 		Description: "Delivers one transactional message by email or SMS through the caller\norg's own provider credential.\n\nThe channel comes from the body — sms or email — and the provider credential is\nread from KMS at orgs/<org>/notify/<service>/<key>, never from the environment.\nThe org is the validated principal's, never a client-supplied value, so a caller\ncan only ever send as their own tenant; an unauthenticated caller gets 401.\nNaming no provider picks the one whose credentials are actually configured\n(Twilio, then Plivo for SMS; Twilio Email, then SMTP for email) and fails closed\nwhen none is. Delivery is synchronous and per recipient: one recipient answers\nthe bare {message_id,status} outcome, several answer the {items:[…]} envelope. A\nterminal provider failure is a 200 whose status is failed with the reason in\nerror, never a transport error. sync=true is REQUIRED — an async dispatch\nanswers 503, because the queue plane that would run it is owned elsewhere. The\nmessage body wins verbatim when present; otherwise template_id (or the event\nname) selects a built-in template rendered against template_vars.",
 		Fields: map[string]string{
 			"notifyDelivery.items":     "Items is the per-recipient outcome, in request order. A single-recipient\nsend answers items[0] BARE — the object itself, not this envelope.",
@@ -41,7 +41,7 @@ func init() {
 			"notifySend.to":            "To is the destination address per recipient — a phone number for sms, an\nemail address for email. Several recipients fan out into one provider call\neach, and the response shape follows the count (see the items field).",
 		},
 	})
-	zip.Describe("POST /v1/notify/send/email", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/notify POST /v1/notify/send/email", zip.Doc{
 		Description: "Delivers one transactional email through the caller org's own\nprovider credential.\n\nIt is the channel-pinned form of the generic send: identical in every respect\nexcept that the channel is fixed to email, OVERRIDING whatever the body names —\nso a body that says sms still goes out as mail. The provider is the org's own\nemail credential from KMS (Twilio Email, then SMTP), resolved for the validated\nprincipal's org; an unauthenticated caller gets 401. Subject is carried on the\nemail channel only.",
 		Fields: map[string]string{
 			"notifyDelivery.items":     "Items is the per-recipient outcome, in request order. A single-recipient\nsend answers items[0] BARE — the object itself, not this envelope.",
@@ -59,7 +59,7 @@ func init() {
 			"notifySend.to":            "To is the destination address per recipient — a phone number for sms, an\nemail address for email. Several recipients fan out into one provider call\neach, and the response shape follows the count (see the items field).",
 		},
 	})
-	zip.Describe("POST /v1/notify/send/sms", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/notify POST /v1/notify/send/sms", zip.Doc{
 		Description: "Delivers one transactional SMS through the caller org's own provider\ncredential.\n\nIt is the channel-pinned form of the generic send: identical in every respect\nexcept that the channel is fixed to sms, OVERRIDING whatever the body names —\nso a body that says email still goes out as a text message. The provider is the\norg's own SMS credential from KMS (Twilio, then Plivo), resolved for the\nvalidated principal's org; an unauthenticated caller gets 401.",
 		Fields: map[string]string{
 			"notifyDelivery.items":     "Items is the per-recipient outcome, in request order. A single-recipient\nsend answers items[0] BARE — the object itself, not this envelope.",

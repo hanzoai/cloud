@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/admin/caps/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin DELETE /v1/admin/caps/:id", zip.Doc{
 		Description: "Removes one cap by id, lifting the ceiling entirely.",
 		Fields: map[string]string{
 			"capIn.id":      "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
@@ -22,7 +22,7 @@ func init() {
 		Example:  json.RawMessage(`{"org":"acme","id":"cap_1"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"ok":true}}`),
 	})
-	zip.Describe("GET /v1/admin/aimetrics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/aimetrics", zip.Doc{
 		Description: "Is the fleet AI board: LLM generations over gen_ai spans (count, cost,\navg/p95 latency, per-model), per-model usage from the live cloud_usage ledger, and\nthe eval plane (traces, scores, score names, runs, and the average-score trend).\n\nEvery signal degrades INDEPENDENTLY — a table that is absent or errors contributes its\nzero value and the read still succeeds. Generation latency is a SEPARATE query from\ngenerations and cost on purpose: a duration/attribute mismatch there must not zero\nthe two numbers that did read.",
 		Fields: map[string]string{
 			"aiMetrics.end":              "End is the moment of this read, RFC 3339 UTC. The window is always right up\nto now; there is no lag to allow for.",
@@ -87,7 +87,7 @@ func init() {
 		Example:  json.RawMessage(`{"range":"7d"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"range":"7d","start":"2026-07-20T00:00:00Z","end":"2026-07-27T00:00:00Z","topModels":[],"o11yAiModels":[],"scoreNames":[],"evalRuns":[],"scoreSeries":[]}}`),
 	})
-	zip.Describe("GET /v1/admin/analytics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/analytics", zip.Doc{
 		Description: "Is the SaaS product-analytics board over the caller's tenant window: active\ncustomers, new and churned, retention, MRR, ARPU, the usage trend and the top\ncustomers by spend — every number folded from the commerce ledger, not sampled.\n\nThe window is the caller's, not the fleet's: a SuperAdmin gets every org, a\nwhite-label admin only their own subtree (core.ScopedOrgs, the one scope predicate).\n\nsources[] carries each upstream's freshness so a partial read is VISIBLE rather than\nsilently low: a ledger that answered for only some orgs marks commerce-ledger degraded\ninstead of publishing an undercount as healthy.",
 		Fields: map[string]string{
 			"SeriesPoint.t":                     "T is the bucket key, and its shape says which interval the series was built at:\n\"2006-01-02\" for a day, the ISO week's Monday in the same form for a week,\n\"2006-01\" for a month. Buckets are enumerated end to end over the window, so the\naxis is continuous and successive points are one interval apart.",
@@ -138,7 +138,7 @@ func init() {
 		Example:  json.RawMessage(`{"range":"30d"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"range":"30d","interval":"day","generatedAt":"2026-07-27T00:00:00Z","sources":[{"name":"iam","ok":true,"rows":2,"lastSync":"2026-07-27T00:00:00Z"}]}}`),
 	})
-	zip.Describe("GET /v1/admin/applications", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/applications", zip.Doc{
 		Description: "Lists IAM applications for one owner org, forwarded VERBATIM from IAM's\napplication list. These are the platform's OIDC clients — the console reads clientId\noff each row.",
 		Fields: map[string]string{
 			"iamPageIn.owner":    "Owner is the org whose rows to read. Defaults to the admin org, which owns the\nplatform's roles and applications.",
@@ -152,7 +152,7 @@ func init() {
 		Example:  json.RawMessage(`{"owner":"admin","p":"1","pageSize":"50"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"total":1}`),
 	})
-	zip.Describe("GET /v1/admin/bases", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/bases", zip.Doc{
 		Description: "Lists the tenant Base instances in the caller's window — a SuperAdmin sees every\ntenant's, anyone else only their own subtree's.\n\nThe scope is enforced TWICE: the upstream is asked for the caller's org, AND every row\nit returns is re-checked against the resolved scope. An upstream that ignored the\nfilter therefore degrades to empty, never to a cross-tenant leak.\n\nThe Base engine is being embedded into cloud; until it lands this proxies\nBASE_ADMIN_URL and, when that is unset, answers 200 with an empty list and msg saying\nso — the honest not-yet state, never fabricated instances.",
 		Fields: map[string]string{
 			"baseInstance.created": "Created is when the instance was created, as the engine reports it.",
@@ -169,7 +169,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"name":"acme-base","org":"acme","url":"https://acme.base.hanzo.ai","status":"running","plan":"pro","region":"nyc3","created":"2026-03-01T00:00:00Z"}],"total":1}`),
 	})
-	zip.Describe("GET /v1/admin/caps", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/caps", zip.Doc{
 		Description: "Reads one org's usage caps: its spend alerts plus the derived period\nspend, over/warn state and reset time.\n\nThese are the SAME rows the customer edits in their own console — a platform override\nand a customer budget are one model, not two.",
 		Fields: map[string]string{
 			"capIn.id":      "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
@@ -182,7 +182,7 @@ func init() {
 		Example:  json.RawMessage(`{"org":"acme"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"id":"cap_1","limitCents":100000,"enforce":true,"periodSpendCents":42000,"over":false,"warn":false,"resetsAt":"2026-08-01T00:00:00Z"}],"total":0}`),
 	})
-	zip.Describe("GET /v1/admin/compute", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/compute", zip.Doc{
 		Description: "Rolls the fleet's compute usage up to one row per (org, app, project, kind):\nhow many distinct machines ran in the window, how many are still active, what they\nbilled, and when each group last emitted an event. The console folds these into its\norg → app → project tree.\n\nA machine counts as ACTIVE when its LATEST lifecycle event is not a terminal one\n(stop/destroy/terminate/delete/off/shutdown/expire and their past tenses) — the same\nfold the console applies, done in the warehouse so the count is over every machine and\nnot just the page.\n\nHonest-empty when the warehouse is not connected or hanzo.compute_usage is not\nprovisioned yet: an empty list, never a fabricated fleet.",
 		Fields: map[string]string{
 			"computeIn.kind":         "Kind narrows to one workload class (bot | machine | cluster | nodepool |\ncontainer | function | …). An OPEN spectrum matched as a plain string, lowercased\nto the warehouse's convention; empty means every kind.",
@@ -204,7 +204,7 @@ func init() {
 		Example:  json.RawMessage(`{"kind":"bot","org":"acme","range":"7d"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","app":"support","project":"default","kind":"bot","machines":4,"active":2,"spendCents":900,"lastTs":"2026-07-26T18:00:00Z"}],"total":1}`),
 	})
-	zip.Describe("GET /v1/admin/flags", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/flags", zip.Doc{
 		Description: "Reads the platform control-plane board: every runtime launch/release\nswitch (waitlist, public signup, subsystem activation, gateway limits, network ids)\nwith its LIVE value and where that value came from — a stored definition or the\ncompiled-in default.",
 		Fields: map[string]string{
 			"BoardView.auditUrl":     "AuditURL is where the change log for those writes lives: /v1/flags/activity.",
@@ -227,7 +227,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"switches":[{"key":"waitlist.chat","category":"launch","label":"Chat waitlist","description":"Gate chat behind the waitlist","value":true,"source":"default"}]}}`),
 	})
-	zip.Describe("GET /v1/admin/me", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/me", zip.Doc{
 		Description: "Answers with the validated operator identity — who the console is signed in as,\nwhich tier they are, and how wide their tenant window is. The fields come from the\nsanitized identity headers the gate just read, so they are authoritative and never\nclient-forgeable; nothing is looked up.",
 		Fields: map[string]string{
 			"adminMe.displayName":  "DisplayName is the label to render. It carries the same value as Name today:\nthis answer is assembled from the sanitized identity headers, which carry no\nseparate display name.",
@@ -243,7 +243,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"owner":"admin","name":"z","email":"z@hanzo.ai","displayName":"z","isSuperAdmin":true,"isWhiteLabel":false}}`),
 	})
-	zip.Describe("GET /v1/admin/money", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/money", zip.Doc{
 		Description: "moneyBoardHandler answers GET /v1/admin/money.",
 		Fields: map[string]string{
 			"MoneyOut.data":                     "Data is the consolidated board. Omitted when the caller was refused.",
@@ -299,7 +299,7 @@ func init() {
 			"moneyRevenue.realizedCents":        "RealizedCents is credit customers have actually CONSUMED, fleet-wide, in US\ncents. This is the revenue figure — MRR beside it is contract value and the\ntwo are never added.",
 		},
 	})
-	zip.Describe("GET /v1/admin/o11y", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/o11y", zip.Doc{
 		Description: "Is the fleet-wide observability board: LLM usage (requests, tokens, cost,\nerrors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in ms,\nerror rate, top services), fleet log volume, and the O11yAI generation rollup — all\naggregated across EVERY tenant, with no org filter applied.\n\nEvery signal degrades INDEPENDENTLY. A table that is absent or errors contributes its\nzero value and the read still succeeds, so the board renders exactly what the\nwarehouse holds rather than failing whole because one of four sources is missing.\nSame when the warehouse is not connected at all: the zero board, never a fabricated\nfleet.",
 		Fields: map[string]string{
 			"o11yGlobal.end":              "End is the moment of this read, RFC 3339 UTC.",
@@ -356,7 +356,7 @@ func init() {
 		Example:  json.RawMessage(`{"range":"7d"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"range":"7d","start":"2026-07-20T00:00:00Z","end":"2026-07-27T00:00:00Z","totals":{"requests":10420,"tokens":8100000,"costCents":41200,"errors":37},"series":[],"logSeries":[],"topOrgs":[],"topModels":[],"topServices":[],"llm":{"generations":0,"costUsd":0}}}`),
 	})
-	zip.Describe("GET /v1/admin/orgs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/orgs", zip.Doc{
 		Description: "Lists the tenant directory one row per org, sorted by slug: member count and the\norg's month-to-date spend and credit balance, read live from IAM and commerce.\n\nThe rows are the caller's tenant window, not the fleet: a SuperAdmin gets every org, a\nwhite-label admin only their own subtree. A per-org read that fails degrades THAT row\nto an honest zero — this panel carries no sources[] channel to report freshness on, so\nthe alternative would be a fleet total that silently reads healthy.",
 		Fields: map[string]string{
 			"orgRow.created":      "Created is when the org was created, as IAM records it (RFC 3339).",
@@ -376,7 +376,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","display":"Acme","users":7,"products":0,"spendCents":12500,"creditsCents":5000,"tokens":0,"created":"2026-01-04T00:00:00Z"}],"total":1}`),
 	})
-	zip.Describe("GET /v1/admin/overview", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/overview", zip.Doc{
 		Description: "Is the Platform Overview tiles: how many orgs and users are in the caller's\ntenant window, the fleet workload counts, and month-to-date spend and credits.\n\nIt ALWAYS answers 200 — a tile board that fails as a whole because one upstream is\ndown is useless. Instead every upstream reports itself in sources[]: ok, degraded, or\nnot-configured. A commerce read that failed for ANY org marks that source degraded,\nbecause the spend/credits totals are then an undercount and must not read healthy.\n\nThe AI tiles — 30-day spend and tokens — come from the AI ledger (ledger.go), the\nplane that owns \"what was served\". They used to come from the money plane with the\ntoken counter hardcoded to zero, so the board read $0.00 and 0 tokens over a month in\nwhich the fleet served fifteen thousand requests. Credits still come from commerce,\nwhich owns the wallet.",
 		Fields: map[string]string{
 			"SourceStatus.at":             "At is when the aggregator ran, RFC3339. It is the READ's timestamp, shared by every\nrow in the list — not a per-source last-success time, so it never implies a stale\nsource is fresh.",
@@ -400,7 +400,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"orgs":2,"users":14,"products":31,"activeProducts":29,"drift":1,"spendCents30d":250000,"tokens30d":0,"creditsCents":10000,"lastSync":"2026-07-27T00:00:00Z","sources":[{"name":"iam","ok":true,"rows":2,"lastSync":"2026-07-27T00:00:00Z"}]}}`),
 	})
-	zip.Describe("GET /v1/admin/products", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/products", zip.Doc{
 		Description: "Lists the fleet workload registry: every operator App CR across the platform\nnamespaces with its declared vs running image tag, reconciled health/phase and drift\nverdict. Optionally narrowed by kind, tier or env, each an exact match.\n\nThe rows are the SAME observation /v1/platform/fleet renders — read through the in-process\nplatform client, not a second k8s client — so the two boards can never disagree about what\nthe fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,\nnever a fabricated row.",
 		Fields: map[string]string{
 			"productRow.cluster":       "hanzo-k8s",
@@ -430,7 +430,7 @@ func init() {
 		Example:  json.RawMessage(`{"tier":"data","env":"main"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"name":"sql","kind":"sql","tier":"data","org":"hanzoai","cluster":"hanzo-k8s","env":"main","namespace":"hanzo","repo":"hanzoai/sql","phase":"Running","declaredTag":"v1.4.2","runningTag":"v1.4.2","latestTag":"","health":"green","drift":false,"driftSeverity":"ok","updated":""}],"total":1}`),
 	})
-	zip.Describe("GET /v1/admin/promos", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/promos", zip.Doc{
 		Description: "Reads the current platform plan promo — the singleton discount offer, e.g.\nthe 50%-off launch promo. Commerce stores it in the reserved platform namespace, so\nthe org sent with the read is the admin org and the service token is what passes\ncommerce's own platform-admin gate.",
 		Fields: map[string]string{
 			"rawOut.data":   "Data is the upstream's payload verbatim, left undescribed for the same reason\nas iamRowsOut: re-describing someone else's schema here would be a second copy\nof it, free to drift.",
@@ -440,7 +440,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"percentOff":50,"start":"2026-07-01T00:00:00Z","end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"total":0}`),
 	})
-	zip.Describe("GET /v1/admin/roles", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/roles", zip.Doc{
 		Description: "Lists IAM roles for one owner org, forwarded VERBATIM from IAM's role list.",
 		Fields: map[string]string{
 			"iamPageIn.owner":    "Owner is the org whose rows to read. Defaults to the admin org, which owns the\nplatform's roles and applications.",
@@ -454,7 +454,7 @@ func init() {
 		Example:  json.RawMessage(`{"owner":"admin","p":"1","pageSize":"50"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"total":1}`),
 	})
-	zip.Describe("GET /v1/admin/services", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/services", zip.Doc{
 		Description: "Reads the launch board: every hosted service in the registry with its LIVE\nwaitlist mode, evaluated through the flag engine. This is the \"remove the waitlist one\nservice at a time\" view.",
 		Fields: map[string]string{
 			"ServiceRow.createdAt":     "CreatedAt is when the service was first registered, Unix seconds. A row from\nthe deployment's brand seed carries the boot that seeded it.",
@@ -472,7 +472,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"services":[{"service":"chat","displayName":"Chat","description":"","hosts":["chat.hanzo.ai"],"waitlistMode":true}]}}`),
 	})
-	zip.Describe("GET /v1/admin/subsystems", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/subsystems", zip.Doc{
 		Description: "subsystems answers GET /v1/admin/subsystems. ?range=24h|7d|30d bounds the telemetry\nwindow (default 30d) — the same enum, and the same helpers, as the o11y board.",
 		Fields: map[string]string{
 			"SourceStatus.at":               "At is when the aggregator ran, RFC3339. It is the READ's timestamp, shared by every\nrow in the list — not a per-source last-success time, so it never implies a stale\nsource is fresh.",
@@ -513,7 +513,7 @@ func init() {
 			"subsystemTotals.subsystems":    "Subsystems is how many are mounted in this binary — the row count.",
 		},
 	})
-	zip.Describe("GET /v1/admin/usage", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/usage", zip.Doc{
 		Description: "Returns the trailing 30 days of AI usage: one org's when org names one, else the\nwhole fleet's — the spend, the tokens and the requests, the daily curve behind them,\nand the split by model.\n\nIt reads the AI ledger (ledger.go), which is the plane that owns this question. It used\nto ask the commerce billing API instead, once per org, and answer with a hardcoded\nempty series, zero tokens and zero requests, on the reasoning that a trend and a split\nwere \"not derivable from the commerce billing API\". They are not — but the question was\nnever commerce's. hanzo.cloud_usage carries a row per served request, so all three fall\nout of the same window the totals do.",
 		Fields: map[string]string{
 			"usageByModel.model":      "Model is the model id the ledger recorded. Rows the ledger left unattributed\nare dropped rather than rendered as a nameless slice.",
@@ -537,7 +537,7 @@ func init() {
 		Example:  json.RawMessage(`{"org":"acme"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"totals":{"spendCents":12500,"tokens":170000,"requests":42},"series":[{"date":"2026-08-13","spendCents":900,"tokens":12000,"requests":3}],"byModel":[{"model":"claude-opus-4-8","spendCents":9000,"tokens":80000}]}}`),
 	})
-	zip.Describe("GET /v1/admin/users", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/users", zip.Doc{
 		Description: "Lists the user directory across the caller's tenant window, one page at a time.\ntotal is IAM's REAL total, so the console can page through it.\n\nA SuperAdmin may aim the read at one tenant with org; a white-label admin cannot — for\nthem the owner is hard-pinned to their own org and org is ignored, which is what keeps\nthe directory from becoming a cross-tenant read.",
 		Fields: map[string]string{
 			"operatorUser.created":      "Created is when the account was created, as IAM records it (RFC 3339).",
@@ -562,7 +562,7 @@ func init() {
 		Example:  json.RawMessage(`{"org":"acme","q":"ada","p":"1","pageSize":"50"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"acme","name":"ada","email":"ada@acme.com","displayName":"Ada","isAdmin":true,"isSuperAdmin":false,"tag":"","created":"2026-01-04T00:00:00Z","lastSignin":"2026-07-01T09:12:00Z","forbidden":false}],"total":222}`),
 	})
-	zip.Describe("GET /v1/admin/volumes", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/volumes", zip.Doc{
 		Description: "Returns the realtime block-storage board: the DigitalOcean volume fleet\n(count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured. The datastore\ncard is the one real fill here, and it is the number to scale on.\n\nThe two sources degrade independently — a DO outage still returns the datastore fill,\nand a disconnected datastore still returns the DO fleet. What a DO outage must NOT do\nis pass for an account with no volumes, so the fleet it could not read is marked\nincomplete rather than reported as a count of zero at a cost of zero.",
 		Fields: map[string]string{
 			"SourceStatus.at":                  "At is when the aggregator ran, RFC3339. It is the READ's timestamp, shared by every\nrow in the list — not a per-source last-success time, so it never implies a stale\nsource is fresh.",
@@ -604,7 +604,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"complete":true,"incompleteReason":"","sources":[{"name":"do.volumes","ok":true,"rows":2,"error":"","at":"2026-08-19T00:00:00Z"}],"fleet":{"count":2,"totalGiB":300,"usedGiB":null,"pct":null,"monthlyUsd":30},"datastore":{"name":"default","mount":"/var/lib/datastore","sizeGiB":200,"usedGiB":81.4,"pct":40.7},"volumes":[{"id":"v1","name":"datastore-data","region":"nyc3","sizeGiB":200,"usedGiB":null,"pct":null,"attached":true,"service":""}],"alerts":[]}}`),
 	})
-	zip.Describe("GET /v1/admin/waitlist", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/waitlist", zip.Doc{
 		Description: "Reads one waitlist's leaderboard from the Hanzo waitlist engine — position,\npoints and referral standing per entry — proxied server-authed with the engine secret,\nnever a client credential.\n\nThe engine's payload is forwarded VERBATIM as data; the console normalizes it. When\nthe engine is not configured on this deployment the read still succeeds, with an empty\nobject and a msg saying so, so the panel shows an honest not-wired state instead of an\nerror the operator would chase.",
 		Fields: map[string]string{
 			"rawOut.data":         "Data is the upstream's payload verbatim, left undescribed for the same reason\nas iamRowsOut: re-describing someone else's schema here would be a second copy\nof it, free to drift.",
@@ -618,7 +618,7 @@ func init() {
 		Example:  json.RawMessage(`{"waitlist":"chat","page":"1","pageSize":"50"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"entries":[{"email":"ada@acme.com","points":120,"position":7}],"total":842}}`),
 	})
-	zip.Describe("PATCH /v1/admin/caps/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin PATCH /v1/admin/caps/:id", zip.Doc{
 		Description: "Edits one cap by id — raise or lower the ceiling, flip enforcement. The\nbody is commerce's spend-alert patch contract, forwarded byte-for-byte.",
 		Fields: map[string]string{
 			"capIn.id":      "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
@@ -631,7 +631,7 @@ func init() {
 		Example:  json.RawMessage(`{"org":"acme","limitCents":250000,"enforce":false}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"id":"cap_1","limitCents":250000,"enforce":false},"total":0}`),
 	})
-	zip.Describe("POST /v1/admin/caps", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin POST /v1/admin/caps", zip.Doc{
 		Description: "Sets a usage cap on one org — a platform override of a customer budget,\nwritten to the customer's own spend-alert rows. The body is commerce's spend-alert\ncontract, forwarded byte-for-byte.",
 		Fields: map[string]string{
 			"capIn.id":      "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
@@ -644,7 +644,7 @@ func init() {
 		Example:  json.RawMessage(`{"org":"acme","limitCents":100000,"enforce":true}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"id":"cap_1","limitCents":100000,"enforce":true},"total":0}`),
 	})
-	zip.Describe("POST /v1/admin/services", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin POST /v1/admin/services", zip.Doc{
 		Description: "Onboards a hosted service, or edits one, so a new host comes under the\nlaunch gate WITHOUT a redeploy. Re-registering an existing service PRESERVES its live\nswitch — editing the hosts of a service that is already open must not silently close\nit again.",
 		Fields: map[string]string{
 			"ServiceInput.description":  "Description is one line saying what the service is, for the board.",
@@ -668,7 +668,7 @@ func init() {
 		Example:  json.RawMessage(`{"service":"chat","displayName":"Chat","description":"Hanzo Chat","hosts":["chat.hanzo.ai"],"waitlistMode":true}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"service":{"service":"chat","displayName":"Chat","description":"Hanzo Chat","hosts":["chat.hanzo.ai"],"waitlistMode":true}}}`),
 	})
-	zip.Describe("POST /v1/admin/services/:service/mode", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin POST /v1/admin/services/:service/mode", zip.Doc{
 		Description: "Flips ONE service's waitlist switch — the launch lever. Hot: it takes\neffect on this pod immediately and on peers within one evaluation TTL, with no\nredeploy. An unknown service is a 404, not a silent create; onboarding goes through\nupsertService.",
 		Fields: map[string]string{
 			"ServiceRow.createdAt":       "CreatedAt is when the service was first registered, Unix seconds. A row from\nthe deployment's brand seed carries the boot that seeded it.",
@@ -689,7 +689,7 @@ func init() {
 		Example:  json.RawMessage(`{"waitlistMode":false}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"service":{"service":"chat","displayName":"Chat","description":"Hanzo Chat","hosts":["chat.hanzo.ai"],"waitlistMode":false}}}`),
 	})
-	zip.Describe("POST /v1/admin/sync", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin POST /v1/admin/sync", zip.Doc{
 		Description: "Answers the operator's \"Sync now\" button. There is nothing to kick: admin\naggregates LIVE on every read, so the button is just a re-read. It acknowledges\nhonestly with started:true rather than pretending a batch job was queued.",
 		Fields: map[string]string{
 			"syncOut.data":        "Data is the acknowledgement. Null when the caller was refused.",
@@ -699,7 +699,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"started":true}}`),
 	})
-	zip.Describe("POST /v1/admin/waitlist/boost", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin POST /v1/admin/waitlist/boost", zip.Doc{
 		Description: "Grants a user waitlist points, moving them up toward the access cutoff.\nThis is the access lever: the cutoff itself does not move, the person does.\n\nIt funnels through the engine's verified grant client (POST /v1/waitlist/award with\nsource=\"grant\" — the ONE path that honours an explicit points amount) and writes a\ntamper-evident audit row either way, so a FAILED grant is recorded too. The reason\nfield goes only to that row.",
 		Fields: map[string]string{
 			"rawOut.data":                   "Data is the upstream's payload verbatim, left undescribed for the same reason\nas iamRowsOut: re-describing someone else's schema here would be a second copy\nof it, free to drift.",
@@ -715,7 +715,7 @@ func init() {
 		Example:  json.RawMessage(`{"waitlist":"chat","email":"ada@acme.com","points":50,"reason":"design partner"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"email":"ada@acme.com","points":170,"position":3}}`),
 	})
-	zip.Describe("PUT /v1/admin/flags/:key", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin PUT /v1/admin/flags/:key", zip.Doc{
 		Description: "Stores or overwrites ONE platform switch's definition and answers with the\nwhole board as it now stands. The flip is hot: this pod applies it immediately and\npeers converge within one evaluation TTL (15s by default), with no redeploy.\n\nThe body reaches the flag engine BYTE-FOR-BYTE — it is the engine's definition\nformat, not this layer's, so a field the engine understands and admin does not must\nstill arrive intact. setFlagIn names the two fields that matter for documentation; it\nis not a filter.\n\nThe write is recorded in the store's activity log against the caller's email.",
 		Fields: map[string]string{
 			"BoardView.auditUrl":     "AuditURL is where the change log for those writes lives: /v1/flags/activity.",
@@ -742,7 +742,7 @@ func init() {
 		Example:  json.RawMessage(`{"active":true,"filters":{"groups":[{"properties":[],"rollout_percentage":100}]}}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"switches":[{"key":"waitlist.chat","category":"launch","label":"Chat waitlist","description":"Gate chat behind the waitlist","value":true,"source":"stored"}]}}`),
 	})
-	zip.Describe("PUT /v1/admin/promos", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin PUT /v1/admin/promos", zip.Doc{
 		Description: "Upserts the platform plan promo — the ONE place the offer is configured.\n\nThe body is commerce's own promo contract and is forwarded BYTE-FOR-BYTE, so no field\ncommerce accepts is dropped in transit. promoIn names its documented fields.",
 		Fields: map[string]string{
 			"promoIn.active":     "Active is the master switch: false parks the offer without deleting it.",

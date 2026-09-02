@@ -7,19 +7,19 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/social/accounts/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social DELETE /v1/social/accounts/:id", zip.Doc{
 		Description: "Removes one connected account from the org and answers 204 with no\nbody; an id that is not there is 404.\n\nIt removes the account record only. Posts that already published through it keep\ntheir published state and their recorded external ids — this does not retract\nanything from the network.",
 		Fields: map[string]string{
 			"rowRef.id": "ID is the account or post to act on, taken from the path.",
 		},
 	})
-	zip.Describe("DELETE /v1/social/posts/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social DELETE /v1/social/posts/:id", zip.Doc{
 		Description: "Removes one post from the org and answers 204 with no body; an id that\nis not there is 404.\n\nIt deletes the record here only. A post that has already published is not\nretracted from the network by deleting it.",
 		Fields: map[string]string{
 			"rowRef.id": "ID is the account or post to act on, taken from the path.",
 		},
 	})
-	zip.Describe("GET /v1/social/accounts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social GET /v1/social/accounts", zip.Doc{
 		Description: "Returns the org's connected accounts — each one's id, network,\nhandle, status and timestamps, most-recently-updated first.\n\nAn account's provider access token is NEVER included in any response on this\nsurface. Only the publisher reads it.",
 		Fields: map[string]string{
 			"accountFilter.limit":     "Limit bounds the page, defaulting to 200 and capped at 1000. It is a string\nrather than an integer on purpose: the route parses it with a leading trim\nand falls back to the default on anything it cannot read, so `?limit=%2050`\nis a page of fifty today. An integer field would refuse the space and read\nan unparseable value as zero, which is a different page.",
@@ -33,7 +33,7 @@ func init() {
 			"socialAccounts.data":     "Data is the accounts, most-recently-updated first, bounded by the limit.",
 		},
 	})
-	zip.Describe("GET /v1/social/accounts/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social GET /v1/social/accounts/:id", zip.Doc{
 		Description: "Returns one of the org's connected accounts by id — its network,\nhandle, status and timestamps — or 404. The provider access token is not part of\nthe response.",
 		Fields: map[string]string{
 			"rowRef.id":               "ID is the account or post to act on, taken from the path.",
@@ -45,7 +45,7 @@ func init() {
 			"socialAccount.updatedAt": "UpdatedAt is when the account row last changed, as a unix timestamp in\nseconds. The listing is ordered by it, newest first.",
 		},
 	})
-	zip.Describe("GET /v1/social/posts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social GET /v1/social/posts", zip.Doc{
 		Description: "Returns the org's posts — content, channel, status, scheduled time,\nmedia and timestamps — most-recently-updated first.",
 		Fields: map[string]string{
 			"postFilter.limit":      "Limit bounds the page, defaulting to 200 and capped at 1000. A string for\nthe same reason accountFilter.Limit is.",
@@ -64,7 +64,7 @@ func init() {
 			"socialPosts.data":      "Data is the posts, most-recently-updated first, bounded by the limit.",
 		},
 	})
-	zip.Describe("GET /v1/social/posts/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social GET /v1/social/posts/:id", zip.Doc{
 		Description: "Returns one of the org's posts by id, with its current status, scheduled\ntime, media and — once it has published — the account and external id it published\nunder. 404 when there is no such post for this org.",
 		Fields: map[string]string{
 			"rowRef.id":             "ID is the account or post to act on, taken from the path.",
@@ -81,7 +81,7 @@ func init() {
 			"socialPost.updatedAt":  "UpdatedAt is when the post row last changed, as a unix timestamp in seconds.\nThe listing is ordered by it, newest first.",
 		},
 	})
-	zip.Describe("GET /v1/social/providers", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social GET /v1/social/providers", zip.Doc{
 		Description: "Reports each supported network's publish-readiness: whether this\ndeployment holds the OAuth application credentials for it and, when it does not,\nexactly which environment variables are missing.\n\nThis is a live read of the deployment's own configuration, not a static list of\nnetworks — it answers \"can I connect this today\", which is what a connect\naffordance and a pre-cutover checklist both need. It says nothing about whether\nthe caller has connected an account; that is the accounts listing.",
 		Fields: map[string]string{
 			"socialProvider.credentialsConfigured": "CredentialsConfigured is whether this deployment holds every OAuth\napplication credential the network needs. It is a statement about the\nDEPLOYMENT, not about the caller: a connected account also needs its own\naccess token before a post can go out.",
@@ -90,7 +90,7 @@ func init() {
 			"socialProviders.data":                 "Data is one row per supported network, in the product's fixed order: x,\nfacebook, instagram, linkedin, tiktok, youtube, threads.",
 		},
 	})
-	zip.Describe("GET /v1/social/summary", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social GET /v1/social/summary", zip.Doc{
 		Description: "Returns four counts for the caller's org: total posts, how many are\nscheduled, how many have published, and how many accounts are connected. It is\nthe dashboard roll-up, computed over the org's own rows in one read.",
 		Fields: map[string]string{
 			"socialSummary.accounts":  "Accounts is how many accounts the org has connected, in any status.",
@@ -99,7 +99,7 @@ func init() {
 			"socialSummary.scheduled": "Scheduled is how many of them are waiting for their scheduled time.",
 		},
 	})
-	zip.Describe("POST /v1/social/accounts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social POST /v1/social/accounts", zip.Doc{
 		Description: "Records a social account for the org and answers 201 with the\nstored row, including the generated id later calls address it by.",
 		Fields: map[string]string{
 			"socialAccount.createdAt":    "CreatedAt is when the account was connected, as a unix timestamp in seconds.",
@@ -113,7 +113,7 @@ func init() {
 			"socialAccountBody.status":   "Status is the connection lifecycle: connected, disconnected or error.\nOmitted means connected. Only a connected account is a publish target.",
 		},
 	})
-	zip.Describe("POST /v1/social/posts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social POST /v1/social/posts", zip.Doc{
 		Description: "Stores a post for the org and answers 201 with the stored row.\n\nA post created as scheduled for a time that has already passed is published\nIMMEDIATELY, and the row returned carries that outcome — this is the one behaviour\na reader would otherwise miss. A future-scheduled post is left for the scheduler,\nand a draft is left alone. Publishing never fails the creation: the post is stored\neither way, and a publish that could not run leaves the row for the scheduler to\nretry.",
 		Fields: map[string]string{
 			"socialPost.accountId":      "AccountID / ExternalID / Error are server-managed publish results, set only by\nthe publish path (never by a client update): the account a post was published\nthrough, the provider's returned external post id (for reconciliation), and the\nlast failure reason. Empty until a publish attempt lands.\nAccountID is the connected account the post went out through. Absent until\na publish succeeds.",
@@ -134,7 +134,7 @@ func init() {
 			"socialPostBody.status":     "Status is the post's lifecycle state: draft, scheduled, published or failed.\nOmitted means draft. The transient publishing claim is never settable here —\naccepting it from a request would let a caller wedge or replay the guard that\nstops two publishers double-posting the same row.",
 		},
 	})
-	zip.Describe("POST /v1/social/posts/:id/publish", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social POST /v1/social/posts/:id/publish", zip.Doc{
 		Description: "Publishes the post immediately to the connected accounts on its channel\nand answers with the updated row, carrying the account and external id it\npublished under.\n\nIt is IDEMPOTENT: a post that has already published, or that another caller is\npublishing right now, comes back unchanged rather than being posted twice. That\nclaim is taken before any network call, which is what makes a double submit safe.\n\nThe two failure shapes differ on purpose. Having no connected account for the\nchannel is the caller's to fix, so it is recorded ON the post as failed with the\nreason and answers normally. A deployment that lacks the network's own credentials\ncannot publish for anyone, so that is a 503 naming exactly what is missing.",
 		Fields: map[string]string{
 			"rowRef.id":             "ID is the account or post to act on, taken from the path.",
@@ -151,7 +151,7 @@ func init() {
 			"socialPost.updatedAt":  "UpdatedAt is when the post row last changed, as a unix timestamp in seconds.\nThe listing is ordered by it, newest first.",
 		},
 	})
-	zip.Describe("PUT /v1/social/accounts/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social PUT /v1/social/accounts/:id", zip.Doc{
 		Description: "Replaces the account's network, handle and status with what the\nbody carries, and answers with the stored row.\n\nThis is a REPLACEMENT, not a merge, which is the rule most easily got wrong: a\nfield the body omits is written as its default, so leaving out the handle blanks\nit and leaving out the status resets it to connected. Send the whole record. The\nsame vocabularies as create apply, and an unknown network or status is refused\nrather than coerced.",
 		Fields: map[string]string{
 			"socialAccount.createdAt":     "CreatedAt is when the account was connected, as a unix timestamp in seconds.",
@@ -165,7 +165,7 @@ func init() {
 			"socialAccountWrite.status":   "Status is the connection lifecycle: connected, disconnected or error.\nOmitting it RESETS the account to connected.",
 		},
 	})
-	zip.Describe("PUT /v1/social/posts/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/social PUT /v1/social/posts/:id", zip.Doc{
 		Description: "Replaces the post's content, channel, status, scheduled time and media\nwith what the body carries, and answers with the stored row.\n\nA REPLACEMENT, not a merge: an omitted field is written as its default, so\nomitting media clears it and omitting the status resets the post to draft.\n`content` is required on every update. Unlike create, this never triggers a\npublish — moving a post's scheduled time into the past here leaves it for the\nscheduler; publish now is its own operation.",
 		Fields: map[string]string{
 			"socialPost.accountId":       "AccountID / ExternalID / Error are server-managed publish results, set only by\nthe publish path (never by a client update): the account a post was published\nthrough, the provider's returned external post id (for reconciliation), and the\nlast failure reason. Empty until a publish attempt lands.\nAccountID is the connected account the post went out through. Absent until\na publish succeeds.",

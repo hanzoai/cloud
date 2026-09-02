@@ -16070,6 +16070,7 @@
           },
           "tools": {
             "description": "Tools is how many tools THIS PROCESS's MCP server carries: its own typed-op\nregistry, projected. It is the only number a subsystem can state honestly —\nwhat the FLEET's server carries is a question only the host can ask, and it\nasks it by asking every subsystem (POST /v1/mcp, tools/list).",
+            "format": "int64",
             "type": "integer"
           }
         },

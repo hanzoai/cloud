@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/sbom/*", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sbom GET /v1/sbom/*", zip.Doc{
 		Description: "Resolve returns everything inside one container image, addressed by its digest\nor by its image ref.\n\nEach component comes back with its name, version, type, package URL and license.\n\nThis read is GLOBAL, not tenant-scoped, and deliberately so: a bill of materials\nbelongs to a content-addressed digest rather than to an org, so every caller\ndeploying the same image resolves the same components, and nothing tenant-owned\nis exposed by it. It still requires an attested caller — global is not public —\nand answers 403 without one. Ingest is the closed half of the pair.\n\nA miss is not the end of the lookup. The registry is the source of truth, so an\nunmaterialized ref is pulled from the SBOM attached to that image, persisted, and\nanswered from the store — the first read of a freshly built image pays for the\npull, later ones do not. The pull reads OUR registries and nothing else, which is\nwhat makes one shared answer trustworthy for every tenant: an attached document\nis whoever controls that repository speaking, so a ref outside them answers 404\nrather than a stranger's account of what is in their image. A bare digest with no\nrepository is not pullable and answers an honest 404, as does a ref with no\nattached document. Repeated ingests collapse to the latest, components come back\nordered by type then name, and a result over 5000 components is capped with\n`truncated` set. When the datastore is not connected the answer is 503 rather\nthan a fabricated empty image.",
 		Fields: map[string]string{
 			"SbomComponent.license":   "License is the FIRST license fact found for the component: its SPDX id, else\nits name, else the expression. Empty when the document declares none.",
@@ -28,7 +28,7 @@ func init() {
 			"SbomView.truncated":      "Truncated is true when the image has MORE components than the cap returns.",
 		},
 	})
-	zip.Describe("GET /v1/sbom/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sbom GET /v1/sbom/health", zip.Doc{
 		Description: "Health is a pure liveness probe: the service is up; datastore reflects whether\nthe datastore store is connected. Not JWT-gated, always 200 (a disconnected\ndatastore is degraded-but-alive; the data endpoints report that as 503).",
 		Fields: map[string]string{
 			"SbomHealth.datastore": "Datastore reports whether the shared datastore connection this subsystem reads\nand writes through is established. False means the data endpoints answer 503.",
@@ -37,7 +37,7 @@ func init() {
 			"SbomHealth.table":     "Table is the fully-qualified datastore table the components live in.",
 		},
 	})
-	zip.Describe("POST /v1/sbom", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sbom POST /v1/sbom", zip.Doc{
 		Description: "Ingest persists a CycloneDX SBOM's components keyed by image digest. Gated to a\nvalidated SuperAdmin (owner == AdminOrg) — the canonical cloud super-admin\ncheck, which the build fleet / CI carries. Re-ingest is idempotent: rows share\nthe (digest, name, version, purl) ORDER BY, so ReplacingMergeTree keeps the\nlatest by ingested_at (and resolve reads FINAL).",
 		Fields: map[string]string{
 			"SbomIngest.document":         "Document is the raw CycloneDX bill of materials, any JSON. Its components[]\nare flattened and persisted; nothing else is read or stored.",

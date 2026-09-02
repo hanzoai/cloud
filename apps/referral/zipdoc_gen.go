@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/referral/bonuses", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/referral GET /v1/admin/referral/bonuses", zip.Doc{
 		Description: "Returns every referral edge in the directory with a fleet summary.\n\nSuperAdmin only, fail-closed. This is the ATTRIBUTION directory — who referred\nwhom and whether that referee became a customer. It carries no amounts because\nthis package issues none. The cross-tenant referral ANALYTICS board (top\nreferrers, conversion) is a different surface, GET /v1/admin/affiliate/referrals,\nowned by the affiliates subsystem over the shared attribution spine.",
 		Fields: map[string]string{
 			"adminBonusDirectory.referrals": "Referrals is every referral in the directory, both orgs exposed.",
@@ -30,7 +30,7 @@ func init() {
 			"adminSummary.total":            "Total is every referral in the directory.",
 		},
 	})
-	zip.Describe("GET /v1/referral", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/referral GET /v1/referral", zip.Doc{
 		Description: "Returns the caller's referral code, share link and the referrals they have made.\n\nThe code is a stable, deterministic function of the org, so the link in this\nresponse is the same one every time. Each row carries the referee and the status\nof that attribution.\n\nIT IS A PURE READ. It advances no referral, grants nothing and deposits nothing\n— a GET reports state, it never changes it. Qualification is the admin sweep's\njob (POST /v1/admin/referral/sweep). The one row this handler can write is the\ncaller's OWN code-directory entry (EnsureCode), which materialises a value\nderiveCode already computes deterministically from the org id so the code has an\nO(1) reverse lookup; it carries no money, no referral state and no other tenant.",
 		Fields: map[string]string{
 			"myReferralView.createdAt":   "CreatedAt is when the referral was recorded, as a Unix timestamp.",
@@ -47,7 +47,7 @@ func init() {
 			"statusCounts.total":         "Total is every referral this org has made.",
 		},
 	})
-	zip.Describe("POST /v1/admin/referral/sweep", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/referral POST /v1/admin/referral/sweep", zip.Doc{
 		Description: "Qualify-checks every pending referral and advances the ones that now qualify.\n\nSuperAdmin only, fail-closed. This is the cron path, and the ONLY path that\nadvances a referral: a referee QUALIFIES once they have made metered spend — the\nhonest signal that they actually used the product rather than merely signing up.\n\nQualifying moves NO money. It records that an attribution became a real customer;\nwhat is owed for that is an affiliate payable in commerce, settled by wire or to a\nconnected wallet. One pass is bounded, so a large backlog drains over several runs\ninstead of wedging one request, and the latch makes the transition at-most-once\nunder a concurrent sweep.\n\nIt reads nothing from the caller — the counters it returns are the whole result.",
 		Fields: map[string]string{
 			"sweepEnvelope.data":    "Data is the sweep's counters.",
@@ -57,7 +57,7 @@ func init() {
 			"sweepResult.swept":     "Swept is how many pending referrals were checked.",
 		},
 	})
-	zip.Describe("POST /v1/referral/claim", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/referral POST /v1/referral/claim", zip.Doc{
 		Description: "Records that the caller's org signed up through a referral code.\n\nThe REFEREE is the validated caller, never a client field, and the referrer is\nresolved from the code — so a caller can only ever attach THEMSELVES to someone\nelse's code. Referring yourself is 400 and an unknown code is 404.\n\nIt is idempotent and first-touch: an org can be referred once, ever. A repeat\ncall returns the referral already on file with created=false and 200, where the\nfirst call answers 201.\n\nRecording a referral grants nothing, and neither does anything downstream of it:\nthe edge later advances to qualified when the referee makes metered spend\n(POST /v1/admin/referral/sweep), and that is the end of it. No credit is ever\nissued from this package.",
 		Fields: map[string]string{
 			"claimRequest.code":   "Code is the referrer's referral code, as it appeared in their ?ref= link.\nCase and surrounding whitespace do not matter.",

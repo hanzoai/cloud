@@ -311,6 +311,7 @@
           },
           "sent": {
             "description": "Sent is how many events the platform accepted, present only on success.",
+            "format": "int64",
             "type": "integer"
           }
         },

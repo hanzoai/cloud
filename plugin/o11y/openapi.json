@@ -235,6 +235,7 @@
             "required": false,
             "description": "Limit caps how many attributes come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -315,6 +316,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -413,6 +415,7 @@
             "required": false,
             "description": "Limit caps how many values come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -448,6 +451,7 @@
             "required": false,
             "description": "Range is the trend window in seconds. Default 3600, capped at 604800 (7d).",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 3600
@@ -458,6 +462,7 @@
             "required": false,
             "description": "StepSec is the bucket width in seconds, clamped to [30, 3600]. Absent\npicks ~60 buckets across the range.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -1268,6 +1273,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -1366,6 +1372,7 @@
             "required": false,
             "description": "Limit caps how many values come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -1476,6 +1483,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "format": "uint64",
                   "type": "integer"
                 }
               }
@@ -1547,6 +1555,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -1645,6 +1654,7 @@
             "required": false,
             "description": "Limit caps how many values come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -1868,6 +1878,7 @@
             "required": false,
             "description": "Limit caps how many dashboards come back. Zero means the default of 20;\nthe runtime caps it at 200.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -1877,6 +1888,7 @@
             "required": false,
             "description": "Offset is how many dashboards to skip for pagination.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -2402,6 +2414,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -2500,6 +2513,7 @@
             "required": false,
             "description": "Limit caps how many values come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -3076,6 +3090,7 @@
             "required": false,
             "description": "Offset is how many issues to skip. Zero starts at the first.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -3085,6 +3100,7 @@
             "required": false,
             "description": "Limit caps how many issues come back. Zero means the default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -3508,6 +3524,7 @@
             "required": false,
             "description": "Limit caps how many keys come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -3517,6 +3534,7 @@
             "required": false,
             "description": "StartUnixMilli is the window start as a unix millisecond epoch. Zero reads\nas unset.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -3526,6 +3544,7 @@
             "required": false,
             "description": "EndUnixMilli is the window end as a unix millisecond epoch. Zero reads as\nunset.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -3624,6 +3643,7 @@
             "required": false,
             "description": "Limit caps how many values come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -3633,6 +3653,7 @@
             "required": false,
             "description": "StartUnixMilli is the window start as a unix millisecond epoch. Zero reads\nas unset.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -3642,6 +3663,7 @@
             "required": false,
             "description": "EndUnixMilli is the window end as a unix millisecond epoch. Zero reads as\nunset.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -3767,6 +3789,7 @@
             "required": false,
             "description": "AttributesLimit caps how many attribute keys come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -3776,6 +3799,7 @@
             "required": false,
             "description": "ExamplesLimit caps how many example queries come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -3811,6 +3835,7 @@
             "required": false,
             "description": "Page is the 1-based page number.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -3820,6 +3845,7 @@
             "required": false,
             "description": "PerPage is the page size.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -3958,6 +3984,7 @@
             "required": false,
             "description": "Page is the 1-based page number.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -3967,6 +3994,7 @@
             "required": false,
             "description": "PerPage is the page size.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -4257,6 +4285,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -4355,6 +4384,7 @@
             "required": false,
             "description": "Limit caps how many values come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -4968,6 +4998,7 @@
             "required": false,
             "description": "LookbackSeconds is how far back to look for received telemetry, in\nseconds.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -5116,6 +5147,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -5214,6 +5246,7 @@
             "required": false,
             "description": "Limit caps how many values come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -5406,6 +5439,7 @@
             "required": false,
             "description": "Offset is how many rows to skip, for paging.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -5415,6 +5449,7 @@
             "required": false,
             "description": "Limit caps how many rows come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -5482,6 +5517,7 @@
             "required": false,
             "description": "Start is the start of the window as a unix-millisecond epoch. Zero means\n24h before the end.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -5491,6 +5527,7 @@
             "required": false,
             "description": "End is the end of the window as a unix-millisecond epoch. Zero means now.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -5545,6 +5582,7 @@
             "required": false,
             "description": "Offset is how many rows to skip, for paging.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -5554,6 +5592,7 @@
             "required": false,
             "description": "Limit caps how many rows come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -5684,6 +5723,7 @@
             "required": false,
             "description": "Offset is how many rows to skip, for paging.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -5693,6 +5733,7 @@
             "required": false,
             "description": "Limit caps how many rows come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -5760,6 +5801,7 @@
             "required": false,
             "description": "Start is the start of the window as a unix-millisecond epoch. Zero means\n24h before the end.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -5769,6 +5811,7 @@
             "required": false,
             "description": "End is the end of the window as a unix-millisecond epoch. Zero means now.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -5823,6 +5866,7 @@
             "required": false,
             "description": "Offset is how many rows to skip, for paging.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -5832,6 +5876,7 @@
             "required": false,
             "description": "Limit caps how many rows come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -5867,6 +5912,7 @@
             "required": false,
             "description": "Start is the start of the window as a unix-millisecond epoch. Zero means\n24h before the end.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -5876,6 +5922,7 @@
             "required": false,
             "description": "End is the end of the window as a unix-millisecond epoch. Zero means now.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -5930,6 +5977,7 @@
             "required": false,
             "description": "Offset is how many rows to skip, for paging.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -5939,6 +5987,7 @@
             "required": false,
             "description": "Limit caps how many rows come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -5974,6 +6023,7 @@
             "required": false,
             "description": "Start is the start of the window as a unix-millisecond epoch. Zero means\n24h before the end.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -5983,6 +6033,7 @@
             "required": false,
             "description": "End is the end of the window as a unix-millisecond epoch. Zero means now.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -6037,6 +6088,7 @@
             "required": false,
             "description": "Offset is how many rows to skip, for paging.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -6046,6 +6098,7 @@
             "required": false,
             "description": "Limit caps how many rows come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -6099,6 +6152,7 @@
             "required": false,
             "description": "Offset is how many rows to skip, for paging.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -6108,6 +6162,7 @@
             "required": false,
             "description": "Limit caps how many rows come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -6238,6 +6293,7 @@
             "required": false,
             "description": "Limit caps how many records come back. Zero means the default of 100.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -6247,6 +6303,7 @@
             "required": false,
             "description": "TimestampStart is the start of the window as a nanosecond epoch. Zero\nmeans fifteen minutes before the end.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -6256,6 +6313,7 @@
             "required": false,
             "description": "TimestampEnd is the end of the window as a nanosecond epoch. Zero means\nnow.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -7100,6 +7158,7 @@
             "required": false,
             "description": "Offset is how many rules to skip, for paging.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -7109,6 +7168,7 @@
             "required": false,
             "description": "Limit caps how many rules come back, at most 1000. Unset means 10.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -7362,6 +7422,7 @@
             "required": false,
             "description": "Start is the start of the window as a Unix timestamp in milliseconds.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -7371,6 +7432,7 @@
             "required": false,
             "description": "End is the end of the window as a Unix timestamp in milliseconds.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -7380,6 +7442,7 @@
             "required": false,
             "description": "Limit caps how many metrics come back; unset means 100, at most 5000.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -7477,6 +7540,7 @@
             "required": false,
             "description": "Start is the start of the window as a Unix timestamp in milliseconds.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -7486,6 +7550,7 @@
             "required": false,
             "description": "End is the end of the window as a Unix timestamp in milliseconds.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -7829,6 +7894,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -7927,6 +7993,7 @@
             "required": false,
             "description": "Limit caps how many values come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -8094,6 +8161,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -8192,6 +8260,7 @@
             "required": false,
             "description": "Limit caps how many values come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -8531,6 +8600,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -8629,6 +8699,7 @@
             "required": false,
             "description": "Limit caps how many values come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -8743,6 +8814,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -8841,6 +8913,7 @@
             "required": false,
             "description": "Limit caps how many values come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -8920,6 +8993,7 @@
             "required": false,
             "description": "Range is the window in seconds. Default 3600, capped at 604800 (7d).",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 3600
@@ -8930,6 +9004,7 @@
             "required": false,
             "description": "StepSec is the bucket width in seconds, clamped to [30, 3600]. Absent\npicks ~60 buckets across the range.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -9107,6 +9182,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -9205,6 +9281,7 @@
             "required": false,
             "description": "Limit caps how many values come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -9660,6 +9737,7 @@
             "required": false,
             "description": "Page is the 1-based page to read. Default 1.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 1
@@ -9670,6 +9748,7 @@
             "required": false,
             "description": "Limit is how many rows to return. Default 20, capped at 100.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 20
@@ -9882,6 +9961,7 @@
             "required": false,
             "description": "Page is the 1-based page to read. Default 1.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -9891,6 +9971,7 @@
             "required": false,
             "description": "Limit is how many rows to return. Default 20, capped at 100.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -10606,6 +10687,7 @@
             "required": false,
             "description": "StartUnixMilli is the window start, unix milliseconds.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -10615,6 +10697,7 @@
             "required": false,
             "description": "EndUnixMilli is the window end, unix milliseconds.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -10633,6 +10716,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50, capped at 200.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -10675,6 +10759,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -10683,6 +10768,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -10699,6 +10785,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -10760,6 +10847,7 @@
             "required": false,
             "description": "Start is the window start, unix milliseconds. Required by the runtime.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -10769,6 +10857,7 @@
             "required": false,
             "description": "End is the window end, unix milliseconds. Required by the runtime.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -10854,6 +10943,7 @@
             "required": false,
             "description": "Start is the window start, unix milliseconds. Required by the runtime.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -10863,6 +10953,7 @@
             "required": false,
             "description": "End is the window end, unix milliseconds. Required by the runtime.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -10948,6 +11039,7 @@
             "required": false,
             "description": "Start is the window start, unix milliseconds. Required by the runtime.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -10957,6 +11049,7 @@
             "required": false,
             "description": "End is the window end, unix milliseconds. Required by the runtime.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -10984,6 +11077,7 @@
             "required": false,
             "description": "Limit caps how many entries come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -11087,6 +11181,7 @@
             "required": false,
             "description": "Start is the window start, unix milliseconds. Required by the runtime.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -11096,6 +11191,7 @@
             "required": false,
             "description": "End is the window end, unix milliseconds. Required by the runtime.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -11305,6 +11401,7 @@
             "required": false,
             "description": "Offset is how many issues to skip. Zero starts at the first.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -11314,6 +11411,7 @@
             "required": false,
             "description": "Limit caps how many issues come back. Zero means the default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -11463,6 +11561,7 @@
             "required": false,
             "description": "Limit caps how many occurrences come back. Zero means the default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -11525,6 +11624,7 @@
             "required": false,
             "description": "Limit caps how many events come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -11783,6 +11883,7 @@
             "required": false,
             "description": "Limit caps how many traces come back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -13111,6 +13212,7 @@
             "required": false,
             "description": "Limit caps how many keys come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -13209,6 +13311,7 @@
             "required": false,
             "description": "Limit caps how many values come back. Absent means 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -14191,6 +14294,7 @@
             "required": false,
             "description": "Range is the window in seconds, counted back from now over each trace's\nlast activity. Default 3600, capped at 604800 (7d).",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 3600
@@ -14201,6 +14305,7 @@
             "required": false,
             "description": "Limit is how many traces to return. Default 50, capped at 500.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 50
@@ -14211,6 +14316,7 @@
             "required": false,
             "description": "MinDurationMs keeps only traces that lasted at least this many\nmilliseconds. Zero or absent keeps every trace in the window.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -14317,6 +14423,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -14325,6 +14432,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -14333,6 +14441,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -14521,6 +14630,7 @@
             "required": false,
             "description": "Step is the bucket width in seconds. The runtime requires it.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -14942,6 +15052,7 @@
             "required": false,
             "description": "Limit caps how many dashboards come back. Zero means the default of 20;\nthe runtime caps it at 200.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -14951,6 +15062,7 @@
             "required": false,
             "description": "Offset is how many dashboards to skip for pagination.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -15667,6 +15779,7 @@
             "type": "object"
           },
           "timestampMillis": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -15931,6 +16044,7 @@
             "type": "array"
           },
           "ShiftBy": {
+            "format": "int64",
             "type": "integer"
           },
           "aggregateAttribute": {
@@ -15973,9 +16087,11 @@
             "type": "string"
           },
           "limit": {
+            "format": "uint64",
             "type": "integer"
           },
           "offset": {
+            "format": "uint64",
             "type": "integer"
           },
           "orderBy": {
@@ -15985,6 +16101,7 @@
             "type": "array"
           },
           "pageSize": {
+            "format": "uint64",
             "type": "integer"
           },
           "queryName": {
@@ -16006,6 +16123,7 @@
             "type": "string"
           },
           "stepInterval": {
+            "format": "int64",
             "type": "integer"
           },
           "temporality": {
@@ -16113,15 +16231,19 @@
             "type": "string"
           },
           "cpuAllocatable": {
+            "format": "double",
             "type": "number"
           },
           "cpuUsage": {
+            "format": "double",
             "type": "number"
           },
           "memoryAllocatable": {
+            "format": "double",
             "type": "number"
           },
           "memoryUsage": {
+            "format": "double",
             "type": "number"
           },
           "meta": {
@@ -16137,6 +16259,7 @@
         "properties": {
           "end": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
@@ -16149,9 +16272,11 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -16159,6 +16284,7 @@
           },
           "start": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -16173,6 +16299,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -16184,15 +16311,19 @@
       "o11y.ClusterRecord": {
         "properties": {
           "clusterCPU": {
+            "format": "double",
             "type": "number"
           },
           "clusterCPUAllocatable": {
+            "format": "double",
             "type": "number"
           },
           "clusterMemory": {
+            "format": "double",
             "type": "number"
           },
           "clusterMemoryAllocatable": {
+            "format": "double",
             "type": "number"
           },
           "clusterName": {
@@ -16226,6 +16357,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {},
@@ -16345,30 +16477,38 @@
       "o11y.DaemonSetListRecord": {
         "properties": {
           "availableNodes": {
+            "format": "int64",
             "type": "integer"
           },
           "cpuLimit": {
+            "format": "double",
             "type": "number"
           },
           "cpuRequest": {
+            "format": "double",
             "type": "number"
           },
           "cpuUsage": {
+            "format": "double",
             "type": "number"
           },
           "daemonSetName": {
             "type": "string"
           },
           "desiredNodes": {
+            "format": "int64",
             "type": "integer"
           },
           "memoryLimit": {
+            "format": "double",
             "type": "number"
           },
           "memoryRequest": {
+            "format": "double",
             "type": "number"
           },
           "memoryUsage": {
+            "format": "double",
             "type": "number"
           },
           "meta": {
@@ -16378,6 +16518,7 @@
             "type": "object"
           },
           "restarts": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -16387,6 +16528,7 @@
         "properties": {
           "end": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
@@ -16399,9 +16541,11 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -16409,6 +16553,7 @@
           },
           "start": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -16423,6 +16568,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -16434,30 +16580,38 @@
       "o11y.DaemonSetRecord": {
         "properties": {
           "currentNodes": {
+            "format": "int64",
             "type": "integer"
           },
           "daemonSetCPU": {
+            "format": "double",
             "type": "number"
           },
           "daemonSetCPULimit": {
+            "format": "double",
             "type": "number"
           },
           "daemonSetCPURequest": {
+            "format": "double",
             "type": "number"
           },
           "daemonSetMemory": {
+            "format": "double",
             "type": "number"
           },
           "daemonSetMemoryLimit": {
+            "format": "double",
             "type": "number"
           },
           "daemonSetMemoryRequest": {
+            "format": "double",
             "type": "number"
           },
           "daemonSetName": {
             "type": "string"
           },
           "desiredNodes": {
+            "format": "int64",
             "type": "integer"
           },
           "meta": {
@@ -16484,6 +16638,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {},
@@ -16544,30 +16699,38 @@
       "o11y.DeploymentListRecord": {
         "properties": {
           "availablePods": {
+            "format": "int64",
             "type": "integer"
           },
           "cpuLimit": {
+            "format": "double",
             "type": "number"
           },
           "cpuRequest": {
+            "format": "double",
             "type": "number"
           },
           "cpuUsage": {
+            "format": "double",
             "type": "number"
           },
           "deploymentName": {
             "type": "string"
           },
           "desiredPods": {
+            "format": "int64",
             "type": "integer"
           },
           "memoryLimit": {
+            "format": "double",
             "type": "number"
           },
           "memoryRequest": {
+            "format": "double",
             "type": "number"
           },
           "memoryUsage": {
+            "format": "double",
             "type": "number"
           },
           "meta": {
@@ -16577,6 +16740,7 @@
             "type": "object"
           },
           "restarts": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -16586,6 +16750,7 @@
         "properties": {
           "end": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
@@ -16598,9 +16763,11 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -16608,6 +16775,7 @@
           },
           "start": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -16622,6 +16790,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -16633,30 +16802,38 @@
       "o11y.DeploymentRecord": {
         "properties": {
           "availablePods": {
+            "format": "int64",
             "type": "integer"
           },
           "deploymentCPU": {
+            "format": "double",
             "type": "number"
           },
           "deploymentCPULimit": {
+            "format": "double",
             "type": "number"
           },
           "deploymentCPURequest": {
+            "format": "double",
             "type": "number"
           },
           "deploymentMemory": {
+            "format": "double",
             "type": "number"
           },
           "deploymentMemoryLimit": {
+            "format": "double",
             "type": "number"
           },
           "deploymentMemoryRequest": {
+            "format": "double",
             "type": "number"
           },
           "deploymentName": {
             "type": "string"
           },
           "desiredPods": {
+            "format": "int64",
             "type": "integer"
           },
           "meta": {
@@ -16683,6 +16860,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {},
@@ -16815,6 +16993,7 @@
             "type": "string"
           },
           "timeUnixNano": {
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -16852,6 +17031,7 @@
             "type": "string"
           },
           "endTimeMillis": {
+            "format": "int64",
             "type": "integer"
           },
           "existingFilterItems": {
@@ -16870,6 +17050,7 @@
             "type": "boolean"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "metricNames": {
@@ -16882,6 +17063,7 @@
             "type": "string"
           },
           "startTimeMillis": {
+            "format": "int64",
             "type": "integer"
           },
           "tagType": {
@@ -16953,6 +17135,7 @@
             "type": "object"
           },
           "durationNano": {
+            "format": "uint64",
             "type": "integer"
           },
           "event": {
@@ -16965,6 +17148,7 @@
             "type": "boolean"
           },
           "level": {
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -16983,6 +17167,7 @@
             "type": "string"
           },
           "timestamp": {
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -17049,6 +17234,7 @@
             "type": "string"
           },
           "step_order": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -17211,6 +17397,7 @@
       "o11y.GettableFlamegraphTrace": {
         "properties": {
           "endTimestampMillis": {
+            "format": "int64",
             "type": "integer"
           },
           "hasMore": {
@@ -17226,6 +17413,7 @@
             "type": "array"
           },
           "startTimestampMillis": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -17234,6 +17422,7 @@
       "o11y.GettableFunnel": {
         "properties": {
           "created_at": {
+            "format": "int64",
             "type": "integer"
           },
           "created_by": {
@@ -17261,6 +17450,7 @@
             "type": "array"
           },
           "updated_at": {
+            "format": "int64",
             "type": "integer"
           },
           "updated_by": {
@@ -17353,6 +17543,7 @@
       "o11y.GettableRuleStateHistory": {
         "properties": {
           "fingerprint": {
+            "format": "uint64",
             "type": "integer"
           },
           "labels": {
@@ -17376,9 +17567,11 @@
             "type": "boolean"
           },
           "unixMilli": {
+            "format": "int64",
             "type": "integer"
           },
           "value": {
+            "format": "double",
             "type": "number"
           }
         },
@@ -17387,9 +17580,11 @@
       "o11y.GettableRuleStateHistoryContributor": {
         "properties": {
           "count": {
+            "format": "uint64",
             "type": "integer"
           },
           "fingerprint": {
+            "format": "uint64",
             "type": "integer"
           },
           "labels": {
@@ -17410,6 +17605,7 @@
       "o11y.GettableRuleStateHistoryStats": {
         "properties": {
           "currentAvgResolutionTime": {
+            "format": "double",
             "type": "number"
           },
           "currentAvgResolutionTimeSeries": {
@@ -17419,6 +17615,7 @@
             "$ref": "#/components/schemas/o11y.TimeSeries"
           },
           "pastAvgResolutionTime": {
+            "format": "double",
             "type": "number"
           },
           "pastAvgResolutionTimeSeries": {
@@ -17428,9 +17625,11 @@
             "$ref": "#/components/schemas/o11y.TimeSeries"
           },
           "totalCurrentTriggers": {
+            "format": "uint64",
             "type": "integer"
           },
           "totalPastTriggers": {
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -17448,6 +17647,7 @@
             "type": "string"
           },
           "total": {
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -17456,9 +17656,11 @@
       "o11y.GettableRuleStateWindow": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           },
           "state": {}
@@ -17501,6 +17703,7 @@
       "o11y.GettableTestRule": {
         "properties": {
           "alertCount": {
+            "format": "int64",
             "type": "integer"
           },
           "message": {
@@ -17523,6 +17726,7 @@
       "o11y.GettableWaterfallTrace": {
         "properties": {
           "endTimestampMillis": {
+            "format": "uint64",
             "type": "integer"
           },
           "hasMissingSpans": {
@@ -17544,12 +17748,15 @@
             "type": "array"
           },
           "startTimestampMillis": {
+            "format": "uint64",
             "type": "integer"
           },
           "totalErrorSpansCount": {
+            "format": "uint64",
             "type": "integer"
           },
           "totalSpansCount": {
+            "format": "uint64",
             "type": "integer"
           },
           "uncollapsedSpans": {
@@ -17695,15 +17902,18 @@
             "type": "boolean"
           },
           "cpu": {
+            "format": "double",
             "type": "number"
           },
           "hostName": {
             "type": "string"
           },
           "load15": {
+            "format": "double",
             "type": "number"
           },
           "memory": {
+            "format": "double",
             "type": "number"
           },
           "meta": {
@@ -17716,6 +17926,7 @@
             "type": "string"
           },
           "wait": {
+            "format": "double",
             "type": "number"
           }
         },
@@ -17725,6 +17936,7 @@
         "properties": {
           "end": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
@@ -17737,9 +17949,11 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -17747,6 +17961,7 @@
           },
           "start": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -17782,6 +17997,7 @@
             "type": "boolean"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -17793,24 +18009,30 @@
       "o11y.HostRecord": {
         "properties": {
           "activeHostCount": {
+            "format": "int64",
             "type": "integer"
           },
           "cpu": {
+            "format": "double",
             "type": "number"
           },
           "diskUsage": {
+            "format": "double",
             "type": "number"
           },
           "hostName": {
             "type": "string"
           },
           "inactiveHostCount": {
+            "format": "int64",
             "type": "integer"
           },
           "load15": {
+            "format": "double",
             "type": "number"
           },
           "memory": {
+            "format": "double",
             "type": "number"
           },
           "meta": {
@@ -17821,6 +18043,7 @@
           },
           "status": {},
           "wait": {
+            "format": "double",
             "type": "number"
           }
         },
@@ -17838,6 +18061,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {},
@@ -17863,10 +18087,12 @@
           },
           "max_alerts": {
             "description": "MaxAlerts is the maximum number of alerts to be sent per incident.io message.\nAlerts exceeding this threshold will be truncated. Setting this to 0\nallows an unlimited number of alerts. Note that if the payload exceeds\nincident.io's size limits, you will receive a 429 response and alerts\nwill not be ingested.",
+            "format": "uint64",
             "type": "integer"
           },
           "timeout": {
             "description": "Timeout is the maximum time allowed to invoke incident.io. Setting this to 0\ndoes not impose a timeout.",
+            "format": "int64",
             "type": "integer"
           },
           "url": {
@@ -18192,33 +18418,42 @@
       "o11y.JobListRecord": {
         "properties": {
           "activePods": {
+            "format": "int64",
             "type": "integer"
           },
           "cpuLimit": {
+            "format": "double",
             "type": "number"
           },
           "cpuRequest": {
+            "format": "double",
             "type": "number"
           },
           "cpuUsage": {
+            "format": "double",
             "type": "number"
           },
           "desiredSuccessfulPods": {
+            "format": "int64",
             "type": "integer"
           },
           "failedPods": {
+            "format": "int64",
             "type": "integer"
           },
           "jobName": {
             "type": "string"
           },
           "memoryLimit": {
+            "format": "double",
             "type": "number"
           },
           "memoryRequest": {
+            "format": "double",
             "type": "number"
           },
           "memoryUsage": {
+            "format": "double",
             "type": "number"
           },
           "meta": {
@@ -18228,9 +18463,11 @@
             "type": "object"
           },
           "restarts": {
+            "format": "int64",
             "type": "integer"
           },
           "successfulPods": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -18240,6 +18477,7 @@
         "properties": {
           "end": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
@@ -18252,9 +18490,11 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -18262,6 +18502,7 @@
           },
           "start": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -18276,6 +18517,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -18287,30 +18529,39 @@
       "o11y.JobRecord": {
         "properties": {
           "activePods": {
+            "format": "int64",
             "type": "integer"
           },
           "desiredSuccessfulPods": {
+            "format": "int64",
             "type": "integer"
           },
           "failedPods": {
+            "format": "int64",
             "type": "integer"
           },
           "jobCPU": {
+            "format": "double",
             "type": "number"
           },
           "jobCPULimit": {
+            "format": "double",
             "type": "number"
           },
           "jobCPURequest": {
+            "format": "double",
             "type": "number"
           },
           "jobMemory": {
+            "format": "double",
             "type": "number"
           },
           "jobMemoryLimit": {
+            "format": "double",
             "type": "number"
           },
           "jobMemoryRequest": {
+            "format": "double",
             "type": "number"
           },
           "jobName": {
@@ -18326,6 +18577,7 @@
             "$ref": "#/components/schemas/o11y.PodCountsByPhase"
           },
           "successfulPods": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -18343,6 +18595,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {},
@@ -18423,9 +18676,11 @@
       "o11y.LimitMetricValue": {
         "properties": {
           "count": {
+            "format": "int64",
             "type": "integer"
           },
           "size": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -18434,9 +18689,11 @@
       "o11y.LimitValue": {
         "properties": {
           "count": {
+            "format": "int64",
             "type": "integer"
           },
           "size": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -18700,9 +18957,11 @@
             "$ref": "#/components/schemas/o11y.PodCountByPhase"
           },
           "cpuUsage": {
+            "format": "double",
             "type": "number"
           },
           "memoryUsage": {
+            "format": "double",
             "type": "number"
           },
           "meta": {
@@ -18721,6 +18980,7 @@
         "properties": {
           "end": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
@@ -18733,9 +18993,11 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -18743,6 +19005,7 @@
           },
           "start": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -18757,6 +19020,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -18774,9 +19038,11 @@
             "type": "object"
           },
           "namespaceCPU": {
+            "format": "double",
             "type": "number"
           },
           "namespaceMemory": {
+            "format": "double",
             "type": "number"
           },
           "namespaceName": {
@@ -18800,6 +19066,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {},
@@ -18812,12 +19079,15 @@
       "o11y.NodeCountByCondition": {
         "properties": {
           "notReady": {
+            "format": "int64",
             "type": "integer"
           },
           "ready": {
+            "format": "int64",
             "type": "integer"
           },
           "unknown": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -18826,9 +19096,11 @@
       "o11y.NodeCountsByReadiness": {
         "properties": {
           "notReady": {
+            "format": "int64",
             "type": "integer"
           },
           "ready": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -18846,15 +19118,19 @@
             "type": "object"
           },
           "nodeCPUAllocatable": {
+            "format": "double",
             "type": "number"
           },
           "nodeCPUUsage": {
+            "format": "double",
             "type": "number"
           },
           "nodeMemoryAllocatable": {
+            "format": "double",
             "type": "number"
           },
           "nodeMemoryUsage": {
+            "format": "double",
             "type": "number"
           },
           "nodeUID": {
@@ -18867,6 +19143,7 @@
         "properties": {
           "end": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
@@ -18879,9 +19156,11 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -18889,6 +19168,7 @@
           },
           "start": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -18903,6 +19183,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -18921,18 +19202,22 @@
             "type": "object"
           },
           "nodeCPU": {
+            "format": "double",
             "type": "number"
           },
           "nodeCPUAllocatable": {
+            "format": "double",
             "type": "number"
           },
           "nodeCountsByReadiness": {
             "$ref": "#/components/schemas/o11y.NodeCountsByReadiness"
           },
           "nodeMemory": {
+            "format": "double",
             "type": "number"
           },
           "nodeMemoryAllocatable": {
+            "format": "double",
             "type": "number"
           },
           "nodeName": {
@@ -18956,6 +19241,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {},
@@ -18982,6 +19268,7 @@
           },
           "expiresAt": {
             "description": "ExpiresAt is when the key stops working, as a unix timestamp in seconds;\nzero means never.",
+            "format": "uint64",
             "type": "integer"
           },
           "id": {
@@ -19013,6 +19300,7 @@
         "properties": {
           "expiresAt": {
             "description": "ExpiresAt is when the key stops working, as a unix timestamp in seconds.\nZero means it never expires; a past timestamp is refused.",
+            "format": "uint64",
             "type": "integer"
           },
           "name": {
@@ -19052,6 +19340,7 @@
         "properties": {
           "expiresAt": {
             "description": "ExpiresAt is when the key stops working, as a unix timestamp in seconds.\nZero means it never expires; a past timestamp is refused.",
+            "format": "uint64",
             "type": "integer"
           },
           "name": {
@@ -19215,6 +19504,7 @@
           },
           "index": {
             "description": "Index is the aggregation's position in the query.",
+            "format": "int64",
             "type": "integer"
           },
           "lowerBoundSeries": {
@@ -19335,6 +19625,7 @@
           },
           "threshold": {
             "description": "Threshold is the satisfied-response time in seconds.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -19373,6 +19664,7 @@
           },
           "threshold": {
             "description": "Threshold is the satisfied-response time in seconds.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -19914,6 +20206,7 @@
           },
           "total": {
             "description": "Total is the count across all pages.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -19937,6 +20230,7 @@
           },
           "total": {
             "description": "Total is the count across all pages.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -20389,10 +20683,12 @@
         "properties": {
           "callCount": {
             "description": "CallCount is how many calls crossed the edge in the window.",
+            "format": "uint64",
             "type": "integer"
           },
           "callRate": {
             "description": "CallRate is calls per second.",
+            "format": "double",
             "type": "number"
           },
           "child": {
@@ -20401,26 +20697,32 @@
           },
           "errorRate": {
             "description": "ErrorRate is the percentage of calls that erred.",
+            "format": "double",
             "type": "number"
           },
           "p50": {
             "description": "P50 is the median call duration, in nanoseconds.",
+            "format": "double",
             "type": "number"
           },
           "p75": {
             "description": "P75 is the 75th-percentile call duration, in nanoseconds.",
+            "format": "double",
             "type": "number"
           },
           "p90": {
             "description": "P90 is the 90th-percentile call duration, in nanoseconds.",
+            "format": "double",
             "type": "number"
           },
           "p95": {
             "description": "P95 is the 95th-percentile call duration, in nanoseconds.",
+            "format": "double",
             "type": "number"
           },
           "p99": {
             "description": "P99 is the 99th-percentile call duration, in nanoseconds.",
+            "format": "double",
             "type": "number"
           },
           "parent": {
@@ -20577,6 +20879,7 @@
           },
           "limit": {
             "description": "Limit caps how many rows come back.",
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -20704,6 +21007,7 @@
           },
           "end": {
             "description": "End is the window's end, epoch milliseconds.",
+            "format": "uint64",
             "type": "integer"
           },
           "endpoint": {
@@ -20727,6 +21031,7 @@
           },
           "start": {
             "description": "Start is the window's start, epoch milliseconds.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -20796,18 +21101,22 @@
         "properties": {
           "end_time": {
             "description": "EndTime is the end of the window, as a millisecond epoch.",
+            "format": "int64",
             "type": "integer"
           },
           "start_time": {
             "description": "StartTime is the start of the window, as a millisecond epoch.",
+            "format": "int64",
             "type": "integer"
           },
           "step_end": {
             "description": "StepEnd is the step the transition runs to, 1-based.",
+            "format": "int64",
             "type": "integer"
           },
           "step_start": {
             "description": "StepStart is the step the transition runs from, 1-based. Ignored by the\nreads that span the whole funnel.",
+            "format": "int64",
             "type": "integer"
           },
           "steps": {
@@ -20910,6 +21219,7 @@
           },
           "count": {
             "description": "Count is how many occurrences have landed on the issue.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
@@ -21012,14 +21322,17 @@
           },
           "limit": {
             "description": "Limit is the page cap that was applied.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is how many were skipped.",
+            "format": "int64",
             "type": "integer"
           },
           "total": {
             "description": "Total is how many matched the filter.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -21160,10 +21473,12 @@
           },
           "limit": {
             "description": "Limit caps how many exception groups come back. Required, non-zero.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is how many groups to skip.",
+            "format": "int64",
             "type": "integer"
           },
           "order": {
@@ -21461,6 +21776,7 @@
           },
           "indexGranularity": {
             "description": "IndexGranularity is the index granularity in rows.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -21624,6 +21940,7 @@
         "properties": {
           "column": {
             "description": "Column is the column number.",
+            "format": "uint32",
             "type": "integer"
           },
           "file": {
@@ -21636,6 +21953,7 @@
           },
           "line": {
             "description": "Line is the line number.",
+            "format": "uint32",
             "type": "integer"
           },
           "own": {
@@ -21653,6 +21971,7 @@
           },
           "timestamp": {
             "description": "Timestamp is when the funnel was created, as a millisecond epoch. Zero\ntakes the runtime's own clock.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -21715,15 +22034,19 @@
       "o11y.O11yFunnelStepWindowIn": {
         "properties": {
           "end_time": {
+            "format": "int64",
             "type": "integer"
           },
           "start_time": {
+            "format": "int64",
             "type": "integer"
           },
           "step_end": {
+            "format": "int64",
             "type": "integer"
           },
           "step_start": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -21752,6 +22075,7 @@
           },
           "timestamp": {
             "description": "Timestamp is when the change was made, as a millisecond epoch.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -21769,6 +22093,7 @@
           },
           "timestamp": {
             "description": "Timestamp is when the change was made, as a millisecond epoch.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -21777,9 +22102,11 @@
       "o11y.O11yFunnelWindowIn": {
         "properties": {
           "end_time": {
+            "format": "int64",
             "type": "integer"
           },
           "start_time": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -22388,14 +22715,17 @@
           },
           "limit": {
             "description": "Limit is the page cap the read ran with.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is the row offset this page started at.",
+            "format": "int64",
             "type": "integer"
           },
           "total": {
             "description": "Total is how many annotations match, across all pages.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -22458,6 +22788,7 @@
           },
           "value": {
             "description": "Value is the numeric score.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -22467,6 +22798,7 @@
         "properties": {
           "completionTokens": {
             "description": "CompletionTokens is the output token count.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -22475,6 +22807,7 @@
           },
           "latencyMs": {
             "description": "LatencyMs is how long it took, in milliseconds.",
+            "format": "double",
             "type": "number"
           },
           "model": {
@@ -22491,6 +22824,7 @@
           },
           "promptTokens": {
             "description": "PromptTokens is the input token count.",
+            "format": "int64",
             "type": "integer"
           },
           "provider": {
@@ -22516,10 +22850,12 @@
           },
           "totalCost": {
             "description": "TotalCost is the observation's cost.",
+            "format": "double",
             "type": "number"
           },
           "totalTokens": {
             "description": "TotalTokens is the sum of prompt and completion tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "traceId": {
@@ -22561,10 +22897,12 @@
           },
           "limit": {
             "description": "Limit is the page cap the read ran with.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is the row offset this page started at.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -22578,10 +22916,12 @@
           },
           "read": {
             "description": "Read is the cost per unit of cache-read tokens.",
+            "format": "double",
             "type": "number"
           },
           "write": {
             "description": "Write is the cost per unit of cache-write tokens.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -22695,14 +23035,17 @@
           },
           "limit": {
             "description": "Limit is the page cap the read ran with.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is the row offset this page started at.",
+            "format": "int64",
             "type": "integer"
           },
           "total": {
             "description": "Total is how many rules match, across all pages.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -22716,10 +23059,12 @@
           },
           "input": {
             "description": "Input is the cost per unit of input tokens.",
+            "format": "double",
             "type": "number"
           },
           "output": {
             "description": "Output is the cost per unit of output tokens.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -22780,6 +23125,7 @@
           },
           "value": {
             "description": "Value is the numeric score.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -22822,14 +23168,17 @@
           },
           "limit": {
             "description": "Limit is the page cap the read ran with.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is the row offset this page started at.",
+            "format": "int64",
             "type": "integer"
           },
           "total": {
             "description": "Total is how many scores match, across all pages.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -22839,6 +23188,7 @@
         "properties": {
           "completionTokens": {
             "description": "CompletionTokens is the conversation's total output tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -22847,22 +23197,27 @@
           },
           "observations": {
             "description": "Observations is how many observations the conversation holds.",
+            "format": "int64",
             "type": "integer"
           },
           "promptTokens": {
             "description": "PromptTokens is the conversation's total input tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "totalCost": {
             "description": "TotalCost is the conversation's total cost.",
+            "format": "double",
             "type": "number"
           },
           "totalTokens": {
             "description": "TotalTokens is the conversation's total tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "traces": {
             "description": "Traces is how many traces the conversation holds.",
+            "format": "int64",
             "type": "integer"
           },
           "userId": {
@@ -22896,10 +23251,12 @@
           },
           "limit": {
             "description": "Limit is the page cap the read ran with.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is the row offset this page started at.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -22909,6 +23266,7 @@
         "properties": {
           "completionTokens": {
             "description": "CompletionTokens is the trace's total output tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -22917,14 +23275,17 @@
           },
           "latencyMs": {
             "description": "LatencyMs is the trace's span, in milliseconds.",
+            "format": "double",
             "type": "number"
           },
           "observations": {
             "description": "Observations is how many observations the trace holds.",
+            "format": "int64",
             "type": "integer"
           },
           "promptTokens": {
             "description": "PromptTokens is the trace's total input tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "serviceName": {
@@ -22937,10 +23298,12 @@
           },
           "totalCost": {
             "description": "TotalCost is the trace's total cost.",
+            "format": "double",
             "type": "number"
           },
           "totalTokens": {
             "description": "TotalTokens is the trace's total tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "userId": {
@@ -22974,10 +23337,12 @@
           },
           "limit": {
             "description": "Limit is the page cap the read ran with.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is the row offset this page started at.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -23043,6 +23408,7 @@
         "properties": {
           "completionTokens": {
             "description": "CompletionTokens is their total output tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -23051,26 +23417,32 @@
           },
           "observations": {
             "description": "Observations is how many observations they produced.",
+            "format": "int64",
             "type": "integer"
           },
           "promptTokens": {
             "description": "PromptTokens is their total input tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "sessions": {
             "description": "Sessions is how many conversations they had.",
+            "format": "int64",
             "type": "integer"
           },
           "totalCost": {
             "description": "TotalCost is their total cost.",
+            "format": "double",
             "type": "number"
           },
           "totalTokens": {
             "description": "TotalTokens is their total tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "traces": {
             "description": "Traces is how many traces they produced.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -23100,10 +23472,12 @@
           },
           "limit": {
             "description": "Limit is the page cap the read ran with.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is the row offset this page started at.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -23142,6 +23516,7 @@
         "properties": {
           "exceptionCount": {
             "description": "ExceptionCount is how many instances the group holds in the window.",
+            "format": "uint64",
             "type": "integer"
           },
           "exceptionMessage": {
@@ -23182,6 +23557,7 @@
           },
           "timestamp": {
             "description": "Timestamp is the start of the bucket.",
+            "format": "int64",
             "type": "integer"
           },
           "value": {
@@ -23227,6 +23603,7 @@
           },
           "deploySequence": {
             "description": "DeploySequence orders this deployment among the version's deployments.",
+            "format": "int64",
             "type": "integer"
           },
           "deployStatus": {
@@ -23260,6 +23637,7 @@
           },
           "version": {
             "description": "Version is the config version number.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -23375,6 +23753,7 @@
           },
           "orderId": {
             "description": "OrderID is the pipeline's 1-based position in the set.",
+            "format": "int64",
             "type": "integer"
           },
           "updatedAt": {
@@ -23474,6 +23853,7 @@
           },
           "orderId": {
             "description": "OrderID is the processor's 1-based position in the pipeline.",
+            "format": "int64",
             "type": "integer"
           },
           "output": {
@@ -23627,6 +24007,7 @@
           },
           "deploySequence": {
             "description": "DeploySequence orders this deployment among the version's deployments.",
+            "format": "int64",
             "type": "integer"
           },
           "deployStatus": {
@@ -23674,6 +24055,7 @@
           },
           "version": {
             "description": "Version is the config version number.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -23727,6 +24109,7 @@
           },
           "orderId": {
             "description": "OrderID is the pipeline's 1-based position in the set.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -23740,6 +24123,7 @@
           },
           "granularity": {
             "description": "Granularity is the index granularity in rows.",
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -23805,6 +24189,7 @@
           },
           "attributes_float": {
             "additionalProperties": {
+              "format": "double",
               "type": "number"
             },
             "description": "AttributesFloat are the record's float attributes.",
@@ -23812,6 +24197,7 @@
           },
           "attributes_int": {
             "additionalProperties": {
+              "format": "int64",
               "type": "integer"
             },
             "description": "AttributesInt are the record's integer attributes.",
@@ -23841,6 +24227,7 @@
           },
           "severity_number": {
             "description": "SeverityNumber is the record's severity as a number.",
+            "format": "uint8",
             "type": "integer"
           },
           "severity_text": {
@@ -23853,10 +24240,12 @@
           },
           "timestamp": {
             "description": "Timestamp is the record's time as a nanosecond epoch.",
+            "format": "uint64",
             "type": "integer"
           },
           "trace_flags": {
             "description": "TraceFlags are the record's trace flags.",
+            "format": "uint32",
             "type": "integer"
           },
           "trace_id": {
@@ -23956,6 +24345,7 @@
           },
           "valueCount": {
             "description": "ValueCount is how many distinct values the attribute has.",
+            "format": "uint64",
             "type": "integer"
           },
           "values": {
@@ -23979,6 +24369,7 @@
           },
           "totalKeys": {
             "description": "TotalKeys is how many keys the metric has.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -24064,18 +24455,22 @@
         "properties": {
           "activeTimeSeries": {
             "description": "ActiveTimeSeries is how many of them are active.",
+            "format": "uint64",
             "type": "integer"
           },
           "dataPoints": {
             "description": "DataPoints is how many data points the metric has.",
+            "format": "uint64",
             "type": "integer"
           },
           "lastReceived": {
             "description": "LastReceived is when the metric last arrived, as a Unix timestamp in\nmilliseconds.",
+            "format": "uint64",
             "type": "integer"
           },
           "totalTimeSeries": {
             "description": "TotalTimeSeries is how many time series the metric has ever had.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -24098,6 +24493,7 @@
         "properties": {
           "end": {
             "description": "End is the end of the window as a Unix timestamp in milliseconds, at most\nthirty minutes after start. Required.",
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -24110,6 +24506,7 @@
           },
           "start": {
             "description": "Start is the start of the window as a Unix timestamp in milliseconds. Required.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -24319,15 +24716,18 @@
           },
           "timestamp": {
             "description": "Timestamp is the point's time as a Unix timestamp in milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "value": {
             "description": "Value is the point's value.",
+            "format": "double",
             "type": "number"
           },
           "values": {
             "description": "Values carries the bucket values of a heatmap point.",
             "items": {
+              "format": "double",
               "type": "number"
             },
             "type": "array"
@@ -24378,10 +24778,12 @@
           },
           "samples": {
             "description": "Samples is how many samples the metric had.",
+            "format": "uint64",
             "type": "integer"
           },
           "timeseries": {
             "description": "TimeSeries is how many time series the metric had.",
+            "format": "uint64",
             "type": "integer"
           },
           "type": {
@@ -24406,6 +24808,7 @@
           },
           "total": {
             "description": "Total is how many metrics matched, across all pages.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -24415,6 +24818,7 @@
         "properties": {
           "end": {
             "description": "End is the end of the window as a Unix timestamp in milliseconds. Required.",
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -24423,10 +24827,12 @@
           },
           "limit": {
             "description": "Limit caps how many metrics come back, between 1 and 5000. Required.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is how many metrics to skip, for paging.",
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -24435,6 +24841,7 @@
           },
           "start": {
             "description": "Start is the start of the window as a Unix timestamp in milliseconds. Required.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -24510,6 +24917,7 @@
         "properties": {
           "end": {
             "description": "End is the end of the window as a Unix timestamp in milliseconds. Required.",
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -24518,6 +24926,7 @@
           },
           "limit": {
             "description": "Limit caps how many entries come back, between 1 and 5000. Required.",
+            "format": "int64",
             "type": "integer"
           },
           "mode": {
@@ -24526,6 +24935,7 @@
           },
           "start": {
             "description": "Start is the start of the window as a Unix timestamp in milliseconds. Required.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -24778,6 +25188,7 @@
           },
           "colno": {
             "description": "Colno is the column number.",
+            "format": "int64",
             "type": "integer"
           },
           "filename": {
@@ -24794,6 +25205,7 @@
           },
           "lineno": {
             "description": "Lineno is the line number.",
+            "format": "int64",
             "type": "integer"
           },
           "module": {
@@ -24820,6 +25232,7 @@
         "properties": {
           "errorCount": {
             "description": "ErrorCount is how many of those runs errored.",
+            "format": "uint64",
             "type": "integer"
           },
           "name": {
@@ -24828,18 +25241,22 @@
           },
           "numCalls": {
             "description": "NumCalls is how many times it ran in the window.",
+            "format": "uint64",
             "type": "integer"
           },
           "p50": {
             "description": "P50 is its median latency, nanoseconds.",
+            "format": "double",
             "type": "number"
           },
           "p95": {
             "description": "P95 is its p95 latency, nanoseconds.",
+            "format": "double",
             "type": "number"
           },
           "p99": {
             "description": "P99 is its p99 latency, nanoseconds.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -24853,6 +25270,7 @@
           },
           "limit": {
             "description": "Limit caps how many operations come back.",
+            "format": "int64",
             "type": "integer"
           },
           "service": {
@@ -24926,6 +25344,7 @@
           },
           "key": {
             "description": "Key is the org's stable numeric key, derived from its id.",
+            "format": "uint32",
             "type": "integer"
           },
           "name": {
@@ -24986,6 +25405,7 @@
           },
           "percentile": {
             "description": "Percentile is the percentile the duration lands at.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -24995,14 +25415,17 @@
         "properties": {
           "p50": {
             "description": "P50 is the median.",
+            "format": "double",
             "type": "number"
           },
           "p90": {
             "description": "P90 is the 90th percentile.",
+            "format": "double",
             "type": "number"
           },
           "p99": {
             "description": "P99 is the 99th percentile.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -25428,6 +25851,7 @@
             "$ref": "#/components/schemas/o11y.querybuildertypesv5.CompositeQuery"
           },
           "end": {
+            "format": "uint64",
             "type": "integer"
           },
           "formatOptions": {
@@ -25441,6 +25865,7 @@
             "type": "string"
           },
           "start": {
+            "format": "uint64",
             "type": "integer"
           },
           "variables": {
@@ -25472,18 +25897,22 @@
         "properties": {
           "bytesScanned": {
             "description": "BytesScanned is how many bytes the query read.",
+            "format": "uint64",
             "type": "integer"
           },
           "durationMs": {
             "description": "DurationMS is how long the query took, in milliseconds.",
+            "format": "uint64",
             "type": "integer"
           },
           "rowsScanned": {
             "description": "RowsScanned is how many rows the query read.",
+            "format": "uint64",
             "type": "integer"
           },
           "stepIntervals": {
             "additionalProperties": {
+              "format": "uint64",
               "type": "integer"
             },
             "description": "StepIntervals is the step used per query, in seconds.",
@@ -25616,14 +26045,17 @@
         "properties": {
           "end": {
             "description": "End is the window's end, epoch nanoseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "eval_time": {
             "description": "EvalTime bounds the span-evaluation scan, nanoseconds; only the\nspan/evaluation view reads it.",
+            "format": "int64",
             "type": "integer"
           },
           "start": {
             "description": "Start is the window's start, epoch nanoseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "variables": {
@@ -25640,6 +26072,7 @@
         "properties": {
           "end": {
             "description": "End is the window's end, epoch nanoseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
@@ -25648,10 +26081,12 @@
           },
           "limit": {
             "description": "Limit caps how many rows come back.",
+            "format": "int64",
             "type": "integer"
           },
           "start": {
             "description": "Start is the window's start, epoch nanoseconds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -25730,10 +26165,12 @@
           },
           "ingestedSamples": {
             "description": "IngestedSamples is how many samples arrived while the rule was active.",
+            "format": "uint64",
             "type": "integer"
           },
           "ingestedSeries": {
             "description": "IngestedSeries is how many series arrived while the rule was active.",
+            "format": "uint64",
             "type": "integer"
           },
           "labels": {
@@ -25753,10 +26190,12 @@
           },
           "retainedSamples": {
             "description": "RetainedSamples is how many of them were kept.",
+            "format": "uint64",
             "type": "integer"
           },
           "retainedSeries": {
             "description": "RetainedSeries is how many of them were kept.",
+            "format": "uint64",
             "type": "integer"
           },
           "updatedAt": {
@@ -25833,6 +26272,7 @@
           },
           "currentRetainedSeries": {
             "description": "CurrentRetainedSeries is how many survive the rules in force today.",
+            "format": "uint64",
             "type": "integer"
           },
           "droppedLabels": {
@@ -25849,14 +26289,17 @@
           },
           "ingestedSeries": {
             "description": "IngestedSeries is how many series the metric ingests today.",
+            "format": "uint64",
             "type": "integer"
           },
           "reductionPercent": {
             "description": "ReductionPercent is the estimated reduction, in percent.",
+            "format": "double",
             "type": "number"
           },
           "retainedSeries": {
             "description": "RetainedSeries is how many would survive with the candidate rule.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -25873,6 +26316,7 @@
           },
           "lookbackMs": {
             "description": "LookbackMs is how far back to sample when estimating.",
+            "format": "int64",
             "type": "integer"
           },
           "matchType": {
@@ -25940,6 +26384,7 @@
           },
           "total": {
             "description": "Total is how many rules matched, across all pages.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -25978,22 +26423,27 @@
         "properties": {
           "estimatedMonthlySavingsUsd": {
             "description": "EstimatedMonthlySavingsUsd is the estimated monthly savings, in USD.",
+            "format": "double",
             "type": "number"
           },
           "ingestedSamples": {
             "description": "IngestedSamples is how many samples arrived across all rules.",
+            "format": "uint64",
             "type": "integer"
           },
           "ingestedSeries": {
             "description": "IngestedSeries is how many series arrived across all rules.",
+            "format": "uint64",
             "type": "integer"
           },
           "retainedSamples": {
             "description": "RetainedSamples is how many of them were kept.",
+            "format": "uint64",
             "type": "integer"
           },
           "retainedSeries": {
             "description": "RetainedSeries is how many of them were kept.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -26143,6 +26593,7 @@
         "properties": {
           "cold_storage_ttl_days": {
             "description": "ColdStorageTTLDays is how old data must be before it moves, in days.",
+            "format": "int64",
             "type": "integer"
           },
           "cold_storage_volume": {
@@ -26151,14 +26602,17 @@
           },
           "default_ttl_days": {
             "description": "DefaultTTLDays is the retention for data no rule matches, in days.",
+            "format": "int64",
             "type": "integer"
           },
           "expected_logs_move_ttl_duration_hrs": {
             "description": "ExpectedLogsMoveTTLHours is the pending logs cold-storage move TTL, in\nhours.",
+            "format": "int64",
             "type": "integer"
           },
           "expected_logs_ttl_duration_hrs": {
             "description": "ExpectedLogsTTLHours is the pending logs TTL, in hours.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -26190,6 +26644,7 @@
           },
           "ttlDays": {
             "description": "TTLDays is the retention applied when it does, in days.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -26199,6 +26654,7 @@
         "properties": {
           "coldStorageDurationDays": {
             "description": "ColdStorageDurationDays is how old data must be before it moves, in days.",
+            "format": "int64",
             "type": "integer"
           },
           "coldStorageVolume": {
@@ -26207,6 +26663,7 @@
           },
           "defaultTTLDays": {
             "description": "DefaultTTLDays is the retention for data no rule matches, in days.",
+            "format": "int64",
             "type": "integer"
           },
           "ttlConditions": {
@@ -26236,6 +26693,7 @@
         "properties": {
           "delay": {
             "description": "Delay is how long to wait before retrying, in nanoseconds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -26551,21 +27009,25 @@
       "o11y.O11yRuleHistoryQueryIn": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
             "$ref": "#/components/schemas/o11y.FilterSet"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "order": {
             "type": "string"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           },
           "state": {
@@ -26897,6 +27359,7 @@
           },
           "total": {
             "description": "Total is how many the org has.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -26939,10 +27402,12 @@
         "properties": {
           "avgDuration": {
             "description": "AvgDuration is their average latency, nanoseconds.",
+            "format": "double",
             "type": "number"
           },
           "callRate": {
             "description": "CallRate is calls per second over the window.",
+            "format": "double",
             "type": "number"
           },
           "dataWarning": {
@@ -26951,26 +27416,32 @@
           },
           "errorRate": {
             "description": "ErrorRate is the percentage of calls that errored.",
+            "format": "double",
             "type": "number"
           },
           "fourXXRate": {
             "description": "FourXXRate is the percentage of calls that answered 4xx.",
+            "format": "double",
             "type": "number"
           },
           "num4XX": {
             "description": "Num4XX is how many of the calls answered 4xx.",
+            "format": "uint64",
             "type": "integer"
           },
           "numCalls": {
             "description": "NumCalls is how many entry-point spans landed in the window.",
+            "format": "uint64",
             "type": "integer"
           },
           "numErrors": {
             "description": "NumErrors is how many of the calls errored.",
+            "format": "uint64",
             "type": "integer"
           },
           "p99": {
             "description": "Percentile99 is the p99 latency of its entry-point spans, nanoseconds.",
+            "format": "double",
             "type": "number"
           },
           "serviceName": {
@@ -27202,6 +27673,7 @@
           "NumberValues": {
             "description": "NumberValues are the numeric operands, when the attribute is a number.",
             "items": {
+              "format": "double",
               "type": "number"
             },
             "type": "array"
@@ -27483,6 +27955,7 @@
         "properties": {
           "end": {
             "description": "End is the window end, as epoch nanoseconds.",
+            "format": "uint64",
             "type": "integer"
           },
           "name": {
@@ -27502,10 +27975,12 @@
           },
           "spanDuration": {
             "description": "SpanDuration is the span's duration in nanoseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "start": {
             "description": "Start is the window start, as epoch nanoseconds.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -27537,6 +28012,7 @@
           },
           "value": {
             "description": "Value is how many events fell in it.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -27630,6 +28106,7 @@
           "numberValues": {
             "description": "NumberValues are the values matched when the tag holds numbers.",
             "items": {
+              "format": "double",
               "type": "number"
             },
             "type": "array"
@@ -27668,6 +28145,7 @@
           "numberValues": {
             "description": "NumberValues are the numeric values to test against.",
             "items": {
+              "format": "double",
               "type": "number"
             },
             "type": "array"
@@ -27724,6 +28202,7 @@
         "properties": {
           "alertCount": {
             "description": "AlertCount is how many series would alert for the tested rule.",
+            "format": "int64",
             "type": "integer"
           },
           "message": {
@@ -27763,6 +28242,7 @@
           },
           "expiresIn": {
             "description": "ExpiresIn is the access token's lifetime in seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "refreshToken": {
@@ -27810,6 +28290,7 @@
         "properties": {
           "count": {
             "description": "Count is how many captured errors carried it.",
+            "format": "uint64",
             "type": "integer"
           },
           "firstSeen": {
@@ -27924,6 +28405,7 @@
           },
           "endTimestampMillis": {
             "description": "EndTimestampMillis is when it closes.",
+            "format": "uint64",
             "type": "integer"
           },
           "events": {
@@ -27942,6 +28424,7 @@
           },
           "startTimestampMillis": {
             "description": "StartTimestampMillis is when the window opens.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -28050,10 +28533,12 @@
           },
           "percentage": {
             "description": "Percentage is the metric's share, in percent.",
+            "format": "double",
             "type": "number"
           },
           "totalValue": {
             "description": "TotalValue is the metric's absolute count.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -28154,6 +28639,7 @@
         "properties": {
           "count": {
             "description": "Count is how many spans were ingested in the bucket.",
+            "format": "uint64",
             "type": "integer"
           },
           "time": {
@@ -28163,6 +28649,7 @@
           },
           "timestamp": {
             "description": "Timestamp is the bucket start, as epoch nanoseconds.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -28695,6 +29182,7 @@
           },
           "timeout": {
             "description": "Timeout is the maximum time allowed to invoke the pagerduty. Setting this to 0\ndoes not impose a timeout.",
+            "format": "int64",
             "type": "integer"
           },
           "url": {}
@@ -28729,15 +29217,19 @@
       "o11y.Pagination": {
         "properties": {
           "page": {
+            "format": "int64",
             "type": "integer"
           },
           "pages": {
+            "format": "int64",
             "type": "integer"
           },
           "per_page": {
+            "format": "int64",
             "type": "integer"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -28746,18 +29238,23 @@
       "o11y.PodCountByPhase": {
         "properties": {
           "failed": {
+            "format": "int64",
             "type": "integer"
           },
           "pending": {
+            "format": "int64",
             "type": "integer"
           },
           "running": {
+            "format": "int64",
             "type": "integer"
           },
           "succeeded": {
+            "format": "int64",
             "type": "integer"
           },
           "unknown": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -28766,18 +29263,23 @@
       "o11y.PodCountsByPhase": {
         "properties": {
           "failed": {
+            "format": "int64",
             "type": "integer"
           },
           "pending": {
+            "format": "int64",
             "type": "integer"
           },
           "running": {
+            "format": "int64",
             "type": "integer"
           },
           "succeeded": {
+            "format": "int64",
             "type": "integer"
           },
           "unknown": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -28795,27 +29297,34 @@
             "type": "object"
           },
           "podCPU": {
+            "format": "double",
             "type": "number"
           },
           "podCPULimit": {
+            "format": "double",
             "type": "number"
           },
           "podCPURequest": {
+            "format": "double",
             "type": "number"
           },
           "podMemory": {
+            "format": "double",
             "type": "number"
           },
           "podMemoryLimit": {
+            "format": "double",
             "type": "number"
           },
           "podMemoryRequest": {
+            "format": "double",
             "type": "number"
           },
           "podUID": {
             "type": "string"
           },
           "restartCount": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -28825,6 +29334,7 @@
         "properties": {
           "end": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
@@ -28837,9 +29347,11 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -28847,6 +29359,7 @@
           },
           "start": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -28861,6 +29374,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -28878,27 +29392,34 @@
             "type": "object"
           },
           "podAge": {
+            "format": "int64",
             "type": "integer"
           },
           "podCPU": {
+            "format": "double",
             "type": "number"
           },
           "podCPULimit": {
+            "format": "double",
             "type": "number"
           },
           "podCPURequest": {
+            "format": "double",
             "type": "number"
           },
           "podCountsByPhase": {
             "$ref": "#/components/schemas/o11y.PodCountsByPhase"
           },
           "podMemory": {
+            "format": "double",
             "type": "number"
           },
           "podMemoryLimit": {
+            "format": "double",
             "type": "number"
           },
           "podMemoryRequest": {
+            "format": "double",
             "type": "number"
           },
           "podPhase": {},
@@ -28920,6 +29441,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {},
@@ -28964,6 +29486,7 @@
       "o11y.PostableClusters": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -28976,15 +29499,18 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
             "$ref": "#/components/schemas/o11y.querybuildertypesv5.OrderBy"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -28993,6 +29519,7 @@
       "o11y.PostableDaemonSets": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -29005,15 +29532,18 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
             "$ref": "#/components/schemas/o11y.querybuildertypesv5.OrderBy"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -29022,6 +29552,7 @@
       "o11y.PostableDeployments": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -29034,15 +29565,18 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
             "$ref": "#/components/schemas/o11y.querybuildertypesv5.OrderBy"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -29059,6 +29593,7 @@
       "o11y.PostableHosts": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -29071,15 +29606,18 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
             "$ref": "#/components/schemas/o11y.querybuildertypesv5.OrderBy"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -29106,6 +29644,7 @@
       "o11y.PostableJobs": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -29118,15 +29657,18 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
             "$ref": "#/components/schemas/o11y.querybuildertypesv5.OrderBy"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -29135,6 +29677,7 @@
       "o11y.PostableNamespaces": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -29147,15 +29690,18 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
             "$ref": "#/components/schemas/o11y.querybuildertypesv5.OrderBy"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -29164,6 +29710,7 @@
       "o11y.PostableNodes": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -29176,15 +29723,18 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
             "$ref": "#/components/schemas/o11y.querybuildertypesv5.OrderBy"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -29215,6 +29765,7 @@
             "type": "string"
           },
           "orderId": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -29244,6 +29795,7 @@
       "o11y.PostablePods": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -29256,15 +29808,18 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
             "$ref": "#/components/schemas/o11y.querybuildertypesv5.OrderBy"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -29279,12 +29834,15 @@
             "type": "boolean"
           },
           "logs_scale_per_day_in_gb": {
+            "format": "int64",
             "type": "integer"
           },
           "number_of_hosts": {
+            "format": "int64",
             "type": "integer"
           },
           "number_of_services": {
+            "format": "int64",
             "type": "integer"
           },
           "reasons_for_interest_in_o11y": {
@@ -29349,6 +29907,7 @@
       "o11y.PostableStatefulSets": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -29361,15 +29920,18 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
             "$ref": "#/components/schemas/o11y.querybuildertypesv5.OrderBy"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -29378,6 +29940,7 @@
       "o11y.PostableVolumes": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "filter": {
@@ -29390,15 +29953,18 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
             "$ref": "#/components/schemas/o11y.querybuildertypesv5.OrderBy"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -29419,12 +29985,14 @@
             "type": "string"
           },
           "processCPU": {
+            "format": "double",
             "type": "number"
           },
           "processID": {
             "type": "string"
           },
           "processMemory": {
+            "format": "double",
             "type": "number"
           },
           "processName": {
@@ -29437,6 +30005,7 @@
         "properties": {
           "end": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
@@ -29449,9 +30018,11 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -29459,6 +30030,7 @@
           },
           "start": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -29473,6 +30045,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -29521,6 +30094,7 @@
             "type": "string"
           },
           "expire": {
+            "format": "int64",
             "type": "integer"
           },
           "html": {
@@ -29539,6 +30113,7 @@
             "type": "string"
           },
           "retry": {
+            "format": "int64",
             "type": "integer"
           },
           "sound": {
@@ -29552,6 +30127,7 @@
             "type": "string"
           },
           "ttl": {
+            "format": "int64",
             "type": "integer"
           },
           "url": {
@@ -29585,6 +30161,7 @@
             "$ref": "#/components/schemas/o11y.CompositeQuery"
           },
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "formatForWeb": {
@@ -29594,10 +30171,12 @@
             "type": "boolean"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           },
           "step": {
             "description": "step is in seconds; used for prometheus queries",
+            "format": "int64",
             "type": "integer"
           },
           "variables": {
@@ -29617,6 +30196,7 @@
           },
           "end": {
             "description": "End is the end time of the query in epoch milliseconds.",
+            "format": "uint64",
             "type": "integer"
           },
           "formatOptions": {
@@ -29635,6 +30215,7 @@
           },
           "start": {
             "description": "Start is the start time of the query in epoch milliseconds.",
+            "format": "uint64",
             "type": "integer"
           },
           "variables": {
@@ -29792,9 +30373,11 @@
       "o11y.ReleStateItem": {
         "properties": {
           "end": {
+            "format": "int64",
             "type": "integer"
           },
           "start": {
+            "format": "int64",
             "type": "integer"
           },
           "state": {}
@@ -29916,6 +30499,7 @@
       "o11y.RuleStateHistory": {
         "properties": {
           "fingerprint": {
+            "format": "uint64",
             "type": "integer"
           },
           "labels": {},
@@ -29944,9 +30528,11 @@
             "type": "boolean"
           },
           "unixMilli": {
+            "format": "int64",
             "type": "integer"
           },
           "value": {
+            "format": "double",
             "type": "number"
           }
         },
@@ -29955,9 +30541,11 @@
       "o11y.RuleStateHistoryContributor": {
         "properties": {
           "count": {
+            "format": "uint64",
             "type": "integer"
           },
           "fingerprint": {
+            "format": "uint64",
             "type": "integer"
           },
           "labels": {},
@@ -29988,6 +30576,7 @@
             "type": "object"
           },
           "total": {
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -30219,6 +30808,7 @@
           },
           "last_received_ts_ms": {
             "description": "epoch milliseconds",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -30330,6 +30920,7 @@
           },
           "timeout": {
             "description": "Timeout is the maximum time allowed to invoke the slack. Setting this to 0\ndoes not impose a timeout.",
+            "format": "int64",
             "type": "integer"
           },
           "title": {
@@ -30392,6 +30983,7 @@
           },
           "value": {
             "additionalProperties": {
+              "format": "uint64",
               "type": "integer"
             },
             "type": "object"
@@ -30496,6 +31088,7 @@
           },
           "operation": {},
           "priority": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -30504,27 +31097,35 @@
       "o11y.StatefulSetListRecord": {
         "properties": {
           "availablePods": {
+            "format": "int64",
             "type": "integer"
           },
           "cpuLimit": {
+            "format": "double",
             "type": "number"
           },
           "cpuRequest": {
+            "format": "double",
             "type": "number"
           },
           "cpuUsage": {
+            "format": "double",
             "type": "number"
           },
           "desiredPods": {
+            "format": "int64",
             "type": "integer"
           },
           "memoryLimit": {
+            "format": "double",
             "type": "number"
           },
           "memoryRequest": {
+            "format": "double",
             "type": "number"
           },
           "memoryUsage": {
+            "format": "double",
             "type": "number"
           },
           "meta": {
@@ -30534,6 +31135,7 @@
             "type": "object"
           },
           "restarts": {
+            "format": "int64",
             "type": "integer"
           },
           "statefulSetName": {
@@ -30546,6 +31148,7 @@
         "properties": {
           "end": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
@@ -30558,9 +31161,11 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -30568,6 +31173,7 @@
           },
           "start": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -30582,6 +31188,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -30593,9 +31200,11 @@
       "o11y.StatefulSetRecord": {
         "properties": {
           "currentPods": {
+            "format": "int64",
             "type": "integer"
           },
           "desiredPods": {
+            "format": "int64",
             "type": "integer"
           },
           "meta": {
@@ -30608,21 +31217,27 @@
             "$ref": "#/components/schemas/o11y.PodCountsByPhase"
           },
           "statefulSetCPU": {
+            "format": "double",
             "type": "number"
           },
           "statefulSetCPULimit": {
+            "format": "double",
             "type": "number"
           },
           "statefulSetCPURequest": {
+            "format": "double",
             "type": "number"
           },
           "statefulSetMemory": {
+            "format": "double",
             "type": "number"
           },
           "statefulSetMemoryLimit": {
+            "format": "double",
             "type": "number"
           },
           "statefulSetMemoryRequest": {
+            "format": "double",
             "type": "number"
           },
           "statefulSetName": {
@@ -30643,6 +31258,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {},
@@ -30673,9 +31289,11 @@
             "$ref": "#/components/schemas/o11y.Series"
           },
           "totalCurrentTriggers": {
+            "format": "uint64",
             "type": "integer"
           },
           "totalPastTriggers": {
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -30954,6 +31572,7 @@
           },
           "api_url": {},
           "chat": {
+            "format": "int64",
             "type": "integer"
           },
           "chat_file": {
@@ -30969,6 +31588,7 @@
             "type": "string"
           },
           "message_thread_id": {
+            "format": "int64",
             "type": "integer"
           },
           "parse_mode": {
@@ -31011,6 +31631,7 @@
           },
           "numberValues": {
             "items": {
+              "format": "double",
               "type": "number"
             },
             "type": "array"
@@ -31190,21 +31811,27 @@
             "type": "string"
           },
           "volumeAvailable": {
+            "format": "double",
             "type": "number"
           },
           "volumeCapacity": {
+            "format": "double",
             "type": "number"
           },
           "volumeInodes": {
+            "format": "double",
             "type": "number"
           },
           "volumeInodesFree": {
+            "format": "double",
             "type": "number"
           },
           "volumeInodesUsed": {
+            "format": "double",
             "type": "number"
           },
           "volumeUsage": {
+            "format": "double",
             "type": "number"
           }
         },
@@ -31214,6 +31841,7 @@
         "properties": {
           "end": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           },
           "filters": {
@@ -31226,9 +31854,11 @@
             "type": "array"
           },
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
+            "format": "int64",
             "type": "integer"
           },
           "orderBy": {
@@ -31236,6 +31866,7 @@
           },
           "start": {
             "description": "epoch time in ms",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -31250,6 +31881,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -31270,21 +31902,27 @@
             "type": "string"
           },
           "volumeAvailable": {
+            "format": "double",
             "type": "number"
           },
           "volumeCapacity": {
+            "format": "double",
             "type": "number"
           },
           "volumeInodes": {
+            "format": "double",
             "type": "number"
           },
           "volumeInodesFree": {
+            "format": "double",
             "type": "number"
           },
           "volumeInodesUsed": {
+            "format": "double",
             "type": "number"
           },
           "volumeUsage": {
+            "format": "double",
             "type": "number"
           }
         },
@@ -31302,6 +31940,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {},
@@ -31327,6 +31966,7 @@
             "type": "string"
           },
           "duration_nano": {
+            "format": "uint64",
             "type": "integer"
           },
           "events": {
@@ -31342,6 +31982,7 @@
             "type": "string"
           },
           "flags": {
+            "format": "uint32",
             "type": "integer"
           },
           "has_children": {
@@ -31366,6 +32007,7 @@
             "type": "string"
           },
           "level": {
+            "format": "uint64",
             "type": "integer"
           },
           "name": {
@@ -31393,6 +32035,7 @@
             "type": "string"
           },
           "status_code": {
+            "format": "int16",
             "type": "integer"
           },
           "status_code_string": {
@@ -31402,9 +32045,11 @@
             "type": "string"
           },
           "sub_tree_node_count": {
+            "format": "uint64",
             "type": "integer"
           },
           "time_unix": {
+            "format": "uint64",
             "type": "integer"
           },
           "trace_id": {
@@ -31444,10 +32089,12 @@
           },
           "max_alerts": {
             "description": "MaxAlerts is the maximum number of alerts to be sent per webhook message.\nAlerts exceeding this threshold will be truncated. Setting this to 0\nallows an unlimited number of alerts.",
+            "format": "uint64",
             "type": "integer"
           },
           "timeout": {
             "description": "Timeout is the maximum time allowed to invoke the webhook. Setting this to 0\ndoes not impose a timeout.",
+            "format": "int64",
             "type": "integer"
           },
           "url": {
@@ -31620,6 +32267,7 @@
         "properties": {
           "completedCount": {
             "description": "CompletedCount is how many have been reviewed.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
@@ -31647,6 +32295,7 @@
           },
           "pendingCount": {
             "description": "PendingCount is how many of its items are still awaiting review.",
+            "format": "int64",
             "type": "integer"
           },
           "scoreConfigIds": {
@@ -31719,10 +32368,12 @@
           },
           "total": {
             "description": "Total is how many services reported at all inside the bucket. It can be\nlower than the current total: a target added last week reported nothing\nthe week before, and saying so is the point.",
+            "format": "int64",
             "type": "integer"
           },
           "up": {
             "description": "Up is how many services were up at the end of the bucket.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -31734,9 +32385,11 @@
             "description": "Range is the window and bucket width actually used, after clamping — not what\nwas asked for, which is why a caller reads it back rather than assuming.",
             "properties": {
               "sinceSec": {
+                "format": "int64",
                 "type": "integer"
               },
               "stepSec": {
+                "format": "int64",
                 "type": "integer"
               }
             },
@@ -31758,10 +32411,12 @@
           },
           "total": {
             "description": "Total is how many services the prober currently watches.",
+            "format": "int64",
             "type": "integer"
           },
           "up": {
             "description": "Up is how many services are up right now.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -31864,18 +32519,22 @@
         "properties": {
           "limit": {
             "description": "Limit is how many rows one page holds.",
+            "format": "int64",
             "type": "integer"
           },
           "page": {
             "description": "Page is the 1-based page this response is.",
+            "format": "int64",
             "type": "integer"
           },
           "totalItems": {
             "description": "TotalItems is how many rows match in total.",
+            "format": "int64",
             "type": "integer"
           },
           "totalPages": {
             "description": "TotalPages is ceil(totalItems/limit), at least 1.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -31891,9 +32550,11 @@
             "description": "Range is the window actually used, after clamping — not what was asked for.\nA caller that wants to know what it got reads this rather than its own query.",
             "properties": {
               "sinceSec": {
+                "format": "int64",
                 "type": "integer"
               },
               "stepSec": {
+                "format": "int64",
                 "type": "integer"
               }
             },
@@ -31933,15 +32594,19 @@
             "description": "Summary totals the window in one object, so a tile does not have to sum the\nseries to render. errorRate is a RATIO of the window's requests, not a\npercentage, and p95Ms is over the window rather than the worst bucket.",
             "properties": {
               "errorRate": {
+                "format": "double",
                 "type": "number"
               },
               "errors": {
+                "format": "int64",
                 "type": "integer"
               },
               "p95Ms": {
+                "format": "double",
                 "type": "number"
               },
               "requests": {
+                "format": "int64",
                 "type": "integer"
               }
             },
@@ -31951,9 +32616,11 @@
             "description": "Usage is the LLM side of the same window: how many calls, how many tokens and\nwhat they cost. It counts model traffic, not HTTP requests, so it does not\nreconcile with series.requests.",
             "properties": {
               "calls": {
+                "format": "int64",
                 "type": "integer"
               },
               "costCents": {
+                "format": "int64",
                 "type": "integer"
               },
               "series": {
@@ -31963,6 +32630,7 @@
                 "type": "array"
               },
               "tokens": {
+                "format": "int64",
                 "type": "integer"
               }
             },
@@ -31979,6 +32647,7 @@
           },
           "v": {
             "description": "V is the bucket's value.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -32036,6 +32705,7 @@
           },
           "latencyMs": {
             "description": "LatencyMs is the health probe's round trip in MILLISECONDS, time-boxed at two\nseconds. It is 0 when no probe answered, which is not a fast service.",
+            "format": "int64",
             "type": "integer"
           },
           "product": {
@@ -32057,6 +32727,7 @@
         "properties": {
           "durationMs": {
             "description": "DurationMs is End minus Start in milliseconds: the trace's wall clock,\nnot the sum of its spans, which double-counts everything concurrent.",
+            "format": "double",
             "type": "number"
           },
           "end": {
@@ -32065,6 +32736,7 @@
           },
           "numSpans": {
             "description": "NumSpans is how many spans the trace carries.",
+            "format": "int64",
             "type": "integer"
           },
           "start": {
@@ -32082,14 +32754,17 @@
         "properties": {
           "count": {
             "description": "Count is how many traces this page carries.",
+            "format": "int64",
             "type": "integer"
           },
           "limit": {
             "description": "Limit is the page cap actually applied, after clamping.",
+            "format": "int64",
             "type": "integer"
           },
           "sinceSec": {
             "description": "SinceSec is the window actually read, in seconds, after clamping.",
+            "format": "int64",
             "type": "integer"
           },
           "traces": {
@@ -32151,10 +32826,12 @@
         "properties": {
           "calls": {
             "description": "Calls is how many LLM calls landed in the bucket.",
+            "format": "int64",
             "type": "integer"
           },
           "costCents": {
             "description": "CostCents is what they cost, in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "t": {
@@ -32163,6 +32840,7 @@
           },
           "tokens": {
             "description": "Tokens is how many tokens they consumed.",
+            "format": "int64",
             "type": "integer"
           }
         },

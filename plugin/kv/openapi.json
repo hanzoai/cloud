@@ -285,14 +285,17 @@
           },
           "history": {
             "description": "History is how many revisions each key keeps.",
+            "format": "int64",
             "type": "integer"
           },
           "ttl": {
             "description": "TTL is the entry expiry in seconds; 0 means none.",
+            "format": "int64",
             "type": "integer"
           },
           "values": {
             "description": "Values is how many values the bucket holds right now.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -306,14 +309,17 @@
           },
           "history": {
             "description": "History is how many revisions each key keeps, 1–64. 0 means 1.",
+            "format": "int64",
             "type": "integer"
           },
           "maxValue": {
             "description": "MaxValue caps one value's size in bytes. 0 or less means the server's\nceiling.",
+            "format": "int64",
             "type": "integer"
           },
           "ttl": {
             "description": "TTL expires entries after this many SECONDS. 0 means no expiry.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -323,6 +329,7 @@
         "properties": {
           "revision": {
             "description": "Revision is the revision the write created.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -344,6 +351,7 @@
           },
           "revision": {
             "description": "Revision is the entry's revision in the bucket.",
+            "format": "uint64",
             "type": "integer"
           },
           "value": {

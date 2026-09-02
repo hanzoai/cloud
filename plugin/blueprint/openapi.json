@@ -91,10 +91,12 @@
           },
           "microUsdPerGbHour": {
             "description": "MicroUSDPerGBHour is the price of one GiB of memory for one hour, in\nmillionths of a US dollar.",
+            "format": "int64",
             "type": "integer"
           },
           "microUsdPerVcpuHour": {
             "description": "MicroUSDPerVCPUHour is the price of one vCPU for one hour, in millionths of\na US dollar.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -104,6 +106,7 @@
         "properties": {
           "blueprints": {
             "description": "Blueprints is how many blueprints this build has embedded and priced.",
+            "format": "int64",
             "type": "integer"
           },
           "rateCard": {
@@ -137,10 +140,12 @@
         "properties": {
           "estCentsPerMonth": {
             "description": "CentsPerMonth is the estimated compute cost of running the whole stack for\none month, in USD cents, from the rate card GET /v1/blueprint/health echoes.",
+            "format": "int64",
             "type": "integer"
           },
           "services": {
             "description": "Services is how many compose services the stack runs.",
+            "format": "int64",
             "type": "integer"
           },
           "templateId": {

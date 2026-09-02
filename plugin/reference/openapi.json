@@ -201,6 +201,7 @@
             "required": false,
             "description": "Limit caps the override listing: default 200, maximum 1000.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 50
@@ -290,6 +291,7 @@
           },
           "overrides": {
             "description": "Overrides is how many your org still holds in this set.",
+            "format": "int64",
             "type": "integer"
           },
           "set": {
@@ -331,6 +333,7 @@
           },
           "score": {
             "description": "Score is the published risk weight where the source expresses one.",
+            "format": "double",
             "type": "number"
           },
           "set": {
@@ -429,6 +432,7 @@
           },
           "keys": {
             "description": "Keys is how many designations that load carried. Zero from a publisher who\ndesignates somebody is a failed load wearing a successful one's clothes,\nand belongs in Refusal instead.",
+            "format": "int64",
             "type": "integer"
           },
           "refusal": {
@@ -458,6 +462,7 @@
           },
           "keys": {
             "description": "Keys is how many members the baseline carries.",
+            "format": "int64",
             "type": "integer"
           },
           "kind": {
@@ -474,6 +479,7 @@
           },
           "overrides": {
             "description": "Overrides is how many entries YOUR org has laid over this baseline.",
+            "format": "int64",
             "type": "integer"
           },
           "refusal": {
@@ -544,6 +550,7 @@
           },
           "keys": {
             "description": "Keys is how many members this publisher contributed.",
+            "format": "int64",
             "type": "integer"
           },
           "origin": {
@@ -573,6 +580,7 @@
         "properties": {
           "keys": {
             "description": "Keys is how many members it carries.",
+            "format": "int64",
             "type": "integer"
           },
           "refusal": {
@@ -597,6 +605,7 @@
           },
           "wrote": {
             "description": "Wrote is how many rows this run actually wrote. Zero with Unchanged means\nthe publisher served the same set again.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -739,6 +748,7 @@
         "properties": {
           "overrides": {
             "description": "Overrides is how many your org now holds in this set.",
+            "format": "int64",
             "type": "integer"
           },
           "set": {
@@ -747,6 +757,7 @@
           },
           "written": {
             "description": "Written is how many entries this call wrote.",
+            "format": "int64",
             "type": "integer"
           }
         },

@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/world", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/world GET /v1/world", zip.Doc{
 		Description: "Answers GET /v1/world — the product's public endpoint, naming every wire\nthis surface answers on.\n\nIt exists because two of those wires are INVISIBLE to the generated document.\n/v1/world/mcp and /v1/world/zap are carved off the cloud catch-all by the\ningress and answered by world-gw, so the cloud router never serves them — and\nopenapi.Describe renders prose only for a route the router actually serves,\nwhich is the very property that keeps the document from being able to claim an\noperation nothing answers. Both addresses are real and public, so without this\nop the only way to learn they exist is to read the ingress config. This is\nwhere that fact lives, in the product's own surface.\n\nPublic on purpose: discovery precedes credentials. It reports addresses and\nprotocols only — never feed data, and never the caller's plan, which\nGET /v1/world/limits owns — so there is nothing here to leak.",
 		Fields: map[string]string{
 			"worldIndex.product": "Product is the product's name as customers know it.",
@@ -20,7 +20,7 @@ func init() {
 			"worldWire.spec":     "Spec is where this wire's operations are enumerated, when they are\nenumerated in a document at all. Empty for a wire that describes itself\nover its own protocol.",
 		},
 	})
-	zip.Describe("GET /v1/world/limits", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/world GET /v1/world/limits", zip.Doc{
 		Description: "Echoes a World plan's rate limits, alert quota and model-API grant, read\nstraight from the live @hanzo/plans catalog, so agents and dashboards configure\nthemselves against the catalog instead of hardcoding tier numbers.\n\nAn empty or unknown plan resolves world-free, and a catalog failure serves that\nsame free floor rather than erroring — so this always answers 200, and it can only\never under-grant. It reports the contract; it does not enforce it.",
 		Fields: map[string]string{
 			"limitsBlock.apiRateLimit": "APIRateLimit is requests per minute allowed against the REST /v1/world\nsurface. -1 means unlimited.",
@@ -33,7 +33,7 @@ func init() {
 			"limitsView.unit":          "Unit names what the two rate numbers are counted in: requests/minute.",
 		},
 	})
-	zip.Describe("GET /v1/world/news", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/world GET /v1/world/news", zip.Doc{
 		Description: "Returns the caller's merged world-news feed: every source their project's\npipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed —\nfetched concurrently, narrowed by the pipeline's keyword/region/source filters,\ndeduplicated by link and sorted freshest first, capped at 50 items.\n\nA project with no stored pipeline gets a sensible default set of world feeds\nrather than an empty answer. A source that fails or times out is SKIPPED: the feed\ndegrades to honest partial results and never 5xxs because one outlet was down.\nReading also publishes the result to the /v1/world/stream subscribers of the same\n(org, project), so a dashboard's own refresh updates every open tab.",
 		Fields: map[string]string{
 			"NewsItem.image":     "Image is a lead-image URL when the upstream carried one.",
@@ -46,7 +46,7 @@ func init() {
 			"newsResponse.items": "Items is the merged, filtered, deduped feed, freshest first and capped at\n50. A source that failed is skipped rather than failing the read, so this\ncan be shorter than the pipeline's reach — it is never an error.",
 		},
 	})
-	zip.Describe("GET /v1/world/pipeline", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/world GET /v1/world/pipeline", zip.Doc{
 		Description: "Returns the caller project's news pipeline: which feeds it reads and how\nthe merged result is filtered. A project that has never written one is answered\nwith the built-in world feeds and `default: true`, so a fresh project sees the\nsame feed /v1/world/news would actually serve rather than an empty configuration.",
 		Fields: map[string]string{
 			"Filters.keywords":       "Keywords keeps only items whose TITLE contains one of these,\ncase-insensitively. They are also the GDELT queries the feed fans out to,\none per keyword of three characters or more — so a keyword both widens what\nis fetched and narrows what is kept.",
@@ -61,10 +61,10 @@ func init() {
 			"pipelineView.updatedAt": "UpdatedAt is when it was last written, RFC3339 UTC. Absent on the default.",
 		},
 	})
-	zip.Describe("GET /v1/world/stream", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/world GET /v1/world/stream", zip.Doc{
 		Description: "Is GET /v1/world/stream — a Server-Sent Events feed of live news\nrefreshes for the caller's (org, project). Org-scoped (fail-closed): the bus\nfilters on org and the loop drops any update whose Project differs, so a\nsubscriber only ever receives its own tenant+project. It streams over both the\nplain HTTP listener and the ZAP machine transport with no transport-specific\ncode (zip SendStreamWriter is transport-agnostic). org/project are captured\n(both cloned by scope) BEFORE SendStreamWriter so the loop never touches the\nrequest Ctx after the handler returns — client-gone is a flush error, bounded\nby a 25s heartbeat.",
 	})
-	zip.Describe("PUT /v1/world/pipeline", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/world PUT /v1/world/pipeline", zip.Doc{
 		Description: "Replaces the caller project's news pipeline and returns what was\nstored. It is a WHOLE replacement, not a patch: a field the request leaves out is\nstored empty, so sending only feeds clears the filters.\n\nEvery feed URL is validated HERE, at the write boundary — http(s) only, and the\nhost must be on the server's allowlist — so a stored pipeline can never name a\nhost the fetcher would later refuse, and the allowlist is one decision in one\nplace rather than a check at each fetch.",
 		Fields: map[string]string{
 			"Filters.keywords":       "Keywords keeps only items whose TITLE contains one of these,\ncase-insensitively. They are also the GDELT queries the feed fans out to,\none per keyword of three characters or more — so a keyword both widens what\nis fetched and narrows what is kept.",

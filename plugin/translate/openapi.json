@@ -65,6 +65,7 @@
             "required": false,
             "description": "Limit caps the rows returned. Non-positive or unparseable means the server\ndefault (200); the ceiling is 1000.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -158,6 +159,7 @@
           },
           "updated_at": {
             "description": "UpdatedAt is the unix second the entry last changed.",
+            "format": "int64",
             "type": "integer"
           }
         },

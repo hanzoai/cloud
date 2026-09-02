@@ -176,6 +176,7 @@
         "properties": {
           "chainId": {
             "description": "ChainID is the EIP-155 id, so a caller can check it matches the wallet\nthey are about to sign with.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -221,10 +222,12 @@
       "chainStatus": {
         "properties": {
           "chainId": {
+            "format": "int64",
             "type": "integer"
           },
           "height": {
             "description": "Height is the latest block, omitted when the chain did not answer rather\nthan reported as zero — a zero height is a real value on a fresh chain.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -244,6 +247,7 @@
         "properties": {
           "code": {
             "description": "Code is the JSON-RPC error code the chain reported, passed through as it\ncame. -32603 (internal error) is the one value this deployment mints\nitself, for an upstream that could not be reached at all.",
+            "format": "int64",
             "type": "integer"
           },
           "message": {

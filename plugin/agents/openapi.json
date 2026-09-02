@@ -121,6 +121,7 @@
             "required": false,
             "description": "Limit caps the page. Absent, zero or over 500 reads as 100.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -254,7 +255,6 @@
       "post": {
         "operationId": "post_agents_coding",
         "summary": "Start one autonomous coding run against a repo in the caller's org",
-        "description": "Runs a coding task on a repository: clones it into a sandbox, lets a model read\nand edit the code, run the tests, and push the work to a branch. Say the thing\nyou want done — \"fix the failing auth test in hanzoai/cloud\" — and the run\ninfers the repo, the branch and the plan. No prefix, no ceremony.\n\nIt answers 202 with the run's handle the moment the run is ADMITTED — not when\nit finishes. A coding run takes minutes; holding a request open for one would\ntie a connection to a model loop and give the caller nothing it cannot get\nbetter from the session stream.\n\nThe handle is a session id, and that is deliberate: the session is already the\nrun's durable record and its live stream (/v1/agents/sessions/{id}/stream), so\nthis op does not grow a progress endpoint, a status endpoint or a cancel\nendpoint of its own. One way to watch a run, whoever started it.\n\nIt is also how work CONTINUES. Pass an earlier run's session as `after` and\nthis one starts from where that one stopped, so \"now add tests for it\" builds\non the branch already pushed instead of a fresh clone. The follow-up still gets\nits own branch and its own session — one run, one branch, always reviewable on\nits own.",
         "tags": [
           "agents"
         ],
@@ -335,6 +335,7 @@
             "required": false,
             "description": "Limit caps how many runs come back, newest first. Absent, zero or out of\nrange (1..200) reads as 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 20
@@ -427,6 +428,7 @@
             "required": false,
             "description": "Limit caps the page. Absent, zero or over 500 reads as 100.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 20
@@ -605,6 +607,7 @@
             "required": false,
             "description": "After is the last seq this poller applied; only commands newer than it come\nback. Absent or negative reads as 0, which drains from the beginning.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 12
@@ -1394,6 +1397,7 @@
             "required": false,
             "description": "Limit caps how many runs come back, newest first. Absent, zero or out of\nrange (1..200) reads as 50.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 20
@@ -1421,51 +1425,40 @@
       "CodingStartIn": {
         "properties": {
           "after": {
-            "description": "After names a previous run's session, and starts this one from where that\none stopped instead of from the repository's default. It is how a follow-up\ninstruction — \"now add tests for it\" — builds on work already done rather\nthan beginning again on a fresh clone.\n\nIt sets the base and nothing else, so this run still writes its OWN branch.\nOne run, one branch: a run that wrote back onto an earlier run's branch\nwould break the rule the forge's ref policy is built on, and would leave\ntwo turns of work with one name to review.\n\nA caller who already knows the branch may pass Base directly; this exists\nbecause the branch is derived from a session id and nobody should have to\nknow how. Base wins if both are given.",
             "type": "string"
           },
           "agentRef": {
-            "description": "AgentRef names a configured agent to run as, which is how an org pins a\nharness, a model and a prompt to a name. Empty runs the default agent.",
             "type": "string"
           },
           "base": {
-            "description": "Base is the branch to start from. Empty takes the repository's default. The\nrun never writes here — it writes the agent branch it answers with.",
             "type": "string"
           },
           "desktop": {
-            "description": "Desktop asks for a run with a SCREEN — an image carrying an X server — for a\ntask that has to drive a browser or another windowed program. False, the\ndefault, is a headless checkout, which is what writing code needs.",
             "type": "boolean"
           },
           "project": {
-            "description": "Project scopes the run to one board's work when the org keeps more than one.\nEmpty is the org's default.",
             "type": "string"
           },
           "prompt": {
-            "description": "Prompt is the task, in the words you would use with a colleague who has the\ncheckout open. It is the whole instruction: there is no second field for\ncontext, and a prompt that names files and the outcome it wants gets a run\nthat does not have to guess either.",
             "type": "string"
           },
           "replyChannel": {
-            "description": "ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the\nsurface that started it has somewhere for it to talk. Empty means nobody is\nlistening and the run simply does not narrate — which is the app surface's\ncase, because /v1/agents/coding hands back a session id and the session stream is\na better progress feed than any message could be.\n\nIt is an ADDRESS and not a token: the engine says \"put this text there\",\nand the process that owns the workspace's bot credential is the one that\nactually posts. So a run reports into a Slack thread without the engine\never holding the token that could post anywhere else in that workspace.",
             "type": "string"
           },
           "replyThread": {
-            "description": "ReplyThread narrows that address to one THREAD inside the channel: on Slack\nit is the parent message's ts, the same value a reply carries as thread_ts.\nEmpty puts the run's status line at the top level of the channel instead.\n\nThe channel is what decides whether a run narrates at all, so this on its own\naddresses nothing — a thread with no ReplyChannel is a run nobody hears.",
             "type": "string"
           },
           "repo": {
-            "description": "Repo is what to work on, as `owner/name` in the caller's own org. The engine\nresolves the clone URL and the push credential from the org itself, so this\nsays WHICH repository and never how to reach it.",
             "type": "string"
           },
           "targetId": {
-            "description": "TargetID routes the run to a registered machine the org has claimed instead\nof to a sandbox in our cluster. Empty runs it here, which is the usual case.",
             "type": "string"
           },
           "timeoutSeconds": {
-            "description": "TimeoutSeconds bounds the whole run. Unset takes the default budget; a run\nthat hits the bound is stopped and reports what it had done by then.",
+            "format": "int64",
             "type": "integer"
           },
           "tool": {
-            "description": "Tool is which harness runs the prompt — dev | claude | codex | python |\nnode — and Desktop is whether the run needs a screen. Both are empty by\ndefault, which is `dev` with no screen, and that default is what every\ncaller gets until it says otherwise.\n\nThey are two fields because they are two questions. The harness decides\nwhat argv starts; the screen decides which image carries an X server. A\ncaller may want claude WITH a browser it can see, and a single enum would\nhave made that combination unsayable.",
             "type": "string"
           }
         },
@@ -1474,23 +1467,18 @@
       "CodingStarted": {
         "properties": {
           "branch": {
-            "description": "Branch is the ref the run will push its work to, and the ONLY ref it is\npermitted to write. It exists before the work does, so it is safe to tell\nsomebody where to look while the run is still going.",
             "type": "string"
           },
           "repo": {
-            "description": "Repo is the repository the run was admitted against, echoed back as the\nengine resolved it.",
             "type": "string"
           },
           "routed": {
-            "description": "Routed says the run went to one of the org's own registered machines rather\nthan to a sandbox in our cluster. False is the ordinary case.",
             "type": "boolean"
           },
           "sessionId": {
-            "description": "SessionID is the run's handle: its durable record, and the id its live\nprogress streams under at /v1/agents/sessions/{sessionId}/stream. Every\nlater question about this run is asked with it.",
             "type": "string"
           },
           "targetId": {
-            "description": "TargetID names that machine when Routed is true, and is empty otherwise.",
             "type": "string"
           }
         },
@@ -1500,6 +1488,7 @@
         "properties": {
           "memory": {
             "description": "VRAM bytes, 0 = unknown",
+            "format": "int64",
             "type": "integer"
           },
           "model": {
@@ -1517,30 +1506,37 @@
         "properties": {
           "at": {
             "description": "unix seconds, server-stamped",
+            "format": "int64",
             "type": "integer"
           },
           "gpuUtil": {
             "description": "0..1 aggregate utilization",
+            "format": "double",
             "type": "number"
           },
           "load1": {
             "description": "Load1 is the machine's own one-minute load average — a count of runnable and\nuninterruptible tasks, NOT a percentage and NOT already divided by core\ncount, so it is read against Spec.CPUs: 8.0 is idle on 16 cores and swamped\non 4. Coerced finite and non-negative on write, so 0 means either genuinely\nidle or nothing reported.",
+            "format": "double",
             "type": "number"
           },
           "load15": {
             "description": "Load15 is the same figure over fifteen. The three together are what separate\na machine that is busy right now from one that has been busy all along —\nwhich is the question a dispatcher is really asking.",
+            "format": "double",
             "type": "number"
           },
           "load5": {
             "description": "Load5 is the same figure averaged over five minutes.",
+            "format": "double",
             "type": "number"
           },
           "memFree": {
             "description": "bytes",
+            "format": "int64",
             "type": "integer"
           },
           "memUsed": {
             "description": "bytes",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1554,6 +1550,7 @@
           },
           "cpus": {
             "description": "logical cores",
+            "format": "int64",
             "type": "integer"
           },
           "gpus": {
@@ -1565,6 +1562,7 @@
           },
           "memory": {
             "description": "total RAM, bytes",
+            "format": "int64",
             "type": "integer"
           },
           "os": {
@@ -1652,6 +1650,7 @@
             "type": "array"
           },
           "runs": {
+            "format": "int64",
             "type": "integer"
           },
           "schedule": {
@@ -1699,6 +1698,7 @@
           },
           "completionTokens": {
             "description": "CompletionTokens is the same measurement for what the model produced, on the\nsame final completion. It is a count of TOKENS, not of turns and not of money.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
@@ -1707,6 +1707,7 @@
           },
           "durationMs": {
             "description": "DurationMs is wall-clock milliseconds around the completion, including a\nfailover's retries. It is time SPENT, not time billed.",
+            "format": "int64",
             "type": "integer"
           },
           "error": {
@@ -1731,6 +1732,7 @@
           },
           "promptTokens": {
             "description": "PromptTokens is what the gateway reported for the run's FINAL completion, and\nonly that one — a tool loop's earlier rounds are the metering ledger's account,\njoined by this run's id. Reading it as the run's total spend undercounts a\nloop.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -1739,6 +1741,7 @@
           },
           "toolCalls": {
             "description": "ToolCalls is how many tool dispatches the run made — a count of ACTIONS, which\nis a different measurement from the token counts above and from the turns a\nbuild reports. Zero is a run that answered straight from the model.",
+            "format": "int64",
             "type": "integer"
           },
           "traceId": {
@@ -1788,6 +1791,7 @@
           },
           "runs": {
             "description": "Runs is how many executions the org has recorded against this agent, counted\nat read time. The list and update reads count the WHOLE history; the detail\nread reports the size of the RecentRuns page it carries, which stops at 20 —\nso a detail row saying 20 means \"at least 20\", not \"exactly 20\".",
+            "format": "int64",
             "type": "integer"
           },
           "schedule": {
@@ -1868,6 +1872,7 @@
           },
           "turns": {
             "description": "Turns is HOW MANY turns the transcript holds — a COUNT, unlike the `turn` on\neach turn of the full story, which is that turn's position. The full read\nreturns at most 1000 of them; this number is not capped.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1901,6 +1906,7 @@
           },
           "turn": {
             "description": "Seq is this turn's POSITION in the session's log — monotonic from 1, per\nsession — and it is what a commit's `Hanzo-Turn:` trailer names. It is not a\ncount of anything: the count is `turns` on the summary beside it.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1990,6 +1996,7 @@
           },
           "seq": {
             "description": "Seq is this command's position in the session's log — the same monotonic\nnumber every other turn is ordered by, so a command sits in the transcript\nwhere it was issued. Send the highest one you applied back as `after` and it\nis never redelivered.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2006,6 +2013,7 @@
           },
           "cursor": {
             "description": "Cursor is the seq to send as `after` on the next poll — the highest seq in\nthis page, or the cursor sent in when the page is empty.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2139,6 +2147,7 @@
           },
           "seq": {
             "description": "Seq is the turn's position in this session's log: monotonic from 1, assigned\nby the store inside the insert, and unique PER SESSION rather than globally.\nIt is the cursor a reader resumes from after a reconnect — ask for everything\nafter your last-seen seq.",
+            "format": "int64",
             "type": "integer"
           },
           "sessionId": {
@@ -2168,6 +2177,7 @@
           },
           "seq": {
             "description": "Seq is that event's position in the session's log — monotonic from 1, per\nsession. A reader holding it can ask the detail or stream reads for\neverything after it, so this doubles as the list's resume cursor.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2390,18 +2400,22 @@
         "properties": {
           "costCents": {
             "description": "CostCents would be the window's spend in cents. Always null here — the money\na run costs is the metering ledger's, joined by the run id, and repeating it\nfrom this side would be a second number that could disagree with the bill.",
+            "format": "double",
             "type": "number"
           },
           "cpuVcpuHours": {
             "description": "CPUVcpuHours would be vCPU-hours over the window. Always null: this store\nholds agent definitions and run I/O, and nothing here meters a CPU. Null is\nthe honest answer and 0 would be a claim.",
+            "format": "double",
             "type": "number"
           },
           "memGbHours": {
             "description": "MemGbHours would be gigabyte-hours of memory. Always null, same reason.",
+            "format": "double",
             "type": "number"
           },
           "storageIoBytes": {
             "description": "StorageIoBytes would be bytes moved to and from storage. Always null, same\nreason.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -2439,6 +2453,7 @@
           },
           "timeoutSeconds": {
             "description": "TimeoutSeconds bounds the run on the machine; 0 means the machine's own default.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2480,6 +2495,7 @@
           },
           "v": {
             "description": "real invocation count in the bucket",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2504,6 +2520,7 @@
             "type": "array"
           },
           "children": {
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
@@ -2516,6 +2533,7 @@
             "type": "string"
           },
           "events": {
+            "format": "int64",
             "type": "integer"
           },
           "host": {
@@ -2616,6 +2634,7 @@
           },
           "pct": {
             "description": "Pct is how much of the run is done, 0 to 100. THE KEY IS ABSENT when\nprogress is indeterminate — a run nobody can estimate is not a run that has\ndone nothing, and rendering the second for the first is the mistake this\nomission exists to make impossible. Read `phase` before reaching for it.",
+            "format": "int64",
             "type": "integer"
           },
           "phase": {
@@ -2641,6 +2660,7 @@
           },
           "children": {
             "description": "Children is the DIRECT fan-out — how many sessions name this one as parent —\nand not the size of the subtree. Read the tree for that.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
@@ -2657,6 +2677,7 @@
           },
           "events": {
             "description": "Events is how many turns the session's log holds, counted at read time. It is\nthe whole log, however few of them RecentEvents carries.",
+            "format": "int64",
             "type": "integer"
           },
           "host": {
@@ -2836,10 +2857,12 @@
           },
           "running": {
             "description": "Running is how many of those are in `running` right now — the number a\ndispatcher weighs against Capacity. paused sessions are in Sessions and not\nhere.",
+            "format": "int64",
             "type": "integer"
           },
           "sessions": {
             "description": "Sessions is how many of the org's sessions are mapped to this machine, by\ntarget id OR by matching Host. All of them, whatever their status.",
+            "format": "int64",
             "type": "integer"
           },
           "spec": {

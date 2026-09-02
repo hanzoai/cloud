@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/graph", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/graph GET /v1/graph", zip.Doc{
 		Fields: map[string]string{
 			"graphReadIn.as_of":       "AsOf bounds the read to what was knowable at an instant, RFC 3339. Absent\nreads everything this plane holds.",
 			"graphReadIn.entity":      "Entity narrows to what was asserted ABOUT one entity. Absent matches every\nentity.",
@@ -29,7 +29,7 @@ func init() {
 			"wireFact.value":          "Value is what the relation points at: another entity's key when Names is\ntrue, otherwise a scalar.",
 		},
 	})
-	zip.Describe("GET /v1/graph/search", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/graph GET /v1/graph/search", zip.Doc{
 		Description: "Finds assertions by their text where read finds them by their keys.\n\nIt is the READ with one more term, not a second way to leave the store: same\norder, same ceiling, same tenancy, and searching composes with narrowing by\nrelation and by instant because all of them are terms of one filter.\n\nIt resolves nothing. What matches is what was asserted, including claims that\nwere later corrected — which is the honest answer to \"where is this mentioned\"\nand the reason the caller then asks resolve about what it found.",
 		Fields: map[string]string{
 			"graphReadOut.assertions": "Assertions are the matching rows in the order they were written, oldest\nfirst. Every version is here: this read resolves nothing and withholds\nnothing, so a superseded claim and the one that superseded it both appear.",
@@ -51,14 +51,14 @@ func init() {
 			"wireFact.value":          "Value is what the relation points at: another entity's key when Names is\ntrue, otherwise a scalar.",
 		},
 	})
-	zip.Describe("GET /v1/graph/vocabulary", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/graph GET /v1/graph/vocabulary", zip.Doc{
 		Fields: map[string]string{
 			"graphVocabularyOut.bound":     "Bound is the ceiling on one walk.",
 			"graphVocabularyOut.relations": "Relations is what this organization has actually asserted, which is the\nonly vocabulary there is: this plane declares none of its own.",
 			"graphVocabularyOut.rule":      "Rule names the terms of the precedence order, in the order they apply. A\nreader who is told a winner without the rule cannot check it.",
 		},
 	})
-	zip.Describe("POST /v1/graph", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/graph POST /v1/graph", zip.Doc{
 		Fields: map[string]string{
 			"graphAssertIn.assertions": "Assertions is the batch. Each member is judged on its own: one refusal\ndoes not discard the rest, because a caller redelivering five facts must\nnot lose four of them to one malformed fifth.",
 			"graphAssertOut.duplicate": "Duplicate is how many members this plane already held. A redelivery\ncollides on its content address and is counted here, not refused: it is\nthe success a retrying caller depends on.",
@@ -76,10 +76,10 @@ func init() {
 			"graphFact.value":          "Value is what the relation points at. When Names is true it is another\nentity's key and the assertion is an EDGE; otherwise it is a scalar and\nthe assertion is a property. 2048 bytes at most, or 512 when it names an\nentity.",
 		},
 	})
-	zip.Describe("POST /v1/graph/graphql", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/graph POST /v1/graph/graphql", zip.Doc{
 		Description: "Is the endpoint. It answers 200 with a GraphQL error list for a query\nthat cannot run, which is the wire every GraphQL client parses — a transport\nerror would be read as the server being down rather than the query being\nwrong.",
 	})
-	zip.Describe("POST /v1/graph/neighbors", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/graph POST /v1/graph/neighbors", zip.Doc{
 		Fields: map[string]string{
 			"graphNeighborsIn.as_of":      "AsOf walks the graph as it stood at an instant, RFC 3339. Absent walks it\nas it stands now.",
 			"graphNeighborsIn.depth":      "Depth is how many hops. Absent is one.",
@@ -92,7 +92,7 @@ func init() {
 			"graphNeighborsOut.truncated": "Truncated says the bound stopped the walk. The bound is part of the answer\nrather than a silent short read.",
 		},
 	})
-	zip.Describe("POST /v1/graph/resolve", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/graph POST /v1/graph/resolve", zip.Doc{
 		Fields: map[string]string{
 			"graphResolveIn.as_of":      "AsOf is the instant to answer at, RFC 3339. Absent means now.",
 			"graphResolveIn.entity":     "Entity is the thing to answer about. Required.",

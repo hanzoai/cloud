@@ -200,6 +200,7 @@
             "required": false,
             "description": "Limit caps the answer; 0 means the default, and anything above the ceiling\nis clamped rather than refused — a search that errors on being too broad\nteaches people to guess.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -488,6 +489,7 @@
             "required": true,
             "description": "Num is the issue's number on that board.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -530,6 +532,7 @@
             "required": true,
             "description": "Num is the issue number on that repository, from the path.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -582,6 +585,7 @@
             "in": "path",
             "required": true,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -656,6 +660,7 @@
           },
           "num": {
             "description": "Num is the issue number on that repository, from the path.",
+            "format": "int64",
             "type": "integer"
           },
           "priority": {
@@ -685,6 +690,7 @@
           },
           "number": {
             "description": "Number is the issue's number on that board, from 1 and monotonic there.\nUnique per board, never across the org — so it addresses an issue only\ntogether with Project.",
+            "format": "int64",
             "type": "integer"
           },
           "priority": {
@@ -726,6 +732,7 @@
         "properties": {
           "count": {
             "description": "Count is how many rows Issues carries — the size of THIS answer after the\ncap, not how many issues matched. A count equal to the limit means there are\nprobably more; there is no total and no cursor.",
+            "format": "int64",
             "type": "integer"
           },
           "issues": {
@@ -746,6 +753,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the item was opened, in unix seconds. 0 when the source\ngave no parseable timestamp.",
+            "format": "int64",
             "type": "integer"
           },
           "description": {
@@ -754,6 +762,7 @@
           },
           "dueAt": {
             "description": "DueAt is when the work is due, in unix seconds; absent means no due date. A\nforge row takes it from its MILESTONE's due date, since a forge issue has no\ndeadline of its own. Never before StartAt, and never past 2200-01-01.",
+            "format": "int64",
             "type": "integer"
           },
           "extRef": {
@@ -781,6 +790,7 @@
           },
           "number": {
             "description": "Number is the item's number ON ITS BOARD, from 1 and monotonic there — the\nforge's own issue number for a forge row, allocated inside the create\ntransaction for an index row so it cannot race. Unique per board, never\nacross the org.",
+            "format": "int64",
             "type": "integer"
           },
           "priority": {
@@ -801,6 +811,7 @@
           },
           "startAt": {
             "description": "StartAt is when the work starts, in unix seconds; absent means unscheduled.\nA forge row takes it from when the issue was opened, but only once the issue\nhas a due date — an interval needs both ends.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -813,6 +824,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when it last changed, in unix seconds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -847,6 +859,7 @@
         "properties": {
           "open": {
             "description": "Open is how many items are still work: everything whose status does not\nend it. It is the number a channel header shows.",
+            "format": "int64",
             "type": "integer"
           },
           "room": {
@@ -855,6 +868,7 @@
           },
           "status": {
             "additionalProperties": {
+              "format": "int64",
               "type": "integer"
             },
             "description": "Status is the count per board column, carrying EVERY column this surface\nknows — an empty column reads 0 rather than being absent, so a caller can\nrender the board without inventing the vocabulary. The keys are the same\nclosed set every other operation here validates against.",
@@ -862,10 +876,12 @@
           },
           "total": {
             "description": "Total is every item bound to this room, settled ones included, so Total\nminus Open is what the room has finished.",
+            "format": "int64",
             "type": "integer"
           },
           "updated": {
             "description": "Updated is when anything in this room's work last moved, in unix seconds.\nABSENT when the room has no work at all: zero would read as the epoch, and\na room nobody has filed anything in has no last activity rather than an\ninfinitely old one. Total is 0 in exactly that case.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -875,6 +891,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the board was created, in unix seconds. 0 on a forge board\nfor the same reason Description is absent.",
+            "format": "int64",
             "type": "integer"
           },
           "description": {
@@ -899,6 +916,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the board record last changed, in unix seconds — the BOARD,\nnot the work on it, so filing an issue does not move it. 0 on a forge board.",
+            "format": "int64",
             "type": "integer"
           }
         },

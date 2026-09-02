@@ -9,8 +9,15 @@
     "method": "POST",
     "url": "https://api.lux.network/v1/mcp"
   },
-  "skill_count": 3,
+  "skill_count": 4,
   "skills": [
+    {
+      "description": "Read network identities: Returns the fabric identities the caller's org owns..",
+      "name": "network_identities",
+      "path": "network_identities/SKILL.md",
+      "service": "network",
+      "sha256": "39e111c5f9ed140b56f72ec0dc132028b771a0107801339338b8d3f80ed1f0df"
+    },
     {
       "description": "Read network network: Returns the caller's org overlay network on the Zero Trust fabric., Returns one overlay network by id, scoped to the caller's org..",
       "name": "network_network",

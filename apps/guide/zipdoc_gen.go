@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/guide/curriculum", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide DELETE /v1/guide/curriculum", zip.Doc{
 		Description: "Clears the caller org's curriculum override and returns the\njourney it falls back to — the brand blueprint, else the embedded fixture.\nClearing an org that never set one is a no-op that answers the same default.",
 		Fields: map[string]string{
 			"Curriculum.steps":          "Steps are the enabled steps in authoring order. Order is the tiebreak the\nnext-step logic walks, so it is part of the contract rather than cosmetic.",
@@ -30,7 +30,7 @@ func init() {
 			"curriculumView.custom":     "Custom is true when the org's OWN curriculum override is active; false when\nthe journey comes from the brand blueprint or the embedded fixture.",
 		},
 	})
-	zip.Describe("GET /v1/guide", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide GET /v1/guide", zip.Doc{
 		Description: "Overview returns the caller org's launch journey: the active curriculum's\nversion and title, every step with its state, whether it is available, what\nblocks it and whether the Business AI can run it, the done/total/percent\nprogress with the next step to take, and the org's analytics funnel folded in.\nAuto-detect runs first, so a step the org has already completed elsewhere reads\ndone without anyone marking it.",
 		Fields: map[string]string{
 			"Funnel.available":      "Available separates \"this org has no traffic\" from \"we could not ask\". False\nmeans the warehouse was unreachable or the org has emitted nothing at all, and\nevery count below is then a placeholder zero rather than a measurement — a\ncaller must read this before reading any of them.",
@@ -68,7 +68,7 @@ func init() {
 			"stepView.tool":         "Tool is the MCP tool the Business AI runs for \"do it for me\". A step naming\nnone can only be completed by a person.",
 		},
 	})
-	zip.Describe("GET /v1/guide/actions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide GET /v1/guide/actions", zip.Doc{
 		Description: "Returns the caller org's Business AI action ledger, most recent\nfirst: every \"do it for me\" tool call, the arguments it ran with, its result and\nwhether it succeeded. It is the audit-visible record of what the agent did on\nthe org's behalf, and the backing state for the \"acted\" auto-detect signal.",
 		Fields: map[string]string{
 			"ActionRecord.args":      "Args is the JSON the tool was called with, recorded as TEXT exactly as sent —\nincluding whatever the AI drafted into it — so a run can be read back and\nreproduced. It is a string, not an object.",
@@ -82,7 +82,7 @@ func init() {
 			"actionsView.data":       "Data is the most-recent actions first, capped at listActionsLimit.",
 		},
 	})
-	zip.Describe("GET /v1/guide/analytics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide GET /v1/guide/analytics", zip.Doc{
 		Description: "Analytics returns the caller org's funnel from the analytics lens plus the GTM\nrecommendations derived from it. It is the Business AI's data-grounded read —\nwhat the funnel is doing, and the next-best action to move its weakest stage. An\nunreachable or silent warehouse answers available=false, never a fabricated\nnumber.",
 		Fields: map[string]string{
 			"Funnel.available":              "Available separates \"this org has no traffic\" from \"we could not ask\". False\nmeans the warehouse was unreachable or the org has emitted nothing at all, and\nevery count below is then a placeholder zero rather than a measurement — a\ncaller must read this before reading any of them.",
@@ -96,7 +96,7 @@ func init() {
 			"analyticsView.recommendations": "Recommendations are the next-best GTM actions derived from that funnel.",
 		},
 	})
-	zip.Describe("GET /v1/guide/blueprint", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide GET /v1/guide/blueprint", zip.Doc{
 		Description: "Returns the FULL authored brand blueprint — every principle,\nsection, step, strategy and template WITH its enabled flag made explicit,\nincluding the disabled items the org-facing reads never see — plus the active\nversion number, the brand key it is stored under and the item counts. It is the\nSuperAdmin authoring view of the platform blueprint, so it is refused 403 for\nanyone else, including a per-org admin: the brand blueprint is shared platform\ncontent, not a per-customer surface.",
 		Fields: map[string]string{
 			"Blog.caseStudy":             "CaseStudy is one worked instance — somebody who ran it, and what happened.",
@@ -162,7 +162,7 @@ func init() {
 			"blueprintView.version":      "Version is the active stored version number (1 is the seed). Each edit\nappends a new one; nothing is ever overwritten.",
 		},
 	})
-	zip.Describe("GET /v1/guide/blueprint/versions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide GET /v1/guide/blueprint/versions", zip.Doc{
 		Description: "Returns the brand blueprint's version history — every\nstored version's number and edit time, newest first — which is the\npoint-in-time-recovery and audit trail behind the authoring plane. Metadata\nonly: the documents are not returned. SuperAdmin only, like the rest of this\nplane. The history is listable even when the current stored document no longer\nparses, so a schema-drifted row can still be diagnosed.",
 		Fields: map[string]string{
 			"VersionMeta.brand":              "Brand is the white-label key this revision was authored under; empty is the\nshared base playbook. Revisions of two brands never share a number line.",
@@ -172,7 +172,7 @@ func init() {
 			"blueprintVersionsView.versions": "Versions are the stored versions, newest first: metadata only, never the\ndocuments.",
 		},
 	})
-	zip.Describe("GET /v1/guide/curriculum", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide GET /v1/guide/curriculum", zip.Doc{
 		Description: "Returns the journey the caller's org is actually running, and\nwhether it comes from the org's OWN override (custom) or from the platform\ndefault — the brand blueprint, else the embedded fixture.",
 		Fields: map[string]string{
 			"Curriculum.steps":          "Steps are the enabled steps in authoring order. Order is the tiebreak the\nnext-step logic walks, so it is part of the contract rather than cosmetic.",
@@ -193,7 +193,7 @@ func init() {
 			"curriculumView.custom":     "Custom is true when the org's OWN curriculum override is active; false when\nthe journey comes from the brand blueprint or the embedded fixture.",
 		},
 	})
-	zip.Describe("GET /v1/guide/profile", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide GET /v1/guide/profile", zip.Doc{
 		Description: "Profile returns the caller org's OBSERVED growth profile — the signal set, the\nclassified growth stage, and the org's own key metrics. It is a pure READ,\nrecomputed from the org's CURRENT state each request (real-time by pull): it\nreuses the reconcile path (snapshotFor runs the detectors) for launch progress\nand runs the growth probes (observe) for the signals — it never caches, never\nruns a billable effect, never targets another org. Org-scoped on the validated\nprincipal; fail-closed without one. It PRODUCES the profile and classifies the\nstage; it decides NO recommendation (that is a later surface).",
 		Fields: map[string]string{
 			"Funnel.available":              "Available separates \"this org has no traffic\" from \"we could not ask\". False\nmeans the warehouse was unreachable or the org has emitted nothing at all, and\nevery count below is then a placeholder zero rather than a measurement — a\ncaller must read this before reading any of them.",
@@ -216,7 +216,7 @@ func init() {
 			"progressView.total":            "Total is how many steps this org's journey holds — the ENABLED steps of the\nplaybook, so it shrinks when an operator disables one and does not match the\nauthored step count.",
 		},
 	})
-	zip.Describe("GET /v1/guide/strategies", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide GET /v1/guide/strategies", zip.Doc{
 		Description: "Strategies returns the ENABLED tactics corpus for the caller's org: the tactics\nlibrary narrowed by the explicit category/workload filters AND by the org's\nOBSERVED growth stage and capability signals (a tactic's tags are\npreconditions, so it surfaces only once the org can act on it). Passing stage\nPREVIEWS the corpus at that stage instead of the observed one. The content is\nshared platform data — no org's records — and the read is never a billable\neffect.",
 		Fields: map[string]string{
 			"corpusView.count":         "Count is how many tactics survived every filter.",
@@ -233,7 +233,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"category":"viral-coefficient","stage":"scaling"}`),
 	})
-	zip.Describe("GET /v1/guide/suggest", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide GET /v1/guide/suggest", zip.Doc{
 		Description: "Suggest returns the caller org's next-best quests: the available, non-terminal\nsteps of its journey ranked by how much downstream work each unblocks, each with\nthe grounded reason it is a good next move and whether the Business AI can run\nit, plus the org's funnel and the GTM recommendations derived from it. A\nbest-effort AI narrative over exactly those quests and numbers is included when\nan AI plane is wired. READ-ONLY: it advises and never runs a step — the only\nexecuting path is POST /v1/guide/steps/{id}/do.",
 		Fields: map[string]string{
 			"Funnel.available":                "Available separates \"this org has no traffic\" from \"we could not ask\". False\nmeans the warehouse was unreachable or the org has emitted nothing at all, and\nevery count below is then a placeholder zero rather than a measurement — a\ncaller must read this before reading any of them.",
@@ -256,10 +256,10 @@ func init() {
 			"suggestion.unlocks":              "Unlocks is how many downstream steps completing this one immediately makes\navailable (its leverage) — the primary ranking key.",
 		},
 	})
-	zip.Describe("PATCH /v1/guide/blueprint/:collection/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide PATCH /v1/guide/blueprint/:collection/:id", zip.Doc{
 		Description: "Edits ONE item in a collection (sections|steps|strategies|\ntemplates) by id — the \"edit an item\" AND the headline \"enable/disable an item\"\nlever (disable is PATCH {\"enabled\": false}). It applies a JSON merge-patch onto the\nitem, re-validates the WHOLE blueprint (fail-closed — a patch that would dangle a dep\nor break the DAG is rejected), and saves a new version. SuperAdmin only.",
 	})
-	zip.Describe("POST /v1/guide/chat", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide POST /v1/guide/chat", zip.Doc{
 		Description: "Chat answers a founder's question about their launch journey as the Business AI\ncoach: it grounds the reply in the org's REAL progress, its ranked available\nquests and its analytics funnel, and returns those candidate quests alongside so\nthe caller can act on one. READ-ONLY — it advises and never runs a step, so it\ncannot be talked into performing an action; the only executing path is POST\n/v1/guide/steps/{id}/do. One AI completion per call, billed to the caller's own\npayer.",
 		Fields: map[string]string{
 			"Funnel.available":         "Available separates \"this org has no traffic\" from \"we could not ask\". False\nmeans the warehouse was unreachable or the org has emitted nothing at all, and\nevery count below is then a placeholder zero rather than a measurement — a\ncaller must read this before reading any of them.",
@@ -282,10 +282,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"message":"what should I do next to get my first customers?"}`),
 	})
-	zip.Describe("POST /v1/guide/steps/:id/do", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide POST /v1/guide/steps/:id/do", zip.Doc{
 		Description: "Is \"do it for me\": the Business AI executes the step through the\nper-principal MCP plane. Dependency-gated (a blocked step is 409). Streams the\nagent's actions as SSE when the caller asks (Accept: text/event-stream or\n?stream=1); otherwise returns the full action log as JSON.",
 	})
-	zip.Describe("POST /v1/guide/steps/:id/done", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide POST /v1/guide/steps/:id/done", zip.Doc{
 		Description: "Marks one step of the caller org's journey complete and returns the\nrefreshed journey.\n\nDependency-GATED, exactly as start is: a step whose prerequisites are unfinished\nis refused 409 carrying {error, step, blockedBy} naming what is in the way.",
 		Fields: map[string]string{
 			"Funnel.available":      "Available separates \"this org has no traffic\" from \"we could not ask\". False\nmeans the warehouse was unreachable or the org has emitted nothing at all, and\nevery count below is then a placeholder zero rather than a measurement — a\ncaller must read this before reading any of them.",
@@ -324,7 +324,7 @@ func init() {
 			"stepView.tool":         "Tool is the MCP tool the Business AI runs for \"do it for me\". A step naming\nnone can only be completed by a person.",
 		},
 	})
-	zip.Describe("POST /v1/guide/steps/:id/reset", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide POST /v1/guide/steps/:id/reset", zip.Doc{
 		Description: "Returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey. Reset is never\ndependency-gated. Auto-detect runs on the next read, so a step the org has in\nfact completed elsewhere goes straight back to done.",
 		Fields: map[string]string{
 			"Funnel.available":      "Available separates \"this org has no traffic\" from \"we could not ask\". False\nmeans the warehouse was unreachable or the org has emitted nothing at all, and\nevery count below is then a placeholder zero rather than a measurement — a\ncaller must read this before reading any of them.",
@@ -363,7 +363,7 @@ func init() {
 			"stepView.tool":         "Tool is the MCP tool the Business AI runs for \"do it for me\". A step naming\nnone can only be completed by a person.",
 		},
 	})
-	zip.Describe("POST /v1/guide/steps/:id/skip", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide POST /v1/guide/steps/:id/skip", zip.Doc{
 		Description: "Marks one step of the caller org's journey skipped and returns the\nrefreshed journey. Skipping is never dependency-gated — the founder is\ndeclaring the step does not apply to them — so a step whose dependencies are\nunfinished can still be skipped, and a skipped step counts as terminal for\neverything downstream of it.",
 		Fields: map[string]string{
 			"Funnel.available":      "Available separates \"this org has no traffic\" from \"we could not ask\". False\nmeans the warehouse was unreachable or the org has emitted nothing at all, and\nevery count below is then a placeholder zero rather than a measurement — a\ncaller must read this before reading any of them.",
@@ -402,7 +402,7 @@ func init() {
 			"stepView.tool":         "Tool is the MCP tool the Business AI runs for \"do it for me\". A step naming\nnone can only be completed by a person.",
 		},
 	})
-	zip.Describe("POST /v1/guide/steps/:id/start", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide POST /v1/guide/steps/:id/start", zip.Doc{
 		Description: "Marks one step of the caller org's journey in progress and returns the\nrefreshed journey.\n\nDependency-GATED: a step whose prerequisites are unfinished is refused 409\ncarrying {error, step, blockedBy}, where blockedBy names the exact steps in the\nway — enough to render the reason without asking again.",
 		Fields: map[string]string{
 			"Funnel.available":      "Available separates \"this org has no traffic\" from \"we could not ask\". False\nmeans the warehouse was unreachable or the org has emitted nothing at all, and\nevery count below is then a placeholder zero rather than a measurement — a\ncaller must read this before reading any of them.",
@@ -441,7 +441,7 @@ func init() {
 			"stepView.tool":         "Tool is the MCP tool the Business AI runs for \"do it for me\". A step naming\nnone can only be completed by a person.",
 		},
 	})
-	zip.Describe("PUT /v1/guide/blueprint", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/guide PUT /v1/guide/blueprint", zip.Doc{
 		Description: "Replaces the whole brand blueprint (a new version). The body must parse\nAND validate as a blueprint; a bad body is 422 and never becomes active (fail-closed,\nso a redeploy's re-seed or the previous version stays authoritative).",
 	})
 }

@@ -183,6 +183,7 @@
           },
           "max_sources": {
             "description": "MaxSources caps how many pages are read. Empty means the mode's own budget.",
+            "format": "int64",
             "type": "integer"
           },
           "mode": {

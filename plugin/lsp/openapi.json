@@ -290,6 +290,7 @@
           },
           "kind": {
             "description": "Kind is the LSP CompletionItemKind number (2 method, 3 function, 5 field, 6\nvariable, …), passed through as the protocol spells it.",
+            "format": "int64",
             "type": "integer"
           },
           "label": {
@@ -315,6 +316,7 @@
           },
           "severity": {
             "description": "Severity is the LSP's: 1 error, 2 warning, 3 information, 4 hint. A file with\nonly 3s and 4s still compiles.",
+            "format": "int64",
             "type": "integer"
           },
           "source": {
@@ -345,10 +347,12 @@
         "properties": {
           "character": {
             "description": "Character is a 0-based UTF-16 code-unit offset within Line, per the LSP\nspecification: not a byte offset and not a rune index. An emoji before the\ncursor counts as one here and as two in Go's arithmetic.",
+            "format": "int64",
             "type": "integer"
           },
           "line": {
             "description": "Line is 0-BASED, per the LSP specification — one less than the line an editor\nshows a human.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -358,10 +362,12 @@
         "properties": {
           "character": {
             "description": "Character is a 0-based UTF-16 code-unit offset within Line, per the LSP\nspecification — not a byte offset and not a rune index.",
+            "format": "int64",
             "type": "integer"
           },
           "line": {
             "description": "Line is 0-based, per the LSP specification.",
+            "format": "int64",
             "type": "integer"
           },
           "path": {
@@ -404,6 +410,7 @@
           },
           "kind": {
             "description": "Kind is the LSP SymbolKind number (5 class, 6 method, 12 function, 23 struct,\n…), passed through rather than translated to a word — these callers already\nspeak LSP, and inventing a second vocabulary is how the two drift.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {

@@ -298,10 +298,12 @@
           },
           "cents": {
             "description": "Cents is what the org spent in that bucket over the window, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "count": {
             "description": "Count is how many ledger lines rolled up into it.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -315,22 +317,27 @@
           },
           "completionTokens": {
             "description": "CompletionTokens is the output half.",
+            "format": "int64",
             "type": "integer"
           },
           "costCents": {
             "description": "CostCents is what they cost the org, in US cents. This IS a Hanzo charge.",
+            "format": "int64",
             "type": "integer"
           },
           "models": {
             "description": "Models is how many distinct models were used.",
+            "format": "int64",
             "type": "integer"
           },
           "promptTokens": {
             "description": "PromptTokens is the input half of that total.",
+            "format": "int64",
             "type": "integer"
           },
           "requests": {
             "description": "Requests is how many completions the org made in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "source": {
@@ -339,6 +346,7 @@
           },
           "tokens": {
             "description": "Tokens is the total tokens those completions consumed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -368,6 +376,7 @@
         "properties": {
           "costCents": {
             "description": "CostCents is what they cost the org, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "provider": {
@@ -376,10 +385,12 @@
           },
           "requests": {
             "description": "Requests is how many completions the org made against that provider.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is the total tokens those completions consumed, prompt plus\ncompletion.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -427,10 +438,12 @@
           },
           "availableCents": {
             "description": "AvailableCents is what of that balance is still spendable.",
+            "format": "int64",
             "type": "integer"
           },
           "balanceCents": {
             "description": "BalanceCents is the prepaid wallet's balance, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "byCategory": {
@@ -442,10 +455,12 @@
           },
           "mtdCents": {
             "description": "MTDCents is commerce's authoritative month-to-date consumed figure, which\nis a different period from the window and is not derived from it.",
+            "format": "int64",
             "type": "integer"
           },
           "overageCents": {
             "description": "OverageCents is month-to-date consumption beyond the plan's allowance.",
+            "format": "int64",
             "type": "integer"
           },
           "series": {
@@ -461,6 +476,7 @@
           },
           "totalCents": {
             "description": "TotalCents is consumption over the requested window, in US cents. It is\nself-consistent with ByCategory and Series.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -470,6 +486,7 @@
         "properties": {
           "cents": {
             "description": "Cents is the consumption recorded in that bucket, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "t": {
@@ -487,6 +504,7 @@
           },
           "costCents": {
             "description": "CostCents is the row's cost in US cents. For an \"account\" row this is the\nPROVIDER's own charge, not a Hanzo one.",
+            "format": "int64",
             "type": "integer"
           },
           "provider": {
@@ -495,6 +513,7 @@
           },
           "requests": {
             "description": "Requests is how many requests the row covers.",
+            "format": "int64",
             "type": "integer"
           },
           "scope": {
@@ -507,10 +526,12 @@
           },
           "tokens": {
             "description": "Tokens is the total tokens the row covers.",
+            "format": "int64",
             "type": "integer"
           },
           "usedPct": {
             "description": "UsedPct is how much of a plan window the row consumed, 0–100. It is a\nshare, never money.",
+            "format": "double",
             "type": "number"
           },
           "window": {
@@ -519,6 +540,7 @@
           },
           "windows": {
             "description": "Windows is how many window instances rolled up into the row.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -583,6 +605,7 @@
           },
           "cachedInputTokens": {
             "description": "CachedInputTokens is the prompt tokens the provider served from cache.",
+            "format": "int64",
             "type": "integer"
           },
           "confidence": {
@@ -591,10 +614,12 @@
           },
           "costCents": {
             "description": "CostCents is what the window cost on the PROVIDER's own plan, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "costLimitCents": {
             "description": "CostLimitCents is the plan's spend ceiling for the window, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -603,6 +628,7 @@
           },
           "inputTokens": {
             "description": "InputTokens is prompt tokens consumed in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "kind": {
@@ -619,6 +645,7 @@
           },
           "outputTokens": {
             "description": "OutputTokens is completion tokens produced in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "plan": {
@@ -631,6 +658,7 @@
           },
           "requests": {
             "description": "Requests is how many requests the window covers.",
+            "format": "int64",
             "type": "integer"
           },
           "resetsAt": {
@@ -650,10 +678,12 @@
           },
           "totalTokens": {
             "description": "TotalTokens is the window's total tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "usedPct": {
             "description": "UsedPct is how much of the window's allowance is consumed, 0–100.",
+            "format": "double",
             "type": "number"
           },
           "window": {
@@ -662,6 +692,7 @@
           },
           "windowMinutes": {
             "description": "WindowMinutes is the window's real length in minutes, as the meter reports\nit.",
+            "format": "int32",
             "type": "integer"
           },
           "windowStart": {
@@ -675,6 +706,7 @@
         "properties": {
           "accepted": {
             "description": "Accepted is how many samples passed validation. Every one of them was\naccepted, or the whole report was refused — there is no partial success.",
+            "format": "int64",
             "type": "integer"
           },
           "stored": {
@@ -692,6 +724,7 @@
           },
           "cachedInputTokens": {
             "description": "CachedInputTokens is the prompt tokens the provider served from cache.",
+            "format": "int64",
             "type": "integer"
           },
           "confidence": {
@@ -700,10 +733,12 @@
           },
           "costCents": {
             "description": "CostCents is what the window cost on the PROVIDER's own plan, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "costLimitCents": {
             "description": "CostLimitCents is the plan's spend ceiling for the window, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -712,6 +747,7 @@
           },
           "inputTokens": {
             "description": "InputTokens is prompt tokens consumed in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "kind": {
@@ -728,6 +764,7 @@
           },
           "outputTokens": {
             "description": "OutputTokens is completion tokens produced in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "plan": {
@@ -740,6 +777,7 @@
           },
           "requests": {
             "description": "Requests is how many requests the window covers.",
+            "format": "int64",
             "type": "integer"
           },
           "resetsAt": {
@@ -752,10 +790,12 @@
           },
           "totalTokens": {
             "description": "TotalTokens is the window's total tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "usedPct": {
             "description": "UsedPct is how much of the window's allowance is consumed, 0–100.",
+            "format": "double",
             "type": "number"
           },
           "window": {
@@ -764,6 +804,7 @@
           },
           "windowMinutes": {
             "description": "WindowMinutes is the window's real length in minutes, as the meter reports\nit.",
+            "format": "int32",
             "type": "integer"
           },
           "windowStart": {
@@ -798,6 +839,7 @@
           },
           "retentionDays": {
             "description": "RetentionDays is how far back the plan may read. GET /v1/usage/analytics\nclamps a custom window's start to this, so an older `start` returns the\nclamped window rather than an error.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -827,6 +869,7 @@
           },
           "retentionDays": {
             "description": "RetentionDays is how far back the resolved plan allows reading.",
+            "format": "int64",
             "type": "integer"
           },
           "scope": {
@@ -902,6 +945,7 @@
           },
           "cachedInputTokens": {
             "description": "CachedInputTokens is the prompt tokens served from the provider's cache;\nomitted when unknown.",
+            "format": "int64",
             "type": "integer"
           },
           "confidence": {
@@ -910,10 +954,12 @@
           },
           "costCents": {
             "description": "CostCents is what the window cost on the PROVIDER's own plan, in US cents.\nIt is not a Hanzo charge.",
+            "format": "int64",
             "type": "integer"
           },
           "costLimitCents": {
             "description": "CostLimitCents is the plan's spend ceiling for the window, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -922,6 +968,7 @@
           },
           "inputTokens": {
             "description": "InputTokens is prompt tokens consumed in the window; omitted when unknown.",
+            "format": "int64",
             "type": "integer"
           },
           "lane": {
@@ -934,6 +981,7 @@
           },
           "outputTokens": {
             "description": "OutputTokens is completion tokens produced in the window; omitted when\nunknown.",
+            "format": "int64",
             "type": "integer"
           },
           "plan": {
@@ -942,6 +990,7 @@
           },
           "requests": {
             "description": "Requests is how many requests were made in the window; omitted when the\nmeter did not report it.",
+            "format": "int64",
             "type": "integer"
           },
           "resetsAt": {
@@ -954,10 +1003,12 @@
           },
           "totalTokens": {
             "description": "TotalTokens is the window's total tokens; omitted when unknown.",
+            "format": "int64",
             "type": "integer"
           },
           "usedPct": {
             "description": "UsedPct is how much of the window's allowance is consumed, 0–100.",
+            "format": "double",
             "type": "number"
           },
           "window": {
@@ -966,6 +1017,7 @@
           },
           "windowMinutes": {
             "description": "WindowMinutes is the window's real length in minutes when the meter\nreported one; omitted when it did not.",
+            "format": "int32",
             "type": "integer"
           },
           "windowStart": {

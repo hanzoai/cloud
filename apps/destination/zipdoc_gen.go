@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/destination/:platform", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/destination DELETE /v1/destination/:platform", zip.Doc{
 		Description: "Forgets a destination for the caller's org: every credential held in\nKMS, then the stored config. Idempotent, and it requires org admin.",
 		Fields: map[string]string{
 			"destinationDisconnected.disconnected": "Disconnected is true when the credentials and the row are gone.",
@@ -17,7 +17,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"platform":"ga4"}`),
 	})
-	zip.Describe("GET /v1/destination", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/destination GET /v1/destination", zip.Doc{
 		Description: "Reports every destination this deployment can forward to, each with the\ncaller org's connection state: whether it is connected, whether it is enabled,\nwhether a credential resolves right now, and the config fields the console\nrenders for it.",
 		Fields: map[string]string{
 			"DestinationField.example":     "a sample value of the right shape (\"G-XXXXXXX\"), when one helps",
@@ -38,7 +38,7 @@ func init() {
 			"destinationList.destinations": "Destinations is one card per registered platform, in slug order.",
 		},
 	})
-	zip.Describe("GET /v1/destination/:platform", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/destination GET /v1/destination/:platform", zip.Doc{
 		Description: "Reports one destination's card for the caller's org — its config fields,\nits connection state, and whether a credential resolves right now. A platform\nthis deployment does not carry is not found.",
 		Fields: map[string]string{
 			"DestinationField.example":    "a sample value of the right shape (\"G-XXXXXXX\"), when one helps",
@@ -60,10 +60,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"platform":"ga4"}`),
 	})
-	zip.Describe("POST /v1/destination/:platform", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/destination POST /v1/destination/:platform", zip.Doc{
 		Description: "Provisions (or updates) a destination: non-secret ids into the store, API\nsecret(s) sealed to KMS (fail-closed). Connecting an ad destination is an org-admin\naction (parity with the integrations AdminOnly discipline). The secret never\nappears in the response, the store, or a log line.",
 	})
-	zip.Describe("POST /v1/destination/:platform/test", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/destination POST /v1/destination/:platform/test", zip.Doc{
 		Description: "Sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata — {\"ok\": false, \"error\": …} at 200 — so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin.",
 		Fields: map[string]string{
 			"destinationRef.platform": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | insights | analytics.",

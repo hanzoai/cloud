@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/domain/availability", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/domain GET /v1/domain/availability", zip.Doc{
 		Description: "Checks exact names rather than searching for them, and answers the\nsame quote shape search does — purchasable, premium, first-term and renewal price\nin cents.\n\nIt requires a validated principal; 403 without one. Nothing is charged and\nnothing is held. A deployment with no registrar credentials answers 503.",
 		Fields: map[string]string{
 			"Offer.available":          "whether it can be bought right now",
@@ -21,7 +21,7 @@ func init() {
 			"quoteList.results":        "Results is one quote per name, priced RETAIL — this deployment's markup is\nalready applied and the wholesale cost is never on the wire.",
 		},
 	})
-	zip.Describe("GET /v1/domain/domains", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/domain GET /v1/domain/domains", zip.Doc{
 		Description: "Is the domains your org has bought here, newest registration first, each\ncarrying the name, when it was registered, when it expires, what the org paid,\nthe registrar order id and the nameservers it points at.\n\nScoped to the validated principal's org — 403 without one, and there is no\nparameter that reaches another org's holdings.\n\nThis is the deployment's OWN ownership record, not a query to the registrar: it\nlists what was bought THROUGH this surface, so a domain the org holds elsewhere\nis not here. The default store is in-process, so a deployment that has not\nswapped in a durable store answers from what this process registered.",
 		Fields: map[string]string{
 			"Holding.costCents":    "wholesale cost",
@@ -35,7 +35,7 @@ func init() {
 			"holdings.domains":     "Domains is the caller org's domains, newest registration first.",
 		},
 	})
-	zip.Describe("GET /v1/domain/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/domain GET /v1/domain/health", zip.Doc{
 		Description: "Reports registrar reachability honestly: ok only when the wholesale\ncredentials are present AND name.com accepted them on a live call made while you\nwaited.\n\nMissing credentials or an unreachable registrar is 503 carrying configured,\nreachable and the reason, so an operator reads the blocker instead of guessing at\nit. It takes no principal, like every subsystem health probe.",
 		Fields: map[string]string{
 			"reachability.configured": "Configured is whether the wholesale credentials are present at all.",
@@ -47,7 +47,7 @@ func init() {
 			"reachability.status":     "Status is \"ok\" when a live call succeeded, else \"degraded\".",
 		},
 	})
-	zip.Describe("GET /v1/domain/search", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/domain GET /v1/domain/search", zip.Doc{
 		Description: "Finds names built from the keyword q, plus the registrar's alternate-TLD\nsuggestions, and answers a quote for each: the name, whether it is purchasable,\nwhether it is premium, the first-term and renewal price in cents, and the TLD.\n\nPrices are RETAIL — this deployment's markup is already applied and the wholesale\ncost is never on the wire.\n\nIt requires a validated principal; 403 without one. Nothing is charged and\nnothing is held — a quote is not a reservation, and the price is re-quoted at\npurchase, so a name quoted here can be gone or dearer by the time you buy it. A\ndeployment with no registrar credentials answers 503.",
 		Fields: map[string]string{
 			"Offer.available":         "whether it can be bought right now",
@@ -62,7 +62,7 @@ func init() {
 			"searchQuery.tld":         "TLD narrows the search to a comma-separated set of top-level domains.",
 		},
 	})
-	zip.Describe("POST /v1/domain/register", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/domain POST /v1/domain/register", zip.Doc{
 		Description: "Buys a domain for your org and answers the ownership record together\nwith the quote it was bought at.\n\nThe order of operations is the product guarantee: quote, refuse anything\nunpurchasable or unpriced, AUTHORIZE the org's prepaid balance, provision the\nauthoritative zone in Hanzo DNS, register at the registrar already pointing at\nHanzo's nameservers, and only then CAPTURE the charge and record ownership. A\nregistrar failure therefore leaves the balance untouched — the org is never\nbilled for a domain it did not get.\n\nIt requires a validated principal; that principal's org owns the domain and is\nthe ledger the charge lands on. Re-buying a name the org already holds is 409,\nnot a second purchase.\n\nRefusals are distinct on purpose: 402 when the prepaid balance cannot cover the\nquoted price, 409 when the name is not available, 503 when the deployment has no\nregistrar credentials, and the registrar's own message with its own 4xx — or 502\nfor its 5xx — when it rejects the purchase. Zone provisioning is best-effort: if\nthe zone service is down the domain is still registered against Hanzo's\nnameservers and the zone reconciles afterwards, rather than the purchase failing.",
 		Fields: map[string]string{
 			"Contacts.admin":          "who administers it",
@@ -103,7 +103,7 @@ func init() {
 			"order.years":             "Years is the term to buy, defaulting to 1.",
 		},
 	})
-	zip.Describe("POST /v1/domain/renew", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/domain POST /v1/domain/renew", zip.Doc{
 		Description: "Extends a domain your org already owns and answers the updated record with\nits new expiry alongside what was paid.\n\nOwnership is the gate: a name the caller's org does not hold is 404, so a renewal\ncan never reach another tenant's domain.\n\nThe price is re-quoted at the CURRENT renewal rate rather than the one paid at\npurchase. If the registrar returns no renewal price the org's original price is\ncharged instead, so a renewal is never accidentally free. The balance is\nauthorized before the registrar is called and captured after it confirms — 402\nwhen the prepaid balance cannot cover it, 503 when the deployment has no\nregistrar credentials. Requires a validated principal.",
 		Fields: map[string]string{
 			"Holding.costCents":     "wholesale cost",
@@ -120,7 +120,7 @@ func init() {
 			"renewReq.years":        "Years is how much longer to hold it, defaulting to 1.",
 		},
 	})
-	zip.Describe("POST /v1/domain/transfer", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/domain POST /v1/domain/transfer", zip.Doc{
 		Description: "Moves a domain you own at another registrar onto your org here, using\nits authCode, and answers the same record-plus-quote a purchase does.\n\nIt is priced and charged exactly like a registration: authorize the org's prepaid\nbalance, ask the registrar for the transfer, capture only after the registrar\naccepts. A name the registrar will not price is 409, an insufficient balance is\n402, and a deployment with no registrar credentials is 503.\n\nIt requires a validated principal; the ownership record is written under that org\nas soon as the registrar ACCEPTS the request, which is not the same instant the\ntransfer completes at the losing registrar. Unlike a registration this does not\nprovision a zone, so the record carries this deployment's configured nameservers.",
 		Fields: map[string]string{
 			"Holding.costCents":       "wholesale cost",

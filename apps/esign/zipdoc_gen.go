@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/esign/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign GET /v1/esign/documents", zip.Doc{
 		Description: "Returns your org's documents, newest first.\n\nEach carries its status, recipients and field layout. The listing is capped at\n200 and there is no paging, so treat it as the recent window rather than a\ncomplete export. It reads the caller's own tenant store, so no other org's\ndocuments can appear in it.",
 		Fields: map[string]string{
 			"esignDocument.completedAt":      "CompletedAt is when the document sealed, in unix milliseconds; null until it\ndoes.",
@@ -49,7 +49,7 @@ func init() {
 			"esignRecipient.signingStatus":   "SigningStatus is NOT_SIGNED, SIGNED or REJECTED. A CC recipient is SIGNED\nfrom the moment they are added, because they are never asked.",
 		},
 	})
-	zip.Describe("GET /v1/esign/documents/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign GET /v1/esign/documents/:id", zip.Doc{
 		Description: "Returns one document with its recipients and field layout.\n\nIt answers the document, its recipients with each one's read and signing status,\nand every field with its type, page and position — the view a sender's UI\nrenders, and where the field ids come from. The id is resolved in the caller's\nOWN tenant store, so another org's document id is a 404 rather than a refusal\nthat would confirm it exists.",
 		Fields: map[string]string{
 			"esignDocument.completedAt":      "CompletedAt is when the document sealed, in unix milliseconds; null until it\ndoes.",
@@ -89,7 +89,7 @@ func init() {
 			"esignRef.id":                    "ID is the document to act on. It is the path segment: the URL is the\naddressing authority, and the org it is resolved in comes from the caller's\nprincipal, so an id belonging to another tenant is simply not found.",
 		},
 	})
-	zip.Describe("GET /v1/esign/documents/:id/audit", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign GET /v1/esign/documents/:id/audit", zip.Doc{
 		Description: "Returns the document's full audit trail, oldest first.\n\nIt answers every recorded event for the document in order — created, recipient\nadded, field created, sent, opened, each field inserted, each recipient\ncompleted or rejected, and completion — with the actor and timestamp on each.\nThis is the evidence record behind a signature, so it is append-only and nothing\nin the surface edits it.\n\nThe id is resolved in the caller's OWN tenant store, so another org's document\nid is a 404.",
 		Fields: map[string]string{
 			"esignEvent.createdAt":  "CreatedAt is when it happened, in unix milliseconds.",
@@ -103,7 +103,7 @@ func init() {
 			"esignTrail.entries":    "Entries is every recorded event in order, oldest first. It is append-only:\nnothing in this surface edits or removes an entry.",
 		},
 	})
-	zip.Describe("GET /v1/esign/documents/:id/download", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign GET /v1/esign/documents/:id/download", zip.Doc{
 		Description: "Returns the document — the sealed PDF once it is complete.\n\nIt answers the document's current PDF as base64 with a sealed flag and a\nfilename. Before completion that is the original upload; once every signer has\nfinished it is the SEALED artifact, with the field values rendered onto the page\nand a real x509 PKCS#7 digital signature applied. There is one pdfBase64 field\neither way, so sealed is what tells you which you are holding.\n\nThe id is resolved in the caller's OWN tenant store, so another org's document\nid is a 404.",
 		Fields: map[string]string{
 			"esignPDF.filename":  "Filename is the name to save it under, built from the title and marked\n_signed once it is sealed.",
@@ -114,14 +114,14 @@ func init() {
 			"esignRef.id":        "ID is the document to act on. It is the path segment: the URL is the\naddressing authority, and the org it is resolved in comes from the caller's\nprincipal, so an id belonging to another tenant is simply not found.",
 		},
 	})
-	zip.Describe("GET /v1/esign/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign GET /v1/esign/health", zip.Doc{
 		Description: "Reports whether the e-signature surface is mounted.\n\nIt answers ok whenever the subsystem is mounted, takes no tenant and needs no\nprincipal. It is deliberately shallow: it is registered before the document host\nis built, so it still answers on a deployment that came up WITHOUT object\nstorage and therefore serves nothing else. Read it as reachability, never as a\npromise that documents can be stored.",
 		Fields: map[string]string{
 			"esignHealth.service": "Service names the subsystem that answered, so a probe reading several looks\nthe same on each.",
 			"esignHealth.status":  "Status is ok whenever the subsystem is mounted. It is never anything else:\nthis route is registered before the document host is built, so it is\nreachability and not a promise that documents can be stored.",
 		},
 	})
-	zip.Describe("GET /v1/esign/o/:org/sign/:token", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign GET /v1/esign/o/:org/sign/:token", zip.Doc{
 		Description: "Opens a document you were asked to sign, using your signing link.\n\nIt answers the document, the recipient the link identifies, the fields THAT\nrecipient must fill, and the PDF to display. The first open also marks the\nrecipient as having opened it and records that on the audit trail, so this read\nhas a side effect by design.\n\nThis surface takes NO account: the signing token is the entire credential, and\nit names the recipient, so a signer sees only their own fields and never the\nother recipients' tokens. The token resolves to its owning tenant FIRST, before\nany per-tenant store is opened, and the org segment is only checked against\nthat answer. An unknown or wrong-org token is one and the same 404, never a\nhint that some other document exists.",
 		Fields: map[string]string{
 			"esignField.customText":     "CustomText is the value a non-signature field was filled with, empty until it\nis. A signature's value is not here: it is stored separately and rendered\nonto the page at sealing.",
@@ -149,7 +149,7 @@ func init() {
 			"esignState.title":          "Title is the document's name.",
 		},
 	})
-	zip.Describe("POST /v1/esign/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign POST /v1/esign/documents", zip.Doc{
 		Description: "Uploads a PDF and opens a draft ready for recipients and fields.\n\nIt answers 201 with the document in DRAFT — the state where recipients and\nfields may still be added, and the only state they may. The bytes go to object\nstorage rather than into the tenant database, and the original is kept under its\nown key so it survives sealing untouched: a completed document can always be\ncompared against what was uploaded. Creation is recorded on the audit trail.\n\nThis is the sender's surface: a validated principal is required, and the document\nlands in that principal's OWN org. Isolation is physical rather than a filter —\neach tenant has its own store — so another org's document id is simply not\nthere. A body over 32 MiB is refused with 413.",
 		Fields: map[string]string{
 			"esignDocument.completedAt":      "CompletedAt is when the document sealed, in unix milliseconds; null until it\ndoes.",
@@ -195,7 +195,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"title":"Mutual NDA","pdfBase64":"JVBERi0xLjQK…","signingOrder":"SEQUENTIAL"}`),
 	})
-	zip.Describe("POST /v1/esign/documents/:id/fields", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign POST /v1/esign/documents/:id/fields", zip.Doc{
 		Description: "Places a field on the page for one recipient to fill.\n\nIt adds a signature, date, name, email or text box at a page and position for\nONE named recipient, and answers 201 with its id. The recipient must belong to\nthis document; one from elsewhere is refused.\n\nFields are what make a recipient signable: a document cannot be sent while any\nsigning recipient has none. Only while DRAFT — adding a field to a sent document\nis a 409 — and an unknown document is a 404. The addition is recorded on the\naudit trail.",
 		Fields: map[string]string{
 			"esignFieldIn.fieldMeta":     "FieldMeta is your own metadata for this field — a label, a placeholder, a\nrequired flag — stored verbatim and handed back on every read of the\ndocument. Any JSON, and esign never interprets it.",
@@ -213,7 +213,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"recipientId":"rec_2f…","type":"SIGNATURE","page":1,"positionX":72,"positionY":640}`),
 	})
-	zip.Describe("POST /v1/esign/documents/:id/recipients", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign POST /v1/esign/documents/:id/recipients", zip.Doc{
 		Description: "Adds someone to a draft and mints their signing token.\n\nIt answers 201 with the recipient's id and their signing TOKEN — the\ncrypto-random capability that is the only credential the signer's surface\naccepts — so this response is where the signing link is built from. A CC\nrecipient is recorded as already complete, because they are never asked to\nsign.\n\nOnly while DRAFT: adding a recipient to a document already sent is a 409,\nbecause the field layout and the turn order were fixed when it went out. An\nunknown document is a 404. The addition is recorded on the audit trail.",
 		Fields: map[string]string{
 			"esignInvite.email":             "Email is the address the invitation is for, lower-cased.",
@@ -228,7 +228,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"email":"counterparty@example.com","name":"Dana Lee","role":"SIGNER"}`),
 	})
-	zip.Describe("POST /v1/esign/documents/:id/send", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign POST /v1/esign/documents/:id/send", zip.Doc{
 		Description: "Sends the document out and answers each signer's link.\n\nIt moves the document from DRAFT to PENDING and answers the signing tokens — one\nper signing recipient, with the path to hand them — which is how the links reach\nthe people who must sign. Nothing is emailed by this call; delivering the links\nis the caller's.\n\nIt refuses to send an unsignable document: no recipients at all is a 400, and so\nis any signing recipient with no fields to fill, named in the error. Re-sending\nan already-pending document is allowed and re-issues the same links rather than\nrestarting anything; a completed document is a 409, and an unknown one a 404.\nThe send is recorded on the audit trail.",
 		Fields: map[string]string{
 			"esignLink.email":       "Email is the address this link is meant for.",
@@ -242,7 +242,7 @@ func init() {
 			"esignSendIn.id":        "ID is the document to send. The URL is the addressing authority.",
 		},
 	})
-	zip.Describe("POST /v1/esign/o/:org/sign/:token/complete", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign POST /v1/esign/o/:org/sign/:token/complete", zip.Doc{
 		Description: "Finishes your signing — and seals the document if you were the\nlast.\n\nIt marks this recipient as done and answers whether the DOCUMENT sealed with it.\nWhen every signing recipient has completed, sealing happens right here in the\nsame call: the collected values are rendered onto the PDF, a real x509 PKCS#7\nsignature is applied, the sealed bytes are stored beside the untouched original,\nand the document moves to COMPLETED. Until then the answer is the recipient's\nown completion with the document still pending.\n\nIt refuses to complete a half-filled signature: a recipient with any unfilled\nfield is a 400 naming how many remain. A document not out for signature is a\n409, as is a recipient who has already completed, and under SEQUENTIAL order a\nsigner out of turn is a 403. The token is the whole credential — no account, and\na token that does not resolve under the org segment is a 404. Sealing and\ncompletion are one transaction, so a failure anywhere leaves the document\nexactly as it was.",
 		Fields: map[string]string{
 			"esignCompletion.documentStatus": "DocumentStatus is COMPLETED when this was the last signature and the document\nsealed here, PENDING while others have still to sign.",
@@ -250,7 +250,7 @@ func init() {
 			"esignCompletion.sealed":         "Sealed is whether the document sealed on this call — the field values\nrendered onto the PDF and a real x509 PKCS#7 signature applied.",
 		},
 	})
-	zip.Describe("POST /v1/esign/o/:org/sign/:token/fields/:fieldId", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign POST /v1/esign/o/:org/sign/:token/fields/:fieldId", zip.Doc{
 		Description: "Fills in one of your fields.\n\nIt records a value for one field and marks it inserted. A signature field takes\na value with isBase64 true for drawn image bytes, or false for a typed\nsignature; a date, name or email field falls back to today, the recipient's name\nor their email when the value is omitted; any other type requires one.\n\nNothing is sealed here — filling every field still leaves the document pending\nuntil the completion call. The token is the whole credential and it bounds what\ncan be written: a field belonging to another recipient is refused with 401 even\nunder a valid token, an unknown field is a 404, and a field already filled is a\n409. A document not out for signature is a 409, as is a recipient who has\nalready completed or rejected. Under SEQUENTIAL order a signer whose turn has\nnot come is refused 403 until every earlier signer has signed. Each insertion is\nrecorded on the audit trail.",
 		Fields: map[string]string{
 			"esignInsertion.fieldId":  "FieldID is the field that was filled.",
@@ -260,7 +260,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"value":"Dana Lee","isBase64":false}`),
 	})
-	zip.Describe("POST /v1/esign/o/:org/sign/:token/reject", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/esign POST /v1/esign/o/:org/sign/:token/reject", zip.Doc{
 		Description: "Declines to sign, with an optional reason.\n\nIt records this recipient's refusal and moves the WHOLE DOCUMENT to REJECTED —\none declining signer ends it for everyone, and there is no route back: the\ndocument cannot then be signed or completed. An optional reason is stored and\nwritten onto the audit trail with the rejection, which is what the sender sees.\n\nA document not out for signature is a 409, and so is a recipient who has already\nsigned or already rejected — a refusal cannot be taken back or repeated. The\ntoken is the whole credential; one that does not resolve under the org segment\nis a 404.",
 		Fields: map[string]string{
 			"esignRejectIn.reason":       "Reason is why the signer is declining. Optional, stored, and written onto the\naudit trail with the rejection — it is what the sender sees.",

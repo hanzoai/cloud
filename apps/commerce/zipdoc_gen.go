@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/commerce/cart/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce GET /v1/commerce/cart/:id", zip.Doc{
 		Description: "Reads one cart: its lines, its status and what it comes to.\n\nThis is what a storefront calls to render the basket, and what a support agent\ncalls to see what a shopper is looking at. The totals are the cart's STORED\ntally — shipping and tax stay zero until checkout resolves a shipping option\nand a tax region, so a cart total before checkout is the merchandise total and\nis meant to be.\n\nThe org scopes the read by construction: the store is namespaced to it, so a\ncart id belonging to another tenant is simply not found rather than found and\nthen filtered, and answers 404 rather than 403 so the id space cannot be probed.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Cart.createdAt":      "CreatedAt is when the cart was opened, RFC3339.",
@@ -36,62 +36,62 @@ func init() {
 			"CartRef.id":          "ID is the cart's id, as the open call answered it.",
 		},
 	})
-	zip.Describe("GET /v1/commerce/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce GET /v1/commerce/health", zip.Doc{
 		Description: "Answers ok whenever the commerce subsystem is mounted. It is registered\nbefore the module embed boots, so it keeps answering even when the embed\nfailed and every business route serves the fail-closed 503 — which is the\npoint: it reports that the process is reachable, never that the money plane\nis healthy. Unauthenticated: a probe that needs a credential is a probe that\nreports the credential.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"liveness.service": "Service names the answering subsystem; it is always commerce.",
 			"liveness.status":  "Status is always ok: mounted is the only state that can answer.",
 		},
 	})
-	zip.Describe("POST /billing/account/members", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/account/members", zip.Doc{
 		Description: "Lists one billing account's roster.\n\ncommerce stores no roster, so the only member it can name is the caller — and\nthat is what it names. What it DOES enforce is that the account asked about is\nthe caller's own: a foreign id is refused rather than answered empty, because\nan empty roster and somebody else's account are different facts and only one\nof them is a refusal.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/accounts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/accounts", zip.Doc{
 		Description: "Lists the caller's billing accounts — one, because in commerce an org IS its\nbilling account.\n\nThe caller's own standing travels IN, which looks backwards until you ask who\nelse could supply it: the membership roster is IAM's, not commerce's, so a\ncallee that answered \"what role does this person hold\" would be inventing the\nanswer. The edge validated it; this reports it. The org is still the caller's\nand cannot be named, so the account described is always the caller's own.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"BillingAccount.role": "Role is the caller's standing. Absent when nobody was named, so an\nanonymous read returns an account rather than an implied membership.",
 		},
 	})
-	zip.Describe("POST /billing/alert/amend", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/alert/amend", zip.Doc{
 		Description: "Changes one spend cap. Only the fields the patch carries move; the rest are\npreserved, so flipping enforcement cannot silently wipe the threshold.\n\nA row belonging to anyone but the caller answers as a MISS rather than a\nrefusal, so a guessed id never becomes an oracle for what the org holds.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/alert/drop", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/alert/drop", zip.Doc{
 		Description: "Removes one spend cap, lifting that ceiling entirely.\n\nA row belonging to anyone but the caller answers as a miss, for the same\nreason the amend does: deleting by guessed id must tell a caller nothing.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/alert/raise", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/alert/raise", zip.Doc{
 		Description: "Opens a spend cap on the caller's own org.\n\nThe row is keyed on the SUBJECT the endpoint resolved, never on a body value,\nand that is what makes enforcement bind: the gate looks the cap up under the\nsame key, so a cap stored under anything else is a cap nothing reads.\n\nA refusal of the caller's own values — a threshold that bounds nothing, a soft\npercentage outside its range, one row too many — is a 400 and says which. Any\nother failure is the store's, and is a 502.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/alerts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/alerts", zip.Doc{
 		Description: "Lists this org's spend caps, each with the period spend derived for its scope.\n\nThe derived figures are POINTERS on the wire and absent rather than zero when\nthe aggregation could not be read, because \"nothing spent\" and \"spend unknown\"\nare different answers and a zero cannot tell them apart. The policy row is\nstill reported either way — a cap whose spend cannot be read is still a cap.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/auto-recharge", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/auto-recharge", zip.Doc{
 		Description: "Reads this org's auto-reload rule — the threshold the sweep measures against and\nthe amount it charges when the balance falls below it.\n\nAn org that never set one reads as DISABLED with zeroes rather than as an error:\n\"no rule\" is a true answer to \"what is your rule\", and `stored` carries the\ndifference between never having set one and having turned one off.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/auto-recharge/set", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/auto-recharge/set", zip.Doc{
 		Description: "Sets this org's auto-reload rule.\n\nENABLING REQUIRES A CARD ON FILE, because the sweep charges off-session and a\nrule that names no chargeable method is a promise the schedule cannot keep. The\nthree refusals a caller can provoke — a non-positive amount, a negative\nthreshold, no default payment method — are the module's own sentinels, mapped\nhere to 400 so a caller learns which of its own values was wrong rather than\nreading a 500 and guessing.\n\nThe rule is the caller's own: the org comes from the validated principal and the\ninput names none, so a write cannot be steered onto another tenant's schedule.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/cap/authorize", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/cap/authorize", zip.Doc{
 		Description: "Answers whether one proposed spend fits inside this org's caps.\n\nIt evaluates EVERY covering row, most-restrictive-wins, and denies when a\nhard-enforceable row is exceeded, reporting the tightest one. Soft rows — and\na project-scoped enforce row whose project axis the caller could not establish\n— never block; they only raise the reported utilization.\n\nProjectValidated travels because only the endpoint knows it. A project a caller\nmerely claimed is not a project the cap may bind on, and a callee that assumed\nvalidation would turn an unproven claim into a refusal.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/credit/balance", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/credit/balance", zip.Doc{
 		Description: "Sums a subject's ACTIVE grants per currency — what is spendable right now,\nwhich is why voided, exhausted and lapsed grants contribute nothing.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/credit/breakdown", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/credit/breakdown", zip.Doc{
 		Description: "Splits that same balance by grant tag, with the earliest expiry under each,\nand the total across all of them.\n\nThe tags cross as a SLICE and are published as an object: a map has no fixed\nlayout, so it cannot cross this plane at all, and the rendering is done once in\nthe contract rather than once per endpoint (plane.CreditBreakdown.MarshalJSON).\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/credits", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/credits", zip.Doc{
 		Description: "Lists a subject's credit grants — every one of them, including the spent, the\nlapsed and the voided.\n\nThe SUBJECT is required rather than optional-like-a-filter, and that is a\ntenancy property rather than a validation nicety: dropping it does not narrow\nthe answer, it WIDENS it to every subject in the org, so one tenant's customers\nwould read each other's grants. The endpoint resolves it from the validated\nprincipal, so a query cannot supply one.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/crypto/deposit", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/crypto/deposit", zip.Doc{
 		Description: "Reads one deposit intent back — pending, confirming, or succeeded.\n\nCaller-scoped: an intent belonging to another payer answers as a MISS, exactly\nas an id that names nothing, so a guessed id cannot confirm that somebody\nelse's deposit exists.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/crypto/mint", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/crypto/mint", zip.Doc{
 		Description: "Issues a per-payer custody deposit address for one asset.\n\nIt reuses the payer's own OPEN intent rather than minting a second, so a\nrefresh cannot spray key generations at the signer fleet — and so a payer who\nsent to the address they were shown five minutes ago is still credited.\n\nTwo refusals, and they mean opposite things to whoever is asking. An asset\nthis rail cannot mint on is 400: ask for a different one. A rail that is SHUT\nfor that asset is 503: nothing you send now can be credited, come back later.\nCollapsing them would tell a customer to retry something that will never work,\nor to give up on something that will.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/crypto/options", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/crypto/options", zip.Doc{
 		Description: "Answers which chains and tokens the crypto rail accepts.\n\nIt is the intersection of two facts, not a config list: an asset is offered\nonly if something is WATCHING it and the custody processor supports it. An\naddress nobody watches credits nobody, so offering one would take a customer's\nmoney and lose it. A rail with nothing configured is 503, not an empty menu.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/invoice/collect", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/invoice/collect", zip.Doc{
 		Description: "Collects an issued invoice: credit grants first, then prepaid balance, then the\ncard on file — the same waterfall the dunning workflow runs.\n\nA DECLINE IS NOT AN ERROR. It answers with paid=false, a reason, and the\ninvoice still open, because a declined collection is a normal business outcome\nthat must remain retryable — and because sealing it as a failure would wedge\ndunning behind a replayed decline. Only a successful collection is sealed, so a\nretry of a paid invoice replays the receipt instead of charging again.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Collected.balanceUsedCents": "BalanceUsedCents is how much was covered by prepaid balance.",
@@ -120,7 +120,7 @@ func init() {
 			"InvoiceRef.id":              "ID is the invoice id.",
 		},
 	})
-	zip.Describe("POST /billing/invoice/issue", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/invoice/issue", zip.Doc{
 		Description: "Issues a draft invoice: moves it to OPEN, assigns its number, and makes it\ncollectible.\n\nOnly a draft can be issued. An invoice already open, paid or void is refused\nwith the state machine's own reason rather than being silently re-issued, which\nwould mint a second number for one debt.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Invoice.amountDueCents":  "AmountDueCents is what remains collectible.",
@@ -142,13 +142,13 @@ func init() {
 			"InvoiceRef.id":           "ID is the invoice id.",
 		},
 	})
-	zip.Describe("POST /billing/invoice/pdf", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/invoice/pdf", zip.Doc{
 		Description: "Renders one invoice as a PDF — the bytes and the filename they are offered\nunder, so the endpoint that serves the download does not need its own renderer.\n\nThe render is a pure function of the invoice: no timestamps, no random ids, so\nthe same invoice renders the same bytes however many times it is asked for,\nand a retry after a dropped connection costs a re-render and nothing else.\n\nThe org scopes the lookup at the storage layer, so a foreign id resolves to\nnothing and is a 404 rather than a filtered hit.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"InvoiceRef.id": "ID is the invoice id.",
 		},
 	})
-	zip.Describe("POST /billing/invoice/raise", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/invoice/raise", zip.Doc{
 		Description: "Raises a DRAFT invoice against a customer in the caller's own org.\n\nThe invoice is not collectible yet: a draft exists so it can be read and\ncorrected, and issueInvoice is the separate act that turns it into a demand for\npayment. The subtotal and amount due are computed from the lines, so there is\nno total to send and none to get wrong.\n\nThe billing org is the caller's, taken from the validated principal, so an\ninvoice can only ever be raised on the caller's own books.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Invoice.amountDueCents":  "AmountDueCents is what remains collectible.",
@@ -173,7 +173,7 @@ func init() {
 			"RaiseIn.userId":          "UserID identifies the customer being billed, within the caller's own org.\nRequired — an invoice with no addressee is not an invoice.",
 		},
 	})
-	zip.Describe("POST /billing/invoice/read", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/invoice/read", zip.Doc{
 		Description: "Reads one invoice out of the caller's org.\n\nThe org scopes the read by construction — the store is namespaced to it — so an\nid belonging to another tenant is not found rather than found and then filtered.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Invoice.amountDueCents":  "AmountDueCents is what remains collectible.",
@@ -195,7 +195,7 @@ func init() {
 			"InvoiceRef.id":           "ID is the invoice id.",
 		},
 	})
-	zip.Describe("POST /billing/invoice/void", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/invoice/void", zip.Doc{
 		Description: "Voids a draft or issued invoice — the cancel.\n\nA paid invoice cannot be voided: money has moved, and the correction for that\nis a refund, not an erasure. The state machine refuses it and that refusal is\nthe answer.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Invoice.amountDueCents":  "AmountDueCents is what remains collectible.",
@@ -217,52 +217,52 @@ func init() {
 			"InvoiceRef.id":           "ID is the invoice id.",
 		},
 	})
-	zip.Describe("POST /billing/invoices", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/invoices", zip.Doc{
 		Description: "Lists one subject's invoices, with the count beside them.\n\nIt sends the STORE'S own projection of an invoice — the billing period, the\ntax and discount lines, the attempt count — which is a wider shape than the\nlifecycle's [plane.Invoice] because it answers a different question: \"what\nhave I been billed\" rather than \"what is on this invoice\". The two are not\nfolded together; shapes that overlap are still two shapes.\n\nEvery timestamp becomes RFC3339 text on the way out, because a time value\ncrosses this plane as an empty struct and would arrive as the zero instant\nwith nothing reporting the loss.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"BillingInvoice.lineItems":    "LineItems carries no omitempty and is never allocated empty, because the\nwire it reproduces sends `null` for an invoice with no lines. An empty\narray there would be a different answer to \"were there lines\".",
 			"InvoiceLineItem.periodStart": "The billed period. Both carry omitempty and neither is ever empty, which\nlooks contradictory and is not: the shape they reproduce is a time value,\nand omitempty does nothing to a struct — so those keys render even for the\nzero instant. The adapter formats the zero instant rather than skipping it,\nwhich is what keeps the two wires the same.",
 		},
 	})
-	zip.Describe("POST /billing/method/detach", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/method/detach", zip.Doc{
 		Description: "Removes one saved payment method.\n\nA method this subject does not own is NOT FOUND rather than refused — the same\nanswer whether the id names nothing or names somebody else's card — so an id\ncannot be probed for existence. Privileged is the ENDPOINT'S determination that\nthis caller may act on any subject inside the org, and travels as one, because\nauthority decided twice is authority that eventually disagrees with itself.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Detachment.deleted": "Deleted is whether the method was actually removed. False with no error\nmeans it was already gone, which is a successful detach rather than a\nfailure — a retry must not be an error.",
 			"Detachment.id":      "ID is the method that was detached, echoed so a caller batching several can\ntell the answers apart.",
 		},
 	})
-	zip.Describe("POST /billing/method/save", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/method/save", zip.Doc{
 		Description: "Saves a payment method for a subject: vaults the instrument at the processor\nand persists the row.\n\nSaving a card that is ALREADY on file answers with the row that already holds\nit rather than stacking a duplicate, and the endpoint needs to tell the two\napart to answer 201 or 200 — so whether the row is new is part of the answer,\nnot something a reader infers.\n\nThe email names the processor's customer profile and is the CALLER'S own,\nresolved at the endpoint from its credential: the store must never read an\nidentity it was not handed.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Rendered.created": "Created reports that the act made a NEW row rather than answering with one\nthat already existed. It rides here because only the store can tell the two\napart — saving a card already on file answers with the row that holds it —\nand the endpoint has to know which happened to answer 201 or 200. Absent on a\nread, where nothing was created and the zero value is the truth.",
 		},
 	})
-	zip.Describe("POST /billing/methods", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/methods", zip.Doc{
 		Description: "Lists the cards and accounts one subject has on file, optionally of one kind.\n\nA store that cannot be read answers an EMPTY LIST rather than a failure, which\nis what this address has always done: the saved-cards panel renders empty\ninstead of breaking the page around it. The subject is the endpoint's, so a\nquery cannot widen the list to another customer of the same org.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Rendered.created": "Created reports that the act made a NEW row rather than answering with one\nthat already existed. It rides here because only the store can tell the two\napart — saving a card already on file answers with the row that holds it —\nand the endpoint has to know which happened to answer 201 or 200. Absent on a\nread, where nothing was created and the zero value is the truth.",
 		},
 	})
-	zip.Describe("POST /billing/mode", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/mode", zip.Doc{
 		Description: "Moves this org between sandbox money and real money.\n\nIt flips whether a charge hits a real card, so it is the one posture change\nthat is not self-service — the endpoint holds it at the platform bar. Live and\ntestMode come back as one fact stated twice, in the two vocabularies its\nreaders use, from the single authority that decided it.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/payouts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/payouts", zip.Doc{
 		Description: "Lists the org's outbound payouts, newest first.\n\nIt takes NO input: the org comes from the caller and a payout is org-scoped\nrather than subject-scoped, so there is nothing else to name and one org can\nnever list another's.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/plans", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/plans", zip.Doc{
 		Description: "Answers the public plan catalog, optionally narrowed to one category.\n\nIt takes no org and needs none: the catalog is what anyone may buy, so there\nis nothing to scope and giving it a tenant would invent one.\n\nThe active offer is resolved HERE, in the process that holds the platform row\nit lives in, and applied to the prices before they leave — so what the catalog\nquotes is what the checkout will charge. An endpoint that priced this itself\nwould need its own copy of the window rule, and a catalog priced without the\noffer is a different catalog.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Rendered.created": "Created reports that the act made a NEW row rather than answering with one\nthat already existed. It rides here because only the store can tell the two\napart — saving a card already on file answers with the row that holds it —\nand the endpoint has to know which happened to answer 201 or 200. Absent on a\nread, where nothing was created and the zero value is the truth.",
 		},
 	})
-	zip.Describe("POST /billing/rate", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/rate", zip.Doc{
 		Description: "Reads one row of the meter authority.\n\nAN ABSENT RATE IS NOT AN ERROR. It answers Found=false and the caller falls\nback to the floor it compiled in, because a meter nobody has published a price\nfor is the ordinary state of a new one — and failing the work would stop a\ncustomer's storage from provisioning over a missing price row. A STORE failure\nis a different thing and is returned as one: that is the authority being\nunwell, not the rate being absent, and a caller that cannot tell them apart\nwould quietly charge its floor while the real price sat unreadable.",
 		Fields: map[string]string{
 			"Rate.nano": "Nano is the price of one Unit in nano-dollars, a billionth of a dollar.\nCents cannot hold these: fractions of a cent per million tokens round to\nzero or to a hundred times the price.",
 			"Rate.unit": "Unit is what ONE of the billed quantity is, so a reader can tell a\nGB-month from a thousand characters without knowing the meter.",
 		},
 	})
-	zip.Describe("POST /billing/recharge", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/recharge", zip.Doc{
 		Description: "Sweeps every org and charges the default card of those whose balance has\nfallen below their own threshold.\n\nIts caller is a SCHEDULE, not a person — there is no request behind an\noff-session charge — which is also why it takes no retry key: one run-all\nrequest's header would be one key for every org it touches, so the second\ncharge would replay the first one's receipt. Each org derives its own.\n\nOrgs is the POPULATION considered, not the row count. That difference is how a\nreader tells \"nobody was below threshold\" from \"the sweep never ran\".\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Recharge.charged": "Charged is how many of them were actually charged. It is at most Orgs, and\nthe difference is orgs whose balance was already above their threshold.",
@@ -270,43 +270,43 @@ func init() {
 			"Recharge.results": "Results is one row per org considered, so a sweep that charged nobody is\nstill explainable. Never null.",
 		},
 	})
-	zip.Describe("POST /billing/rollup", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/rollup", zip.Doc{
 		Description: "Answers a subject's month: what the plan includes, what has been consumed\nagainst it, and the wallet beside it.\n\nThe two blocks stay SEPARATE because they are separate monies — one was sold\nwith the plan, one was bought with a card — and their sum is not a number\nanyone holds. Nothing here adds them, and a reader that did would be inventing\na balance.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/settings", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/settings", zip.Doc{
 		Description: "Answers the PUBLIC half of this org's processor configuration — the ids a\nbrowser needs to tokenize a card, and the environment it must tokenize\nagainst.\n\nIt carries no secret: an application id is published to every checkout page by\ndesign. What matters is that it resolves sandbox-versus-production through the\nSAME authority the charge path uses, so the account a browser tokenizes\nagainst is always the account the charge will be made on. A mismatch there is\na card that vaults and then cannot be charged.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/subscribe", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/subscribe", zip.Doc{
 		Description: "Buys a plan with a card — a fresh single-use token, which is vaulted first, or\na card the subject already saved.\n\nThe settled charge IS the mint authority, which is why this opens a paid-tier\nsubscription without the gate that stops one being minted for free: money that\narrived is the thing that gate was asking for.\n\nIt answers TWO SHAPES and keeps them apart. A fresh sale is a receipt; an\nidentical retry is the sealed body of the first one, verbatim. The endpoint owes\na different status for each, and a retry answered as fresh would read as a\nsecond subscription having been opened.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/subscription/cancel", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/subscription/cancel", zip.Doc{
 		Description: "Ends a subscription — at the end of the period already paid for, or at once.\n\nThe lifecycle belongs to the engine, so a move it will not make comes back as\nthe caller's own refusal rather than being re-decided here: one state machine,\nin one place. A subscription from another org is not found rather than\nrefused, so an id cannot be probed for existence.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Subscription.mrrCents":       "MRRCents is what this subscription contributes per month — commerce's own\nfigure, interval-normalized and multiplied by its seats, so no reader\nre-derives it from price and interval.",
 			"SubscriptionRef.atPeriodEnd": "AtPeriodEnd cancels at the end of the paid period rather than at once. It\ndefaults TRUE on the endpoint, because a customer who cancels has already\npaid for the period they are in.",
 		},
 	})
-	zip.Describe("POST /billing/subscription/reactivate", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/subscription/reactivate", zip.Doc{
 		Description: "Puts a canceled subscription back on its plan.\n\nIt is the act least likely to come from a browser — what asks for it is\nusually a recovered payment method or a support tool — which is most of the\nargument for it being answerable by name at all.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Subscription.mrrCents":       "MRRCents is what this subscription contributes per month — commerce's own\nfigure, interval-normalized and multiplied by its seats, so no reader\nre-derives it from price and interval.",
 			"SubscriptionRef.atPeriodEnd": "AtPeriodEnd cancels at the end of the paid period rather than at once. It\ndefaults TRUE on the endpoint, because a customer who cancels has already\npaid for the period they are in.",
 		},
 	})
-	zip.Describe("POST /billing/subscriptions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/subscriptions", zip.Doc{
 		Description: "Lists the plans a subject holds, with the count beside them.\n\nIt is the CUSTOMER's view of the same rows FinanceSubs answers for an\noperator's revenue board — one store, one core, one projection, two audiences.\nFolding the two would make the customer's page inherit the board's fields or\nthe board inherit the customer's.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Subscription.mrrCents": "MRRCents is what this subscription contributes per month — commerce's own\nfigure, interval-normalized and multiplied by its seats, so no reader\nre-derives it from price and interval.",
 			"Subscriptions.count":   "Count is the row count beside the rows, which is the shape this address\nhas always answered with.",
 		},
 	})
-	zip.Describe("POST /billing/tier", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/tier", zip.Doc{
 		Description: "Answers which tier a subject is on, what it allows, and what they can spend.\n\nThe tier is DERIVED from their own active subscriptions unless the edge\nsupplied one it was entitled to mint. A tier that cannot be read is an ERROR\nrather than Free: the router in front of the models maps any non-2xx to Free,\nso answering Free from a question nobody could answer would pin every paying\ncustomer to the most restrictive row with nothing anywhere to find.\n\neffectiveAvailable is the only figure a gate compares against zero — the\nothers are its parts, three sources of one spend rather than three balances to\nadd up a second time.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"TierLimits.unlimitedAgents": "UnlimitedAgents reports that MaxAgents 0 means \"no ceiling\" rather than\n\"no agents\" — the reading a bare zero cannot carry.",
 		},
 	})
-	zip.Describe("POST /billing/topup", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/topup", zip.Doc{
 		Description: "Charges a card the subject already saved and credits their wallet.\n\nThe method must belong to the subject; one that does not is a MISS rather than\na refusal, so a guessed id cannot confirm that somebody else's card exists.\nThe description rides to the processor, where the customer reads it, which is\nwhy the caller says it rather than this side inventing a sentence.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Charged.balanceCents":    "BalanceCents is the subject's balance AFTER the charge settled, in cents, so\na caller does not have to re-read to show the new number.",
@@ -317,7 +317,7 @@ func init() {
 			"SavedCardIn.description": "Description rides on the charge to the processor, which is where the\ncustomer reads it. A top-up and an auto-recharge say different true things\nthere, so it is a value rather than a sentence invented in the store.",
 		},
 	})
-	zip.Describe("POST /billing/topup/card", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/topup/card", zip.Doc{
 		Description: "Charges a single-use card token and credits the subject's wallet.\n\nThis is the cold-customer path: nothing is saved first, so a caller with no\ncard on file can add funds. The nonce is spent by the charge and is worthless\nto anyone who reads it afterwards.\n\nThe bounds are enforced HERE and only here. A scripted or agent-driven request\nnever passes through a console's client-side cap, so the floor and the ceiling\nhave to bind where the money moves.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Charged.balanceCents":  "BalanceCents is the subject's balance AFTER the charge settled, in cents, so\na caller does not have to re-read to show the new number.",
@@ -327,31 +327,31 @@ func init() {
 			"Charged.transactionId": "TransactionID is the ledger entry this charge created. It is the handle a\nlater read or a refund names, and it is minted by the ledger rather than by\nthe caller.",
 		},
 	})
-	zip.Describe("POST /billing/transaction", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/transaction", zip.Doc{
 		Description: "Reads one ledger entry by its id, for the caller's own books.\n\nIt is [commercebilling.ReadPayment] — the module's own published read of the\nrow — so the receipt a top-up hands back and the row a statement lists are the\nsame record read the same way. That core loads a transaction by id and refuses\nanything that is not a DEPOSIT, which is why this answers 404 for a row that\nexists but is not a top-up: the read is narrower than the collection beside it,\nand saying so is better than widening a money read to close a asymmetry nobody\nasked about.\n\nThe org is the caller's and cannot be named, so a guessed id misses rather than\nreaching another tenant's ledger.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/transactions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/transactions", zip.Doc{
 		Description: "Reads one page of a subject's ledger, newest first.\n\nThe SUBJECT travels and the org does not, which is the tenancy rule this plane\nkeeps everywhere: a subject is a wallet inside the caller's own org, so naming\none can reach another account of that org and nothing beyond it. The edge\nresolves it from the validated principal, so a query cannot widen the read.\n\nCount is the size of the whole history rather than of the page, because that\ndifference is how a reader knows there is more to ask for.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /billing/wire", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/wire", zip.Doc{
 		Description: "Renders the receiving bank details for a wire top-up.\n\nThe account is the SERVING BRAND'S own — resolved from the host the customer\nis paying on, never from the caller — and the caller's billing key is rendered\ninto the payment reference, which is how an arriving wire names who it\ncredits. Nothing mints here; ops settle a receipt with the admin credit verb\nonce the bank confirms.\n\nEvery failure is one answer, because they are one fact to a customer: no brand\nrow, no secrets and no account all mean there is nowhere to send the money. A\nhalf-filled form is not an alternative.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /finance/authorize", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /finance/authorize", zip.Doc{
 		Description: "Answers whether one proposed prepaid spend may proceed, so an app in its own\nprocess can gate priced work against a ledger it cannot open.\n\nThe verdict is a VALUE, not an error: ok, no-funds, cap-spent, or a reason\nstring. Only the first admits the work — a caller that treats anything else as\npermission has misread it. The distinction matters because no-funds and\ncap-spent are the customer's to fix while a reason is the operator's.\n\nIt FAILS CLOSED on an unconfigured meter. This process owns the money plane, so\nif ITS meter is unconfigured the honest answer is unknown rather than allowed —\nthe caller refuses on a reason it can log instead of handing out work nobody\ncan bill. An amount that cannot be PARSED is refused outright, because a charge\nthat cannot be read is not a charge of zero and a gate that treated it as one\nwould let the work through free.\n\nThe org is the CALLER'S and can never be named in the input; an empty subject\ngates the org's own account. Authorizing does not debit — the record op does.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /finance/balance", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /finance/balance", zip.Doc{
 		Description: "Reads one subject's spendable prepaid balance out of the ledger this process\nowns, so a process that must never open the file can still report a balance.\n\nThe ORG is the caller's — the gateway's assertion, or what a background job\nstated once and explicitly — and can never be named in the input, so a caller\ncannot read another tenant's books. The SUBJECT is the caller's to choose, but\nonly within that org: it is a wallet inside the ledger the caller's identity\nalready pinned. An empty subject reads the org's own account and an empty\ncurrency reads usd. A missing ledger is an ERROR, never a zero — answering zero\nfrom the process that owns the file would report every account as broke.\n\nThe amount crosses the plane EXACTLY. Flattening it to cents here was the\nconsole's understatement: every sub-cent tail of the true balance vanished\nbetween the one writer and every reader.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /finance/costs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /finance/costs", zip.Doc{
 		Description: "Is what we paid every vendor in a period, and the total.\n\nIt is a PLATFORM god-view, not a tenant read: the figures are the fleet's own\nCOGS. It still resolves through orgOf, because the books it walks are\nnamespaced and the reserved admin org is where the platform's own live —\nasking without a validated caller would read an empty namespace and report\nthat we pay our vendors nothing, which is the worst shape a cost report can\ntake.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /finance/credit", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /finance/credit", zip.Doc{
 		Description: "Puts money INTO one subject's prepaid ledger — the seller's half of a\nsettlement, and the only op on this plane that creates a balance rather than\nmoving, reading or gating one.\n\nREF IS REQUIRED and is the idempotency key. Without it this op is a money\nprinter: a settlement retries by construction, and a retry would credit twice.\nIt is required rather than defaulted, because a default nobody chose is a key\nthat collides. The amount must PARSE and must be positive — a credit is not a\ndebit spelled with a sign.\n\nThe ORG comes from the CALLER, never the argument: a caller able to name the\ncredited org could pay itself out of someone else's books. An empty subject\ncredits the org's own account. The amount is deposited as the EXACT decimal\nrather than its minor unit, because a settlement is routinely a fraction of a\ncent and rounding to the minor unit would round it to nothing.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Credited.id": "ID is the ledger entry the credit created — the handle a reconciliation\nnames, and the one fact about a completed credit that cannot be derived\nfrom the request that asked for it.\n\nThe op always had it and threw it away, so a caller with no ledger of its\nown could move money and then had nothing to cite for it: the admin grant\nreceipt's transactionId echoed the idempotency key it had just sent, which\nreads like an id and identifies nothing in commerce's books.\n\nAPPENDED at the end, because the wire is field ORDER — a field inserted\nanywhere else changes what every existing peer reads.",
 		},
 	})
-	zip.Describe("POST /finance/record", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /finance/record", zip.Doc{
 		Description: "Debits one metered act against the prepaid ledger and records what it was for —\nmodel, provider, project, service, request id and client address — so usage a\nprocess cannot write locally still lands in the one ledger of record.\n\nIt is the DEBIT half and is deliberately a separate op from the credit: two\nseparate acts with separate idempotency and separate authority, because folding\nthem into one signed amount would make a sign error a transfer in the wrong\ndirection. It is also separate from the authorize gate, which decides and does\nnot move money.\n\nThe billed USER and ORG are set here from the CALLER, never from the argument:\na caller that could name the billed org could bill someone else. An empty\nsubject bills the org's own account. Unlike the gate, an unconfigured meter is\nan ERROR here rather than a verdict — there is no honest way to acknowledge a\ndebit that was never written.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Usage.actor":        "Actor is WHO acted, when that is not the wallet being billed — an admin or an\nagent running on behalf of the payer. The subject says whose money moved; this\nsays whose hand moved it, and a ledger entry without it cannot answer the only\nquestion an audit asks. It crossed on the old HTTP body (`actor`) and had no\nfield here, so the split-deploy debit landed unattributed.",
@@ -360,32 +360,32 @@ func init() {
 			"Usage.requestId":    "RequestID is the call's CORRELATION id, for tracing a debit back to the request\nthat made it. Attribution only: it is NOT the idempotency key (see Ref).",
 		},
 	})
-	zip.Describe("POST /finance/scope-rules", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /finance/scope-rules", zip.Doc{
 		Description: "Lists the caller org's per-scope request-rate ceilings, so the edge limiter in\nanother process can enforce a budget whose rows it cannot open.\n\nIt takes NO input: the org rides the caller and there is nothing else to name,\nso one org can never read another's ceilings. Only rows that SET a ceiling are\nreturned — a spend-alert row with no rate limit is a spend cap, a different\npolicy answered by a different op, and shipping it here would make the limiter\nweigh rules that bind nothing.\n\nThe row scan is the org's WHOLE policy set — the same query commerce's own cap\nverdict runs (loadOrgScopes), bounded the same way. The retired HTTP read went\nthrough the per-subject list instead, so the rate ceiling and the spend cap\ncould in principle bind on different rows; one query is what makes that\nimpossible rather than merely unlikely.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /finance/spend", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /finance/spend", zip.Doc{
 		Description: "Reads the caller org's metered consumption since a moment, beside the prepaid\nbalance it is drawn from. `since` is a unix second; 0 reads the calendar month\nto date, which is what every page showing this figure means by it.\n\nIt answers from the LEDGER'S OWN windowed sum — the same source the rolling\nspend cap reads — so a program that qualifies an org on its spend and the gate\nthat stops that org from spending cannot disagree about the amount. Deposits\nare not consumption and are excluded by that sum; the balance beside it is the\nwallet's settled figure.\n\nThe org is the CALLER'S and can never be named in the input, so one tenant can\nnever read another's totals. A missing ledger is an ERROR, never a zero: a\nzero here would qualify nobody, accrue nothing and show every customer a blank\nmonth, silently — which is exactly what the HTTP read it replaces did.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /finance/subs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /finance/subs", zip.Doc{
 		Description: "Lists the caller org's subscriptions — which plan, what state, and\nwhen it began — filtered by user and status the same way the HTTP endpoint filters\nthem, because it IS the same query: commerce exports it as a value-taking core\n(billing.ListSubscriptions) and both callers ask that one function. Deriving\nthe filter again here would be a second implementation of one question, and\ntwo copies of a subscription filter is how a billing page and a plan gate come\nto disagree about who is subscribed.\n\nThe org comes from the CALLER, never the payload — SubsIn has no org field, so\none tenant cannot read another's subscriptions. It sends rows rather than a\nrendered envelope: the HTTP surface builds its own from these, and putting the\nrenderer next to the datastore is the import cycle that shape implies.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Sub.mrrCents": "MRRCents is what this subscription contributes per month — commerce's own\nfigure, interval-normalized and multiplied by its seats.\n\nIt travels rather than being derived by the reader, because a reader that\nderived it needed its own copy of commerce's interval normalization AND the\nseat count, and the admin surface that did exactly that read a ten-seat plan\nas one seat. Commerce bills price x quantity; it is the authority on what a\nsubscription is worth, and everyone else is a display.",
 			"Sub.planName": "PlanName is what a person calls this plan, for a surface that shows it.",
 		},
 	})
-	zip.Describe("POST /finance/txns", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /finance/txns", zip.Doc{
 		Description: "Lists the caller org's ledger entries — id, kind, ref, memo, amount and\ntimestamp — most recent first and bounded to one page. It is the movement list\nbehind the customer-facing transactions, credits and receipts pages, all three\nof which read this one list.\n\nThe org is the CALLER'S and cannot be named in the input, so one org can never\nread another's entries. What the input DOES name is which books, whose wallet\nand how many rows: `test` reads the SANDBOX ledger, a physically separate file,\nbecause a caller that posted test rows into real revenue would have restated the\ncompany's income with nothing downstream able to tell; `subject` is a wallet\nINSIDE the caller's org — the same key the balance op takes, so the movements\nand the standing total answer for one account — and empty reads every wallet in\nthe org; `limit` is a page size and 0 takes the default.\n\nUnlike the usage read the amount crosses as a DECIMAL STRING with its currency\nrather than a bare quantity, because an entry is a movement a customer reads\nrather than a number a gate does arithmetic on. A ledger implementation that\ncannot list entries is an error, not an empty page.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /finance/usage", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /finance/usage", zip.Doc{
 		Description: "Lists the caller org's recorded usage debits — id, model, exact amount and\ntimestamp — most recent first, bounded to the same page size the co-resident\nreader asks for so the page a customer sees does not change with which process\nanswered.\n\nIt takes NO input at all: the org comes from the caller and there is nothing\nelse to name, so one org can never list another's debits. It sends ROWS rather\nthan a rendered view — the HTTP surface builds its own envelope from these,\nbecause sending the envelope would put the renderer next to the ledger, which\nis the import cycle that shape implies. A ledger implementation that cannot\nlist usage is an error, not an empty page.\n\nEach amount is the ledger's OWN value, never rebuilt from its cent rounding:\nreconstructing an exact plane amount from the rounding was the sharpest form of\nthe flatten, a wire type promising precision the value had already lost.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /store/current", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /store/current", zip.Doc{
 		Description: "Is the caller org's own storefront, provisioned on first ask.\n\nResolved inside that org's namespace and nowhere else, so a store id can never\ncross a tenant boundary — StoreIn carries no fields at all, which is the same\nguarantee stated in the type.",
 	})
-	zip.Describe("POST /store/listing", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /store/listing", zip.Doc{
 		Description: "Upserts one product listing on the caller org's store.\n\nThe patch is decoded ONTO the existing listing by the core, never replacing\nit, so a caller setting a header image preserves the curated name, price and\ncopy it says nothing about.",
 	})
-	zip.Describe("POST /v1/commerce/cart", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /v1/commerce/cart", zip.Doc{
 		Description: "Opens an empty cart for a shopper to fill, and answers it with its new id.\n\nThis is the first step of a sale: hold the id, add items to it with\nsetCartItem, then hand it to checkout. Every field of the request is optional —\nan empty body opens a perfectly good anonymous cart — and the fields exist only\nto pre-fill what is already known about the shopper.\n\nThe STORE defaults to the org's own default storefront, so a merchant selling\nthrough one storefront never has to name it. The CURRENCY defaults to usd; note\nthat checkout overrides it with the store's own currency when the sale is\nauthorized, so a currency set here is a hint rather than a commitment.\n\nThe cart is created in the CALLER'S OWN org namespace, taken from the validated\nprincipal and never from the body, so a cart can never be opened on another\ntenant's books.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Cart.createdAt":      "CreatedAt is when the cart was opened, RFC3339.",
@@ -417,7 +417,7 @@ func init() {
 			"CartOpen.user":       "User is the id of the signed-in shopper this cart belongs to, when there is\none. Empty means a guest cart identified only by its own id.",
 		},
 	})
-	zip.Describe("POST /v1/commerce/cart/:id/discard", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /v1/commerce/cart/:id/discard", zip.Doc{
 		Description: "Discards a cart the shopper abandoned, and answers it in its final state.\n\nA discarded cart is CLOSED, not deleted: the row stays, so abandoned-basket\nreporting and any follow-up that keys on it still have something to read. It\nstops being a cart anything will check out, which is the point — it is how a\nstorefront says \"this basket is over\" without destroying the evidence that it\nexisted.\n\nDiscarding is idempotent: a cart already discarded answers its stored state\nrather than failing, so a retry is safe.\n\nThe cart is resolved inside the caller's own org namespace, so another tenant's\nid answers 404.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Cart.createdAt":      "CreatedAt is when the cart was opened, RFC3339.",
@@ -446,7 +446,7 @@ func init() {
 			"CartRef.id":          "ID is the cart's id, as the open call answered it.",
 		},
 	})
-	zip.Describe("POST /v1/commerce/cart/:id/item", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /v1/commerce/cart/:id/item", zip.Doc{
 		Description: "Sets how many of one item a cart holds, and answers the whole updated cart.\n\nThis is the ONE way a cart's contents change. The quantity is the RESULT, not a\ndelta: sending 3 leaves 3 however many were there before, so a retry is safe and\na double-submit cannot double an order. ZERO REMOVES the line — there is\ndeliberately no separate delete, because removal is the same act at the boundary\nvalue and a second spelling would be a second set of edge cases.\n\nName the item with EITHER product OR variant, never both. Prefer variant for\nanything sold in sizes, colours or tiers: the price and the stock belong to the\nvariant, so a product-level line on a varianted product prices the wrong thing.\nEither may be given as an id or as the human key — a product's URL slug, a\nvariant's SKU — which is what lets a storefront add to cart straight from a\nproduct page URL without a lookup first.\n\nThe item's price and name are CACHED onto the line as it is added, so the cart\nkeeps the price the shopper was shown even if the catalog moves underneath it.\n\nAn item that resolves to nothing in the catalog is refused 400 and the cart is\nleft exactly as it was; nothing is partially applied.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Cart.createdAt":       "CreatedAt is when the cart was opened, RFC3339.",

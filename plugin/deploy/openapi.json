@@ -622,6 +622,7 @@
           },
           "resources": {
             "description": "Resources is how MANY objects CD manages for this Application\n(len(status.resources)) — a count, not the objects. Zero for an Application\nCD has not reconciled.",
+            "format": "int64",
             "type": "integer"
           },
           "revision": {
@@ -655,6 +656,7 @@
           },
           "id": {
             "description": "ID is CD's own sequence number for this deploy (status.history[].id). It\nincreases with every applied revision, so the largest id in `history` is the\nmost recent deploy — which is the first entry, since the list is reversed.",
+            "format": "int64",
             "type": "integer"
           },
           "revision": {
@@ -804,6 +806,7 @@
         "properties": {
           "applicationsCount": {
             "description": "ApplicationsCount is how many of THE CALLER'S applications reconcile into\nthis cluster, so a tenant sees its own count and a SuperAdmin the fleet's. It\nis zero for the in-cluster destination when the caller owns nothing, since\nthat destination is listed whether or not anything targets it.",
+            "format": "int64",
             "type": "integer"
           },
           "connectionState": {
@@ -1434,10 +1437,12 @@
         "properties": {
           "declared": {
             "description": "Declared is how many objects the rendered source declares — the denominator\nthe three outcome counts below are read against. Zero means the render\nproduced nothing, which trips the prune fuse rather than sweeping the fleet.",
+            "format": "int64",
             "type": "integer"
           },
           "failed": {
             "description": "Failed is how many objects the apply could not reconcile. Non-zero is a\nPARTIAL run reported at 200: the engine applied what it could and each\nfailure names itself in Results, so a caller reads this number rather than\nthe status code to learn whether the fleet matches the source.",
+            "format": "int64",
             "type": "integer"
           },
           "instance": {
@@ -1450,6 +1455,7 @@
           },
           "pruned": {
             "description": "Pruned is how many live objects this run DELETED because the source no\nlonger declares them. Always 0 when Prune is false.",
+            "format": "int64",
             "type": "integer"
           },
           "results": {
@@ -1469,6 +1475,7 @@
           },
           "synced": {
             "description": "Synced is how many objects the run applied successfully.",
+            "format": "int64",
             "type": "integer"
           }
         },

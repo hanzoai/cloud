@@ -84,6 +84,7 @@
             "required": false,
             "description": "Limit is how many rows to return, newest first. Default 50, maximum 200; a\nvalue at or below zero, or one that is not a number, takes the default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 100
@@ -154,6 +155,7 @@
             "required": false,
             "description": "Limit is how many rows to return, newest first. Default 50, maximum 200; a\nvalue at or below zero, or one that is not a number, takes the default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 100
@@ -406,6 +408,7 @@
             "required": false,
             "description": "Limit bounds every ranked lens in the response. Default 10, maximum 100; a\nvalue at or below zero, or one that is not a number, takes the default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 25
@@ -524,14 +527,17 @@
           },
           "pageviews": {
             "description": "Pageviews is how many $pageview events fell in this bucket.",
+            "format": "int64",
             "type": "integer"
           },
           "pct": {
             "description": "Pct is this bucket's share of ALL in-window pageviews, 0..100, one decimal —\nnot of the returned rows, so a top-N shows the long tail honestly.",
+            "format": "double",
             "type": "number"
           },
           "visitors": {
             "description": "Visitors is how many distinct people they came from.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -706,6 +712,7 @@
         "properties": {
           "aov": {
             "description": "AOV is average order value — Revenue/Orders, rounded to two places. Zero when\nthere were no orders.",
+            "format": "double",
             "type": "number"
           },
           "available": {
@@ -714,6 +721,7 @@
           },
           "orders": {
             "description": "Orders is how many order_completed events landed in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "reason": {
@@ -722,6 +730,7 @@
           },
           "revenue": {
             "description": "Revenue is the total those orders carried, in the events' own currency unit.",
+            "format": "double",
             "type": "number"
           },
           "source": {
@@ -800,30 +809,37 @@
           },
           "completionTokens": {
             "description": "CompletionTokens is the output half of Tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "errorRate": {
             "description": "ErrorRate is Errors/Requests, 0..1, rounded to three places. Zero when there\nwere no requests.",
+            "format": "double",
             "type": "number"
           },
           "errors": {
             "description": "Errors is how many of Requests failed.",
+            "format": "int64",
             "type": "integer"
           },
           "models": {
             "description": "Models is how many distinct models the org called.",
+            "format": "int64",
             "type": "integer"
           },
           "promptTokens": {
             "description": "PromptTokens is the input half of Tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "providers": {
             "description": "Providers is how many distinct providers served them.",
+            "format": "int64",
             "type": "integer"
           },
           "requests": {
             "description": "Requests is how many LLM calls the org made in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "source": {
@@ -832,10 +848,12 @@
           },
           "spendCents": {
             "description": "SpendCents is what those calls cost, in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is prompt plus completion tokens over those calls.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -878,6 +896,7 @@
           },
           "pct": {
             "description": "Pct is this model's share of the window's returned spend, 0..100, one decimal.",
+            "format": "double",
             "type": "number"
           },
           "provider": {
@@ -886,14 +905,17 @@
           },
           "requests": {
             "description": "Requests is how many calls went to this model.",
+            "format": "int64",
             "type": "integer"
           },
           "spendCents": {
             "description": "SpendCents is what they cost, in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is prompt plus completion tokens over those calls.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -940,6 +962,7 @@
         "properties": {
           "orders": {
             "description": "Orders is how many order_completed events carried it.",
+            "format": "int64",
             "type": "integer"
           },
           "productId": {
@@ -948,10 +971,12 @@
           },
           "revenue": {
             "description": "Revenue is the total they carried, in the events' own currency unit.",
+            "format": "double",
             "type": "number"
           },
           "units": {
             "description": "Units is the summed quantity sold.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1134,10 +1159,12 @@
         "properties": {
           "requests": {
             "description": "Requests is how many LLM calls fell in this bucket.",
+            "format": "int64",
             "type": "integer"
           },
           "spendCents": {
             "description": "SpendCents is what they cost, in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "t": {
@@ -1146,6 +1173,7 @@
           },
           "tokens": {
             "description": "Tokens is prompt plus completion tokens over those calls.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1159,6 +1187,7 @@
           },
           "pageviews": {
             "description": "Pageviews is how many $pageview events landed in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "reason": {
@@ -1167,6 +1196,7 @@
           },
           "sessions": {
             "description": "Sessions is how many distinct visits they span.",
+            "format": "int64",
             "type": "integer"
           },
           "source": {
@@ -1175,6 +1205,7 @@
           },
           "visitors": {
             "description": "Visitors is how many distinct people those pageviews came from.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1408,10 +1439,12 @@
         "properties": {
           "exhausted": {
             "description": "Exhausted counts facts the bus abandoned after maxDeliver failed inserts.",
+            "format": "int64",
             "type": "integer"
           },
           "undecodable": {
             "description": "Undecodable counts messages acked without landing because they did not parse.",
+            "format": "int64",
             "type": "integer"
           }
         },

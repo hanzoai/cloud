@@ -972,6 +972,7 @@
           },
           "port": {
             "description": "Port is the port a client connects to on Host.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -1009,6 +1010,7 @@
           },
           "port": {
             "description": "Port is the port a client connects to on Host.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -1026,6 +1028,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the resource was provisioned, in unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "host": {
@@ -1046,6 +1049,7 @@
           },
           "port": {
             "description": "Port is the port a client connects to on Host.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -1063,6 +1067,7 @@
           },
           "dimension": {
             "description": "Dimension is the size of one vector in the collection.",
+            "format": "int64",
             "type": "integer"
           },
           "distanceMetric": {
@@ -1075,10 +1080,12 @@
           },
           "storageBytes": {
             "description": "StorageBytes is the collection's on-disk size, omitted when unknown.",
+            "format": "int64",
             "type": "integer"
           },
           "vectorCount": {
             "description": "VectorCount is the collection's point count.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1100,14 +1107,17 @@
         "properties": {
           "totalCollections": {
             "description": "TotalCollections is how many collections the store holds.",
+            "format": "int64",
             "type": "integer"
           },
           "totalStorageBytes": {
             "description": "TotalStorageBytes is the sum of every collection's on-disk size.",
+            "format": "int64",
             "type": "integer"
           },
           "totalVectors": {
             "description": "TotalVectors is the sum of every collection's point count.",
+            "format": "int64",
             "type": "integer"
           }
         },

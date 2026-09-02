@@ -7,23 +7,23 @@ import (
 )
 
 func init() {
-	zip.Describe("POST /iam/approval", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/iam POST /iam/approval", zip.Doc{
 		Description: "Answers with the CALLER'S OWN recorded approvalStatus.\n\nThe subject is the caller's and can never be an argument. A caller able to name\na subject could read another person's waitlist state, which is a small leak on\nits own and a membership oracle in bulk.\n\nIt returns the raw status and judges nothing. Whether \"pending\" gates a person\nis admission's rule, and it lives with the gate — one place decides, and the\nidentity store is not it.\n\nA subject with no user row is a REFUSAL, not an empty status. A machine token's\napp-id subject and a deleted user both land there, and admission reads an empty\nstatus as approved: answering \"\" for a principal the store does not know would\nwave through exactly the callers least entitled to it. The error path is\nadmission's documented fail-open, which is a decision it makes knowingly about\nan IAM it could not reach — not one this handler makes for it silently.",
 	})
-	zip.Describe("POST /iam/email", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/iam POST /iam/email", zip.Doc{
 		Description: "Answers with the CALLER'S OWN address and verification state.\n\nThe subject is the caller's and can never be an argument, exactly as approval\nstates: a caller able to name a subject could read another person's address,\nwhich is a leak on its own and an account oracle in bulk.\n\nA subject with no user row is a REFUSAL rather than an unverified answer. The\ntwo would gate the same way today, but they are different facts — \"this person\nhas not confirmed their address\" is about a person, and \"this principal is not\na person\" is about the credential — and a caller that ever wants to tell them\napart should not have to guess which one it got.",
 		Fields: map[string]string{
 			"Email.address":  "Address is what the store holds, which is not necessarily what a token's\n`email` claim says — a caller that changed it since the token was minted\nwould present the old one. Anything resolving an identity uses this.",
 			"Email.verified": "Verified is whether the person proved the address. False is a real answer\nand callers must refuse on it, never treat it as \"probably fine\".",
 		},
 	})
-	zip.Describe("POST /iam/federated", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/iam POST /iam/federated", zip.Doc{
 		Description: "Resolves a member of the caller's org from an identity another\nprovider issued. GitHub is the one provider today: IAM's federation writes the\nnumeric GitHub user id onto the user row at sign-in, and that is the id a\nGitHub webhook carries — so the same value, and nothing a person typed,\ndecides who a comment runs as. The org is the caller's, and the query is\nbounded to it, so an id that belongs to a person in another org resolves to\nnobody here.",
 	})
-	zip.Describe("POST /iam/grant", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/iam POST /iam/grant", zip.Doc{
 		Description: "Records one membership in the caller's org, idempotently.",
 	})
-	zip.Describe("POST /iam/mailable", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/iam POST /iam/mailable", zip.Doc{
 		Description: "Answers with the people in the CALLER'S OWN org who may be sent mail —\nid, owner, name and email, and nothing else.\n\nIt is the internal-plane replacement for reading the identity store through DB().\nThat read worked only while every subsystem shared one binary and returned nil\nthe moment one did not, so marketing resolved every audience to \"IAM unavailable\"\nand could mail nobody. This op runs in the process that owns the store, so it\nanswers wherever the caller happens to live.\n\nThe org is taken from the authenticated call and can never be named in an\nargument: it is the tenancy key for the whole identity store, so a caller able to\npass it could enumerate another tenant's people. A call carrying no org is\nrefused, not answered with an empty roster.\n\nThe projection is deliberately narrow. Four fields are what it takes to name a\nperson and reach them; returning the identity record itself would put every\ncredential column on the wire for what is only an audience count.\n\nIt fails closed on a store that is not open: this process owns the store, so a\nnil handle is a boot-order fault, and an empty roster would read as \"this org has\nnobody\" — an announcement that silently reaches no one is worse than one that\nrefuses out loud.",
 		Fields: map[string]string{
 			"Recipient.email":   "the address to reach them at",
@@ -33,13 +33,13 @@ func init() {
 			"Roster.recipients": "everyone in the org who may be mailed; empty is a real answer, not an error",
 		},
 	})
-	zip.Describe("POST /iam/members", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/iam POST /iam/members", zip.Doc{
 		Description: "Lists the grants in one scope, each with the display name IAM holds for\nthe person — so a caller never keeps a copy of somebody's name to show it.",
 		Fields: map[string]string{
 			"Scope.any": "Any drops the scope filters, for the caller asking where one person acts.",
 		},
 	})
-	zip.Describe("POST /iam/projects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/iam POST /iam/projects", zip.Doc{
 		Description: "Answers with the projects owned by the CALLER'S OWN org.\n\nThe org comes from the authenticated call and can never be an argument. Owner\nis the tenancy key of the whole project table, so a caller able to pass it\ncould list another tenant's work — which is exactly the hole the HTTP client\nthis replaces had to mint a per-org credential to close.\n\nThe projection is narrow on purpose: five fields are what it takes to key,\nname and date a project. Returning the record itself would put IAM's metadata\nand workspace columns on a wire whose layout is positional, so every field\nhere is one the contract can never reorder.\n\nIt fails closed on a store that is not open. This process owns the store, so a\nnil handle is a boot-order fault, and an empty list would read as \"this org has\nno projects\" — a lie that a caller would act on by offering to create one that\nalready exists.",
 		Fields: map[string]string{
 			"Project.createdTime": "RFC3339, as IAM stores it; empty when IAM has none, never a fabricated time",
@@ -48,10 +48,10 @@ func init() {
 			"Project.owner":       "the org that owns it — the tenancy key",
 		},
 	})
-	zip.Describe("POST /iam/roles", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/iam POST /iam/roles", zip.Doc{
 		Description: "Resolves the caller's effective roles: the org grant they hold, plus every\nrole naming them directly or through a team.\n\nAn org owner or admin is a System Manager, which is what makes an org\nadministrable the moment it exists — the grant IAM already records, rather than\na first-caller-wins seed in whichever subsystem was reached first.\n\nIt fails closed on a store that is not open: this process owns the store, so a\nnil handle is a boot-order fault, and an empty set would read as a member with\nno grants — a refusal the caller would blame on their own permissions.",
 	})
-	zip.Describe("POST /iam/seats", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/iam POST /iam/seats", zip.Doc{
 		Description: "Counts the caller's org's billable people.\n\nThe error is PROPAGATED: a wallet reading zero seats under-bills silently,\nwhere a failure retries. This is the one read here that must not degrade.",
 	})
 }

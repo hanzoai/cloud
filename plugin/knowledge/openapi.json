@@ -400,6 +400,7 @@
           },
           "docCount": {
             "description": "DocCount is the live count of this provider's documents in the org's store.",
+            "format": "int64",
             "type": "integer"
           },
           "error": {
@@ -510,6 +511,7 @@
           },
           "score": {
             "description": "Score is the cosine similarity between the query's embedding and the\ndocument's, from -1 to 1, higher being closer — the collection is created\nwith Cosine distance. Hits arrive ordered by it, descending. There is no\nabsolute cutoff: what counts as a good score moves with the query and the\nembedding model, so compare scores within one response and not across\nqueries.",
+            "format": "double",
             "type": "number"
           },
           "title": {
@@ -548,6 +550,7 @@
         "properties": {
           "ingested": {
             "description": "Ingested is how many documents landed in the org's knowledge store.",
+            "format": "int64",
             "type": "integer"
           },
           "provider": {
@@ -568,6 +571,7 @@
           },
           "limit": {
             "description": "Limit bounds the hits returned. Default 10, maximum 50.",
+            "format": "int64",
             "type": "integer"
           },
           "project": {

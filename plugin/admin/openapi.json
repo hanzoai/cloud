@@ -1619,6 +1619,7 @@
             "required": false,
             "description": "SizeGiB is the target size on the resize action. A volume only ever grows —\nExpandTo is the verdict that refuses a shrink, so this is not validated here.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -3116,6 +3117,7 @@
           },
           "migratedCents": {
             "description": "MigratedCents is the balance carried across, read from commerce BEFORE the move.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -3161,10 +3163,12 @@
           },
           "idlePVCs": {
             "description": "IdlePVCs is how many of this cluster's volumes are Bound with no pod mounting them\n— its share of the review queue, not of the delete queue.",
+            "format": "int64",
             "type": "integer"
           },
           "monthlyCents": {
             "description": "MonthlyCents is this cluster's share of the bill: its droplets plus the volumes\nPROVEN to belong to it. Load balancers are not included — a Service's load balancer\nis attributed on the load-balancer row, not folded in here, so cluster costs never\ndouble-count against Cost.totalMonthly.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -3173,14 +3177,17 @@
           },
           "nodePools": {
             "description": "NodePools is how many pools the cluster has, which is len(pools).",
+            "format": "int64",
             "type": "integer"
           },
           "nodes": {
             "description": "Nodes is how many droplets carry this cluster's tag. It comes from the DO\ninventory, so it is populated even for a cluster that never answered.",
+            "format": "int64",
             "type": "integer"
           },
           "pods": {
             "description": "Pods is how many pods the scan listed, all namespaces. Zero when Scanned is false —\nunknown, not empty.",
+            "format": "int64",
             "type": "integer"
           },
           "pools": {
@@ -3192,10 +3199,12 @@
           },
           "pvcs": {
             "description": "PVCs is how many PersistentVolumeClaims the scan listed.",
+            "format": "int64",
             "type": "integer"
           },
           "pvs": {
             "description": "PVs is how many PersistentVolumes the scan listed. These are the claims that make a\nDO volume live; zero here with Scanned false is what forces the whole board\nincomplete.",
+            "format": "int64",
             "type": "integer"
           },
           "region": {
@@ -3242,26 +3251,32 @@
         "properties": {
           "dropletsMonthly": {
             "description": "DropletsMonthly is DigitalOcean's list price for every droplet's size, summed.\nThe droplet's local disk is part of that price and is never billed again.",
+            "format": "int64",
             "type": "integer"
           },
           "loadBalancersMonthly": {
             "description": "LoadBalancersMonthly is $12 per billed node per month, summed. DO's API does not\nprice load balancers, so this is derived from the size_unit it does report.",
+            "format": "int64",
             "type": "integer"
           },
           "reclaimableMonthly": {
             "description": "ReclaimableMonthly is what deleting the unreferenced volumes would stop costing —\nthe one figure on this board that a button here can actually collect. Zero while\nComplete is false, because an unproven orphan is not an orphan.",
+            "format": "int64",
             "type": "integer"
           },
           "totalMonthly": {
             "description": "TotalMonthly is droplets + volumes + load balancers. It is the fleet's recurring\nbill, not the DigitalOcean invoice: bandwidth, snapshots, spaces and registry are\nnot inventory this board reads. WastedMonthly is already inside VolumesMonthly and\nis never added again.",
+            "format": "int64",
             "type": "integer"
           },
           "volumesMonthly": {
             "description": "VolumesMonthly is block storage at DO's rate of 10 cents per provisioned GiB per\nmonth, summed over every volume — attached, idle and orphaned alike, because DO\nbills for capacity, not for use.",
+            "format": "int64",
             "type": "integer"
           },
           "wastedMonthly": {
             "description": "WastedMonthly is what the fleet pays every month for provisioned-but-empty space on\nthe volumes a kubelet actually measured.\n\nIt is NOT ReclaimableMonthly and must never be added to it. Reclaimable is money a\nbutton on this board collects, by deleting volumes proven to belong to no one.\nWasted is money locked inside volumes that are IN USE and holding live data:\nDigitalOcean can only ever grow a volume, so collecting it means copying a database\nonto a smaller one. See shrinkRecipe.\n\nIt is also a LOWER BOUND — unmeasured volumes contribute nothing.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -3271,10 +3286,12 @@
         "properties": {
           "apiKeys": {
             "description": "APIKeys is how many members hold an access key — the org's programmatic reach,\ncounted from users[] and never the keys themselves.",
+            "format": "int64",
             "type": "integer"
           },
           "balanceCents": {
             "description": "BalanceCents is the prepaid wallet still held, in USD cents.",
+            "format": "int64",
             "type": "integer"
           },
           "created": {
@@ -3287,6 +3304,7 @@
           },
           "mrrCents": {
             "description": "MRRCents is monthly recurring revenue, in USD cents, over the subscriptions\ncommerce counts as revenue. A trial contributes zero while still naming Plan.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -3303,6 +3321,7 @@
           },
           "spendCents": {
             "description": "SpendCents is metered consumption over the trailing 30 days, in USD cents.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -3347,6 +3366,7 @@
         "properties": {
           "balanceCents": {
             "description": "BalanceCents is the prepaid wallet the org still holds, in USD cents. What is left\nto spend, not what was granted.",
+            "format": "int64",
             "type": "integer"
           },
           "created": {
@@ -3363,6 +3383,7 @@
           },
           "mrrCents": {
             "description": "MRRCents is the org's monthly recurring revenue, in USD cents: commerce's own\nper-subscription figure, already interval-normalized and multiplied by seats, summed\nover the subscriptions commerce counts as revenue. A trial contributes zero.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -3379,6 +3400,7 @@
           },
           "spendCents": {
             "description": "SpendCents is metered consumption over the TRAILING 30 DAYS, in USD cents — the one\nwindow every fleet money surface means by \"spend\". Positive, and it does not reset\non the first of the month.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -3387,6 +3409,7 @@
           },
           "users": {
             "description": "Users is how many members IAM lists for the org, up to the 200-member page this\nread takes. Every other IAM-derived field on the row is folded from that same page.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -3396,6 +3419,7 @@
         "properties": {
           "cents": {
             "description": "Cents is the entry's magnitude in minor units, and it is UNSIGNED — a withdraw\ndoes not arrive negative, so a running balance has to be folded by reading Type.",
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -3473,6 +3497,7 @@
           },
           "total": {
             "description": "Total is len(data). The list is unpaginated, so it is a convenience, never a\ncount of rows withheld. Omitted on an error.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -3482,10 +3507,12 @@
         "properties": {
           "accountBalanceCents": {
             "description": "AccountBalanceCents is DigitalOcean's raw account balance, sign INCLUDED: positive\nmeans we owe DO, negative means we hold credit. It is here so the sign convention\nis visible rather than only implied by CreditRemainingCents.",
+            "format": "int64",
             "type": "integer"
           },
           "avgDailyBurnCents": {
             "description": "AvgDailyBurnCents is month-to-date spend divided by the elapsed days of the current\nmonth, at least one. A running average, so it is noisiest on the 1st and steadies\nthrough the month. It is the denominator of runwayDays.",
+            "format": "int64",
             "type": "integer"
           },
           "configured": {
@@ -3494,6 +3521,7 @@
           },
           "creditRemainingCents": {
             "description": "CreditRemainingCents is the promo credit still held, in USD cents, POSITIVE. It is\nthe negated account balance, clamped at zero: DigitalOcean carries an\naccounts-receivable sign, so credit we hold shows as a NEGATIVE balance and an\namount we owe shows positive — an account we owe on has zero credit, not negative.",
+            "format": "int64",
             "type": "integer"
           },
           "error": {
@@ -3513,6 +3541,7 @@
           },
           "monthToDateSpendCents": {
             "description": "MonthToDateSpendCents is what DigitalOcean has charged this calendar month, in USD\ncents. It resets on the first, which is why the burn below divides by the day of\nthe month and not by a fixed 30.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -3522,6 +3551,7 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is the entry in USD cents, converted once from DO's decimal-dollar\nstring. It carries DO's own accounts-receivable sign: a usage charge is positive.",
+            "format": "int64",
             "type": "integer"
           },
           "date": {
@@ -3576,6 +3606,7 @@
           },
           "totalCents": {
             "description": "TotalCents is whole-platform COGS for the period, in USD cents — commerce's figure,\nnot a sum of Vendors recomputed here. It is the number the margin subtracts.",
+            "format": "int64",
             "type": "integer"
           },
           "vendors": {
@@ -3620,10 +3651,12 @@
         "properties": {
           "grossMarginCents": {
             "description": "GrossMarginCents is revenue.totalRevenueCents minus cost.totalCents, in USD cents.\nNegative means the fleet spent more on vendors than its customers consumed.",
+            "format": "int64",
             "type": "integer"
           },
           "grossMarginPct": {
             "description": "GrossMarginPct is that margin as a percentage of revenue — 42.5 means 42.5%, not\n0.425. Zero when revenue is zero, which is arithmetic, not a claim of break-even.",
+            "format": "double",
             "type": "number"
           },
           "profitable": {
@@ -3632,6 +3665,7 @@
           },
           "runwayDays": {
             "description": "RunwayDays is DigitalOcean promo credit divided by average daily burn — how long\nthe credit lasts at today's rate, and nothing to do with the margin above. NULL,\nnever a large number, when DO is unconfigured or burn is zero: no honest projection\nexists, and an infinity would read as safety.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -3662,14 +3696,17 @@
           },
           "creditsConsumedCents": {
             "description": "CreditsConsumedCents is the same figure as TotalRevenueCents, named for the other\nside of the identity: what the fleet earned is exactly what its customers burned.",
+            "format": "int64",
             "type": "integer"
           },
           "mrrCents": {
             "description": "MRRCents is fleet monthly recurring revenue, in USD cents, summed over every org's\nrevenue-counting subscriptions. Contract value, and a different question from\nTotalRevenueCents — it is not folded into the margin.",
+            "format": "int64",
             "type": "integer"
           },
           "totalRevenueCents": {
             "description": "TotalRevenueCents is fleet consumption over the trailing 30 days, in USD cents,\nsummed across every org. Realized revenue: credit is revenue when it is SPENT, not\nwhen it is granted.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -3695,6 +3732,7 @@
           },
           "monthlyCents": {
             "description": "MonthlyCents is the money at stake, and it is the secondary sort within a severity.\nIt carries what acting would actually SAVE, not the raw waste — an oversized volume\nreports the saving after keeping headroom, since a list sorted by money has to be\nsorted by money you could really get back. Zero when nothing is at stake.",
+            "format": "int64",
             "type": "integer"
           },
           "resource": {
@@ -3716,6 +3754,7 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is the credit, in whole cents. Must be positive and within the\nper-grant cap.",
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -3762,6 +3801,7 @@
         "properties": {
           "balanceCents": {
             "description": "BalanceCents is the account balance AFTER the grant, in whole cents.",
+            "format": "int64",
             "type": "integer"
           },
           "balanceExact": {
@@ -3774,6 +3814,7 @@
           },
           "grantedCents": {
             "description": "GrantedCents is the amount actually credited.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -3803,6 +3844,7 @@
           },
           "amountCents": {
             "description": "AmountCents is the credit in USD cents, always positive. On a successful grant it\nis what was actually written to the ledger; on a REFUSED one it is what was asked\nfor and never moved, so summing this column without filtering on Result overstates\nwhat the fleet gave away.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
@@ -3855,6 +3897,7 @@
           },
           "total": {
             "description": "Total is the store's count for the filter, which EXCEEDS len(data) when limit\ntruncated. Omitted on an error.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -3864,10 +3907,12 @@
         "properties": {
           "brokenAt": {
             "description": "BrokenAt is the seq of the FIRST record that failed verification, and -1\nwhenever the walk found no break (including an unread chain, where no seq\nwas reached).",
+            "format": "int64",
             "type": "integer"
           },
           "count": {
             "description": "Count is the number of records walked. Zero on an unread chain, where it\nmeans \"nothing was read\", not \"the chain is empty\".",
+            "format": "uint64",
             "type": "integer"
           },
           "head": {
@@ -3893,6 +3938,7 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is the invoice total in minor units of Currency, as of its latest\nevent. It is the amount BILLED — a partially paid invoice does not report a\nremainder here.",
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -3949,6 +3995,7 @@
           },
           "total": {
             "description": "Total is how many matched BEFORE limit truncated, so a console can say \"showing 50\nof 812\". Omitted on an error.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -3970,6 +4017,7 @@
           },
           "droplets": {
             "description": "Droplets is how many droplets it forwards to. NOT a liveness signal: a DOKS load\nbalancer lists every node in its cluster, so a leaked one still looks busy.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -3982,6 +4030,7 @@
           },
           "monthlyCents": {
             "description": "MonthlyCents is SizeUnit at $12 per node per month. Derived, because DO's API\nprices droplets but not load balancers.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -3998,6 +4047,7 @@
           },
           "sizeUnit": {
             "description": "SizeUnit is the number of billed load-balancer nodes DO reports. Never below 1: DO\nomits the field on the legacy single-node size, which is one node, not zero.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -4027,18 +4077,22 @@
           },
           "id": {
             "description": "ID is the DigitalOcean droplet id. Numeric, and the id every droplet route takes.",
+            "format": "int64",
             "type": "integer"
           },
           "localDiskGiB": {
             "description": "LocalDiskGiB is the droplet's own disk, in GiB. Its price is already inside\nMonthlyCents — DO does not bill it as block storage, and adding it to the volume\ntotals is how a fleet appears to hold terabytes it never pays for.",
+            "format": "int64",
             "type": "integer"
           },
           "memoryMiB": {
             "description": "MemoryMiB is the plan's RAM, in MiB as DO reports it.",
+            "format": "int64",
             "type": "integer"
           },
           "monthlyCents": {
             "description": "MonthlyCents is DO's list price for SizeSlug, in cents per month. It is the plan's\nprice, not a metered bill, so it does not move with how hard the machine works.",
+            "format": "int64",
             "type": "integer"
           },
           "mutable": {
@@ -4051,6 +4105,7 @@
           },
           "pods": {
             "description": "Pods is how many pods the scan found scheduled on this node.",
+            "format": "int64",
             "type": "integer"
           },
           "privateIp": {
@@ -4090,10 +4145,12 @@
           },
           "vcpus": {
             "description": "VCPUs is the plan's virtual CPU count.",
+            "format": "int64",
             "type": "integer"
           },
           "volumes": {
             "description": "Volumes is how many block-storage volumes DO reports attached to this droplet.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4124,6 +4181,7 @@
             "type": "string"
           },
           "orgs": {
+            "format": "int64",
             "type": "integer"
           },
           "revenue": {
@@ -4215,10 +4273,12 @@
           },
           "clusterSchedulable": {
             "description": "ClusterSchedulable is how many nodes in the WHOLE cluster are both Ready and\nschedulable — not just this pool's. Cordoned and NotReady nodes are excluded,\nbecause a shrink's evicted pods cannot land on them. It rides on the row so\nScaleTo is a pure method of the row and needs no second lookup.",
+            "format": "int64",
             "type": "integer"
           },
           "count": {
             "description": "Count is how many nodes the pool is currently set to. It is the DECLARED count, so\nit can lead reality while DOKS creates or drains machines.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -4244,6 +4304,7 @@
         "properties": {
           "burn_cents": {
             "description": "BurnCents is what we have consumed against that grant, in USD cents. For\nDigitalOcean it is grant minus remaining, floored at zero — derived from their\nauthoritative balance. For every other provider it is the all-time sum of\ncost_cents in the usage warehouse, which is not windowed.",
+            "format": "int64",
             "type": "integer"
           },
           "error": {
@@ -4252,6 +4313,7 @@
           },
           "grant_cents": {
             "description": "GrantCents is the promo credit that provider has issued us, in USD cents. For\nDigitalOcean it is DISCOVERED from their own invoices, never declared: the\nhand-entered number was wrong by ~$22k and nobody could check it. Zero means no\ngrant — or, when Error is set, that we could not find out.",
+            "format": "int64",
             "type": "integer"
           },
           "has_credit": {
@@ -4268,10 +4330,12 @@
           },
           "remaining_cents": {
             "description": "RemainingCents is the grant still available, in USD cents, never negative. For\nDigitalOcean it is the live negated account balance; for the rest it is grant minus\nburn. Zero on a provider with no grant, and zero on one whose grant is spent —\nHasCredit and IsPaidOnly separate those two.",
+            "format": "int64",
             "type": "integer"
           },
           "runway_days": {
             "description": "nil when burn is 0 / unknown (never a fabricated infinity)",
+            "format": "double",
             "type": "number"
           }
         },
@@ -4334,6 +4398,7 @@
           },
           "total": {
             "description": "Total is how many records match the filter across all pages, so a console can page\nwithout walking. Omitted on an error.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4343,6 +4408,7 @@
         "properties": {
           "balanceCents": {
             "description": "BalanceCents is the prepaid wallet the org still holds, in USD cents. Money not yet\nearned: it becomes revenue only as it is spent.",
+            "format": "int64",
             "type": "integer"
           },
           "display": {
@@ -4351,6 +4417,7 @@
           },
           "mrrCents": {
             "description": "MRRCents is the org's monthly recurring revenue, in USD cents, over the\nsubscriptions commerce counts as revenue. Contract value, not cash collected.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -4363,6 +4430,7 @@
           },
           "spendCents": {
             "description": "SpendCents is realized consumption over the trailing 30 days, in USD cents. The\ntable's primary sort, largest first.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4372,10 +4440,12 @@
         "properties": {
           "arpuCents": {
             "description": "ARPUCents is TotalSpendCents divided by PayingCustomers, in USD cents — average\nrevenue per PAYING customer, not per signup. Zero when nobody pays, which is\ndivision declining to happen rather than a measured zero.",
+            "format": "int64",
             "type": "integer"
           },
           "customers": {
             "description": "Customers is every org IAM lists, paying or not.",
+            "format": "int64",
             "type": "integer"
           },
           "generatedAt": {
@@ -4384,10 +4454,12 @@
           },
           "mrrCents": {
             "description": "MRRCents is fleet monthly recurring revenue, in USD cents — the sum of every org's\nrevenue-counting subscriptions. Orthogonal to TotalSpendCents, and never added to\nit: one is contract value, the other is consumption.",
+            "format": "int64",
             "type": "integer"
           },
           "payingCustomers": {
             "description": "PayingCustomers counts the orgs with spend or MRR above zero. It is the ARPU\ndenominator, chosen so a fleet of free signups cannot deflate the number.",
+            "format": "int64",
             "type": "integer"
           },
           "perCustomer": {
@@ -4413,10 +4485,12 @@
           },
           "totalBalancesCents": {
             "description": "TotalBalancesCents is prepaid credit held across the fleet, in USD cents. A\nLIABILITY, not revenue — it is money customers have not spent yet.",
+            "format": "int64",
             "type": "integer"
           },
           "totalSpendCents": {
             "description": "TotalSpendCents is realized consumption across the fleet over the trailing 30 days,\nin USD cents. This is the revenue figure; balances above are not.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4447,10 +4521,12 @@
           },
           "mrrCents": {
             "description": "MRRCents is this category's run-rate MRR, active subscriptions only.",
+            "format": "int64",
             "type": "integer"
           },
           "subscriptions": {
             "description": "Subscriptions counts every non-canceled subscription in the category, trialing\nincluded. So a category of nothing but trials shows subscriptions above zero and\nmrrCents at zero, which is the honest reading.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4464,6 +4540,7 @@
           },
           "mrrCents": {
             "description": "MRRCents is the org's run-rate MRR, summed over its active subscriptions. Zero for\na pay-as-you-go org, which is a true zero and not a gap.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -4476,6 +4553,7 @@
           },
           "seats": {
             "description": "Seats is licensed seats across all the org's non-canceled subscriptions.",
+            "format": "int64",
             "type": "integer"
           },
           "since": {
@@ -4488,6 +4566,7 @@
           },
           "usageCents": {
             "description": "UsageCents is the org's metered spend over the window. It is the tiebreaker in the\nranking, and the only revenue a pay-as-you-go org has.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4505,6 +4584,7 @@
           },
           "mrrDeltaCents": {
             "description": "MRRDeltaCents is SIGNED: positive for a creation, negative for a cancellation. It\nis the run-rate this one movement added or took away, so summing the feed over the\nwindow gives revenue.netNewMrrCents.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -4526,6 +4606,7 @@
         "properties": {
           "active": {
             "description": "Active counts this plan's subscriptions in the `active` state — the ones MRRCents\nis summed over.",
+            "format": "int64",
             "type": "integer"
           },
           "category": {
@@ -4534,6 +4615,7 @@
           },
           "mrrCents": {
             "description": "MRRCents is this plan's contribution to run-rate MRR, active subscriptions only.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -4546,10 +4628,12 @@
           },
           "seats": {
             "description": "Seats is licensed seats across ALL of this plan's non-canceled subscriptions,\ntrialing included — a wider set than Active, so seats can be non-zero on a plan\ncarrying no MRR at all.",
+            "format": "int64",
             "type": "integer"
           },
           "trialing": {
             "description": "Trialing counts this plan's subscriptions still in a trial. Not yet revenue.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4559,10 +4643,12 @@
         "properties": {
           "activeSubscriptions": {
             "description": "ActiveSubscriptions counts every non-canceled subscription — trialing and past_due\nincluded. It is deliberately a wider set than the one MRRCents sums, so this can be\nnon-zero while MRR is zero.",
+            "format": "int64",
             "type": "integer"
           },
           "arrCents": {
             "description": "ARRCents is MRRCents times twelve. A run-rate restatement of today's MRR, not a\nforecast: nothing in it anticipates growth, churn or an annual discount.",
+            "format": "int64",
             "type": "integer"
           },
           "byCategory": {
@@ -4574,26 +4660,32 @@
           },
           "churnedMrrCents": {
             "description": "ChurnedMRRCents is the MRR carried by subscriptions CANCELED inside the window,\nreported as a POSITIVE magnitude — the sign convention lives in NetNewMRRCents,\nwhich subtracts it, not here.",
+            "format": "int64",
             "type": "integer"
           },
           "mrrCents": {
             "description": "MRRCents is run-rate monthly recurring revenue, in USD cents, summed over the\nsubscriptions whose LATEST lifecycle event left them `active`. Trialing, past_due\nand unpaid subscriptions contribute nothing — the predicate is exactly commerce's\nCountsTowardMRR, spelled in SQL because this board reads the warehouse rather than\ncalling the Go function.",
+            "format": "int64",
             "type": "integer"
           },
           "netNewMrrCents": {
             "description": "NetNewMRRCents is NewMRRCents minus ChurnedMRRCents. Negative means the fleet lost\nmore recurring revenue than it won over the window. It counts only creations and\ncancellations — an upgrade or downgrade in place moves MRRCents without appearing\nhere.",
+            "format": "int64",
             "type": "integer"
           },
           "newMrrCents": {
             "description": "NewMRRCents is the MRR carried by subscriptions CREATED inside the window. Gross,\nand positive.",
+            "format": "int64",
             "type": "integer"
           },
           "payingCustomers": {
             "description": "PayingCustomers counts distinct ORGS with at least one active subscription carrying\nMRR above zero. Orgs, not subscriptions: an org on three plans counts once.",
+            "format": "int64",
             "type": "integer"
           },
           "trials": {
             "description": "Trials counts subscriptions currently in a trial. Revenue that has not started, so\nit is reported beside MRR and never inside it.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4610,10 +4702,12 @@
           },
           "canceled": {
             "description": "Canceled is how many were canceled inside the window. Not a rate: divide by New, or\nby activeSubscriptions, only if you mean to.",
+            "format": "int64",
             "type": "integer"
           },
           "new": {
             "description": "New is how many subscriptions were created inside the window.",
+            "format": "int64",
             "type": "integer"
           },
           "recent": {
@@ -4625,6 +4719,7 @@
           },
           "trialsActive": {
             "description": "TrialsActive is how many subscriptions are trialing right now. The same number as\nrevenue.trials, restated on the panel an operator works trials from.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4638,10 +4733,12 @@
           },
           "requests": {
             "description": "Requests is how many billed API calls the window recorded — one per debit event.",
+            "format": "int64",
             "type": "integer"
           },
           "windowUsageCents": {
             "description": "WindowUsageCents is metered API spend over the window, in USD cents. Consumption\nrevenue, entirely separate from MRR — adding the two double-counts nothing but\ninvents a figure the business does not have.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4651,6 +4748,7 @@
         "properties": {
           "count": {
             "description": "Count is the node count to set.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -4672,6 +4770,7 @@
           },
           "value": {
             "description": "Value is the bucket's total, in the unit its own series carries: CENTS for spend,\nrevenue and usage; a COUNT for signups, active customers, cumulative customers and\nchurn. A bucket nothing landed in is an honest 0, not a gap — the axis was\nenumerated first and every bucket exists whether or not anything filled it.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4708,6 +4807,7 @@
       "ServiceView": {
         "properties": {
           "createdAt": {
+            "format": "int64",
             "type": "integer"
           },
           "description": {
@@ -4726,6 +4826,7 @@
             "type": "string"
           },
           "updatedAt": {
+            "format": "int64",
             "type": "integer"
           },
           "updatedBy": {
@@ -4825,6 +4926,7 @@
           },
           "rows": {
             "description": "Rows is how many records came back. Zero with ok=true is a genuine empty result;\nzero with ok=false means nothing was read at all.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4842,6 +4944,7 @@
           },
           "mrrCents": {
             "description": "MRRCents is the subscription's monthly recurring revenue in USD cents — already\ninterval-normalized and multiplied by seats by the emitter, so an annual plan\nreports a twelfth here and not its yearly price. Reported for EVERY row, including\ntrialing and canceled ones, which are not revenue: filter on Status before summing.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -4890,6 +4993,7 @@
           },
           "total": {
             "description": "Total is how many matched BEFORE limit truncated. Omitted on an error.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -4957,78 +5061,97 @@
         "properties": {
           "attachedGiB": {
             "description": "AttachedGiB is the provisioned capacity of the attached volumes, in GiB.",
+            "format": "int64",
             "type": "integer"
           },
           "attachedVolumes": {
             "description": "AttachedVolumes counts the volumes DO reports attached to a droplet right now.",
+            "format": "int64",
             "type": "integer"
           },
           "clusters": {
             "description": "Clusters is how many DOKS clusters DigitalOcean reports, scanned or not. It is the\ndenominator the completeness gate counts unanswered clusters against.",
+            "format": "int64",
             "type": "integer"
           },
           "detachedGiB": {
             "description": "DetachedGiB is the provisioned capacity of the detached volumes, in GiB. With\nAttachedGiB it sums to VolumeGiB.",
+            "format": "int64",
             "type": "integer"
           },
           "detachedVolumes": {
             "description": "DetachedVolumes is the exact complement of AttachedVolumes — bound, released and\nunreferenced together, so the two always sum to Volumes. Detached is NOT idle and\nNOT garbage: most of these are live data between mounts.",
+            "format": "int64",
             "type": "integer"
           },
           "idlePVCs": {
             "description": "IdlePVCs counts volumes whose PVC is Bound but which no running pod mounts. A\nreview queue, never a delete queue — the usual member is a stopped database — and\ndeliberately excluded from ReclaimableMonthly.",
+            "format": "int64",
             "type": "integer"
           },
           "loadBalancers": {
             "description": "LoadBalancers is every DO load balancer in the account.",
+            "format": "int64",
             "type": "integer"
           },
           "localDiskGiB": {
             "description": "LocalDiskGiB is the droplets' own disk, summed. Broken out precisely so it is never\nadded to VolumeGiB: it is included in each droplet's own monthly price and DO does\nnot bill it as block storage.",
+            "format": "int64",
             "type": "integer"
           },
           "measuredGiB": {
             "description": "MeasuredGiB is the PROVISIONED capacity of the measured volumes — how much of the\nfleet UsedGiB and WastedGiB were computed from, not how much of it is full.",
+            "format": "int64",
             "type": "integer"
           },
           "measuredVolumes": {
             "description": "Fill. MeasuredVolumes/UnmeasuredVolumes are the honesty denominator: UsedGiB and\nWastedGiB describe the measured set ONLY, so a board showing waste must show how\nmuch of the fleet the figure was computed from. Unmeasured capacity contributes\nnothing to either — it is not assumed empty, and it is not assumed full.",
+            "format": "int64",
             "type": "integer"
           },
           "nodes": {
             "description": "Nodes is every droplet in the account, cluster member or not — the same population\nas Snapshot.nodes, which is a superset of the machines Kubernetes knows about.",
+            "format": "int64",
             "type": "integer"
           },
           "unmeasuredGiB": {
             "description": "UnmeasuredGiB is the provisioned capacity of the unmeasured volumes, in GiB — the\nsize of the blind spot behind UsedGiB and WastedGiB.",
+            "format": "int64",
             "type": "integer"
           },
           "unmeasuredVolumes": {
             "description": "UnmeasuredVolumes counts volumes no kubelet reported a reading for. Not measured is\na different fact from empty, so these contribute to neither UsedGiB nor WastedGiB.",
+            "format": "int64",
             "type": "integer"
           },
           "unreferencedGiB": {
             "description": "UnreferencedGiB is the provisioned capacity of the unreferenced volumes, in GiB —\nthe space a delete would hand back.",
+            "format": "int64",
             "type": "integer"
           },
           "unreferencedVolumes": {
             "description": "UnreferencedVolumes counts the volumes no PV in any cluster names — the deletable\nset, and the only one. It is a count of CANDIDATES: whether the button is live\nstill depends on Complete.",
+            "format": "int64",
             "type": "integer"
           },
           "usedGiB": {
             "description": "UsedGiB is what the measured filesystems actually hold. Summed in BYTES and\nconverted once at the end, so hundreds of sub-GiB readings do not each round to\nzero on the way in.",
+            "format": "int64",
             "type": "integer"
           },
           "volumeGiB": {
             "description": "VolumeGiB is the PROVISIONED block-storage capacity, in whole GiB — the number\nDigitalOcean bills for. It excludes droplet local disk entirely; see LocalDiskGiB.",
+            "format": "int64",
             "type": "integer"
           },
           "volumes": {
             "description": "Volumes is every block-storage volume in the account.",
+            "format": "int64",
             "type": "integer"
           },
           "wastedGiB": {
             "description": "WastedGiB is provisioned minus measured across the measured set, in billed GiB. A\nLOWER BOUND on fleet waste, and not the same money as ReclaimableMonthly: this\nspace sits inside volumes holding live data. See Cost.wastedMonthly.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5038,6 +5161,7 @@
         "properties": {
           "broken": {
             "description": "Broken counts the chains whose hash chain fails; each names where.",
+            "format": "int64",
             "type": "integer"
           },
           "chains": {
@@ -5049,14 +5173,17 @@
           },
           "intact": {
             "description": "Intact counts the chains that verified end to end.",
+            "format": "int64",
             "type": "integer"
           },
           "records": {
             "description": "Records is the total number of records walked across every chain that was\nread. It counts nothing for an unread chain.",
+            "format": "uint64",
             "type": "integer"
           },
           "unread": {
             "description": "Unread counts the chains that could not be read. NOT a pass: nothing is known\nabout their contents.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5086,6 +5213,7 @@
         "properties": {
           "cost_cents": {
             "description": "CostCents is what those calls cost US at the provider, in USD cents. Upstream\nspend, not what a customer was billed. The rows are ordered by it, largest first.",
+            "format": "int64",
             "type": "integer"
           },
           "funding": {
@@ -5102,10 +5230,12 @@
           },
           "requests": {
             "description": "Requests is how many calls the window recorded for this provider and model.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is total tokens across the window's calls — prompt and completion together,\nas the meter summed them.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5115,6 +5245,7 @@
         "properties": {
           "amountCents": {
             "description": "Amount is the period's cost in USD cents, POSITIVE — money out is not negated\nhere. Summed across lines it is the platform COGS the margin subtracts.",
+            "format": "int64",
             "type": "integer"
           },
           "note": {
@@ -5182,6 +5313,7 @@
           "dropletIds": {
             "description": "DropletIDs are the droplets DO reports this volume attached to. Non-empty is hard\nkernel-level evidence the volume is in use right now. Never null.",
             "items": {
+              "format": "int64",
               "type": "integer"
             },
             "type": "array"
@@ -5208,6 +5340,7 @@
           },
           "monthlyCents": {
             "description": "MonthlyCents is SizeGiB at DO's rate of 10 cents per GiB per month. It is charged\non provisioned capacity, so an empty volume and a full one of the same size cost\nexactly the same.",
+            "format": "int64",
             "type": "integer"
           },
           "mountedBy": {
@@ -5247,6 +5380,7 @@
           },
           "sizeGiB": {
             "description": "SizeGiB is the PROVISIONED size — what DigitalOcean bills. It is not the\nfilesystem's capacity, which is a few percent smaller after format overhead.",
+            "format": "int64",
             "type": "integer"
           },
           "state": {
@@ -5259,14 +5393,17 @@
           },
           "usedBytes": {
             "description": "UsedBytes is the measured filesystem usage. BYTES, not GiB: the volumes this exists\nto catch hold a fraction of a GiB in 200, and rounding that to an integer GiB would\nprint the very 0 the flag above exists to prevent.",
+            "format": "int64",
             "type": "integer"
           },
           "wastedGiB": {
             "description": "WastedGiB is provisioned minus measured, in the unit DigitalOcean BILLS: whole GiB\nof the volume's own size, never the filesystem's capacity — a 200 GiB volume carries\na 196 GiB filesystem after format overhead, and the invoice says 200.",
+            "format": "int64",
             "type": "integer"
           },
           "wastedMonthlyCents": {
             "description": "WastedMonthlyCents is WastedGiB at the same 10 cents per GiB per month. Money the\nfleet pays for empty space inside a volume that is IN USE — so it is not\ncollectable by any button here, only by the copy-and-swap migration the matching\nfinding spells out. Zero when HasUsage is false, which means unknown, not none.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5284,6 +5421,7 @@
           },
           "sizeGiB": {
             "description": "SizeGiB is the target size on the resize action. A volume only ever grows —\nExpandTo is the verdict that refuses a shrink, so this is not validated here.",
+            "format": "int64",
             "type": "integer"
           },
           "snapshot": {
@@ -5425,14 +5563,17 @@
           },
           "costCents": {
             "description": "CostCents is what they cost, in US cents, as the ledger recorded it.",
+            "format": "int64",
             "type": "integer"
           },
           "requests": {
             "description": "Requests is how many calls that principal made in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is the total tokens those calls consumed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5442,34 +5583,42 @@
         "properties": {
           "avgScore": {
             "description": "AvgScore is the unweighted mean of every score value in the window,\nregardless of scorer, to 4dp. Because the scorers are pooled it also moves\nwhen the MIX of scorers changes, so read it as a trend and the per-scorer\nrows for the level.",
+            "format": "double",
             "type": "number"
           },
           "datasets": {
             "description": "Datasets is how many distinct datasets those traces ran against.",
+            "format": "int64",
             "type": "integer"
           },
           "latencyMsAvg": {
             "description": "LatencyMsAvg is the mean model-under-test call duration in milliseconds,\naveraged only over traces whose end time is after their start — an unfinished\ntrace does not drag it down.",
+            "format": "double",
             "type": "number"
           },
           "models": {
             "description": "Models is how many distinct models were under test.",
+            "format": "int64",
             "type": "integer"
           },
           "runs": {
             "description": "Runs is how many DISTINCT eval runs left traces in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "scoreNames": {
             "description": "ScoreNames is how many distinct scorers produced them.",
+            "format": "int64",
             "type": "integer"
           },
           "scores": {
             "description": "Scores is how many individual score values were recorded, across every\nscorer.",
+            "format": "int64",
             "type": "integer"
           },
           "traces": {
             "description": "Traces is how many eval traces were recorded — one per model-under-test call.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5479,10 +5628,12 @@
         "properties": {
           "costUsd": {
             "description": "CostUsd is their summed cost in US DOLLARS — the span attribute's unit, not\nthe cents the ledger leaderboard beside this uses.",
+            "format": "double",
             "type": "number"
           },
           "generations": {
             "description": "Generations is how many gen_ai spans named it. The board ranks on this.",
+            "format": "int64",
             "type": "integer"
           },
           "model": {
@@ -5496,6 +5647,7 @@
         "properties": {
           "costCents": {
             "description": "CostCents is what they cost, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "model": {
@@ -5504,10 +5656,12 @@
           },
           "requests": {
             "description": "Requests is how many calls went to it. The board ranks on this.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is what those calls consumed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5517,18 +5671,22 @@
         "properties": {
           "costUsd": {
             "description": "CostUsd is their summed cost in US DOLLARS, not cents: it is the span\nattribute's native unit and is carried through unconverted.",
+            "format": "double",
             "type": "number"
           },
           "generations": {
             "description": "Generations is how many LLM calls the fleet made in the window — one per\ngen_ai span.",
+            "format": "int64",
             "type": "integer"
           },
           "latencyMsAvg": {
             "description": "LatencyMsAvg is the mean generation duration in milliseconds, over spans that\nrecorded a duration at all.",
+            "format": "double",
             "type": "number"
           },
           "latencyMsP95": {
             "description": "LatencyMsP95 is the 95th-percentile generation duration in milliseconds — the\ntail a user actually feels.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -5538,6 +5696,7 @@
         "properties": {
           "avgValue": {
             "description": "AvgValue is their mean, to 4dp, pooled across the run's scorers.",
+            "format": "double",
             "type": "number"
           },
           "dataset": {
@@ -5554,6 +5713,7 @@
           },
           "scores": {
             "description": "Scores is how many score values the run recorded in the window.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5563,10 +5723,12 @@
         "properties": {
           "avgValue": {
             "description": "AvgValue is the mean of every score in that bucket, to 4dp. This series IS\nthe eval-progress signal.",
+            "format": "double",
             "type": "number"
           },
           "count": {
             "description": "Count is how many scores the mean was taken over — the weight behind the\npoint, and what tells a real dip from a thin bucket.",
+            "format": "int64",
             "type": "integer"
           },
           "ts": {
@@ -5580,18 +5742,22 @@
         "properties": {
           "avgValue": {
             "description": "AvgValue is their mean, to 4dp.",
+            "format": "double",
             "type": "number"
           },
           "count": {
             "description": "Count is how many values this scorer produced in the window. The board ranks\non this, so a busy scorer leads whether or not it scores well.",
+            "format": "int64",
             "type": "integer"
           },
           "maxValue": {
             "description": "MaxValue is the highest. With Min it bounds the spread the mean hides.",
+            "format": "double",
             "type": "number"
           },
           "minValue": {
             "description": "MinValue is the lowest single value this scorer recorded in the window.",
+            "format": "double",
             "type": "number"
           },
           "name": {
@@ -5605,26 +5771,32 @@
         "properties": {
           "completionTokens": {
             "description": "CompletionTokens is the generated half of Tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "costCents": {
             "description": "CostCents is what those calls cost, in US CENTS — this half of the board is\nthe billing ledger, so it is cents while the gen_ai half is dollars.",
+            "format": "int64",
             "type": "integer"
           },
           "models": {
             "description": "Models is how many DISTINCT models were called, not a count of calls.",
+            "format": "int64",
             "type": "integer"
           },
           "promptTokens": {
             "description": "PromptTokens is the input half of Tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "requests": {
             "description": "Requests is how many calls the ledger recorded in the window, errored ones\nincluded.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is prompt plus completion across them.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5658,6 +5830,7 @@
           },
           "arpuCents": {
             "description": "ARPUCents is average revenue per active customer over the window, in US\ncents: window spend divided by MAU, falling back to TotalCustomers when\nnothing was active. Integer division, so it truncates.",
+            "format": "int64",
             "type": "integer"
           },
           "churn": {
@@ -5669,6 +5842,7 @@
           },
           "churnRatePct": {
             "description": "ChurnRatePct is churned customers as a percentage of the at-risk base,\npooled over the last SIX months rather than over Range.",
+            "format": "double",
             "type": "number"
           },
           "computed": {
@@ -5687,6 +5861,7 @@
           },
           "dau": {
             "description": "DAU is how many distinct customers had a usage event in the last 24 hours. A\nFIXED lookback — it ignores Range, so it does not change when the window\ndoes.",
+            "format": "int64",
             "type": "integer"
           },
           "generatedAt": {
@@ -5695,6 +5870,7 @@
           },
           "growthRatePct": {
             "description": "GrowthRatePct is the percentage change in signups against the immediately\npreceding window of the same length; negative when signups fell. It is 0\nwhen the prior window had none, which is not the same as flat.",
+            "format": "double",
             "type": "number"
           },
           "interval": {
@@ -5703,22 +5879,27 @@
           },
           "ltvCents": {
             "description": "LTVCents is estimated lifetime value per customer, in US cents: ARPU divided\nby the monthly churn rate. NULL until real churn is observed — with no churn\nthe formula divides by zero, and a huge number would read as good news.",
+            "format": "int64",
             "type": "integer"
           },
           "mau": {
             "description": "MAU is the same over the last 30 days, and it is the denominator ARPUCents\nuses.",
+            "format": "int64",
             "type": "integer"
           },
           "mrrCents": {
             "description": "MRRCents is monthly recurring revenue as of NOW, in US cents, summed from\nactive subscriptions across the caller's window. Point-in-time: it is the\none revenue figure here that is not a fold of the usage window.",
+            "format": "int64",
             "type": "integer"
           },
           "newCustomers": {
             "description": "NewCustomers is how many of them signed up inside the window.",
+            "format": "int64",
             "type": "integer"
           },
           "nrrPct": {
             "description": "NRRPct is net revenue retention. Always NULL: it needs a history of MRR over\ntime and commerce keeps only the current value, so there is nothing honest to\ncompute.",
+            "format": "double",
             "type": "number"
           },
           "range": {
@@ -5759,6 +5940,7 @@
           },
           "totalCustomers": {
             "description": "TotalCustomers is how many customers in the caller's window carry a signup\ndate at all, over ALL time rather than within Range.",
+            "format": "int64",
             "type": "integer"
           },
           "usage": {
@@ -5770,6 +5952,7 @@
           },
           "wau": {
             "description": "WAU is the same over the last 7 days.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5804,6 +5987,7 @@
           },
           "value": {
             "description": "Value is that customer's spend over the window, in US cents.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5861,6 +6045,7 @@
           },
           "total": {
             "description": "Total is len(data): the caller's whole window after scope filtering,\nunpaginated. Absent when the read failed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5883,6 +6068,7 @@
         "properties": {
           "active": {
             "description": "Active is how many of them are still running — the ones whose LATEST\nlifecycle event is not a terminal one (stop, destroy, terminate, delete,\noff, shutdown, expire and their past tenses). Decided in the warehouse over\nevery machine, not over a page.",
+            "format": "int64",
             "type": "integer"
           },
           "app": {
@@ -5899,6 +6085,7 @@
           },
           "machines": {
             "description": "Machines is how many DISTINCT machines of that kind ran in the window,\ncounted by machine id. Not a count of events.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -5911,6 +6098,7 @@
           },
           "spendCents": {
             "description": "SpendCents is what the group billed over the window, in US cents, summed\nfrom the per-event prices.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5935,6 +6123,7 @@
           },
           "total": {
             "description": "Total is len(data): the roll-up is one row per group, unpaginated. Absent\nwhen the read failed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5952,14 +6141,17 @@
           },
           "pct": {
             "description": "Pct is UsedGiB as a percentage of SizeGiB, 0..100 to one decimal. The alert\nthresholds read this.",
+            "format": "double",
             "type": "number"
           },
           "sizeGiB": {
             "description": "SizeGiB is its total capacity in GiB.",
+            "format": "int64",
             "type": "integer"
           },
           "usedGiB": {
             "description": "UsedGiB is the space in use, in GiB to one decimal. This is the ONE real\nfill on the board and the number to scale on.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -5977,6 +6169,7 @@
           },
           "SizeGiB": {
             "description": "SizeGiB is the snapshot's size, from DO's size_gigabytes: the PROVISIONED size of\nthe volume it was taken from, not the bytes the snapshot occupies. DO bills\nsnapshots on used space, which this does not report.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6015,6 +6208,7 @@
           },
           "total": {
             "description": "Total is IAM's count across all pages. Absent when the read failed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6080,26 +6274,32 @@
         "properties": {
           "consumedCents": {
             "description": "ConsumedCents is realized spend, in US cents. A credit is consumed exactly\nwhen it is spent, so this is the same number revenue reports, stated once\nfrom one source.",
+            "format": "int64",
             "type": "integer"
           },
           "grantedCents": {
             "description": "GrantedCents is every credit successfully issued, in US cents, over the\nwhole grant history rather than a window. Refused grants are excluded — they\nmoved nothing.",
+            "format": "int64",
             "type": "integer"
           },
           "grantedPrepaidCents": {
             "description": "GrantedPrepaidCents is the half backed by real money the customer paid in, in\nUS cents. With GrantedTrialCents it sums to GrantedCents.",
+            "format": "int64",
             "type": "integer"
           },
           "grantedTrialCents": {
             "description": "GrantedTrialCents is the non-cash half — comps and promos we gave away — in\nUS cents. A grant whose source the ledger did not record counts here, since a\ngrant nobody paid for is the safer assumption.",
+            "format": "int64",
             "type": "integer"
           },
           "grants": {
             "description": "Grants is how many successful grants make up GrantedCents. If it reaches the\nscan bound the grants source is marked partial rather than the sum being\npresented as complete.",
+            "format": "int64",
             "type": "integer"
           },
           "outstandingCents": {
             "description": "OutstandingCents is the LIABILITY: prepaid and promo balance customers still\nhold and have not burned. It is not revenue, and it is not GrantedCents\nminus ConsumedCents — customers also add their own money.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6109,14 +6309,17 @@
         "properties": {
           "doAvgDailyBurnCents": {
             "description": "DOAvgDailyBurnCents is the average DigitalOcean spend per day, in US cents.\nDividing the credit above by it is the runway.",
+            "format": "int64",
             "type": "integer"
           },
           "doCreditRemainingCents": {
             "description": "DOCreditRemainingCents is the promo credit left on the DigitalOcean account,\nin US cents — what is left to spend, not what was granted.",
+            "format": "int64",
             "type": "integer"
           },
           "doMonthToDateCents": {
             "description": "DOMonthToDateCents is DigitalOcean spend so far this month, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "period": {
@@ -6125,10 +6328,12 @@
           },
           "treasuryReserveCents": {
             "description": "TreasuryReserveCents is the platform reserve backing the payout programs, in\nUS cents, read live from the treasury app. Zero here can mean an empty\nreserve OR an unreachable treasury — the treasury row in sources is what\ntells them apart.",
+            "format": "int64",
             "type": "integer"
           },
           "vendorCogsCents": {
             "description": "VendorCogsCents is what the platform owes its vendors for Period, in US\ncents, POSITIVE — money out is not negated. This is the COGS the margin\nsubtracts.",
+            "format": "int64",
             "type": "integer"
           },
           "vendors": {
@@ -6145,10 +6350,12 @@
         "properties": {
           "grossCents": {
             "description": "GrossCents is realized revenue minus vendor COGS, in US cents. Negative\nmeans the fleet spent more on vendors than its customers consumed. GROSS\nonly: salaries, tooling and everything outside vendor COGS are not in it.",
+            "format": "int64",
             "type": "integer"
           },
           "grossPct": {
             "description": "GrossPct is that margin as a percentage of revenue — 42.5 means 42.5%, not\n0.425. Zero when revenue is zero, which is arithmetic rather than a claim of\nbreak-even.",
+            "format": "double",
             "type": "number"
           },
           "profitable": {
@@ -6157,6 +6364,7 @@
           },
           "runwayDays": {
             "description": "RunwayDays is DigitalOcean promo credit divided by average daily burn: how\nlong the credit lasts at today's rate, and nothing to do with the margin\nabove. NULL — never a large number — when DigitalOcean is unconfigured or\nburn is zero, because no honest projection exists and an infinity would read\nas safety.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -6166,6 +6374,7 @@
         "properties": {
           "balanceCents": {
             "description": "BalanceCents is the prepaid wallet the tenant still holds, in US cents —\nmoney not yet earned.",
+            "format": "int64",
             "type": "integer"
           },
           "display": {
@@ -6174,14 +6383,17 @@
           },
           "grantedCents": {
             "description": "GrantedCents is credit successfully granted TO this tenant, in US cents,\nacross all history. Zero for a tenant that was never granted any.",
+            "format": "int64",
             "type": "integer"
           },
           "grants": {
             "description": "Grants is how many grants that was.",
+            "format": "int64",
             "type": "integer"
           },
           "mrrCents": {
             "description": "MRRCents is the tenant's monthly recurring revenue, in US cents. Contract\nvalue, not cash collected.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -6194,6 +6406,7 @@
           },
           "spendCents": {
             "description": "SpendCents is realized consumption over the trailing 30 days, in US cents.\nThe board sorts on it, largest first.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6203,26 +6416,32 @@
         "properties": {
           "arpuCents": {
             "description": "ARPUCents is realized spend divided by PAYING customers, in US cents — per\npaying customer, not per signup, so free signups cannot deflate it.",
+            "format": "int64",
             "type": "integer"
           },
           "arrCents": {
             "description": "ARRCents is MRRCents times twelve, in US cents. A projection of today's\ncontracts, not a measurement of a year.",
+            "format": "int64",
             "type": "integer"
           },
           "customers": {
             "description": "Customers is every org IAM lists, paying or not.",
+            "format": "int64",
             "type": "integer"
           },
           "mrrCents": {
             "description": "MRRCents is fleet monthly recurring revenue, in US cents — contract value\nfrom subscriptions. Orthogonal to RealizedCents and never added to it.",
+            "format": "int64",
             "type": "integer"
           },
           "paying": {
             "description": "Paying is how many of them have spend or MRR above zero. It is the ARPU\ndenominator.",
+            "format": "int64",
             "type": "integer"
           },
           "realizedCents": {
             "description": "RealizedCents is credit customers have actually CONSUMED, fleet-wide, in US\ncents. This is the revenue figure — MRR beside it is contract value and the\ntwo are never added.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6292,10 +6511,12 @@
         "properties": {
           "costUsd": {
             "description": "CostUsd is their summed cost in US DOLLARS, not cents: the span attribute's\nnative unit, carried through unconverted.",
+            "format": "double",
             "type": "number"
           },
           "generations": {
             "description": "Generations is how many LLM calls the fleet made in the window — one per\ngen_ai span. It counts the same activity the usage totals do, from the trace\nplane instead of the billing ledger, so the two need not match exactly.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6305,6 +6526,7 @@
         "properties": {
           "count": {
             "description": "Count is the log lines emitted in that bucket, fleet-wide.",
+            "format": "int64",
             "type": "integer"
           },
           "ts": {
@@ -6318,6 +6540,7 @@
         "properties": {
           "costCents": {
             "description": "CostCents is what they cost, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "model": {
@@ -6326,10 +6549,12 @@
           },
           "requests": {
             "description": "Requests is how many calls went to it. The board ranks on this.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is what those calls consumed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6339,6 +6564,7 @@
         "properties": {
           "costCents": {
             "description": "CostCents is what they cost, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -6347,10 +6573,12 @@
           },
           "requests": {
             "description": "Requests is how many calls that tenant made. The board ranks on this, so the\ntop rows are the busiest tenants and not necessarily the costliest.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is what those calls consumed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6377,18 +6605,22 @@
         "properties": {
           "costCents": {
             "description": "CostCents is what they cost, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "errors": {
             "description": "Errors is how many of them failed.",
+            "format": "int64",
             "type": "integer"
           },
           "requests": {
             "description": "Requests is the calls served in that bucket.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is the tokens they consumed.",
+            "format": "int64",
             "type": "integer"
           },
           "ts": {
@@ -6402,14 +6634,17 @@
         "properties": {
           "errorRate": {
             "description": "percent (0..100)",
+            "format": "double",
             "type": "number"
           },
           "latencyP95Ms": {
             "description": "LatencyP95Ms is that service's 95th-percentile span duration in\nmilliseconds.",
+            "format": "double",
             "type": "number"
           },
           "requests": {
             "description": "Requests is how many spans it emitted in the window. The board ranks on\nthis.",
+            "format": "int64",
             "type": "integer"
           },
           "service": {
@@ -6423,62 +6658,77 @@
         "properties": {
           "completionTokens": {
             "description": "CompletionTokens is the generated half of Tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "costCents": {
             "description": "CostCents is what those calls cost, in US CENTS. The trace and gen_ai\nfigures elsewhere on this board are not in cents; this one is.",
+            "format": "int64",
             "type": "integer"
           },
           "errors": {
             "description": "Errors is how many of Requests the ledger marked failed.",
+            "format": "int64",
             "type": "integer"
           },
           "latencyP50Ms": {
             "description": "LatencyP50Ms is the median request duration in milliseconds, over spans\nrather than over ledger rows — so it covers every traced request, not only\nthe LLM ones counted above.",
+            "format": "double",
             "type": "number"
           },
           "latencyP95Ms": {
             "description": "LatencyP95Ms is the 95th percentile of the same durations.",
+            "format": "double",
             "type": "number"
           },
           "latencyP99Ms": {
             "description": "LatencyP99Ms is the 99th percentile — the tail worth paging on.",
+            "format": "double",
             "type": "number"
           },
           "logVolume": {
             "description": "LogVolume is how many log lines the fleet emitted in the window. Volume only\n— nothing here says how many of them were errors.",
+            "format": "int64",
             "type": "integer"
           },
           "models": {
             "description": "Models is how many distinct models were called.",
+            "format": "int64",
             "type": "integer"
           },
           "orgs": {
             "description": "Orgs is how many DISTINCT tenants appear in the window — the fleet's active\ntenant count, not a count of calls.",
+            "format": "int64",
             "type": "integer"
           },
           "promptTokens": {
             "description": "PromptTokens is the input half of Tokens.",
+            "format": "int64",
             "type": "integer"
           },
           "requests": {
             "description": "Requests is how many LLM calls the fleet served in the window, across every\ntenant, errored ones included. From the billing ledger.",
+            "format": "int64",
             "type": "integer"
           },
           "services": {
             "description": "Services is how many distinct services emitted a span in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is prompt plus completion tokens across those calls.",
+            "format": "int64",
             "type": "integer"
           },
           "traceCount": {
             "description": "TraceCount is how many spans the fleet emitted in the window, across every\nservice. It counts TRACED REQUESTS, so it is a much larger number than\nRequests above and is not a superset of it: one is the trace plane, the other\nthe billing ledger.",
+            "format": "int64",
             "type": "integer"
           },
           "traceErrorRate": {
             "description": "percent (0..100)",
+            "format": "double",
             "type": "number"
           }
         },
@@ -6537,6 +6787,7 @@
           },
           "creditsCents": {
             "description": "CreditsCents is the credit balance the tenant still holds, in US cents, from\nthe commerce wallet. What they have left, not what they were given.",
+            "format": "int64",
             "type": "integer"
           },
           "display": {
@@ -6549,18 +6800,22 @@
           },
           "products": {
             "description": "Products is always 0. The fleet workload registry is not attributed to\ntenants yet, and a count of the platform's own workloads on a tenant row\nwould be a number about somebody else.",
+            "format": "int64",
             "type": "integer"
           },
           "spendCents": {
             "description": "SpendCents is the tenant's AI spend over the trailing 30 days, in US cents,\nfrom the usage ledger. A tenant with no rows in that window reads a true zero.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is the tokens served for this tenant over that same 30-day window.",
+            "format": "int64",
             "type": "integer"
           },
           "users": {
             "description": "Users is the tenant's member count, from IAM's own total.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6585,6 +6840,7 @@
           },
           "total": {
             "description": "Total is the whole directory's row count BEFORE paging, so a console can page\nagainst it. Absent when the read failed, since there is then nothing to count.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6594,14 +6850,17 @@
         "properties": {
           "activeProducts": {
             "description": "ActiveProducts is how many of those the operator reconciled to green health.\nThe gap against Products is everything not green, unknown health included.",
+            "format": "int64",
             "type": "integer"
           },
           "creditsCents": {
             "description": "CreditsCents is the credit balance customers still HOLD — the liability, in\nUS cents, summed over the window from the commerce wallet. It is not revenue\nand not spend.",
+            "format": "int64",
             "type": "integer"
           },
           "drift": {
             "description": "Drift is how many workloads the operator flagged as drifting — its declared\nimage and what is actually running disagree. It counts the operator's own\nverdict; this layer does not re-derive it.",
+            "format": "int64",
             "type": "integer"
           },
           "lastSync": {
@@ -6610,10 +6869,12 @@
           },
           "orgs": {
             "description": "Orgs is how many tenants are in the caller's window: every org for a\nSuperAdmin, their own subtree for a white-label admin.",
+            "format": "int64",
             "type": "integer"
           },
           "products": {
             "description": "Products is how many workloads the operator is observing across the platform\nnamespaces — one per App CR.",
+            "format": "int64",
             "type": "integer"
           },
           "sources": {
@@ -6625,14 +6886,17 @@
           },
           "spendCents30d": {
             "description": "SpendCents30d is AI spend over the trailing 30 days, in US cents, folded from\nthe usage ledger (one row per served request).",
+            "format": "int64",
             "type": "integer"
           },
           "tokens30d": {
             "description": "Tokens30d is total tokens served over that same 30-day window.",
+            "format": "int64",
             "type": "integer"
           },
           "users": {
             "description": "Users is the member count summed over those orgs. An org whose IAM read\nfailed contributes zero rather than failing the tile.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6743,6 +7007,7 @@
           },
           "total": {
             "description": "Total is len(data): the registry is the whole observed fleet after filtering,\nunpaginated. Absent when the read failed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6760,6 +7025,7 @@
           },
           "percentOff": {
             "description": "PercentOff is the discount, 0-100.",
+            "format": "int64",
             "type": "integer"
           },
           "plans": {
@@ -6792,6 +7058,7 @@
           },
           "total": {
             "description": "Total is the upstream's row count when it forwarded a list, and absent when it\nforwarded a single object — which is why it is optional rather than zero.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6805,11 +7072,13 @@
           },
           "size": {
             "description": "Size is how many customers signed up in that month — the denominator behind\nevery percentage in Values.",
+            "format": "int64",
             "type": "integer"
           },
           "values": {
             "description": "Values is the percentage of the cohort ACTIVE in each month after signup,\n0..100, with values[0] the signup month itself. Its length varies by row: an\nolder cohort has more months behind it, which is what makes the grid a\ntriangle.",
             "items": {
+              "format": "double",
               "type": "number"
             },
             "type": "array"
@@ -6832,6 +7101,7 @@
           },
           "periods": {
             "description": "Periods is the longest Values length across the cohorts — the width of the\ntriangle, so a renderer can size the grid before walking it.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6929,6 +7199,7 @@
           },
           "pct": {
             "description": "Pct is the fill that raised the alert, 0..100.",
+            "format": "double",
             "type": "number"
           },
           "volume": {
@@ -6942,22 +7213,27 @@
         "properties": {
           "count": {
             "description": "Count is how many volumes the DigitalOcean account holds. A measurement only\nwhen the snapshot is complete — otherwise it is zero because nothing was\nread.",
+            "format": "int64",
             "type": "integer"
           },
           "monthlyUsd": {
             "description": "MonthlyUsd is the fleet's block-storage cost in whole US DOLLARS per month —\ncapacity times DO's $0.10/GiB list price, rounded. A list-price estimate for\nthe ops budget, not an invoice line, and dollars rather than the cents the\nmoney boards use.",
+            "format": "int64",
             "type": "integer"
           },
           "pct": {
             "description": "Pct is null, for the same reason as UsedGiB.",
+            "format": "double",
             "type": "number"
           },
           "totalGiB": {
             "description": "TotalGiB is their summed provisioned capacity in GiB.",
+            "format": "int64",
             "type": "integer"
           },
           "usedGiB": {
             "description": "UsedGiB is null: with no per-volume fill there is no honest fleet total to\nsum.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -7021,6 +7297,7 @@
           },
           "pct": {
             "description": "Pct is null on every row, for the same reason as UsedGiB. The console\nrenders an em dash rather than a number nobody took.",
+            "format": "double",
             "type": "number"
           },
           "region": {
@@ -7033,10 +7310,12 @@
           },
           "sizeGiB": {
             "description": "SizeGiB is the PROVISIONED capacity in GiB. It is what is billed, attached\nor not, used or not.",
+            "format": "int64",
             "type": "integer"
           },
           "usedGiB": {
             "description": "UsedGiB is null on every row. DigitalOcean exposes capacity and attachment\nbut not fill, so nothing here has measured it — null means unmeasured, and\nis not 0.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -7085,10 +7364,12 @@
           },
           "errorRate": {
             "description": "percent (0..100)",
+            "format": "double",
             "type": "number"
           },
           "errors": {
             "description": "Errors is how many of those requests errored.",
+            "format": "int64",
             "type": "integer"
           },
           "lastErrorAt": {
@@ -7109,14 +7390,17 @@
           },
           "latencyP50Ms": {
             "description": "LatencyP50Ms is its median request duration in milliseconds.",
+            "format": "double",
             "type": "number"
           },
           "latencyP95Ms": {
             "description": "LatencyP95Ms is its 95th percentile in milliseconds.",
+            "format": "double",
             "type": "number"
           },
           "latencyP99Ms": {
             "description": "LatencyP99Ms is its 99th percentile in milliseconds.",
+            "format": "double",
             "type": "number"
           },
           "name": {
@@ -7132,10 +7416,12 @@
           },
           "requests": {
             "description": "Requests is the traced requests it served in the window. Zero when the\nwarehouse is unavailable, so read the board's sources before reading it as\nidle.",
+            "format": "int64",
             "type": "integer"
           },
           "requestsPerMin": {
             "description": "RequestsPerMin is Requests averaged over the WHOLE window, to 2dp — a flat\nmean, so a burst and a steady trickle of the same volume look alike here.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -7145,30 +7431,37 @@
         "properties": {
           "disabled": {
             "description": "Disabled is the rest. With Enabled it sums to Subsystems.",
+            "format": "int64",
             "type": "integer"
           },
           "enabled": {
             "description": "Enabled is how many of them are switched ON.",
+            "format": "int64",
             "type": "integer"
           },
           "errorRate": {
             "description": "percent (0..100)",
+            "format": "double",
             "type": "number"
           },
           "errors": {
             "description": "Errors is how many of them errored.",
+            "format": "int64",
             "type": "integer"
           },
           "reporting": {
             "description": "enabled AND served ≥1 traced request in the window",
+            "format": "int64",
             "type": "integer"
           },
           "requests": {
             "description": "Requests is the traced requests every subsystem served in the window,\nsummed.",
+            "format": "int64",
             "type": "integer"
           },
           "subsystems": {
             "description": "Subsystems is how many are mounted in this binary — the row count.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -7208,10 +7501,12 @@
           },
           "spendCents": {
             "description": "SpendCents is this model's share of the window's cost, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is this model's share of the tokens.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -7265,14 +7560,17 @@
           },
           "requests": {
             "description": "Requests is that day's served-request count.",
+            "format": "int64",
             "type": "integer"
           },
           "spendCents": {
             "description": "SpendCents is that day's cost, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is that day's token count.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -7282,14 +7580,17 @@
         "properties": {
           "requests": {
             "description": "Requests is how many were served — including the ones that errored, which\nstill consumed the call.",
+            "format": "int64",
             "type": "integer"
           },
           "spendCents": {
             "description": "SpendCents is what those requests cost, in US cents.",
+            "format": "int64",
             "type": "integer"
           },
           "tokens": {
             "description": "Tokens is prompt plus completion tokens across them.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -7314,6 +7615,7 @@
           },
           "total": {
             "description": "Total is IAM's count across ALL pages, not len(data) — it is what the console\npages against. Absent when the read failed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -7344,6 +7646,7 @@
           },
           "points": {
             "description": "Points is how many points to award. Must be positive — this client exists to move\nsomeone UP toward the cutoff.",
+            "format": "int64",
             "type": "integer"
           },
           "reason": {

@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.lux.network/v1/mcp"
   },
-  "skill_count": 7,
+  "skill_count": 8,
   "skills": [
     {
       "description": "Read team account: Start a sign-in at lux.id, Complete a sign-in and hand the browser its session, Returns the identity providers this deployment starts a login with..",
@@ -47,11 +47,18 @@
       "sha256": "f7f4677021fb025316314df3ba664bdc9f09f80ac5bef34012e4cecc75cc1fba"
     },
     {
-      "description": "Read team rooms: Returns every room of the caller's org, across the spaces it owns, with the work facet each carries..",
+      "description": "Read team public: Lists the rooms orgs have published, across every org..",
+      "name": "team_public",
+      "path": "team_public/SKILL.md",
+      "service": "team",
+      "sha256": "c95b7ffaf2dd79b860851c034d02afeda17835b739dc9c4bcf38073bb52e52c2"
+    },
+    {
+      "description": "Read team rooms: Returns every room of the caller's org, across the spaces it owns, with the work facet each carries., Returns the tail of one room's conversation, oldest first..",
       "name": "team_rooms",
       "path": "team_rooms/SKILL.md",
       "service": "team",
-      "sha256": "aaa8b72c11203c5718195ba34fa1a4b030e1a47b3a4193b7d0cfaad4052f8525"
+      "sha256": "cd32a9a93d5235e229f7dc06b2b6b8d0afb96194d2f31bdce2334cec3837ca65"
     },
     {
       "description": "Read team transactor: Statistics returns the transactor's live sessions for the space the caller's credential names — the endpoint the front's space switcher and server panel poll on the transactor base., Open the space data-plane socket.",

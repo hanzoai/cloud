@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/compliance/accreditation", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance GET /v1/compliance/accreditation", zip.Doc{
 		Description: "Returns the org's tracked accreditation-state records, newest\nfirst — evidence entries the org keeps, never a platform certification.",
 		Fields: map[string]string{
 			"accList.data":          "Data is the org's tracked accreditation records, newest first.",
@@ -28,7 +28,7 @@ func init() {
 			"listIn.limit":          "Limit caps the rows returned; non-positive means the server default.",
 		},
 	})
-	zip.Describe("GET /v1/compliance/accreditation/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance GET /v1/compliance/accreditation/:id", zip.Doc{
 		Description: "Returns one tracked accreditation record.",
 		Fields: map[string]string{
 			"accView.basis":         "Basis is the qualification category: income, net_worth, professional_license,\nor entity.",
@@ -46,7 +46,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"acc_1"}`),
 	})
-	zip.Describe("GET /v1/compliance/audit", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance GET /v1/compliance/audit", zip.Doc{
 		Description: "AuditRead is the compliance read of the SHARED tamper-evident audit plane —\nthe SOC 2 posture surface (privileged actions: who started/decided what, when). The\norg is PINNED to the caller's validated org and the rows are narrowed to\ncompliance.* actions. Fail-closed: no principal is a 403, no configured audit\nstore a 501.",
 		Fields: map[string]string{
 			"Wire.action":          "Action is the verb that was performed. It is the event's name, not the HTTP\nmethod — a request-sourced record carries both, and the pair is what makes a\nrow readable (\"grant.create\" at POST /v1/admin/grants).",
@@ -75,14 +75,14 @@ func init() {
 			"auditList.disclaimer": "Disclaimer states that statuses are provider-reported or tracked, never a\nplatform assertion of legal or regulatory compliance.",
 		},
 	})
-	zip.Describe("GET /v1/compliance/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance GET /v1/compliance/health", zip.Doc{
 		Description: "Health reports subsystem liveness and the wired verification provider. Fail-open\non purpose: it never probes the external provider, so a provider outage cannot\nfail liveness.",
 		Fields: map[string]string{
 			"healthView.provider": "Provider is the wired verification provider's name (\"manual\" by default).",
 			"healthView.status":   "Status is \"ok\" when the subsystem is live.",
 		},
 	})
-	zip.Describe("GET /v1/compliance/records", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance GET /v1/compliance/records", zip.Doc{
 		Description: "ListRecords is the unified compliance-record view for the org: its verifications\nand accreditation records together, each provider-reported or tracked, never\nplatform-asserted. PII stays in the subject store; records carry only opaque ids\nand statuses.",
 		Fields: map[string]string{
 			"accView.basis":            "Basis is the qualification category: income, net_worth, professional_license,\nor entity.",
@@ -112,7 +112,7 @@ func init() {
 			"recordList.verifications": "Verifications is the org's KYC/KYB checks, provider-reported statuses only.",
 		},
 	})
-	zip.Describe("GET /v1/compliance/status", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance GET /v1/compliance/status", zip.Doc{
 		Description: "Status is the org's honest posture read: the wired provider and the per-status\ntally of its verifications. It is deliberately NOT a boolean \"compliant\" — it\nreports counts of provider-reported states and carries the boundary disclaimer.",
 		Fields: map[string]string{
 			"statusView.disclaimer":      "Disclaimer states that statuses are provider-reported, never a platform\nassertion of legal or regulatory compliance.",
@@ -122,7 +122,7 @@ func init() {
 			"verificationTally.total":    "Total is the sum over every status.",
 		},
 	})
-	zip.Describe("GET /v1/compliance/subjects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance GET /v1/compliance/subjects", zip.Doc{
 		Description: "Returns the org's subjects as PII-MINIMIZED summaries — no name or\nemail, only whether an email is on file. The full record is returned only by the\nexplicit single-subject read.",
 		Fields: map[string]string{
 			"listIn.limit":             "Limit caps the rows returned; non-positive means the server default.",
@@ -134,7 +134,7 @@ func init() {
 			"subjectSummary.ref":       "Ref is the org's own opaque external id for this subject.",
 		},
 	})
-	zip.Describe("GET /v1/compliance/subjects/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance GET /v1/compliance/subjects/:id", zip.Doc{
 		Description: "Returns one subject WITH its contact PII — the only surface that\nreturns it, and only to the owning org. The response is never cached by any\nintermediary.",
 		Fields: map[string]string{
 			"Subject.createdAt": "CreatedAt is when the subject was first recorded, Unix SECONDS.",
@@ -149,7 +149,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"sub_1"}`),
 	})
-	zip.Describe("GET /v1/compliance/verifications", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance GET /v1/compliance/verifications", zip.Doc{
 		Description: "Returns the org's KYC/KYB verifications, newest first — opaque\nsubject references and provider-reported statuses only, no subject PII.",
 		Fields: map[string]string{
 			"checkList.data":       "Data is the org's verifications, newest first, without subject PII.",
@@ -167,7 +167,7 @@ func init() {
 			"listIn.limit":         "Limit caps the rows returned; non-positive means the server default.",
 		},
 	})
-	zip.Describe("GET /v1/compliance/verifications/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance GET /v1/compliance/verifications/:id", zip.Doc{
 		Description: "Returns one verification — its opaque subject reference and\nprovider-reported status, no subject PII.",
 		Fields: map[string]string{
 			"checkView.createdAt": "CreatedAt is the unix second the verification was started.",
@@ -184,7 +184,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"chk_1"}`),
 	})
-	zip.Describe("POST /v1/compliance/accreditation", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance POST /v1/compliance/accreditation", zip.Doc{
 		Description: "Records an ASSERTED accreditation state for a subject — the\nsubject's own assertion, with no verifier. Every CONFIRMED state\n(provider_verified, reviewer_confirmed) and every rejected/expired state is a\nDECISION recorded via the decision endpoint, attributed to the reviewer — a\ncreate can never stamp a confirmation. The underlying figures (income, net\nworth) are never stored; only the method, category, and state.",
 		Fields: map[string]string{
 			"accView.basis":                  "Basis is the qualification category: income, net_worth, professional_license,\nor entity.",
@@ -208,7 +208,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"subjectId":"sub_1","method":"self_attested","basis":"income"}`),
 	})
-	zip.Describe("POST /v1/compliance/accreditation/:id/decision", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance POST /v1/compliance/accreditation/:id/decision", zip.Doc{
 		Description: "Records an org reviewer's decision on an accreditation\nrecord — a reviewer confirmation, a provider verification the reviewer has\nevidence of (a CPA/attorney letter, a verifier report), a rejection, or an\nexpiry. ROLE-GATED (an org admin or platform reviewer) and ATTRIBUTED: the\nreviewer's identity is recorded as ReviewerSub and audited. Human-in-the-loop:\nthe platform never confirms on its own, and even a provider_verified state\ncarries the reviewer who recorded it.",
 		Fields: map[string]string{
 			"accView.basis":                "Basis is the qualification category: income, net_worth, professional_license,\nor entity.",
@@ -227,7 +227,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"acc_1","status":"reviewer_confirmed"}`),
 	})
-	zip.Describe("POST /v1/compliance/subjects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance POST /v1/compliance/subjects", zip.Doc{
 		Description: "Records a party the org is verifying as part of its own\nonboarding/compliance — a team member, vendor, customer, or counterparty. The\nsubject's contact PII (name/email) is sealed at rest and returned only to the\nowning org; downstream records reference the subject by opaque id.",
 		Fields: map[string]string{
 			"Subject.createdAt": "CreatedAt is when the subject was first recorded, Unix SECONDS.",
@@ -245,7 +245,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"kind":"individual","email":"founder@example.com","name":"Ada"}`),
 	})
-	zip.Describe("POST /v1/compliance/verifications", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance POST /v1/compliance/verifications", zip.Doc{
 		Description: "Begins a KYC/KYB verification of a subject through the wired\nprovider — an existing subject by id, or one created inline from the request.\nThe returned status is provider-reported and never terminal on a fresh start:\nstarting a verification can never yield a verified record, and a provider error\nis a 502, never a verification.",
 		Fields: map[string]string{
 			"checkView.createdAt":       "CreatedAt is the unix second the verification was started.",
@@ -266,7 +266,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"subjectId":"sub_1"}`),
 	})
-	zip.Describe("POST /v1/compliance/verifications/:id/decision", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance POST /v1/compliance/verifications/:id/decision", zip.Doc{
 		Description: "Records a privileged reviewer's MANUAL decision on a\nverification — the human-in-the-loop path, and the ONLY route to a passing status\nwhen no real provider is wired. It produces a DISTINCT reviewer_confirmed, never\na provider_verified (a provider decision is the provider's to report, via the\nwebhook or a reconcile), and it is ROLE-GATED (an org admin or platform reviewer)\nAND ATTRIBUTED (the reviewer's user id is DecidedBy), so a manual pass is always\naccountable.",
 		Fields: map[string]string{
 			"checkView.createdAt":         "CreatedAt is the unix second the verification was started.",
@@ -284,7 +284,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"chk_1","status":"reviewer_confirmed"}`),
 	})
-	zip.Describe("POST /v1/compliance/verifications/:id/refresh", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance POST /v1/compliance/verifications/:id/refresh", zip.Doc{
 		Description: "Polls the wired provider for its current decision and\nrecords it, ATTRIBUTED to the provider — the internal PULL reconcile. For the\nManual provider the check stays pending; for a hosted provider it reflects the\nprovider's settled status. A poll error is a 502, never a verification.",
 		Fields: map[string]string{
 			"checkView.createdAt": "CreatedAt is the unix second the verification was started.",
@@ -301,7 +301,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"chk_1"}`),
 	})
-	zip.Describe("POST /v1/compliance/verifications/webhook", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/compliance POST /v1/compliance/verifications/webhook", zip.Doc{
 		Description: "Is the external PUSH reconcile: a provider (or a Hanzo relay)\nsignals that a verification settled. It authenticates by HMAC SIGNATURE (not an\ninternal principal — an external caller has no validated org), locates the check by\nthe provider reference the signed payload names, and RECONCILES the status from the\nprovider API. The body carries no trusted decision, so a valid signature cannot\nforce a status — the wired provider is the source of truth, and Manual stays\npending. Disabled (501) unless a webhook secret is configured.\n\nUNTYPED on purpose: the HMAC is computed over the RAW body bytes and verified\nBEFORE anything parses, and an unknown reference answers a benign 200 no-op whose\nshape differs from the reconciled check. A typed op would decode its In first —\nreordering the authentication — and cannot answer two 200 shapes.",
 	})
 }

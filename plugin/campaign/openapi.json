@@ -46,6 +46,7 @@
             "required": false,
             "description": "Limit bounds the page. 0 or less means the default of 200; anything above\n1000 is clamped to 1000.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 50
@@ -465,6 +466,7 @@
           },
           "spendCents": {
             "description": "SpendCents is what the provider itself reports this channel spent, in CENTS.\n0 when the channel never launched, when no executor is wired for it, or when\nthe read failed — SpendError tells the last case apart from a genuine zero.",
+            "format": "int64",
             "type": "integer"
           },
           "spendError": {
@@ -527,6 +529,7 @@
           },
           "budget": {
             "description": "Budget is the campaign's total budget in CENTS, handed to each executor as the\nbudget for its channel. 0 means none was set.",
+            "format": "int64",
             "type": "integer"
           },
           "channels": {
@@ -545,6 +548,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the campaign was created, in unix seconds. Server-set.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -557,6 +561,7 @@
           },
           "scheduleAt": {
             "description": "ScheduleAt is when the campaign should run, in unix seconds. 0 (absent) means\nlaunch immediately. It is passed to each executor; nothing in this service\nwakes up to launch it for you.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -565,6 +570,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is the last write in unix seconds — an edit, a launch or a pause.\nServer-set on every save.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -581,6 +587,7 @@
           },
           "cac": {
             "description": "CAC is customer acquisition cost: spend DOLLARS per conversion, rounded to\ncents. 0 when nothing converted — that is \"not yet computable\", not \"free\".",
+            "format": "double",
             "type": "number"
           },
           "campaignId": {
@@ -596,18 +603,22 @@
           },
           "clicks": {
             "description": "Clicks is the campaign's click events over the window.",
+            "format": "int64",
             "type": "integer"
           },
           "conversions": {
             "description": "Conversions is the terminal funnel events attributed to the campaign — orders\ncompleted, signups completed, explicit conversion events.",
+            "format": "int64",
             "type": "integer"
           },
           "ctr": {
             "description": "CTR is clicks per impression, a fraction rounded to 4 places (0.0123 = 1.23%),\nnot a percentage. 0 when there were no impressions to divide by.",
+            "format": "double",
             "type": "number"
           },
           "cvr": {
             "description": "CVR is conversions per click, a fraction rounded to 4 places. 0 when there\nwere no clicks.",
+            "format": "double",
             "type": "number"
           },
           "end": {
@@ -616,6 +627,7 @@
           },
           "impressions": {
             "description": "Impressions is how many times the campaign's creatives were shown, counted\nfrom its utm_campaign-tagged impression events.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -628,10 +640,12 @@
           },
           "revenue": {
             "description": "Revenue is the summed revenue attribute of the campaign's events, in whole\nCURRENCY UNITS (dollars) — the one money value here that is not in cents.",
+            "format": "double",
             "type": "number"
           },
           "roas": {
             "description": "ROAS is return on ad spend: revenue per spend DOLLAR, rounded to 2 places\n(2.5 = $2.50 back per $1). 0 when nothing was spent.",
+            "format": "double",
             "type": "number"
           },
           "source": {
@@ -640,6 +654,7 @@
           },
           "spendCents": {
             "description": "SpendCents is the campaign's total spend in CENTS: the sum of what each live\nchannel's provider reports. A channel whose spend could not be read\ncontributes 0 and says so on its own row.",
+            "format": "int64",
             "type": "integer"
           },
           "start": {
@@ -652,6 +667,7 @@
           },
           "visitors": {
             "description": "Visitors is how many distinct people the campaign reached, counted by event\nidentity across ALL its events in the window — not a subset of Impressions, so\nit can exceed them for a campaign whose provider reports clicks but not views.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -661,10 +677,12 @@
         "properties": {
           "budget": {
             "description": "Budget is the sum of every campaign's budget, in CENTS.",
+            "format": "int64",
             "type": "integer"
           },
           "campaigns": {
             "description": "Campaigns is how many campaigns the org has, in any state.",
+            "format": "int64",
             "type": "integer"
           },
           "channels": {
@@ -676,6 +694,7 @@
           },
           "live": {
             "description": "Live is how many of them are currently live.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -687,6 +706,7 @@
             "type": "string"
           },
           "budget": {
+            "format": "int64",
             "type": "integer"
           },
           "channels": {
@@ -709,6 +729,7 @@
             "type": "string"
           },
           "scheduleAt": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -722,6 +743,7 @@
           },
           "budget": {
             "description": "Budget is the campaign's total budget in CENTS. Negative reads as 0.",
+            "format": "int64",
             "type": "integer"
           },
           "channels": {
@@ -744,6 +766,7 @@
           },
           "scheduleAt": {
             "description": "ScheduleAt is when the campaign should run, in unix seconds. Negative reads\nas 0 (immediately).",
+            "format": "int64",
             "type": "integer"
           }
         },

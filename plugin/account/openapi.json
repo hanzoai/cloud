@@ -375,6 +375,7 @@
           },
           "type": {
             "description": "Type is the text-size multiplier, clamped to the ramp window [0.85, 1.4].\nAbsent (0) leaves the published default.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -388,6 +389,7 @@
           },
           "expiresIn": {
             "description": "ExpiresIn is the token's lifetime in seconds. Fetch a new one when it lapses;\na change with an expired token is refused.",
+            "format": "int64",
             "type": "integer"
           }
         },

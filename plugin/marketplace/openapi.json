@@ -222,6 +222,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the listing was published, in Unix SECONDS, minted at\ninsert. Every listing read orders by it descending, so it is the shop's\nordering key as well as its age.",
+            "format": "int64",
             "type": "integer"
           },
           "currency": {

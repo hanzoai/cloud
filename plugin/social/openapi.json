@@ -469,6 +469,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the account was connected, as a unix timestamp in seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "handle": {
@@ -489,6 +490,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the account row last changed, as a unix timestamp in\nseconds. The listing is ordered by it, newest first.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -556,6 +558,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the post was created, as a unix timestamp in seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "error": {
@@ -579,6 +582,7 @@
           },
           "scheduleAt": {
             "description": "ScheduleAt is when the post is due, as a unix timestamp in SECONDS. 0 means\nunscheduled. It is meaningful only while the status is scheduled — a\nscheduled post whose time has arrived is published by the scheduler.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -587,6 +591,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the post row last changed, as a unix timestamp in seconds.\nThe listing is ordered by it, newest first.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -611,6 +616,7 @@
           },
           "scheduleAt": {
             "description": "ScheduleAt is when to publish, as a unix timestamp in SECONDS. 0 means\nunscheduled. A negative value is clamped to 0. It only matters for a post\nwhose status is scheduled.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -639,6 +645,7 @@
           },
           "scheduleAt": {
             "description": "ScheduleAt is when to publish, as a unix timestamp in SECONDS. 0 means\nunscheduled. Moving it into the past here does NOT publish the post — that is\nthe scheduler's to notice, or the publish operation's.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -696,18 +703,22 @@
         "properties": {
           "accounts": {
             "description": "Accounts is how many accounts the org has connected, in any status.",
+            "format": "int64",
             "type": "integer"
           },
           "posts": {
             "description": "Posts is how many posts the org has, in any state.",
+            "format": "int64",
             "type": "integer"
           },
           "published": {
             "description": "Published is how many of them have published.",
+            "format": "int64",
             "type": "integer"
           },
           "scheduled": {
             "description": "Scheduled is how many of them are waiting for their scheduled time.",
+            "format": "int64",
             "type": "integer"
           }
         },

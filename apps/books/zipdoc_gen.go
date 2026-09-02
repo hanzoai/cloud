@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/books/accounts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/accounts", zip.Doc{
 		Description: "Returns the org's chart of accounts — the seeded fixed chart every\nposting key in the ledger refers to.",
 		Fields: map[string]string{
 			"Account.name":     "Name is the account's human name, for a statement's line label.",
@@ -20,7 +20,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
-	zip.Describe("GET /v1/books/bank/transactions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/bank/transactions", zip.Doc{
 		Description: "Returns the org's normalized bank transactions, newest first —\nevery row the import and connector paths have ingested, with its amount in exact cents,\nits direction, and whether it has been matched to a voucher yet.",
 		Fields: map[string]string{
 			"BankTxnRow.amountCents":    "AmountCents is the size of the movement in whole cents, always POSITIVE —\ndirection carries the sign, so a caller must read both to know which way money\nwent.",
@@ -38,7 +38,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"limit":100}`),
 	})
-	zip.Describe("GET /v1/books/bank/unreconciled", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/bank/unreconciled", zip.Doc{
 		Description: "Returns the org's unmatched bank inflows and their open clarifying\nquestions — the queue a human answers so an unexplained deposit is never guessed into\nrevenue.",
 		Fields: map[string]string{
 			"BankQuestion.connector":       "Connector names the feed the unplaceable line arrived on. With externalId it\nidentifies both the question and the bank line it is about, so re-syncing the\nsame deposit never asks twice.",
@@ -62,7 +62,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
-	zip.Describe("GET /v1/books/export", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/export", zip.Doc{
 		Description: "Returns the complete financial package for the caller's org over\n(from, to]: the trial balance, the P&L, the balance sheet, and the GL detail behind\nthem — the four statements a tax preparer or an investor asks for, assembled from the\none ledger in a single read so they cannot disagree with each other.",
 		Fields: map[string]string{
 			"BalanceLine.account":           "Account is the chart-of-accounts number this line reports on. ABSENT marks a\nDERIVED line that no account holds — retained earnings is the one such line,\ncomputed from cumulative income minus expense.",
@@ -128,7 +128,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"from":"2026-01-01T00:00:00Z","to":"2026-12-31T23:59:59Z","format":"json"}`),
 	})
-	zip.Describe("GET /v1/books/gl", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/gl", zip.Doc{
 		Description: "ListGL returns the org's most recent GL Entry rows, newest first. This is the raw\ndouble-entry detail behind every statement: one row per leg, with its debit, credit,\nposting time and the source that booked it.",
 		Fields: map[string]string{
 			"GLRow.account":    "Account is the chart-of-accounts number this leg posts to.",
@@ -145,7 +145,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"limit":100}`),
 	})
-	zip.Describe("GET /v1/books/inbox", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/inbox", zip.Doc{
 		Description: "Returns the org's open document queue — everything uploaded but not yet\nbooked, newest first, each with its extracted summary and the confidence the scanner\nresolved its category at. A booked document drops out of the queue.",
 		Fields: map[string]string{
 			"Extracted.category":   "Category is the expense bucket the SCANNER guessed, as a slug — a hint only.\nVendor rules override it whenever they know better, so this is the model's\nreading and not the account the entry will land on.",
@@ -171,7 +171,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
-	zip.Describe("GET /v1/books/metrics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/metrics", zip.Doc{
 		Description: "Metrics returns the org's deterministic SaaS-metrics snapshot over an optional\n(from, to] window — MRR, ARR, revenue, COGS, burn, gross margin, net income, cash,\ndeferred revenue, monthly burn and runway — as raw int64-cent figures AND the same\nfigures already formatted. Every number is the ledger, aggregated the one way the books\ndefine it, never a guess; it is the grounded read the unified /v1/ask advisor replays.",
 		Fields: map[string]string{
 			"Figure.label":                    "Label names the metric, e.g. \"MRR\" or \"Runway\".",
@@ -200,7 +200,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"from":"2026-01-01T00:00:00Z","to":"2026-06-30T23:59:59Z"}`),
 	})
-	zip.Describe("GET /v1/books/pnl", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/pnl", zip.Doc{
 		Description: "Returns the org's accrual-basis Profit & Loss over an optional (from, to]\nwindow of RFC3339 posting times: recognized revenue, matched cost, and the net.",
 		Fields: map[string]string{
 			"PnL.expense":      "Expense is the cost lines that moved in the period, one per account.",
@@ -220,7 +220,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"from":"2026-01-01T00:00:00Z","to":"2026-03-31T23:59:59Z"}`),
 	})
-	zip.Describe("GET /v1/books/position", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/position", zip.Doc{
 		Description: "Returns the org's Balance Sheet as of `to` (empty = all time), with the\nAssets == Liabilities + Equity equation proof.",
 		Fields: map[string]string{
 			"BalanceLine.account":           "Account is the chart-of-accounts number this line reports on. ABSENT marks a\nDERIVED line that no account holds — retained earnings is the one such line,\ncomputed from cumulative income minus expense.",
@@ -240,7 +240,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"to":"2026-03-31T23:59:59Z"}`),
 	})
-	zip.Describe("GET /v1/books/questions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/questions", zip.Doc{
 		Description: "Returns the clarifying questions the caller's own recent GL raises — the\nunusual postings a founder should look at (outliers, reversals, round-offs, uncosted\nrevenue, an overdrawn wallet), sharpest first. An empty list means the books look clean;\nthe detector is deterministic over the ledger and invents nothing.",
 		Fields: map[string]string{
 			"Question.account":            "Account is the chart number the questioned entry posted to, where one applies.",
@@ -254,7 +254,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
-	zip.Describe("GET /v1/books/rules", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/rules", zip.Doc{
 		Description: "Returns the org's auto-categorization rules, highest priority first. A rule\nis a standing instruction — \"anything whose merchant contains X books to category Y\" —\nand it overrides a vendor's default category, so this is the list that decides how a\nfuture bill classifies itself.",
 		Fields: map[string]string{
 			"Rule.category":    "Category is the COA expense account a matching bill books to. An upsert normalizes\na slug (\"cloud\") to its account number.",
@@ -265,7 +265,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
-	zip.Describe("GET /v1/books/transactions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/transactions", zip.Doc{
 		Description: "Returns the org's booked ledger as a single-line register, newest\nfirst: one row per voucher, with its date, description, vendor, category, source and\namount in exact cents. It is the double-entry ledger projected to the register a human\nreads, filterable by posting-time window, category and vendor. Strictly read-only — it\nrestates the books, it never moves them.",
 		Fields: map[string]string{
 			"Txn.amountCents":              "AmountCents is the voucher's total, in whole cents — its total debit, which\nequals its total credit because every voucher balances. It is the size of the\nentry and carries no direction; the category says which way it went.",
@@ -286,7 +286,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"category":"software","limit":50}`),
 	})
-	zip.Describe("GET /v1/books/trial", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/trial", zip.Doc{
 		Description: "Returns the org's trial balance over an optional [from, to] window of\nRFC3339 posting times, including the opening/closing columns and the\nTotalDebit == TotalCredit proof that the books balance.",
 		Fields: map[string]string{
 			"TrialBalance.balanced":         "Balanced is the proof this report exists to give: whether total debits equal\ntotal credits. It is computed from the rows above, never assumed, and false\nmeans the ledger itself is broken rather than that the report is wrong.",
@@ -310,7 +310,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"from":"2026-01-01T00:00:00Z","to":"2026-03-31T23:59:59Z"}`),
 	})
-	zip.Describe("GET /v1/books/vendors", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books GET /v1/books/vendors", zip.Doc{
 		Description: "Returns the org's vendor book: each canonical vendor, the alias spellings a\nreceipt may print it under, and the expense account new bills from it default to. A\nvendor here is what makes a scanned bill self-classify instead of asking again.",
 		Fields: map[string]string{
 			"VendorRow.aliases":         "Aliases are the other spellings a receipt may print the vendor under; a scan\nmatching any of them resolves to this vendor.",
@@ -321,10 +321,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
-	zip.Describe("POST /books/figures", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books POST /books/figures", zip.Doc{
 		Description: "Answers the caller's own all-time ledger snapshot as formatted\nfigures.\n\nThe org is the CALLER's plane identity and there is no argument that could\nname another: [plane.FiguresIn] is empty, and the identity zip forwards is the\none the gateway minted. Anonymous is REFUSED rather than defaulted — a books\nread with no principal behind it is not a read of nobody's ledger, it is a\nread of the first org whose name a bug supplies.\n\nThe LIVE ledger, never the sandbox. A sandbox figure narrated as an answer\nabout the business would be a fabricated number wearing a real one's label,\nand the selector that would let a caller ask for it is the same argument this\nop refuses to grow.",
 	})
-	zip.Describe("POST /v1/books/ask", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books POST /v1/books/ask", zip.Doc{
 		Description: "Answers a plain-language question about the caller's own books — \"what is my\nMRR?\", \"how long is my runway?\" — with figures taken from their ledger, never a guessed\nnumber. A deterministic keyword router picks the intent and reads the real metrics, and\nthose figures, followups and report sources are computed BEFORE any model call and are\nnever altered by one: the optional narration client only rephrases the sentence, and it\ndegrades silently to the templated answer when no AI plane is wired. It is strictly\nread-only — it restates the books, it never posts to them.",
 		Fields: map[string]string{
 			"AskRequest.from":       "From is the RFC3339 start of the metric window. Empty means all time, treated as a\nsingle reporting period (see monthsBetween).",
@@ -340,7 +340,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"question":"how long is my runway?"}`),
 	})
-	zip.Describe("POST /v1/books/bank/sync", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books POST /v1/books/bank/sync", zip.Doc{
 		Description: "Pulls every connected bank (Plaid/Teller) for the caller's org, maps each\nfetched transaction to a posting and books it idempotently, then advances that\nconnector's cursor so the next sync resumes where this one stopped. One connector's\noutage is skipped rather than failing the whole sync. It reports the batch: how many\ntransactions were seen, how many vouchers posted, how many inflows reconciled against\nthe processor clearing account, how many raised a question, how many were own-account\ntransfers, and how many were already-processed no-ops. It is READ-ONLY against the\nbank — it ingests, it never sends money.",
 		Fields: map[string]string{
 			"BankTally.ingested":   "transactions seen",
@@ -351,7 +351,7 @@ func init() {
 			"BankTally.transfers":  "own-account moves recorded (no P&L)",
 		},
 	})
-	zip.Describe("POST /v1/books/rules", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books POST /v1/books/rules", zip.Doc{
 		Description: "Creates or updates one auto-categorization rule, keyed by its pattern —\nwriting a pattern that already exists REPLACES that row's category and priority. The\ncategory is normalized to a real COA expense account, and anything unrecognized becomes\n5900 Uncategorized rather than a guessed real account. It answers the row exactly as\nstored, so the caller sees the normalization. A rule overrides a vendor's default\ncategory, so this is the standing instruction that decides how a future bill classifies.",
 		Fields: map[string]string{
 			"Rule.category": "Category is the COA expense account a matching bill books to. An upsert normalizes\na slug (\"cloud\") to its account number.",
@@ -360,7 +360,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"pattern":"aws","category":"cloud","priority":5}`),
 	})
-	zip.Describe("POST /v1/books/scan/book", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books POST /v1/books/scan/book", zip.Doc{
 		Description: "Posts a reviewed scanned bill to the ledger. It is the scanner's ONLY write:\nthe voucher goes through the same post() choke point every other source uses, so it is\nchecked to balance (Σdebit == Σcredit) and is idempotent by (scan, scanId) — re-booking\nthe same scan answers posted=false and writes nothing. A bill whose economic identity\n(vendor, total, issue date) already posted under a DIFFERENT scan is refused 409 unless\noverride is set, which is what stops the same receipt re-scanned into a new file hash\nfrom double-booking. An unbalanced voucher is refused 400.",
 		Fields: map[string]string{
 			"BookRequest.override": "Override books this bill even when one of the SAME economic identity\n(vendor, total, issue date) already posted — the explicit human confirmation that a\nsame-looking bill is a genuine second spend, not the same receipt re-scanned.",
@@ -379,14 +379,14 @@ func init() {
 		},
 		Example: json.RawMessage(`{"scanId":"a5f3c1","voucher":{"description":"GitHub","legs":[{"account":"5300","debit":1234},{"account":"2001","credit":1234}]}}`),
 	})
-	zip.Describe("POST /v1/books/sync", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books POST /v1/books/sync", zip.Doc{
 		Description: "Sync ingests the caller's OWN org from commerce into BOTH ledgers (live and sandbox)\nand reports how many new vouchers posted to each. It is idempotent — money that has\nalready been booked posts nothing on a repeat — and it is read-only against commerce:\nit never mints a deposit, a credit or a payout, only the accounting twin of money that\nalready moved.",
 		Fields: map[string]string{
 			"syncTally.live":    "Live is the number of vouchers newly posted to the live ledger.",
 			"syncTally.sandbox": "Sandbox is the number newly posted to the sandbox ledger.",
 		},
 	})
-	zip.Describe("POST /v1/books/vendors", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/books POST /v1/books/vendors", zip.Doc{
 		Description: "Creates or updates one vendor in the org's vendor book, keyed by its\ncanonical name — writing a canonical name that already exists REPLACES that row's\naliases and default category. A category given as a slug (\"software\") is normalized to\nits real COA expense account, and anything unrecognized becomes 5900 Uncategorized\nrather than a guessed real account. It answers the row exactly as stored, so the caller\nsees the normalization. Recording a vendor is what makes future bills from it\nself-classify instead of asking again.",
 		Fields: map[string]string{
 			"VendorRow.aliases":         "Aliases are the other spellings a receipt may print the vendor under; a scan\nmatching any of them resolves to this vendor.",

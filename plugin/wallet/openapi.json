@@ -366,6 +366,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the wallet was provisioned, Unix seconds. Listings order\nby it, newest first.",
+            "format": "int64",
             "type": "integer"
           },
           "custody": {
@@ -401,6 +402,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the account was opened, Unix seconds. Listings order by\nit, newest first.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -497,6 +499,7 @@
         "properties": {
           "chainId": {
             "description": "ChainID is the EVM chain the Safe transaction is bound to. 0 uses the\nwallet's own chain, or the Hanzo L1 (36963) when it is chain-agnostic.",
+            "format": "int64",
             "type": "integer"
           },
           "data": {
@@ -505,6 +508,7 @@
           },
           "nonce": {
             "description": "Nonce is the Safe's transaction nonce.",
+            "format": "int64",
             "type": "integer"
           },
           "to": {

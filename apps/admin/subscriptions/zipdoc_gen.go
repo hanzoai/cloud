@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/subscriptions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/subscriptions GET /v1/admin/subscriptions", zip.Doc{
 		Description: "Answers GET /v1/admin/subscriptions.\n\n\tGET /v1/admin/subscriptions?org=&status=&limit=",
 		Fields: map[string]string{
 			"SubscriptionRow.display":  "Display is the same slug as Org. The warehouse holds no friendly name and this read\ndoes no per-org IAM fan-out, so it repeats the slug rather than inventing one.",
