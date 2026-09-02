@@ -132,9 +132,9 @@ func caller(ctx context.Context) (org, user string, err error) {
 // op's own message, an org that is not a DNS-1123 label → 400. forbidden is the
 // message that op has always answered with.
 func authed(ctx context.Context, forbidden string) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden(forbidden)
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return "", err
 	}
 	if !validOrg(org) {
 		return "", zip.ErrBadRequest("org must be a DNS-1123 label")

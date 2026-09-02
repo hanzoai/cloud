@@ -121,9 +121,9 @@ const (
 // caller able to name the org could read another tenant's backlog, and a search
 // is exactly the shape that would quietly return it.
 func (o ops) searchIssues(ctx context.Context, in *issueSearch) (*issueHits, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("a validated principal is required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if in.Status != "" && !statuses[in.Status] {
 		return nil, zip.ErrBadRequest("unknown status")
@@ -205,9 +205,9 @@ func (o ops) claimIssue(ctx context.Context, in *issueClaim) (*issueHit, error) 
 	if err := csrf(ctx, changes); err != nil {
 		return nil, err
 	}
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("a validated principal is required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if in.Num <= 0 {
 		return nil, zip.ErrBadRequest("bad issue number")

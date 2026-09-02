@@ -119,9 +119,9 @@ type noArgs struct{}
 // targets another tenant with. It fails closed off the HTTP path, where there is no
 // principal and no attested admin.
 func caller(ctx context.Context) (*zip.Ctx, string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, "", zip.ErrForbidden("a validated principal is required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, "", err
 	}
 	c, ok := cloud.Request(ctx)
 	if !ok {

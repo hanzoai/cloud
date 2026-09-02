@@ -256,9 +256,9 @@ type challengeView struct {
 // A tokenId outside the Validator tier is refused here rather than after signing.
 func (o validatorOps) challenge(ctx context.Context, in *challengeIn) (*challengeView, error) {
 	s := o.s
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("validated identity required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	tokenID, err := parseTokenID(in.TokenID)
 	if err != nil {
@@ -325,9 +325,9 @@ type validatorClaim struct {
 // Example: {"tokenId": 7, "nonce": "5f3a…", "signature": "0x…"}
 func (o validatorOps) provision(ctx context.Context, body *validatorClaim) (*slotView, error) {
 	s := o.s
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("validated identity required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if body.TokenID == 0 || strings.TrimSpace(body.Nonce) == "" || strings.TrimSpace(body.Signature) == "" {
 		return nil, zip.ErrBadRequest("tokenId, nonce, and signature are required")
@@ -505,9 +505,9 @@ type validatorList struct {
 // whole surface.
 func (o validatorOps) list(ctx context.Context, in *listIn) (*validatorList, error) {
 	s := o.s
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("validated identity required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	slots, err := s.State.store.ListSlots(ctx, org, limitOf(in.Limit))
 	if err != nil {
@@ -543,9 +543,9 @@ type slotRef struct {
 // different status, so this route cannot be used to probe which slots are taken.
 func (o validatorOps) get(ctx context.Context, in *slotRef) (*slotView, error) {
 	s := o.s
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("validated identity required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	tokenID, err := parseTokenID(in.TokenID)
 	if err != nil {

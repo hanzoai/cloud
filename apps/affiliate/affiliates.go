@@ -410,9 +410,9 @@ type affiliateStanding struct {
 // Hanzo's MARGIN, never on the referred customer's bill, so nothing here changes
 // what that customer pays.
 func (o ops) standing(ctx context.Context, _ *noInput) (*affiliateStanding, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to view your affiliate program")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	a, err := o.s.State.store.GetByOrg(ctx, org)
@@ -537,9 +537,9 @@ type affiliateSelf struct {
 // Scoped to the validated org and nothing else, and refused without a
 // principal. A PURE READ — it reports the downline but accrues nothing.
 func (o ops) self(ctx context.Context, _ *noInput) (*affiliateSelf, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to view your affiliate program")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	a, err := o.s.State.store.GetByOrg(ctx, org)
@@ -661,9 +661,9 @@ func (a *application) StatusCode() int {
 //
 // Example: {"requestedCode": "acme"}
 func (o ops) apply(ctx context.Context, in *applyRequest) (*application, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to apply as an affiliate")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := requireBody(ctx); err != nil {
 		return nil, err
@@ -742,9 +742,9 @@ func (a *attribution) StatusCode() int {
 //
 // Example: {"code": "acme"}
 func (o ops) attribute(ctx context.Context, in *attributeRequest) (*attribution, error) {
-	referredOrg, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to record an affiliate")
+	referredOrg, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	code := normalizeCode(in.Code)
 	if code == "" {

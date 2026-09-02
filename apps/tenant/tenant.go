@@ -183,9 +183,9 @@ func Qualified(id string, k Key) bool {
 // principal with no issuer to resolve (an sk- key this deployment's own IAM
 // issued) carries no second fact, and nothing is compared.
 func Of(ctx context.Context, deployment string) (Key, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return Key{}, zip.ErrForbidden("no validated principal")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return Key{}, err
 	}
 	k, err := Mint(deployment, org)
 	if err != nil {

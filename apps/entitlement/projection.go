@@ -21,7 +21,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/zap-proto/zip"
 )
 
 // projectionView is the exact wire contract the @hanzogui/shell useEntitlement hook
@@ -51,9 +50,9 @@ type projectionView struct {
 // The ENFORCEMENT path still fails open, so functionality survives the same outage
 // even while the UI conservatively shows locked.
 func (o ops) projection(ctx context.Context, _ *noArgs) (*projectionView, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("no validated principal")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	// "admin" is the platform-sudo predicate, not a commerce product: resolve it

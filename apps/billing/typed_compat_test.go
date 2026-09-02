@@ -77,12 +77,12 @@ func TestLedgerTyped_ContractUnmoved(t *testing.T) {
 }
 
 // TestUsageAccountsTyped_KeepsGates pins the per-account breakdown's two
-// refusals: an absent identity is 401 "sign in", and a deployment without the
+// refusals: an absent identity is 403 (no org scope), and a deployment without the
 // linked-account plane is an honest 501 — never an empty breakdown.
 func TestUsageAccountsTyped_KeepsGates(t *testing.T) {
 	app := mountApp(t, "", "")
-	if status, _, _ := callRoute(t, app, http.MethodGet, "/v1/billing/usage/accounts", "", "victim"); status != http.StatusUnauthorized {
-		t.Fatalf("no principal: want 401, got %d", status)
+	if status, _, _ := callRoute(t, app, http.MethodGet, "/v1/billing/usage/accounts", "", "victim"); status != http.StatusForbidden {
+		t.Fatalf("no principal: want 403, got %d", status)
 	}
 	if status, _, _ := callRoute(t, app, http.MethodGet, "/v1/billing/usage/accounts", "acme/dave", "acme"); status != http.StatusNotImplemented {
 		t.Fatalf("no linked-account plane in this binary: want 501, got %d", status)
