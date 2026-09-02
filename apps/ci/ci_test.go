@@ -318,3 +318,59 @@ func TestShutdownStopsThePollers(t *testing.T) {
 		t.Fatalf("the forge was asked %d more times after shutdown; the pollers outlive the mount", after-settled)
 	}
 }
+
+// THE ROUTES, MOUNTED AND CALLED. The tests above reach viewer and unconfigured
+// directly; Use, routes, both ops and call had never run, so nothing checked
+// that the surface this package exists to mount is reachable at the address it
+// claims, or that a caller without a validated principal is refused there
+// rather than only in the helper.
+//
+// build fails closed here because no CI_GIT_TOKEN is set, which is the state a
+// machine holding no secrets is in — so this exercises the honest-503 path end
+// to end, including the reason reaching the caller.
+func mounted(t *testing.T) *zip.App {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	app.Use(cloud.Bridge())
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use: %v", err)
+	}
+	return app
+}
+
+func get(t *testing.T, app *zip.App, path string, headers map[string]string) (int, string) {
+	t.Helper()
+	rq := httptest.NewRequest(http.MethodGet, path, nil)
+	for k, v := range headers {
+		rq.Header.Set(k, v)
+	}
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 0})
+	if err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
+}
+
+func TestBothOpsAreMountedAndRefuseAnUnvalidatedCaller(t *testing.T) {
+	app := mounted(t)
+	for _, path := range []string{"/v1/ci/runs", "/v1/ci/fleet"} {
+		// No identity at all: the org cannot be trusted, so the surface must
+		// not answer with anyone's runs.
+		status, body := get(t, app, path, nil)
+		if status == http.StatusOK {
+			t.Errorf("GET %s answered 200 to a caller with no validated principal: %s", path, body)
+		}
+
+		// With a validated principal the op runs, reaches the mounted handler
+		// and reports why it cannot serve — the sentence, not just the code.
+		status, body = get(t, app, path, map[string]string{"X-User-Id": "u-1", "X-Org-Id": "acme"})
+		if status == http.StatusOK {
+			t.Errorf("GET %s answered 200 though ci is unconfigured: %s", path, body)
+		}
+		if !strings.Contains(body, "not configured") {
+			t.Errorf("GET %s did not say why it cannot serve: %s", path, body)
+		}
+	}
+}
