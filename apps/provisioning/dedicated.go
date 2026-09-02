@@ -402,7 +402,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 	secretRef := fmt.Sprintf("orgs/%s/%s/%s", org, kind, name)
 	storedRef := ""
 	if s.State.sec.Enabled() {
-		if err := s.State.sec.Put(secretRef, []byte(pw)); err != nil {
+		if err := s.State.sec.Put(ctx, secretRef, []byte(pw)); err != nil {
 			s.Log.Error("kms put failed", "kind", kind, "err", err)
 			return nil, zip.Errorf(http.StatusInternalServerError, "store secret failed")
 		}
@@ -416,7 +416,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 	secObj := adminSecretObj(ns, org, inst, kind, secretName, e.secretEnv(user, pw, db))
 	if err := s.State.orch.ApplySecret(ctx, ns, secretName, secObj); err != nil {
 		if storedRef != "" {
-			_ = s.State.sec.Delete(storedRef)
+			_ = s.State.sec.Delete(ctx, storedRef)
 		}
 		s.Log.Error("project admin secret failed", "kind", kind, "org", org, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "project admin secret: %v", err)
@@ -426,7 +426,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 	if err := s.State.orch.ApplyDatastore(ctx, ns, inst, crObj); err != nil {
 		_ = s.State.orch.DeleteSecret(ctx, ns, secretName)
 		if storedRef != "" {
-			_ = s.State.sec.Delete(storedRef)
+			_ = s.State.sec.Delete(ctx, storedRef)
 		}
 		s.Log.Error("launch instance failed", "kind", kind, "org", org, "inst", inst, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "launch instance: %v", err)
@@ -445,7 +445,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 		_ = s.State.orch.DeleteDatastore(ctx, ns, inst)
 		_ = s.State.orch.DeleteSecret(ctx, ns, secretName)
 		if storedRef != "" {
-			_ = s.State.sec.Delete(storedRef)
+			_ = s.State.sec.Delete(ctx, storedRef)
 		}
 		if errors.Is(err, errConflict) {
 			return nil, zip.ErrConflict("resource already exists")
@@ -472,7 +472,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 		_ = s.State.orch.DeleteDatastore(ctx, ns, inst)
 		_ = s.State.orch.DeleteSecret(ctx, ns, secretName)
 		if storedRef != "" {
-			_ = s.State.sec.Delete(storedRef)
+			_ = s.State.sec.Delete(ctx, storedRef)
 		}
 		s.Log.Error("inject addon url failed; rolled back provision", "kind", kind, "org", org, "instance", instance, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "wire instance: %v", err)

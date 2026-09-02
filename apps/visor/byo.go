@@ -117,7 +117,7 @@ func (o ops) detachCluster(ctx context.Context, in *clusterRef) (*clusterDetache
 	if name == "" {
 		return nil, zip.ErrBadRequest("cluster id required")
 	}
-	found, err := o.State.fleet.Deregister(org, project(c), name)
+	found, err := o.State.fleet.Deregister(ctx, org, project(c), name)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "detach: %v", err)
 	}
@@ -129,8 +129,8 @@ func (o ops) detachCluster(ctx context.Context, in *clusterRef) (*clusterDetache
 
 // byoClusters returns the org+project's BYO clusters as clusterViews for the fleet
 // merge. The default project resolves the legacy org-only shard (unchanged view).
-func byoClusters(s *cloud.Service[state], org, project string) []clusterView {
-	list, err := s.State.fleet.List(org, project)
+func byoClusters(ctx context.Context, s *cloud.Service[state], org, project string) []clusterView {
+	list, err := s.State.fleet.List(ctx, org, project)
 	if err != nil || len(list) == 0 {
 		return nil
 	}

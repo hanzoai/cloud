@@ -30,7 +30,7 @@ type fakeAttached struct {
 	asked     []string
 }
 
-func (f *fakeAttached) RESTForOrgCluster(org, project, name string) (*rest.Config, error) {
+func (f *fakeAttached) RESTForOrgCluster(_ context.Context, org, project, name string) (*rest.Config, error) {
 	f.asked = append(f.asked, org+"/"+project+"/"+name)
 	if org == f.org && name == f.name && f.cfg != nil {
 		return f.cfg, nil

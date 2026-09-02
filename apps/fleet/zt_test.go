@@ -6,6 +6,7 @@
 package fleet
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -61,11 +62,11 @@ func TestFabricDialWithoutAnIdentitySaysSo(t *testing.T) {
 // enabled one answers the same sentinel — the absence a caller maps to 404.
 func TestRESTForOrgClusterAbsenceIsTheSentinel(t *testing.T) {
 	var r *Registry
-	if _, err := r.RESTForOrgCluster("acme", "", "lab"); !errors.Is(err, ErrNoCluster) {
+	if _, err := r.RESTForOrgCluster(context.Background(), "acme", "", "lab"); !errors.Is(err, ErrNoCluster) {
 		t.Fatalf("nil registry: err = %v, want ErrNoCluster", err)
 	}
 	disabled := &Registry{}
-	if _, err := disabled.RESTForOrgCluster("acme", "", "lab"); !errors.Is(err, ErrNoCluster) {
+	if _, err := disabled.RESTForOrgCluster(context.Background(), "acme", "", "lab"); !errors.Is(err, ErrNoCluster) {
 		t.Fatalf("disabled registry: err = %v, want ErrNoCluster", err)
 	}
 }

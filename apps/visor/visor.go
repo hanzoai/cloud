@@ -121,7 +121,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		Base: cloud.NewBase(deps, "visor"),
 		State: state{
 			cl:    newClient(),
-			fleet: fleet.New(deps.Brand, luxlog.Default().New("subsystem", "fleet")),
+			fleet: fleet.New(deps.KMS, luxlog.Default().New("subsystem", "fleet")),
 			bill:  cloud.NewMeter(deps, "compute"),
 		},
 	}
@@ -775,7 +775,7 @@ func (o ops) listClusters(ctx context.Context, _ *cloud.Unit) (*clusterList, err
 	// ONE fleet surface: managed clusters (Visor node pools) + the org's BYO ones,
 	// the latter sharded by the caller's project sub-scope.
 	clusters := clustersFromPools(pools)
-	clusters = append(clusters, byoClusters(o.Service, org, project(c))...)
+	clusters = append(clusters, byoClusters(ctx, o.Service, org, project(c))...)
 	return &clusterList{Clusters: clusters, Degraded: down}, nil
 }
 

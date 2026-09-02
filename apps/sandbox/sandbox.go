@@ -248,7 +248,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// The fleet registry is how a lease that NAMES a cluster reaches it: the
 	// org's sealed kubeconfig, unsealed from KMS behind the one interface a
 	// test can stand in for. See runtime.at.
-	rt.attached = fleet.New(deps.Brand, b.Log)
+	rt.attached = fleet.New(deps.KMS, b.Log)
 	s := &cloud.Service[state]{Base: b, State: state{
 		stores:  cloud.NewOrgStore(b, "sandbox", openStore),
 		rt:      rt,
@@ -398,7 +398,7 @@ func New(deps cloud.Deps) (*Service, error) {
 	}
 	b := cloud.NewBase(deps, "sandbox")
 	rt := newRuntime()
-	rt.attached = fleet.New(deps.Brand, b.Log)
+	rt.attached = fleet.New(deps.KMS, b.Log)
 	return &cloud.Service[state]{Base: b, State: state{
 		stores:  cloud.NewOrgStore(b, "sandbox", openStore),
 		rt:      rt,

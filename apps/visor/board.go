@@ -289,8 +289,8 @@ func byoUnit(w byoWorker) fleetUnit {
 // clusterUnits folds in the org's attached BYO clusters. A cluster's accelerators
 // are counted, not modelled — the registry reports vendor totals across nodes, and
 // the board reports exactly that rather than inventing per-card detail.
-func clusterUnits(s *cloud.Service[state], org, proj string) []fleetUnit {
-	list := byoClusters(s, org, proj)
+func clusterUnits(ctx context.Context, s *cloud.Service[state], org, proj string) []fleetUnit {
+	list := byoClusters(ctx, s, org, proj)
 	out := make([]fleetUnit, 0, len(list))
 	for _, cl := range list {
 		u := fleetUnit{
@@ -368,7 +368,7 @@ func (o ops) listFleet(ctx context.Context, _ *cloud.Unit) (*fleetBoard, error) 
 	units := make([]fleetUnit, 0, 16)
 	units = append(units, agentUnits(s, c, org)...)
 	units = append(units, workerUnits(ctx, org)...)
-	units = append(units, clusterUnits(s, org, project(c))...)
+	units = append(units, clusterUnits(ctx, s, org, project(c))...)
 	units = append(units, machineUnits(s, c, org)...)
 
 	// Overlay the series' latest sample onto the units that carry no live snapshot

@@ -1,13 +1,10 @@
 package provisioning
 
 import (
+	"context"
+	"github.com/hanzoai/cloud/types"
 	"errors"
-	"strconv"
-	"strings"
 
-	"github.com/hanzoai/cloud"
-	kms "github.com/hanzoai/cloud/apps/mpc"
-	"github.com/hanzoai/cloud/internal/environ"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -23,94 +20,46 @@ import (
 // response and stores only metadata (secret_ref left empty). This honors the
 // hard rule: never store a password in plaintext.
 type secrets struct {
-	client  *kms.Client
+	client  types.KMSClient
 	enabled bool
 	log     luxlog.Logger
 }
 
-// envs read here:
+// newSecrets takes the deployment's KMS rather than opening one. build.go
+// constructs it once, from the one bootstrap env, and hands it to every subsystem
+// that custodies a credential — so a second opener cannot disagree with it about
+// which org's namespace, which quorum, or what an absent passphrase means.
 //
-//	CLOUD_KMS_NODES       CSV of MPC node URLs (e.g. https://kms-0:9999,https://kms-1:9999). Empty => degraded.
-//	CLOUD_KMS_PASSPHRASE  passphrase that derives the client-side CEK.            Empty => degraded.
-//	CLOUD_KMS_ORG         KMS org slug for sealed secrets (default: deployment brand, else "hanzo").
-//	CLOUD_KMS_THRESHOLD   t-of-n quorum (default: number of nodes; clamped to [1,n]).
-func openSecrets(brand string, log luxlog.Logger) *secrets {
-	s := &secrets{log: log}
-
-	nodesCSV := environ.Or("CLOUD_KMS_NODES", "")
-	pass := environ.Or("CLOUD_KMS_PASSPHRASE", "")
-	if strings.TrimSpace(nodesCSV) == "" || pass == "" {
-		log.Warn("provisioning KMS degraded: set CLOUD_KMS_NODES + CLOUD_KMS_PASSPHRASE to persist secrets; passwords are returned once on create and not stored")
-		return s
-	}
-
-	var nodes []string
-	for n := range strings.SplitSeq(nodesCSV, ",") {
-		if t := strings.TrimSpace(n); t != "" {
-			nodes = append(nodes, t)
-		}
-	}
-
-	org := environ.Or("CLOUD_KMS_ORG", brand)
-	if org == "" {
-		org = "hanzo"
-	}
-
-	threshold := len(nodes)
-	if v := environ.Or("CLOUD_KMS_THRESHOLD", ""); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= len(nodes) {
-			threshold = n
-		}
-	}
-
-	// cloud.OrgNamespace is the one place a string becomes a tenant name; the
-	// MPC client takes the name so it never has to fold a slug itself.
-	ns, err := cloud.OrgNamespace(org, "")
-	if err != nil {
-		log.Error("provisioning KMS org is not a valid namespace; degrading", "org", org, "err", err)
-		return s
-	}
-	client, err := kms.NewClient(kms.Config{Nodes: nodes, Namespace: ns, Threshold: threshold})
-	if err != nil {
-		log.Error("provisioning KMS init failed; degrading", "err", err)
-		return s
-	}
-	// Unlock derives the CEK from the passphrase client-side. Without it Set/Get
-	// fail closed ("client is locked"), so a failed unlock means degrade.
-	if err := client.Unlock(pass); err != nil {
-		log.Error("provisioning KMS unlock failed; degrading", "err", err)
-		return s
-	}
-
-	s.client = client
-	s.enabled = true
-	log.Info("provisioning KMS enabled", "org", org, "nodes", len(nodes), "threshold", threshold)
-	return s
+// A nil client is the degraded mode this package has always had: Enabled() is
+// false, nothing plaintext is ever written, and the create handler returns the
+// generated password once in its response while the row stores only metadata.
+func newSecrets(k types.KMSClient, log luxlog.Logger) *secrets {
+	return &secrets{client: k, enabled: k != nil, log: log}
 }
 
 // Enabled reports whether secrets can be persisted to KMS.
 func (s *secrets) Enabled() bool { return s != nil && s.enabled }
 
 // Put seals value under ref. Only call when Enabled() is true.
-func (s *secrets) Put(ref string, value []byte) error {
+func (s *secrets) Put(ctx context.Context, ref string, value []byte) error {
 	if !s.Enabled() {
 		return errors.New("provisioning: KMS disabled")
 	}
-	return s.client.Set(ref, value)
+	return s.client.PutSecret(ctx, ref, value)
 }
 
 // Get returns the sealed value for ref.
-func (s *secrets) Get(ref string) ([]byte, error) {
+func (s *secrets) Get(ctx context.Context, ref string) ([]byte, error) {
 	if !s.Enabled() {
 		return nil, errors.New("provisioning: KMS disabled")
 	}
-	return s.client.Get(ref)
+	return s.client.GetSecret(ctx, ref)
 }
 
 // Delete removes the sealed secret. Best-effort; no-op when degraded.
-func (s *secrets) Delete(ref string) error {
+func (s *secrets) Delete(ctx context.Context, ref string) error {
 	if !s.Enabled() {
 		return nil
 	}
-	return s.client.Delete(ref)
+	return s.client.DeleteSecret(ctx, ref)
 }

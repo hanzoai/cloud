@@ -182,7 +182,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 	// Shared BYO-cluster registry (registration surface is the visor fleet at
 	// /v1/visor/clusters; ml only READS it to federate serving onto the org's cluster).
-	s.State.fleet = fleet.New(deps.Brand, s.Log)
+	s.State.fleet = fleet.New(deps.KMS, s.Log)
 
 	mount(s, app)
 	s.Log.Info("ml surface mounted", "k8s", s.State.dyn != nil, "brand", deps.Brand, "env", deps.Env)

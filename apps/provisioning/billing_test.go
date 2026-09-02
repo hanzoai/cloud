@@ -72,7 +72,7 @@ func newBilledService(t *testing.T, commerceURL string, kinds ...string) (*cloud
 		Base: cloud.Base{Log: log, Bill: cloud.NewMeter(cloud.Deps{Metering: m, Env: "mainnet"}, "provisioning")},
 		State: state{
 			store: newTestStore(t),
-			sec:   openSecrets("hanzo", log),
+			sec:   newSecrets(nil, log),
 			reg:   reg,
 		},
 	}

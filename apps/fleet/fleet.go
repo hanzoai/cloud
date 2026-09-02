@@ -24,6 +24,7 @@
 package fleet
 
 import (
+	"github.com/hanzoai/cloud/types"
 	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
@@ -37,8 +38,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud"
-	kms "github.com/hanzoai/cloud/apps/mpc"
 	"github.com/hanzoai/cloud/apps/principal"
 	luxlog "github.com/luxfi/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -74,18 +73,22 @@ type Cluster struct {
 // Registry is the KMS-backed BYO-cluster store. A nil KMS (unconfigured) makes it
 // disabled: Register fails closed (never plaintext) and List no-ops.
 type Registry struct {
-	kms *kms.Client
+	kms types.KMSClient
 	log luxlog.Logger
 	// dynCache holds federated per-cluster clients (key "org/name") so a registered
 	// cluster becomes the org's compute plane without rebuilding on every request.
 	cache map[string]dynamic.Interface
 }
 
-// New opens the registry against the deployment's KMS (CLOUD_KMS_NODES /
-// CLOUD_KMS_PASSPHRASE — the ONE bootstrap env, shared with the rest of cloud). Nil
-// KMS => Enabled() is false and the registry is a graceful no-op.
-func New(brand string, log luxlog.Logger) *Registry {
-	return &Registry{kms: openKMS(brand), log: log, cache: map[string]dynamic.Interface{}}
+// New takes the deployment's KMS rather than opening one. build.go constructs it
+// once, from the one bootstrap env, and every subsystem that custodies a secret is
+// handed that — so a second opener cannot disagree with it about which org's
+// namespace, which quorum, or what to do when the passphrase is absent.
+//
+// A nil client makes Enabled() false and the registry a graceful no-op, which is
+// the same answer it gave when it opened its own and the env was unset.
+func New(kms types.KMSClient, log luxlog.Logger) *Registry {
+	return &Registry{kms: kms, log: log, cache: map[string]dynamic.Interface{}}
 }
 
 // Enabled reports whether BYO registration can persist (KMS reachable).
@@ -109,11 +112,11 @@ func configRef(org, project, name string) string {
 }
 
 // List returns the org+project's registered BYO clusters (metadata only). Absent == empty.
-func (r *Registry) List(org, project string) ([]Cluster, error) {
+func (r *Registry) List(ctx context.Context, org, project string) ([]Cluster, error) {
 	if !r.Enabled() {
 		return nil, nil
 	}
-	raw, err := r.kms.Get(indexRef(org, project))
+	raw, err := r.kms.GetSecret(ctx, indexRef(org, project))
 	if err != nil || len(raw) == 0 {
 		return nil, nil
 	}
@@ -140,10 +143,10 @@ func (r *Registry) Register(ctx context.Context, org, project, name, kubeconfig,
 	if err != nil {
 		return Cluster{}, fmt.Errorf("cluster unreachable with this kubeconfig: %w", err)
 	}
-	if err := r.kms.Set(configRef(org, project, name), kubeBytes); err != nil {
+	if err := r.kms.PutSecret(ctx, configRef(org, project, name), kubeBytes); err != nil {
 		return Cluster{}, fmt.Errorf("seal kubeconfig: %w", err)
 	}
-	list, err := r.List(org, project)
+	list, err := r.List(ctx, org, project)
 	if err != nil {
 		return Cluster{}, err
 	}
@@ -153,7 +156,7 @@ func (r *Registry) Register(ctx context.Context, org, project, name, kubeconfig,
 		Registered: time.Now().UTC().Format(time.RFC3339), Default: isDefault,
 	}
 	list = upsert(list, rec)
-	if err := r.writeIndex(org, project, list); err != nil {
+	if err := r.writeIndex(ctx, org, project, list); err != nil {
 		return Cluster{}, err
 	}
 	r.cache[scopeRef(org, project)+"/"+name] = dyn
@@ -162,11 +165,11 @@ func (r *Registry) Register(ctx context.Context, org, project, name, kubeconfig,
 
 // Deregister detaches a BYO cluster from the org+project fleet (index + sealed
 // kubeconfig + cached client).
-func (r *Registry) Deregister(org, project, name string) (bool, error) {
+func (r *Registry) Deregister(ctx context.Context, org, project, name string) (bool, error) {
 	if !r.Enabled() {
 		return false, nil
 	}
-	list, err := r.List(org, project)
+	list, err := r.List(ctx, org, project)
 	if err != nil {
 		return false, err
 	}
@@ -182,10 +185,10 @@ func (r *Registry) Deregister(org, project, name string) (bool, error) {
 	if !found {
 		return false, nil
 	}
-	if err := r.writeIndex(org, project, out); err != nil {
+	if err := r.writeIndex(ctx, org, project, out); err != nil {
 		return false, err
 	}
-	_ = r.kms.Delete(configRef(org, project, name))
+	_ = r.kms.DeleteSecret(ctx, configRef(org, project, name))
 	delete(r.cache, scopeRef(org, project)+"/"+name)
 	return true, nil
 }
@@ -200,18 +203,18 @@ var ErrNoCluster = errors.New("no such cluster")
 // passed back through the same SafeRESTConfig gate that admitted it at attach.
 // The caller names the cluster (a sandbox leased onto it) rather than taking the
 // org's default, and it reads the same index and the same sealed key.
-func (r *Registry) RESTForOrgCluster(org, project, name string) (*rest.Config, error) {
+func (r *Registry) RESTForOrgCluster(ctx context.Context, org, project, name string) (*rest.Config, error) {
 	if !r.Enabled() {
 		return nil, ErrNoCluster
 	}
-	list, err := r.List(org, project)
+	list, err := r.List(ctx, org, project)
 	if err != nil {
 		return nil, err
 	}
 	if !slices.ContainsFunc(list, func(cl Cluster) bool { return cl.Name == name }) {
 		return nil, ErrNoCluster
 	}
-	raw, err := r.kms.Get(configRef(org, project, name))
+	raw, err := r.kms.GetSecret(ctx, configRef(org, project, name))
 	if err != nil {
 		return nil, fmt.Errorf("unseal kubeconfig for %s: %w", name, err)
 	}
@@ -221,49 +224,12 @@ func (r *Registry) RESTForOrgCluster(org, project, name string) (*rest.Config, e
 	return restFromKubeconfig(raw)
 }
 
-func (r *Registry) writeIndex(org, project string, list []Cluster) error {
+func (r *Registry) writeIndex(ctx context.Context, org, project string, list []Cluster) error {
 	raw, err := json.Marshal(list)
 	if err != nil {
 		return err
 	}
-	return r.kms.Set(indexRef(org, project), raw)
-}
-
-// --- helpers ---
-
-func openKMS(brand string) *kms.Client {
-	nodesCSV := environ.Or("CLOUD_KMS_NODES", "")
-	pass := environ.Or("CLOUD_KMS_PASSPHRASE", "")
-	if nodesCSV == "" || pass == "" {
-		return nil
-	}
-	var nodes []string
-	for n := range strings.SplitSeq(nodesCSV, ",") {
-		if t := strings.TrimSpace(n); t != "" {
-			nodes = append(nodes, t)
-		}
-	}
-	org := cmp.Or(environ.Or("CLOUD_KMS_ORG", ""), brand, "hanzo")
-	threshold := len(nodes)
-	if v := environ.Or("CLOUD_KMS_THRESHOLD", ""); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= len(nodes) {
-			threshold = n
-		}
-	}
-	// cloud.OrgNamespace is the one place a string becomes a tenant name; the
-	// MPC client takes the name so it never has to fold a slug itself.
-	ns, err := cloud.OrgNamespace(org, "")
-	if err != nil {
-		return nil
-	}
-	client, err := kms.NewClient(kms.Config{Nodes: nodes, Namespace: ns, Threshold: threshold})
-	if err != nil {
-		return nil
-	}
-	if err := client.Unlock(pass); err != nil {
-		return nil
-	}
-	return client
+	return r.kms.PutSecret(ctx, indexRef(org, project), raw)
 }
 
 // restFromKubeconfig is SafeRESTConfig plus the client identity every fleet
