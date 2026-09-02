@@ -25,12 +25,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/sqlpool"
 	luxlog "github.com/luxfi/log"
-	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
 
@@ -39,11 +37,10 @@ import (
 type publicIndex struct{ db *sql.DB }
 
 func openPublicIndex(dir string) (*publicIndex, error) {
-	db, err := cek.Open(namespace.System(), "public_rooms", dir)
+	db, err := sqlpool.Open("public_rooms", dir)
 	if err != nil {
-		return nil, fmt.Errorf("team: open public index: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	// The key is (org, space, room) because that triple is what addresses a room
 	// in its owning store, and a directory row that cannot be resolved back to
 	// one is a result nobody can open. `members` is a COUNT: how busy a room is

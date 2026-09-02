@@ -12,9 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	"github.com/hanzoai/orm"
 	"github.com/hanzoai/orm/query"
 
@@ -83,11 +81,10 @@ type member struct {
 }
 
 func openAccountStore(dir string) (*accountStore, error) {
-	conn, err := cek.Open(namespace.System(), "account", dir)
+	conn, err := sqlpool.Open("account", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open account store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(conn)
 	// "sqlite" is load-bearing twice over: it is the name hanzoai/sqlite registers the
 	// driver under AND the key dbx maps to its SQLite builder. An unrecognised name
 	// falls back to the standard builder, whose INSERT cannot say ON CONFLICT at all.

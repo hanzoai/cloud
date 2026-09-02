@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -38,11 +36,10 @@ func projectKey(project string) string {
 
 // OpenActivationStore opens (and migrates) the activation store under dir.
 func OpenActivationStore(dir string) (*ActivationStore, error) {
-	db, err := cek.Open(namespace.System(), "tools-activation", dir)
+	db, err := sqlpool.Open("tools-activation", dir)
 	if err != nil {
-		return nil, fmt.Errorf("tools: open activation store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &ActivationStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 )
@@ -52,12 +51,11 @@ func fanOutLegacy(ctx context.Context, dataDir string, st *state) error {
 		return nil // fresh install: nothing was ever written to the shared file
 	}
 	// The legacy file was always opened under the platform key, never an org's.
-	raw, err := cek.Open(namespace.System(), legacySubsystem, dataDir)
+	raw, err := sqlpool.Open(legacySubsystem, dataDir)
 	if err != nil {
-		return fmt.Errorf("open legacy store: %w", err)
+		return err
 	}
 	defer func() { _ = raw.Close() }()
-	sqlpool.Single(raw)
 
 	done, err := legacyFannedOut(ctx, raw)
 	if err != nil {

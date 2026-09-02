@@ -17,9 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -168,11 +166,10 @@ type CatalogStore struct {
 
 // OpenCatalogStore opens (and migrates) the catalog under dir.
 func OpenCatalogStore(dir string) (*CatalogStore, error) {
-	db, err := cek.Open(namespace.System(), "tools-catalog", dir)
+	db, err := sqlpool.Open("tools-catalog", dir)
 	if err != nil {
-		return nil, fmt.Errorf("tools: open catalog store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS catalog (
   id          TEXT PRIMARY KEY,

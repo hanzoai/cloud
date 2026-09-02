@@ -6,11 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	// cek is the ONE opener: the database is born encrypted under the key cek
-	// derives from the process master and this namespace.
-	"github.com/hanzoai/cek"
+	// sqlpool.Open is the ONE opener: it names the database in the system
+	// namespace, opens it encrypted under the key cek derives from the process
+	// master, and applies the single-connection cap the store's atomicity rests on.
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 )
 
 // blueprint_store.go is the SHARED, platform-scoped store for the brand blueprint —
@@ -42,11 +41,10 @@ type BlueprintStore struct {
 // entity — because a brand blueprint is platform content, not an org's.
 // MaxOpenConns(1) serializes writes.
 func openBlueprintStore(dir string) (*BlueprintStore, error) {
-	db, err := cek.Open(namespace.System(), "guide-blueprint", dir)
+	db, err := sqlpool.Open("guide-blueprint", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open blueprint store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &BlueprintStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
