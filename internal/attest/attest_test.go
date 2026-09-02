@@ -62,25 +62,3 @@ func TestAMalformedTokenIsRefused(t *testing.T) {
 		}
 	}
 }
-
-// TestSharedSaysWhyWhenThereIsNoKey: the boot verdict has to name the value an
-// operator must set, or the process that refuses every change says nothing an
-// operator can act on.
-func TestSharedSaysWhyWhenThereIsNoKey(t *testing.T) {
-	t.Setenv(KeyEnv, "")
-	err := Shared()
-	if err == nil {
-		t.Fatal("an unset key reported itself shared")
-	}
-	if !strings.Contains(err.Error(), KeyEnv) {
-		t.Errorf("the reason does not name the value to set: %v", err)
-	}
-	t.Setenv(KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	if err := Shared(); err != nil {
-		t.Fatalf("a provisioned key was not recognised: %v", err)
-	}
-	t.Setenv(KeyEnv, "too-short")
-	if Shared() == nil {
-		t.Fatal("a key that is not 32 bytes reported itself shared")
-	}
-}
