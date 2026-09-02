@@ -11,10 +11,10 @@ import (
 	"time"
 )
 
-// X (Twitter) connector. Name="x" == the clients/integrations provider id whose
-// OAuth2 user token is custodied under xTokenSecret. Like the GitHub connector it
-// is COMPLETE and correct today but fails closed with "x not connected" until
-// integrations seals a token — the API code below simply never runs until then.
+// X (Twitter) connector. Name="x" == the apps/integrations provider id whose
+// OAuth2 user token is custodied under xTokenSecret — integrations/x.go seals
+// exactly that name, which is what makes this connector reachable. Until an org
+// connects X it fails closed with "x not connected" and the API code never runs.
 //
 // verify_follow answers "does userId follow targetUser?" so a waitlist flow can
 // award social:x:follow points. It emits {verified, platform, source, dedupKey};

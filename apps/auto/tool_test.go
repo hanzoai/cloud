@@ -28,7 +28,7 @@ func TestConnectorToolsArePublished(t *testing.T) {
 	for _, tl := range list {
 		names[tl.Name] = tl.Schema
 	}
-	for _, want := range []string{"slack_send_message", "core_http_request", "core_code", "github_create_issue", "google_append_row", "google_list_files"} {
+	for _, want := range []string{"slack_send_message", "core_http_request", "core_code", "x_verify_follow", "google_append_row", "google_list_files"} {
 		schema, ok := names[want]
 		if !ok {
 			t.Fatalf("the tool plane is missing %q (%d tools published)", want, len(names))
