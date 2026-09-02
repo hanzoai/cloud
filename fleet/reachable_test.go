@@ -20,7 +20,7 @@ package fleet_test
 // plugin child (cloud.App → its own Mount → the console last), listening on its
 // own unix socket, with the fleet's composed MCP server over the top. Nothing is
 // stubbed, and in particular [refuse] is not stubbed — a name that trips the
-// disclosure or authority rules is dropped in [Door.gather] before the routing
+// disclosure or authority rules is dropped in [MCP.gather] before the routing
 // table is written, so an operation that passes here is one an agent can actually
 // reach.
 //

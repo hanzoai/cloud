@@ -498,7 +498,7 @@ func TestASourceCannotLandWhatNoLookupCouldReach(t *testing.T) {
 	}
 }
 
-// TestASourceCannotLandMoreMembersThanTheDoorAdmits.
+// TestASourceCannotLandMoreMembersThanTheEndpointAdmits.
 //
 // [swing] bounds how far a take may move from the version it REPLACES, and a
 // first take has no previous version to be measured against — which, after a
@@ -506,7 +506,7 @@ func TestASourceCannotLandWhatNoLookupCouldReach(t *testing.T) {
 // the resolve amplifier was open: one source, one refresh, however many members
 // [maxBody] admits, all of them into the snapshot this one-replica deployment
 // keeps in memory for every request.
-func TestASourceCannotLandMoreMembersThanTheDoorAdmits(t *testing.T) {
+func TestASourceCannotLandMoreMembersThanTheEndpointAdmits(t *testing.T) {
 	s := plant(t, serves(new(string)))
 
 	// One string, shared by every element: this test is about the COUNT, and

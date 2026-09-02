@@ -22,18 +22,18 @@ import (
 	"testing"
 )
 
-// mcpDoor is the ONE public MCP path — MCPPath, not a literal restating it. This
+// mcpEndpoint is the ONE public MCP path — MCPPath, not a literal restating it. This
 // file guards the endpoint; a guard that spells the address itself can pass while
 // the endpoint has moved, which is the drift these gates exist to make impossible.
 // The host claims the path exactly, so a plugin prefix may be DEEPER (tools owns
 // /v1/mcp/servers) but never equal.
-const mcpDoor = MCPPath
+const mcpEndpoint = MCPPath
 
-// TestNoAppClaimsTheDoor: no manifest row may claim the exact MCP path.
-func TestNoAppClaimsTheDoor(t *testing.T) {
+// TestNoAppClaimsTheEndpoint: no manifest row may claim the exact MCP path.
+func TestNoAppClaimsTheEndpoint(t *testing.T) {
 	for _, a := range Apps {
 		for _, p := range a.Prefixes {
-			if p == mcpDoor {
+			if p == mcpEndpoint {
 				t.Fatalf("app %q claims %q, the host's own MCP endpoint. A Load there registers "+
 					"All(%q), which fiber merges with the host's POST into one route — the endpoint "+
 					"would sit behind the proxy handler and never run. Claim a DEEPER prefix "+
@@ -43,7 +43,7 @@ func TestNoAppClaimsTheDoor(t *testing.T) {
 	}
 }
 
-// TestNoSecondMCPDoor: no app may serve a path ENDING in /mcp.
+// TestNoSecondMCPEndpoint: no app may serve a path ENDING in /mcp.
 //
 // This is the structural reason a fourth registry cannot grow back. A hand-rolled
 // JSON-RPC endpoint can only exist as a route; every route an app serves is
@@ -55,7 +55,7 @@ func TestNoAppClaimsTheDoor(t *testing.T) {
 // A path CONTAINING /mcp is fine — /v1/mcp/servers is the external MCP server
 // registry, a real and different capability (records an org creates, not tools a
 // registry enumerates).
-func TestNoSecondMCPDoor(t *testing.T) {
+func TestNoSecondMCPEndpoint(t *testing.T) {
 	for _, a := range Apps {
 		for _, p := range served(t, a.Name) {
 			if strings.HasSuffix(p, "/mcp") {
@@ -67,15 +67,15 @@ func TestNoSecondMCPDoor(t *testing.T) {
 	}
 }
 
-// foreignDoors is the CLOSED list of routes ending in /mcp that this fleet serves
+// foreignEndpoints is the CLOSED list of routes ending in /mcp that this fleet serves
 // and that are NOT a projection of our own typed ops. Each entry carries why.
 //
 // The list exists because the document cannot see every endpoint: a subsystem that
 // mounts a raw net/http mux registers routes zip never projects, so a path can be
-// served and appear in no subset. TestNoSecondMCPDoorInSource reads the SOURCE
+// served and appear in no subset. TestNoSecondMCPEndpointInSource reads the SOURCE
 // for that reason, and an endpoint with a real, foreign owner is named here rather
 // than deleted — deleting it would remove a capability with nothing to replace it.
-var foreignDoors = map[string]string{
+var foreignEndpoints = map[string]string{
 	// hanzoai/tasks' OWN MCP surface, served by the embedded engine's
 	// srv.MCPHandler() behind cloud's identity gate. Its tools are the task/workflow
 	// engine's, implemented in that module — they are not cloud typed ops, so the
@@ -98,7 +98,7 @@ var foreignDoors = map[string]string{
 	"apps/world/index.go": "hanzoai/world's own MCP tool surface, served by world-gw via an ingress path-carve; cloud names the address, never serves it",
 }
 
-// TestNoSecondMCPDoorInSource is the gate that makes a fourth registry impossible
+// TestNoSecondMCPEndpointInSource is the gate that makes a fourth registry impossible
 // to add quietly. A hand-rolled MCP server has to register a route, and a route
 // needs a path literal — so any Go string ending in "/mcp" outside cmd/cloud is
 // either the one endpoint being moved (a deliberate edit here) or a rival being
@@ -106,7 +106,7 @@ var foreignDoors = map[string]string{
 //
 // It reads SOURCE, which is what lets it see what the document cannot: apps/tasks'
 // MCP server is a raw net/http mux handler and appears in no subset at all.
-func TestNoSecondMCPDoorInSource(t *testing.T) {
+func TestNoSecondMCPEndpointInSource(t *testing.T) {
 	// A ROUTE path, which is what an MCP server needs and what this gate hunts: it
 	// starts at the root and ends at /mcp. The leading slash is load-bearing —
 	// without it the pattern also matched `"github.com/zap-proto/mcp"`, and an import
@@ -130,14 +130,14 @@ func TestNoSecondMCPDoorInSource(t *testing.T) {
 				if strings.HasPrefix(trimmed, "//") || !lit.MatchString(line) {
 					continue
 				}
-				if _, ok := foreignDoors[filepath.ToSlash(rel)]; ok {
+				if _, ok := foreignEndpoints[filepath.ToSlash(rel)]; ok {
 					continue
 				}
 				t.Errorf("%s:%d serves an MCP path: %s\n"+
 					"The fleet has ONE MCP server — POST /v1/mcp on the host, composed by asking "+
 					"every subsystem. A typed op is ALREADY a tool there. If this is a "+
 					"foreign engine's own surface rather than a projection of our ops, name it in "+
-					"foreignDoors with the reason.", rel, i+1, trimmed)
+					"foreignEndpoints with the reason.", rel, i+1, trimmed)
 			}
 			return nil
 		})

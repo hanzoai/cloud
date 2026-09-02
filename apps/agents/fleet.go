@@ -1,11 +1,11 @@
 package agents
 
-// door.go — where a run's tools come from once the fleet is more than one
+// fleet.go — where a run's tools come from once the fleet is more than one
 // process: the fleet's OWN agent MCP server, asked over the internal socket.
 //
 // # Why this is not a new mechanism
 //
-// The fleet already aggregates. fleet.Door asks every composed app what it
+// The fleet already aggregates. fleet.MCP asks every composed app what it
 // serves right now, merges the answers, remembers which app listed which name,
 // and forwards a tools/call to that app (fleet/mcp.go). It is what serves
 // api.hanzo.ai/v1/mcp and what a Slack MCP client already talks to. Building a
@@ -69,17 +69,17 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// doorTools is the tool plane read from the FLEET's composed agent MCP server.
-type doorTools struct{}
+// fleetTools is the tool plane read from the FLEET's composed agent MCP server.
+type fleetTools struct{}
 
-// errNoDoor reports that this process is not part of a fleet: nothing is
+// errNoFleet reports that this process is not part of a fleet: nothing is
 // listening on the router's socket, so there is no composed MCP server to ask.
 //
 // It is the ONE error a caller may read as "fall back", exactly as plane.ErrNoPeer
 // is on the peer plane. Every other failure is an outage and is reported as one —
 // an MCP server that is present and broken must never read as a fleet with no
 // tools.
-var errNoDoor = errors.New("agents: no fleet MCP server on this host")
+var errNoFleet = errors.New("agents: no fleet MCP server on this host")
 
 // catalog resolves the agent's declared names against the fleet's own surface.
 //
@@ -93,7 +93,7 @@ var errNoDoor = errors.New("agents: no fleet MCP server on this host")
 // MCP server does not offer is simply absent, which is the same rule
 // registryTools follows: offering a tool that would be refused at dispatch
 // teaches the model a lie.
-func (doorTools) catalog(ctx context.Context, org, actor string, want []string) []types.ToolDef {
+func (fleetTools) catalog(ctx context.Context, org, actor string, want []string) []types.ToolDef {
 	if org == "" || len(want) == 0 {
 		return nil
 	}
@@ -129,8 +129,8 @@ func (doorTools) catalog(ctx context.Context, org, actor string, want []string) 
 	if len(wanted) == 0 && !all {
 		return nil
 	}
-	res, err := askDoor(ctx, org, actor, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
-	if errors.Is(err, errNoDoor) {
+	res, err := ask(ctx, org, actor, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	if errors.Is(err, errNoFleet) {
 		return registryTools{}.catalog(ctx, org, actor, want)
 	}
 	if err != nil {
@@ -212,7 +212,7 @@ func (doorTools) catalog(ctx context.Context, org, actor string, want []string) 
 	// what makes "declared 3, offered 1" diagnosable instead of a shrug.
 	if len(out) < len(wanted) && len(listed.Meta) > 0 {
 		trace.SpanFromContext(ctx).SetAttributes(
-			attribute.String("hanzo.agent.tools_meta", preview(string(listed.Meta), maxDoorMeta)))
+			attribute.String("hanzo.agent.tools_meta", preview(string(listed.Meta), maxMeta)))
 	}
 	return out
 }
@@ -257,7 +257,7 @@ func describe(ctx context.Context, org, actor, op string) (types.ToolDef, error)
 	if err != nil {
 		return types.ToolDef{}, err
 	}
-	res, err := askDoor(ctx, org, actor, body)
+	res, err := ask(ctx, org, actor, body)
 	if err != nil {
 		return types.ToolDef{}, err
 	}
@@ -276,10 +276,10 @@ func describe(ctx context.Context, org, actor, op string) (types.ToolDef, error)
 	return types.ToolDef{Name: op, Description: d.Description, Schema: d.InputSchema}, nil
 }
 
-// maxDoorMeta bounds what one span attribute may carry: `_meta` names every
+// maxMeta bounds what one span attribute may carry: `_meta` names every
 // subsystem that did not answer, and a fleet-wide outage would otherwise put a
 // hundred rows on every run's trace.
-const maxDoorMeta = 1024
+const maxMeta = 1024
 
 func preview(s string, n int) string {
 	if len(s) <= n {
@@ -292,13 +292,13 @@ func preview(s string, n int) string {
 // the app that listed it and forwards this message verbatim to that app's
 // registry, so the host can only ever ROUTE a call and never invoke something
 // the owner did not declare.
-func (doorTools) call(ctx context.Context, org, actor, name, args string) (string, error) {
+func (fleetTools) call(ctx context.Context, org, actor, name, args string) (string, error) {
 	body, err := toolCallBody(name, args)
 	if err != nil {
 		return "", err
 	}
-	res, err := askDoor(ctx, org, actor, body)
-	if errors.Is(err, errNoDoor) {
+	res, err := ask(ctx, org, actor, body)
+	if errors.Is(err, errNoFleet) {
 		return registryTools{}.call(ctx, org, actor, name, args)
 	}
 	if err != nil {
@@ -373,18 +373,18 @@ func toolResult(res json.RawMessage) (string, error) {
 	return truncateToolResult(text), nil
 }
 
-// askDoor puts one JSON-RPC message to the fleet's MCP server as (org, actor)
+// ask puts one JSON-RPC message to the fleet's MCP server as (org, actor)
 // and returns the `result` member.
 //
 // A JSON-RPC ERROR is an error here, deliberately: a tool the MCP server will
 // not route answers -32602, and folding that into an empty result would make
 // "this tool is not yours to call" indistinguishable from "it ran and said
 // nothing".
-func askDoor(ctx context.Context, org, actor string, body []byte) (json.RawMessage, error) {
+func ask(ctx context.Context, org, actor string, body []byte) (json.RawMessage, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	addr, err := doorAddr()
+	addr, err := socket()
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +409,7 @@ func askDoor(ctx context.Context, org, actor string, body []byte) (json.RawMessa
 	}
 	req.SetBody(body)
 
-	if err := doorClient(addr).Do(req, resp); err != nil {
+	if err := transport(addr).Do(req, resp); err != nil {
 		return nil, fmt.Errorf("agents: the fleet MCP server at %s did not answer: %w", addr, err)
 	}
 	if code := resp.StatusCode(); code < 200 || code > 299 {
@@ -430,13 +430,13 @@ func askDoor(ctx context.Context, org, actor string, body []byte) (json.RawMessa
 	return append(json.RawMessage(nil), env.Result...), nil
 }
 
-// doorAddr resolves the fleet MCP server's socket, or says which of the two
-// failures it is. See [errNoDoor].
+// socket resolves the fleet MCP server's socket, or says which of the two
+// failures it is. See [errNoFleet].
 //
 // It probes by CONNECTING, because the file does not answer the question: a
 // socket path outlives the process that bound it wherever the run directory is a
 // volume. plane.Listening is the one implementation of that rule.
-func doorAddr() (string, error) {
+func socket() (string, error) {
 	plane.Bind()
 	path := zip.SocketPath(plane.HostApp)
 	up, err := plane.Listening(path)
@@ -444,19 +444,19 @@ func doorAddr() (string, error) {
 		return "", fmt.Errorf("agents: the fleet MCP server's socket is unusable: %w", err)
 	}
 	if !up {
-		return "", fmt.Errorf("%w (%s)", errNoDoor, path)
+		return "", fmt.Errorf("%w (%s)", errNoFleet, path)
 	}
 	return path, nil
 }
 
-// doorClients is one pooled transport per ADDRESS, for the reason fleet keeps
+// pool is one pooled transport per ADDRESS, for the reason fleet keeps
 // one: a transport holds a connection pool, so dialing per ask turns every tool
 // call into a fresh connect. Keyed by address rather than kept in a single var
 // because a test points the run directory somewhere else.
-var doorClients sync.Map // addr -> *zaphttp.Transport
+var pool sync.Map // addr -> *zaphttp.Transport
 
-func doorClient(addr string) *zaphttp.Transport {
-	if c, ok := doorClients.Load(addr); ok {
+func transport(addr string) *zaphttp.Transport {
+	if c, ok := pool.Load(addr); ok {
 		return c.(*zaphttp.Transport)
 	}
 	t := zaphttp.Dial("unix", addr)
@@ -465,6 +465,6 @@ func doorClient(addr string) *zaphttp.Transport {
 	// startup, so a transport that gave up sooner than the run does would report
 	// an outage for a fleet that was merely waking up.
 	t.SetReadTimeout(toolRunBudget)
-	c, _ := doorClients.LoadOrStore(addr, t)
+	c, _ := pool.LoadOrStore(addr, t)
 	return c.(*zaphttp.Transport)
 }

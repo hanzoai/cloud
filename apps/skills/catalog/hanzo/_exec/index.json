@@ -16,14 +16,14 @@
       "name": "exec_download",
       "path": "exec_download/SKILL.md",
       "service": "exec",
-      "sha256": "d90cb9b570afddbc9f3935be4574355a6a9933f3196b3a94c27365694e267257"
+      "sha256": "f05ac5659b2c2ce4d25fa8d7f2d5bf8c705edfe06541458a9e6adeba16c0f67f"
     },
     {
       "description": "Read exec files: Lists the files in an execution session..",
       "name": "exec_files",
       "path": "exec_files/SKILL.md",
       "service": "exec",
-      "sha256": "ee095b7310094483e8a0ea4c0ac1b9d78d56b1af07f683681f69243b1c904ac8"
+      "sha256": "588b622de6a7909d03876cd08f4a0e2f98b0aeb1a3e9765672b40f36fc34b116"
     }
   ],
   "spec_version": "8.0.0"

@@ -132,8 +132,8 @@ func Complete(doc *Document, owner Owner) error {
 		// [Product] hid this by accident for the document, returning "" for any
 		// segment holding a dot; /v1/commands has no dot to hide behind, so it
 		// arrived as an orphan charged to ai the moment it was declared. owner has
-		// to decline both on purpose, and [Door] is where serve says which.
-		if Door(key.path) {
+		// to decline both on purpose, and [Host] is where serve says which.
+		if Host(key.path) {
 			continue
 		}
 		// The declaration is keyed by the ROUTER's pattern (/v1/kms/secrets/+) and

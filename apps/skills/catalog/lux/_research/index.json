@@ -16,28 +16,28 @@
       "name": "research_artifacts",
       "path": "research_artifacts/SKILL.md",
       "service": "research",
-      "sha256": "00291da851aed5e3073a855e608ce926de365e5d012df21275259f6449c4c725"
+      "sha256": "29c7e9951a96a873b13b1a2b848e1b6957568b2b0c4c3ce2970d7c2e06fef426"
     },
     {
       "description": "Read research experiments: Returns the caller org's CANONICAL experiments — the deterministic deduped view over the versioned history..",
       "name": "research_experiments",
       "path": "research_experiments/SKILL.md",
       "service": "research",
-      "sha256": "1d9e45e8d4d0f758a3f737fa389abc8962d2dc7742386b4b6ea803b9374e5f49"
+      "sha256": "e5c897e202c60793775c8d51f180ee31467a54fd2d22f23d94b38743278cc568"
     },
     {
       "description": "Read research projects: Returns every research project in the caller's org with its real totals — canonical and retained side by side — which is the ops board's \"every project + real totals\" view..",
       "name": "research_projects",
       "path": "research_projects/SKILL.md",
       "service": "research",
-      "sha256": "22bbf056381a45572e3d0f6ac2ad5a5cce916a41c9fd984a9cd0270a96bd4b32"
+      "sha256": "d36d9860f33a959c4194af8f65a4595442c28f237d23c5394e777a1b1c5c6eab"
     },
     {
       "description": "Read research totals: Returns the caller org's headline aggregate plus a per-kind breakdown — the observatory's poll target..",
       "name": "research_totals",
       "path": "research_totals/SKILL.md",
       "service": "research",
-      "sha256": "840f989e21a5b651f2041ce146b571b8bd72012654e93a79bd49b0eedcf46fe3"
+      "sha256": "03d164de52aca3925e0c7fc39973fa9df934df23ff4d73cc3fbf25781526167e"
     }
   ],
   "spec_version": "8.0.0"

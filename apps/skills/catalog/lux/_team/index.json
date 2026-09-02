@@ -16,56 +16,56 @@
       "name": "team_account",
       "path": "team_account/SKILL.md",
       "service": "team",
-      "sha256": "dccbd05316f38a38c784e6600db9baa23ade58e10c03318e239bfef2b66c63cc"
+      "sha256": "6957ed930fc55135d4860450c57639f916311b2b533d9c5cadc26d2aa125d207"
     },
     {
       "description": "Read team billing: Returns the plan and seat counts for the caller's OWN org, resolved from the VERIFIED team session token — never a client header., Open the wallet page, Load an asset of the wallet page.",
       "name": "team_billing",
       "path": "team_billing/SKILL.md",
       "service": "team",
-      "sha256": "ed143f5a68b53a17085e45eedc8d0cc2a773dbe768e48989d33897687fff53c9"
+      "sha256": "b212822353d36d40fd5a58039e85daa2b06528b26d67dc8d0ee90b7be590fa0c"
     },
     {
       "description": "Read team bots: Returns the caller org's bot members — the org's agents projected as the space Employees they become, each with the member account uuid and Person reference the roster addresses it by..",
       "name": "team_bots",
       "path": "team_bots/SKILL.md",
       "service": "team",
-      "sha256": "0dc68a383aebf1f90b5fb9f93af697dba3b29e84b3838930c4c26911f388d443"
+      "sha256": "52131fe25351562df30901568d8d8c97b28bd656734cef693ca5738a0340b7b0"
     },
     {
       "description": "Read team collaborator: Open the live collaborative-editing socket.",
       "name": "team_collaborator",
       "path": "team_collaborator/SKILL.md",
       "service": "team",
-      "sha256": "1d496066416383de19992b71ec6ea2c07ecf7301208abba6a56eb797a8bd88b5"
+      "sha256": "b78d702b89940816d40040d822023389b29523ccaa2e12afbbfdd8136c659d8a"
     },
     {
       "description": "Read team files: Download a space file.",
       "name": "team_files",
       "path": "team_files/SKILL.md",
       "service": "team",
-      "sha256": "f7f4677021fb025316314df3ba664bdc9f09f80ac5bef34012e4cecc75cc1fba"
+      "sha256": "461f9ddf84773981ef37d1f7112a2c81b8bfa34590ef7b65d729029904b7ffa0"
     },
     {
       "description": "Read team public: Lists the rooms orgs have published, across every org..",
       "name": "team_public",
       "path": "team_public/SKILL.md",
       "service": "team",
-      "sha256": "c95b7ffaf2dd79b860851c034d02afeda17835b739dc9c4bcf38073bb52e52c2"
+      "sha256": "7c716fb3980708d2a605d968406f4cfa15df444436ff6d2ef47e725991e41a7f"
     },
     {
       "description": "Read team rooms: Returns every room of the caller's org, across the spaces it owns, with the work facet each carries., Returns the tail of one room's conversation, oldest first..",
       "name": "team_rooms",
       "path": "team_rooms/SKILL.md",
       "service": "team",
-      "sha256": "cd32a9a93d5235e229f7dc06b2b6b8d0afb96194d2f31bdce2334cec3837ca65"
+      "sha256": "6b370f17d8a02a06f3bcef9a26065e364bfaf374fa82defd38f143fa8f174043"
     },
     {
       "description": "Read team transactor: Statistics returns the transactor's live sessions for the space the caller's credential names — the endpoint the front's space switcher and server panel poll on the transactor base., Open the space data-plane socket.",
       "name": "team_transactor",
       "path": "team_transactor/SKILL.md",
       "service": "team",
-      "sha256": "e0943ffc1bdf4f8751d871a2a9f82fb86e133572f68e40ae2a65021132f90e04"
+      "sha256": "ac02a67826e3a9708c5d0bf870cb5183af0682a9358d32c2e718800b6ee05b44"
     }
   ],
   "spec_version": "8.0.0"

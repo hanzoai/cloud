@@ -28,7 +28,7 @@ package risk
 // [maxResident] — and read only what an operator can read.
 //
 // The two tests above them are NOT gap closures and are not claimed as any: main
-// already refuses an over-long field ([TestField_IsRefusedAtTheDoorAndNotTruncated])
+// already refuses an over-long field ([TestField_IsRefusedAtTheEndpointAndNotTruncated])
 // and already notices a census that stops counting
 // ([TestRings_TheCeilingIsMeasuredNotAsserted]). They are kept because they state
 // the same two bounds from the direction an operator reads them — the published
@@ -53,7 +53,7 @@ import (
 // tenant as many megabytes as it likes, while the probe still reports the same
 // count.
 //
-// [TestField_IsRefusedAtTheDoorAndNotTruncated] already covers that refusal at
+// [TestField_IsRefusedAtTheEndpointAndNotTruncated] already covers that refusal at
 // the wire. This states it from the other end — the arithmetic the ceiling is
 // derived from — and at the CONSTRUCTOR rather than at an endpoint, because the
 // fold from a tenant's own feature surface and the replay from its own record

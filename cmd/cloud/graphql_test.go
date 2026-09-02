@@ -8,14 +8,14 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 )
 
-// TestTheGraphQLDoorIsTheHostsNotACatchAlls is the defect, as a test.
+// TestTheGraphQLEndpointIsTheHostsNotACatchAlls is the defect, as a test.
 //
 // /v1/graphql was claimed by nobody, so it fell to the app holding the /v1
 // remainder — which mounted a projection of its OWN registry and answered with a
 // schema one field wide. The document endpoint had exactly this bug and this is the
 // same test for the same shape, because the reasoning is identical: an answer
 // about the whole fleet is the host's, since no plugin can see past itself.
-func TestTheGraphQLDoorIsTheHostsNotACatchAlls(t *testing.T) {
+func TestTheGraphQLEndpointIsTheHostsNotACatchAlls(t *testing.T) {
 	app := host(t)
 
 	code, ctype, body := do(t, app, "/v1/graphql")
@@ -61,9 +61,9 @@ func TestTheSchemaIsTheFleetsAndNotOneApps(t *testing.T) {
 	t.Logf("fleet schema: %d bytes, %d fields", len(sdl), fields)
 }
 
-// TestClaimingTheGraphQLDoorTookNothingWithIt is the other half: one address, not
+// TestClaimingTheGraphQLEndpointTookNothingWithIt is the other half: one address, not
 // the family. The knowledge graph keeps /v1/graph and ai keeps its own product.
-func TestClaimingTheGraphQLDoorTookNothingWithIt(t *testing.T) {
+func TestClaimingTheGraphQLEndpointTookNothingWithIt(t *testing.T) {
 	app := host(t)
 
 	for path, want := range map[string]string{

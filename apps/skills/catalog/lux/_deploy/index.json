@@ -16,84 +16,84 @@
       "name": "deploy_account",
       "path": "deploy_account/SKILL.md",
       "service": "deploy",
-      "sha256": "f23d5f2bfa3f0ec1f29e6894280e0489d54f6ace4884bcce64b9e65daca4224c"
+      "sha256": "26afd491b1d32b056a604e20e79c94268d4d40c925a6385c49aaae622f53d7ba"
     },
     {
       "description": "Read deploy applications: Returns the fleet as an argocd ApplicationList: one projected Application per operator App CR, carrying the image tag the CR DECLARES, the tag actually RUNNING in the cluster's Deployment, the reconciled health, and the sync verdict those two produce (de",
       "name": "deploy_applications",
       "path": "deploy_applications/SKILL.md",
       "service": "deploy",
-      "sha256": "f61be2bb8014f7b07e4b72dd425167cf0b0122d693da6720cbd3faec955cfabc"
+      "sha256": "8744e9c6ab0855c868841f5674bb50109461d1d8ce9745dbc43b6c85497cb1db"
     },
     {
       "description": "Read deploy callback: Finish the sign-in round trip and mint the console session.",
       "name": "deploy_callback",
       "path": "deploy_callback/SKILL.md",
       "service": "deploy",
-      "sha256": "0ae0e5627ca45da8b03bc5ec31e4782228e9566d6f61ff5789dba36a0a8234eb"
+      "sha256": "ec0be61067c77ca32bc45fec82f0e90e927d6d49a0a730860b91a920b4082c7e"
     },
     {
       "description": "Read deploy clusters: Returns the argocd ClusterList of the destinations the caller's applications reconcile into: one entry per distinct destination server, carrying the count of applications reconciling into it..",
       "name": "deploy_clusters",
       "path": "deploy_clusters/SKILL.md",
       "service": "deploy",
-      "sha256": "71c1da40b457e5ccab21fca320a934fa87dd395141e2c63359a414c970c828df"
+      "sha256": "4c09e77404331a34af5285210d0612f3a3e8c13751b96150df97320d11121e01"
     },
     {
       "description": "Read deploy gitops: Lists every Lux CD Application in the cluster: the git source each one polls, the commit it last APPLIED, how its last sync operation ended, and its recent deploy history — newest deploy first, ordered by namespace then name..",
       "name": "deploy_gitops",
       "path": "deploy_gitops/SKILL.md",
       "service": "deploy",
-      "sha256": "f2f45a873dd4e6eaa24ad35ca63e6e5997843f02a88f10c7c3a1c616cd986d57"
+      "sha256": "b21583023fc7cb1499fd62a23334b03922b0dc98455a86fad5f908fad8b7b14e"
     },
     {
       "description": "Read deploy health: Health reports whether this deployment can observe the delivery plane..",
       "name": "deploy_health",
       "path": "deploy_health/SKILL.md",
       "service": "deploy",
-      "sha256": "3d270c3acf7d3bafea6b2c22c01b74b0888942ff1d465682ba6c937537335951"
+      "sha256": "c86fc7ce0f80bb16fd56bec73f0b3260718e3b9ce40c085ef7d569a826c2cde9"
     },
     {
       "description": "Read deploy login: Start the sign-in round trip for this console.",
       "name": "deploy_login",
       "path": "deploy_login/SKILL.md",
       "service": "deploy",
-      "sha256": "a53b8738c6d9eaf205d1e7f44e36d25a5bc9fb65ec7779b89d00fc0aef6fbd11"
+      "sha256": "ea28abce8cef15a386f6f913354650d7fed224088d24077b1c8e756a43d8c1e5"
     },
     {
       "description": "Read deploy projects: Returns the argocd AppProjectList this console groups and filters applications by..",
       "name": "deploy_projects",
       "path": "deploy_projects/SKILL.md",
       "service": "deploy",
-      "sha256": "ba090a45232ca177e963b8faf154b210b8e297de1fb09d1b1c8b767ddb5432b5"
+      "sha256": "449a21a5de88f82d64fa0e3099396f9771f2e6ed8c54c5fb81914fa73bdedffc"
     },
     {
       "description": "Read deploy session: Answers \"is this browser signed in, and if not where does it sign in?\" — the dashboard SPA's bootstrap question, and the only route on this plane that answers for an anonymous caller..",
       "name": "deploy_session",
       "path": "deploy_session/SKILL.md",
       "service": "deploy",
-      "sha256": "a7b6356b1c2d8750ade63f79568bf4caf55c4b453ce6b8dbd2d1bc75a1a76e57"
+      "sha256": "545dd1b3250a640a15c05b714b974b31fa9fe9a73ddad771cd9f282e3c8dd2b6"
     },
     {
       "description": "Read deploy settings: Returns the argocd AuthSettings object the dashboard SPA awaits before its first render..",
       "name": "deploy_settings",
       "path": "deploy_settings/SKILL.md",
       "service": "deploy",
-      "sha256": "59bac1860c785072066db82fdfaad1eeb231d7de3d838e3d0c078f4c54609709"
+      "sha256": "c3f2a917cd4d13a11d58a5dba3281d3e1b6c8d64a6d89aaefd5185c80a2d0389"
     },
     {
       "description": "Read deploy stream: Live application fleet updates as Server-Sent Events, Live resource tree for one application, as Server-Sent Events.",
       "name": "deploy_stream",
       "path": "deploy_stream/SKILL.md",
       "service": "deploy",
-      "sha256": "1dbf95b4a93aed3141c63d672cfae860468e968c17c7e6296cd22678c39e439f"
+      "sha256": "fee8b546858d353e92f42e3e4f20e53cec989e060e4701eb56108a3875398f54"
     },
     {
       "description": "Read deploy version: Returns the argocd VersionMessage the dashboard SPA reads at bootstrap..",
       "name": "deploy_version",
       "path": "deploy_version/SKILL.md",
       "service": "deploy",
-      "sha256": "451f630905b6d9a3b1c1598611217ed586f89aa6ab64f8a51447e1d1db47a015"
+      "sha256": "7dc2f234b347ff04c4797ffcdebdb66843c6c5049b0a391e26bdf6d9c2134373"
     }
   ],
   "spec_version": "8.0.0"

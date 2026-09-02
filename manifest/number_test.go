@@ -196,7 +196,7 @@ func TestBothSpellingsReachTheSameApp(t *testing.T) {
 // the rewrite.
 func front(t *testing.T) *zip.App {
 	t.Helper()
-	app := zip.New(zip.Config{AppName: "alias-door", DisableStartupMessage: true})
+	app := zip.New(zip.Config{AppName: "alias-endpoint", DisableStartupMessage: true})
 	app.Use(zip.H(func(c *zip.Ctx) error {
 		if p := c.Path(); p != "" {
 			if canonical := Normalize(p); canonical != p {

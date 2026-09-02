@@ -5,7 +5,7 @@ import (
 )
 
 // TestOpenRoomIsReadBackByListRooms is the property the create op has to hold:
-// it is the same door, not a second store. A room opened over REST is a document
+// it is the same endpoint, not a second store. A room opened over REST is a document
 // the transactor owns, so the listing that reads the transactor's own documents
 // finds it with no sync step.
 func TestOpenRoomIsReadBackByListRooms(t *testing.T) {

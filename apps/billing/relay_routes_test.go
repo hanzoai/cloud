@@ -26,7 +26,7 @@ import (
 // leaf by leaf rather than by prefix — a prefix is a claim about a subtree, and
 // a mount that missed one leaf inside a claimed subtree is exactly what this
 // catches.
-func TestRelayedDoorsAreMountedAndFailClosed(t *testing.T) {
+func TestRelayedEndpointsAreMountedAndFailClosed(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `{}`}
 	app := mountApp(t, f.server(t).URL, "svc-token")
 

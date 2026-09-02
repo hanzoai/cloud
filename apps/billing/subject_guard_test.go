@@ -30,7 +30,7 @@ import (
 // resolve it from the caller's own credential — so there is no pin to remember
 // and no chain to get wrong. This walks the AST for the one way that could
 // regress: a Subject field assigned from anything else, above all a query value.
-func TestNoDoorReadsItsSubjectFromTheRequest(t *testing.T) {
+func TestNoEndpointReadsItsSubjectFromTheRequest(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatalf("glob: %v", err)

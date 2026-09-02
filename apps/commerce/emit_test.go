@@ -65,7 +65,7 @@ func paid() payment {
 		org:      "acme",
 		ledger:   "acme",
 		subject:  "person_42",
-		door:     "/v1/commerce/payments",
+		path:     "/v1/commerce/payments",
 		via:      "/v1/commerce/payments",
 		cents:    4950,
 		currency: "eur",

@@ -121,9 +121,9 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 	  {"type":"event","event":"waitlist_joined","distinctId":"anon-1","sessionId":"s1","product":"console","refCode":"REF123"}
 	]}`
 
-	code, respBody := livePost(t, app, canonDoor, "user-42", org, body)
+	code, respBody := livePost(t, app, canonEndpoint, "user-42", org, body)
 	if code != http.StatusOK {
-		t.Fatalf("POST %s = %d (%s)", canonDoor, code, respBody)
+		t.Fatalf("POST %s = %d (%s)", canonEndpoint, code, respBody)
 	}
 	var res CaptureResult
 	if err := json.Unmarshal(respBody, &res); err != nil {
@@ -262,7 +262,7 @@ func TestLiveAnonymousCaptureIsRefused(t *testing.T) {
 	marker := "anon-" + time.Now().UTC().Format("150405.000")
 	body := `{"batch":[{"type":"pageview","distinctId":"visitor-x","sessionId":"` + marker + `","product":"site","path":"/"}]}`
 
-	req := httptest.NewRequest(http.MethodPost, canonDoor, strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, canonEndpoint, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Host = "hanzo.ai" // a brand host names no tenant
 	resp, err := app.Test(req)

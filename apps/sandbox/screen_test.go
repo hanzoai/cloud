@@ -101,7 +101,7 @@ func TestScreenPageNeedsNoOriginButItsOwn(t *testing.T) {
 	}
 }
 
-func TestTicketNamesTheDoorItWasMintedAt(t *testing.T) {
+func TestTicketNamesTheEndpointItWasMintedAt(t *testing.T) {
 	// The terminal's URL used to be spelled into the mint, so a second endpoint
 	// would have handed callers the first endpoint's address — a ticket that opens
 	// the right sandbox and shows the wrong thing.
@@ -111,16 +111,16 @@ func TestTicketNamesTheDoorItWasMintedAt(t *testing.T) {
 		t.Fatal("Mount did not publish the service")
 	}
 	ready(t, s)
-	m := seed(t, s, "acme", "m-doors")
+	m := seed(t, s, "acme", "m-endpoints")
 
-	for _, door := range []string{"terminal", "screen"} {
-		code, body := req(t, app, "POST", "/v1/sandbox/"+m.ID+"/"+door+"/ticket", "acme", "")
+	for _, endpoint := range []string{"terminal", "screen"} {
+		code, body := req(t, app, "POST", "/v1/sandbox/"+m.ID+"/"+endpoint+"/ticket", "acme", "")
 		if code != 201 {
-			t.Fatalf("%s ticket: %d %s", door, code, body)
+			t.Fatalf("%s ticket: %d %s", endpoint, code, body)
 		}
-		want := "/v1/sandbox/" + m.ID + "/" + door + "?ticket="
+		want := "/v1/sandbox/" + m.ID + "/" + endpoint + "?ticket="
 		if !strings.Contains(string(body), want) {
-			t.Errorf("%s ticket url does not name its own endpoint: %s", door, body)
+			t.Errorf("%s ticket url does not name its own endpoint: %s", endpoint, body)
 		}
 	}
 }

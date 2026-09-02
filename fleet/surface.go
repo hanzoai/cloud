@@ -9,7 +9,7 @@ import (
 
 // What the fleet's MCP server is WILLING to say a tool is, and in what ORDER.
 //
-// [Door.gather] asks every subsystem what it serves and returns the union. That
+// [MCP.gather] asks every subsystem what it serves and returns the union. That
 // is the right answer to "what exists" and the wrong answer to "what may an
 // agent call", and until this file the MCP server had no second answer: on
 // api.hanzo.ai it projected 1,323 tools with zero annotations, zero

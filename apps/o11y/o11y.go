@@ -514,7 +514,7 @@ func mountRuntime(deps cloud.Deps) error {
 // cloud.Bridge still crosses, because [zip.Ctx.SetContext] parks on the
 // *fasthttp.RequestCtx and the delegate hands the child that same RequestCtx — so
 // the validated org parked at /v1/o11y is the one every typed op behind it reads.
-// door_test.go is the end-to-end proof, over the real mount.
+// endpoint_test.go is the end-to-end proof, over the real mount.
 //
 // # cloud.Bridge is not installed here
 //

@@ -16,28 +16,28 @@
       "name": "legal_documents",
       "path": "legal_documents/SKILL.md",
       "service": "legal",
-      "sha256": "e31571b2b0ecca7146e9b976e5be81ce886faca349fa6410c78c01ef1950a435"
+      "sha256": "03d1d14d8f4fc866dc37f9b577151489f1d2c340a445aa4cd9fb2ed4c29f9cd3"
     },
     {
       "description": "Read legal filings: Returns the org's filing records, newest first — which documents were filed where, through which provider, and what the filing's honest status is..",
       "name": "legal_filings",
       "path": "legal_filings/SKILL.md",
       "service": "legal",
-      "sha256": "cb052859d72cdacfdc0689c3bc295aff90079710e2a9bc349f7c9d231020376a"
+      "sha256": "d23c66777473899c1bd17ad9bc923b99da34a596e278d2ff2c7858bd8b008f63"
     },
     {
       "description": "Read legal health: Reports that the legal subsystem is serving and how many built-in templates its catalog carries..",
       "name": "legal_health",
       "path": "legal_health/SKILL.md",
       "service": "legal",
-      "sha256": "f95dad2ed6f077bb171dc970d2cacf6aa5141cce9aa17ba7c5cfc7739b5685e8"
+      "sha256": "8c5ca4272ac3f099a2e4cd317458fa54d784ef91b6d25218e4fc96e2f5ab1363"
     },
     {
       "description": "Read legal templates: Returns the org's effective template catalog: every built-in template, with any the org has overridden replaced by its own latest version., Returns one template resolved for the caller's org — the org's own override if it has saved one, else the built-in — w",
       "name": "legal_templates",
       "path": "legal_templates/SKILL.md",
       "service": "legal",
-      "sha256": "856ce41122f16a0528d73f9c67860a5bb9349d8dd41adb0c4cd827c91bd4665e"
+      "sha256": "fa20bc561ad03410f831fb5a4308ab6f4d3b3784169b80d192752225720d6ab3"
     }
   ],
   "spec_version": "8.0.0"

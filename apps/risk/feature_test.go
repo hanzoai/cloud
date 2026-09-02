@@ -337,15 +337,15 @@ func TestRollup_RollsEachWindowOnce(t *testing.T) {
 	}
 }
 
-// TestFeatureSurface_IsTheOnlyDatastoreDoor is the TYPE-level argument, enforced
+// TestFeatureSurface_IsTheOnlyDatastoreEndpoint is the TYPE-level argument, enforced
 // by reading the package's own source.
 //
 // The claim "there is no path from this package to the warehouse that does not
 // carry a tenant" is only true while the warehouse is reachable from one file. A
 // second importer somewhere else would be a second place to forget the predicate,
 // and nothing else in the suite would notice.
-func TestFeatureSurface_IsTheOnlyDatastoreDoor(t *testing.T) {
-	const door = "feature.go"
+func TestFeatureSurface_IsTheOnlyDatastoreEndpoint(t *testing.T) {
+	const endpoint = "feature.go"
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatalf("glob: %v", err)
@@ -365,13 +365,13 @@ func TestFeatureSurface_IsTheOnlyDatastoreDoor(t *testing.T) {
 			t.Fatalf("parse %s: %v", name, err)
 		}
 		for _, imp := range f.Imports {
-			if strings.Contains(imp.Path.Value, "cloud/apps/datastore") && name != door {
+			if strings.Contains(imp.Path.Value, "cloud/apps/datastore") && name != endpoint {
 				offenders = append(offenders, name)
 			}
 		}
 		// The feature and baseline tables must be NAMED in one place too: a
 		// statement composed elsewhere is a statement outside the predicate.
-		if name != door && name != "baseline.go" {
+		if name != endpoint && name != "baseline.go" {
 			if bytesContain(src, featureTable) || bytesContain(src, baselineTable) {
 				offenders = append(offenders, name+" (names a table directly)")
 			}
@@ -379,17 +379,17 @@ func TestFeatureSurface_IsTheOnlyDatastoreDoor(t *testing.T) {
 	}
 	if len(offenders) > 0 {
 		t.Fatalf("the warehouse is reachable from %s — it must be reachable only from %s, "+
-			"because that is the file every read takes a tenant in", strings.Join(offenders, ", "), door)
+			"because that is the file every read takes a tenant in", strings.Join(offenders, ", "), endpoint)
 	}
 	// And that file really is the one importer: feature.go must import it, or the
 	// assertion above is vacuously true.
-	src, err := os.ReadFile(door)
+	src, err := os.ReadFile(endpoint)
 	if err != nil {
-		t.Fatalf("read %s: %v", door, err)
+		t.Fatalf("read %s: %v", endpoint, err)
 	}
-	f, err := parser.ParseFile(fset, door, src, parser.ImportsOnly)
+	f, err := parser.ParseFile(fset, endpoint, src, parser.ImportsOnly)
 	if err != nil {
-		t.Fatalf("parse %s: %v", door, err)
+		t.Fatalf("parse %s: %v", endpoint, err)
 	}
 	var found bool
 	ast.Inspect(f, func(n ast.Node) bool {
@@ -399,7 +399,7 @@ func TestFeatureSurface_IsTheOnlyDatastoreDoor(t *testing.T) {
 		return true
 	})
 	if !found {
-		t.Fatalf("%s does not import the warehouse — the one-importer assertion is vacuous", door)
+		t.Fatalf("%s does not import the warehouse — the one-importer assertion is vacuous", endpoint)
 	}
 }
 

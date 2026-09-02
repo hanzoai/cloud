@@ -110,7 +110,7 @@ func TestCSRF_AmbientWriteWithValidTokenAllows(t *testing.T) {
 // — same-site requests are not stopped by preflight the way cross-site ones are —
 // and SameSite sends the session cookie to it.
 //
-// Sec-Fetch-Site answers that case at the door: a sibling subdomain's request says
+// Sec-Fetch-Site answers that case on arrival: a sibling subdomain's request says
 // `same-site`, never `same-origin`. No token, no MAC, no identity binding, and the
 // forgery never reaches the handler. A write as mallory FROM mallory's own console
 // is not forgery and is not refused — the old test read that as a violation because

@@ -16,7 +16,7 @@ import (
 // promise a caller acts on and a failure at the platform. Nothing pinned a single
 // one of them. Every flag on every transport could be set true and the suite
 // stayed green, which is how whatsapp came to advertise native media and then
-// drop every attachment, and how an attachment-only send to it reached the door
+// drop every attachment, and how an attachment-only send to it reached the endpoint
 // with no text at all and answered 502.
 //
 // So each flag is checked against a FACT about this transport, and a flag can
@@ -117,7 +117,7 @@ var sendProbes = map[string]struct{ room, root string }{
 }
 
 // richMessage carries one of everything the envelope can hold, so a transport
-// that drops attachments or actions is visible in what its door received.
+// that drops attachments or actions is visible in what its endpoint received.
 func richMessage(channel, room string) Message {
 	return Message{
 		Channel: channel,
@@ -132,9 +132,9 @@ func richMessage(channel, room string) Message {
 
 // TestEveryTransportFlattensWhatItCannotRender pins media/actions to renderText,
 // the ONE downgrade path. No transport renders an attachment or a control
-// natively, so both flags are false everywhere and every egress hands the door
+// natively, so both flags are false everywhere and every egress hands the endpoint
 // renderText's flattening — a transport that passed m.Text raw would drop the
-// attachment silently, and an attachment-only send would reach the door with
+// attachment silently, and an attachment-only send would reach the endpoint with
 // nothing to say and fail at the platform.
 func TestEveryTransportFlattensWhatItCannotRender(t *testing.T) {
 	e := newApp(t)
@@ -143,7 +143,7 @@ func TestEveryTransportFlattensWhatItCannotRender(t *testing.T) {
 	if s == nil {
 		t.Fatal("channels not mounted")
 	}
-	spies := map[string]*doorRec{
+	spies := map[string]*endpointRec{
 		"discord": spyDiscord(t), "github": spyGitHub(t), "linear": spyLinear(t),
 		"slack": spySlack(t), "teams": spyTeams(t), "telegram": spyTelegram(t), "whatsapp": spyWhatsApp(t),
 	}
@@ -176,7 +176,7 @@ func TestEveryTransportFlattensWhatItCannotRender(t *testing.T) {
 
 // TestEveryTransportSendsAsTheOrg pins the tenant onto the wire. The org is what
 // buys the credential — integrations resolves the per-org token from it and
-// refuses an empty one — so a door that drops it leaves the custody check
+// refuses an empty one — so a endpoint that drops it leaves the custody check
 // nothing to check. Four of the five dropped it, which no test could see because
 // only slack's spy recorded the field.
 func TestEveryTransportSendsAsTheOrg(t *testing.T) {
@@ -186,7 +186,7 @@ func TestEveryTransportSendsAsTheOrg(t *testing.T) {
 	if s == nil {
 		t.Fatal("channels not mounted")
 	}
-	spies := map[string]*doorRec{
+	spies := map[string]*endpointRec{
 		"discord": spyDiscord(t), "github": spyGitHub(t), "linear": spyLinear(t),
 		"slack": spySlack(t), "teams": spyTeams(t), "telegram": spyTelegram(t), "whatsapp": spyWhatsApp(t),
 	}
@@ -209,12 +209,12 @@ func TestEveryTransportSendsAsTheOrg(t *testing.T) {
 	}
 }
 
-// TestEveryDoorNamesTheOrgOnTheWire reads what actually reached the plane. The
-// doors are spied everywhere else in this package, so their own bodies were the
+// TestEveryEndpointNamesTheOrgOnTheWire reads what actually reached the plane. The
+// endpoints are spied everywhere else in this package, so their own bodies were the
 // one thing no test could see — and four of the five built a send that named no
 // org at all, which left telegram and whatsapp undeliverable and let discord and
 // teams spend a shared app credential with nothing to check it against.
-func TestEveryDoorNamesTheOrgOnTheWire(t *testing.T) {
+func TestEveryEndpointNamesTheOrgOnTheWire(t *testing.T) {
 	var sent []plane.ChatSendIn
 	saved := ask
 	ask = func(ctx context.Context, app, op string, in *plane.ChatSendIn) (*plane.ChatSendOut, error) {
@@ -225,25 +225,25 @@ func TestEveryDoorNamesTheOrgOnTheWire(t *testing.T) {
 
 	ctx := context.Background()
 	const org = "acme"
-	if _, err := discordDoor(ctx, org, "c-1", "", "hi"); err != nil {
+	if _, err := discordEndpoint(ctx, org, "c-1", "", "hi"); err != nil {
 		t.Fatalf("discord: %v", err)
 	}
-	if err := slackDoor(ctx, org, "C1", "", "hi"); err != nil {
+	if err := slackEndpoint(ctx, org, "C1", "", "hi"); err != nil {
 		t.Fatalf("slack: %v", err)
 	}
-	if err := teamsDoor(ctx, org, "https://smba.example/amer/", "19:x@thread.tacv2", "hi"); err != nil {
+	if err := teamsEndpoint(ctx, org, "https://smba.example/amer/", "19:x@thread.tacv2", "hi"); err != nil {
 		t.Fatalf("teams: %v", err)
 	}
-	if err := telegramDoor(ctx, org, 777, 0, "hi"); err != nil {
+	if err := telegramEndpoint(ctx, org, 777, 0, "hi"); err != nil {
 		t.Fatalf("telegram: %v", err)
 	}
-	if _, err := whatsappDoor(ctx, org, "15551230000", "", "hi"); err != nil {
+	if _, err := whatsappEndpoint(ctx, org, "15551230000", "", "hi"); err != nil {
 		t.Fatalf("whatsapp: %v", err)
 	}
-	if _, err := githubDoor(ctx, org, "acme/widgets#7", "hi"); err != nil {
+	if _, err := githubEndpoint(ctx, org, "acme/widgets#7", "hi"); err != nil {
 		t.Fatalf("github: %v", err)
 	}
-	if _, err := linearDoor(ctx, org, "6f0b-issue", "hi"); err != nil {
+	if _, err := linearEndpoint(ctx, org, "6f0b-issue", "hi"); err != nil {
 		t.Fatalf("linear: %v", err)
 	}
 	if len(sent) != len(transports) {

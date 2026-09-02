@@ -16,35 +16,35 @@
       "name": "index_health",
       "path": "index_health/SKILL.md",
       "service": "index",
-      "sha256": "29e973f621b19672d627813c8dac2cf429e7778b45e9e1698b245a1d1c9b525e"
+      "sha256": "b0588cb71782342faab78e8f165c4afce17f5a56d08ccfbbf84b91b6b7d93cfc"
     },
     {
       "description": "Read index indexes: Lists the indexes your org holds., Reads one index's definition., Pages through the documents in an index..",
       "name": "index_indexes",
       "path": "index_indexes/SKILL.md",
       "service": "index",
-      "sha256": "7dc08875f67da97ec6fe7761b66b2cc19406083d3b8e4aa6e6ad4e5730ca22ab"
+      "sha256": "73bd9ddf7c96c7ae92dc7b93219d25b93bf4264e7bd8f3c4073320dbaffa92d9"
     },
     {
       "description": "Read index stats: Counts the documents in each of your indexes..",
       "name": "index_stats",
       "path": "index_stats/SKILL.md",
       "service": "index",
-      "sha256": "2a6d78b90a5ac5f6826f98222976271af6bf43f1b5febae94ad511949da47d30"
+      "sha256": "dccccde77f3bbd14aa3ce83ceb066ecebe97ee88854c281869fb780908a5b968"
     },
     {
       "description": "Read index tasks: Checks a write task, which has already finished..",
       "name": "index_tasks",
       "path": "index_tasks/SKILL.md",
       "service": "index",
-      "sha256": "388214a41cdeb324d0388ffe1f8411f6848ed028b19c68ee65cb3f3671151fcb"
+      "sha256": "e7feb8673165dc4cb2f7bfa39837fadf3a73991be9bdcc304106f99eeb33dc1c"
     },
     {
       "description": "Read index version: Identifies the search implementation answering..",
       "name": "index_version",
       "path": "index_version/SKILL.md",
       "service": "index",
-      "sha256": "7970815dc9b201a170f2393ccf36823459a34ce1b3c21b3bf2d733768fed8eb2"
+      "sha256": "2a847a25b0903e401ac6e30a4cdd6d5220317db8b7f47ed029df002f875abdfb"
     }
   ],
   "spec_version": "8.0.0"

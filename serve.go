@@ -180,12 +180,12 @@ func Listen(plugins []Plugin, enable []string) error {
 	// opaque 400 "Error when parsing request", which reads like a malformed
 	// payload rather than a size cap. Env GATEWAY_BODY_LIMIT (see config.go).
 	// The per-caller half of this binary's MCP server, from the composition root
-	// (Plugin.Door). Nil for every app but the tool plane, which is the only one
+	// (Plugin.Offer). Nil for every app but the tool plane, which is the only one
 	// whose tools are ROWS — an org's connectors, skills, agents and the servers
 	// it enabled — and therefore the only one that cannot be projected at build
 	// time. The build-time half is unaffected: it is still the typed-op array,
 	// still rendered once, still served as bytes.
-	source, err := door(plugins)
+	source, err := offer(plugins)
 	if err != nil {
 		return err
 	}
@@ -459,9 +459,9 @@ func Listen(plugins []Plugin, enable []string) error {
 	// This process's AGENT MCP SERVER on that same plane, before the sockets bind,
 	// so a caller that resolves one is answered by an endpoint that is already
 	// there. It is the same MCP server the edge serves, at the address the fleet's
-	// own callers use: see Door, which is also where the reason it cannot be the
+	// own callers use: see UseMCP, which is also where the reason it cannot be the
 	// edge's is written.
-	Door(app)
+	UseMCP(app)
 
 	// Internal plane: this app's typed ops over ZAP on its canonical unix socket
 	// (plane.go). Served for every mounted app name — the ops declared during

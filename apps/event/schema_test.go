@@ -113,14 +113,14 @@ func TestEverySignalIsRoutableAndSpelledOnce(t *testing.T) {
 	}
 }
 
-// TestDoorAcceptsExactlyWhatTheSinkCanLand is the property that keeps "accepted"
+// TestEndpointAcceptsExactlyWhatTheSinkCanLand is the property that keeps "accepted"
 // honest, restated as a test rather than as a comment.
 //
 // landableSignals is DERIVED from writers, so the two cannot be edited apart. The
 // failure it prevents is a 200 that means "discarded": publish to a subject no writer
 // drains and the fact sits on the stream until MaxAge takes it, with the caller told it
 // landed.
-func TestDoorAcceptsExactlyWhatTheSinkCanLand(t *testing.T) {
+func TestEndpointAcceptsExactlyWhatTheSinkCanLand(t *testing.T) {
 	if len(landableSignals) != len(writers) {
 		t.Fatalf("landable=%d writers=%d — the endpoint's answer must be derived from the "+
 			"sink's, never kept beside it", len(landableSignals), len(writers))

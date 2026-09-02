@@ -714,12 +714,12 @@ func TestTypedAnswersAreByteIdenticalToTheMaps(t *testing.T) {
 	}
 }
 
-// TestTheDoorIsOneRule drives the live router across both admission scopes. A
+// TestTheEndpointIsOneRule drives the live router across both admission scopes. A
 // member reads and cannot write; an admin does both; an anonymous caller does
 // neither. The point is not that each answer is right — it is that the typed
 // collection ops and the raw value routes reach the SAME answer, because they
 // ask the same function.
-func TestTheDoorIsOneRule(t *testing.T) {
+func TestTheEndpointIsOneRule(t *testing.T) {
 	app := broker(t)
 	for _, tc := range []struct {
 		name, method, path, org string

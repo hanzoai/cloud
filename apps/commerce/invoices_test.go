@@ -25,7 +25,7 @@ import (
 //
 // It covered the typed PAYMENT ops too, at POST /v1/commerce/payments. That was a
 // second public address onto the one card money move the browser top-up already
-// reached, so it was retired; the surviving door is POST /v1/billing/topup/token
+// reached, so it was retired; the surviving endpoint is POST /v1/billing/topup/token
 // and its screen is proven in risk_payments_test.go.
 
 // toolsFor returns the invoice surface's MCP projection — the SAME projection

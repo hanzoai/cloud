@@ -83,10 +83,10 @@ type tollOut struct {
 	OK bool `json:"ok"`
 }
 
-// tollDoor is one way to reach an operation. Each returns whether the call was
+// tollEndpoint is one way to reach an operation. Each returns whether the call was
 // REFUSED and the sentence it was refused with — the two facts every transport
 // can answer, however differently it spells them on the wire.
-type tollDoor struct {
+type tollEndpoint struct {
 	name string
 	call func(t *testing.T, op string) (refused bool, detail string)
 }
@@ -203,8 +203,8 @@ func identify(h http.Header) {
 	h.Set("X-User-Name", tollUser)
 }
 
-func (r *tollRig) doors() []tollDoor {
-	return []tollDoor{
+func (r *tollRig) endpoints() []tollEndpoint {
+	return []tollEndpoint{
 		{"REST", func(t *testing.T, op string) (bool, string) {
 			t.Helper()
 			method, path := pathOf(op)
@@ -339,7 +339,7 @@ func (r *tollRig) settled(t *testing.T, want int64) {
 
 // ── the charge: one operation, four transports, one debit each ───────────────────
 
-// TestTollChargesEveryDoorOnce is the whole claim. Each transport is funded for
+// TestTollChargesEveryEndpointOnce is the whole claim. Each transport is funded for
 // exactly one call, spends it, and is then refused at zero without the handler
 // running.
 //
@@ -349,16 +349,16 @@ func (r *tollRig) settled(t *testing.T, want int64) {
 // therefore no wallet. There is nobody to charge. Serving it anyway is the exact
 // leak this gate closes, so it is refused whether or not anyone is funded —
 // which the funded leg below asserts explicitly.
-func TestTollChargesEveryDoorOnce(t *testing.T) {
-	for _, d := range tollApp(t).doors() {
+func TestTollChargesEveryEndpointOnce(t *testing.T) {
+	for _, d := range tollApp(t).endpoints() {
 		t.Run(d.name, func(t *testing.T) {
 			r := tollApp(t)
-			door := r.doors()[doorIndex(d.name)]
+			endpoint := r.endpoints()[endpointIndex(d.name)]
 
 			r.fund(t, tollPrice, "fund-"+d.name)
 			before := r.ran.Load()
 
-			refused, detail := door.call(t, tollRun)
+			refused, detail := endpoint.call(t, tollRun)
 			if d.name == "CLI" {
 				if !refused {
 					t.Fatalf("a priced op ran from the command line with no principal behind it — " +
@@ -384,7 +384,7 @@ func TestTollChargesEveryDoorOnce(t *testing.T) {
 
 			// ── at zero, REFUSE, and do not run ─────────────────────────────────
 			ran := r.ran.Load()
-			refused, detail = door.call(t, tollRun)
+			refused, detail = endpoint.call(t, tollRun)
 			if !refused {
 				t.Fatalf("%s: the call on an empty wallet was served — a prepaid system that "+
 					"serves on empty is a free tier by accident (%s)", d.name, detail)
@@ -427,7 +427,7 @@ func TestTollChargesEveryDoorOnce(t *testing.T) {
 	}
 }
 
-func doorIndex(name string) int {
+func endpointIndex(name string) int {
 	switch name {
 	case "REST":
 		return 0
@@ -456,14 +456,14 @@ func TestTollMovesNothingForUnpricedWork(t *testing.T) {
 		{"read of a priced surface", tollRead},
 	} {
 		t.Run(op.name, func(t *testing.T) {
-			for _, d := range tollApp(t).doors() {
+			for _, d := range tollApp(t).endpoints() {
 				t.Run(d.name, func(t *testing.T) {
 					r := tollApp(t)
-					door := r.doors()[doorIndex(d.name)]
+					endpoint := r.endpoints()[endpointIndex(d.name)]
 					r.fund(t, tollFund, "fund-control")
 					before := r.ran.Load()
 
-					refused, detail := door.call(t, op.id)
+					refused, detail := endpoint.call(t, op.id)
 					if refused {
 						t.Fatalf("%s over %s was refused: %s — work that costs nothing was gated",
 							op.name, d.name, detail)
@@ -509,7 +509,7 @@ func TestTollTakesOverWhenTheEdgeIsGone(t *testing.T) {
 	r.fund(t, tollPrice, "fund-noedge")
 	before := r.ran.Load()
 
-	if refused, detail := r.doors()[doorIndex("REST")].call(t, tollRun); refused {
+	if refused, detail := r.endpoints()[endpointIndex("REST")].call(t, tollRun); refused {
 		t.Fatalf("a funded caller was refused with no edge gate mounted: %s", detail)
 	}
 	if r.ran.Load() != before+1 {
@@ -521,7 +521,7 @@ func TestTollTakesOverWhenTheEdgeIsGone(t *testing.T) {
 	}
 
 	ran := r.ran.Load()
-	refused, detail := r.doors()[doorIndex("REST")].call(t, tollRun)
+	refused, detail := r.endpoints()[endpointIndex("REST")].call(t, tollRun)
 	if !refused {
 		t.Fatalf("the call on an empty wallet was served: %s", detail)
 	}
@@ -532,14 +532,14 @@ func TestTollTakesOverWhenTheEdgeIsGone(t *testing.T) {
 
 // ── the client itself ─────────────────────────────────────────────────────────────
 
-// TestOperationIsTheSameValueAtEveryDoor is the measurement the whole design rests
+// TestOperationIsTheSameValueAtEveryEndpoint is the measurement the whole design rests
 // on, pinned so it cannot quietly stop being true: the operation zip hands the
 // authorizer is the SAME value however the call arrived, while the request path —
 // which is what the HTTP edge reads — is the operation on exactly one of the four.
 //
 // If this ever fails, the edge gate and the op gate are pricing two different
 // things again, which is the bug.
-func TestOperationIsTheSameValueAtEveryDoor(t *testing.T) {
+func TestOperationIsTheSameValueAtEveryEndpoint(t *testing.T) {
 	r := tollApp(t)
 	r.fund(t, tollFund, "fund-measure")
 	var ops, reqs []string
@@ -554,7 +554,7 @@ func TestOperationIsTheSameValueAtEveryDoor(t *testing.T) {
 		}
 		return nil
 	})
-	for _, d := range r.doors() {
+	for _, d := range r.endpoints() {
 		if refused, detail := d.call(t, tollRun); refused {
 			t.Fatalf("%s: %s", d.name, detail)
 		}

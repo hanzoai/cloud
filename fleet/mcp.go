@@ -28,7 +28,7 @@ import (
 // Every method below is answered from the children. Nothing is remembered
 // between requests except how to ROUTE a name — which app listed it, and which
 // operation the MCP server published it as. Both are written by one gather and
-// neither is a catalogue: see [Door.owner].
+// neither is a catalogue: see [MCP.owner].
 
 // protocolVersion is the MCP spec revision this server speaks. It is zip's
 // (mcpProtocolVersion) — the children answer initialize with the same string,
@@ -61,16 +61,16 @@ type Outage struct {
 	Error string `json:"error"`
 }
 
-// Door is the composed agent MCP server: the apps it fronts, and the tool→app
+// MCP is the composed agent MCP server: the apps it fronts, and the tool→app
 // routing it learned from the last time it asked.
 //
 // HOW to reach one is deliberately NOT here. The same MCP server is published at
 // two addresses with two different populations behind them — the edge, and the
 // fleet's own internal socket — and a subsystem's is likewise reached at two
-// (see [At]). Holding one reach on the Door would make the routing table and the
+// (see [At]). Holding one reach on the server would make the routing table and the
 // hop one fact, so publishing the MCP server anywhere would publish the edge's
 // hop everywhere.
-type Door struct {
+type MCP struct {
 	host *zip.App
 	apps []string
 
@@ -84,7 +84,7 @@ type Door struct {
 	// alias is the same kind of fact and rides with it: the name the MCP server
 	// PUBLISHED for an operation → the id its owner knows it by. It holds only the
 	// operations whose published name differs, it is rewritten by the same gather,
-	// and it is read at exactly two places — [Door.lookup] and [Door.describe]. See
+	// and it is read at exactly two places — [MCP.lookup] and [MCP.describe]. See
 	// fleet/verbs.go for why the name it undoes is not the name the gate judged.
 	mu    sync.RWMutex
 	owner map[string]string
@@ -102,7 +102,7 @@ type Door struct {
 
 // descriptorOf is what the server hands back for a published operation: the same
 // shape a child's own registry projects, carrying the two fields a catalog can
-// hold. The input schema is not among them — [Door.describe] asks the owner for
+// hold. The input schema is not among them — [MCP.describe] asks the owner for
 // that, which starts ONE subsystem rather than the fleet.
 func descriptorOf(app string, op Op) json.RawMessage {
 	raw, err := json.Marshal(map[string]any{
@@ -138,8 +138,8 @@ func descriptorOf(app string, op Op) json.RawMessage {
 //
 // A signpost is only true where the server actually moved, and this is the one
 // place that knows it did — the same call that registers the target names it.
-func Use(host *zip.App, path string, apps []string, at At) *Door {
-	d := &Door{host: host, apps: apps, owner: map[string]string{}}
+func Use(host *zip.App, path string, apps []string, at At) *MCP {
+	d := &MCP{host: host, apps: apps, owner: map[string]string{}}
 	// The EDGE endpoint: the one address a client with no credential can reach, and
 	// therefore the one that has to say where a credential comes from (challenge).
 	host.Post(path, func(c *zip.Ctx) error { return d.serve(c, at, true) })
@@ -159,7 +159,7 @@ func Use(host *zip.App, path string, apps []string, at At) *Door {
 // find; the host's internal socket is one hop with no edge on it (see
 // cmd/cloud/wake.go, which is the one caller).
 //
-// A SECOND Door over the same children would be a second routing table and,
+// A SECOND server over the same children would be a second routing table and,
 // worse, a second place the curation rule could be applied — or forgotten. This
 // is the same object reached from another direction: one aggregation, one
 // policy, one owner map. Which is also why an internal caller cannot be offered
@@ -171,7 +171,7 @@ func Use(host *zip.App, path string, apps []string, at At) *Door {
 // what arrived; the fleet's own socket forwards into its plane endpoint, where
 // the caller is a sibling and its statement of who it acts for is what the socket
 // makes it worth. Same routing table, same curation, same hop — one value apart.
-func (d *Door) Serve(on *zip.App, path string, at At) {
+func (d *MCP) Serve(on *zip.App, path string, at At) {
 	// The PLANE endpoint: a sibling on the fleet's own socket carries its identity
 	// as headers the socket vouches for, never a bearer, so it is never challenged.
 	on.Post(path, func(c *zip.Ctx) error { return d.serve(c, at, false) })
@@ -184,10 +184,10 @@ func (d *Door) Serve(on *zip.App, path string, at At) {
 // console shell. The body is JSON for the same reason the hop exists at all: a
 // caller who reads bytes rather than following it must never get HTML here. It
 // carries no tool list — a signpost is not a second MCP server.
-func signpost(door string) zip.Handler {
-	body := map[string]string{"error": "the MCP server moved", "door": door}
+func signpost(path string) zip.Handler {
+	body := map[string]string{"error": "the MCP server moved", "door": path}
 	return func(c *zip.Ctx) error {
-		c.SetHeader("Location", door)
+		c.SetHeader("Location", path)
 		return c.JSON(http.StatusPermanentRedirect, body)
 	}
 }
@@ -199,7 +199,7 @@ type message struct {
 	Params json.RawMessage `json:"params"`
 }
 
-func (d *Door) serve(c *zip.Ctx, at At, edge bool) error {
+func (d *MCP) serve(c *zip.Ctx, at At, edge bool) error {
 	var req message
 	if err := json.Unmarshal(c.Body(), &req); err != nil {
 		return c.JSON(200, rpcErr(nil, -32700, "parse error"))
@@ -237,7 +237,7 @@ func (d *Door) serve(c *zip.Ctx, at At, edge bool) error {
 
 // list answers tools/list from the subsystems themselves, and NAMES the ones it
 // could not reach.
-func (d *Door) list(c *zip.Ctx, req message, at At) error {
+func (d *MCP) list(c *zip.Ctx, req message, at At) error {
 	tools, down, held := d.gather(c, at)
 	// ONE TOOL PER SUBSYSTEM, the operation carried in an argument. The flat
 	// projection was 1,189 tools in 977 KB, which no model holds and every client
@@ -267,7 +267,7 @@ func (d *Door) list(c *zip.Ctx, req message, at At) error {
 // ask tools/list makes — rather than a guess or a fan-out per call. If it is
 // still nobody's, that is a -32602 and not an outage: every app answered, and
 // none of them serves it.
-func (d *Door) call(c *zip.Ctx, req message, at At, edge bool) error {
+func (d *MCP) call(c *zip.Ctx, req message, at At, edge bool) error {
 	var p struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
@@ -392,7 +392,7 @@ type named struct {
 // discovery path would otherwise execute on every child in the fleet.
 //
 // This is also where the tool surface is GATED, and it is the only place, on
-// purpose. The routing table [Door.owner] is written here and nowhere else, so a
+// purpose. The routing table [MCP.owner] is written here and nowhere else, so a
 // name that refuse() rejects is never written, is never routable, and a
 // tools/call naming it gets the same -32602 as a tool that does not exist —
 // including from a client that cached the name before the rule existed. A filter
@@ -401,7 +401,7 @@ type named struct {
 // It returns the tools themselves rather than their bytes because every caller
 // needs the OWNER too: list() groups by it (fleet/grouped.go) and describe()
 // answers out of the same gated set.
-func (d *Door) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
+func (d *MCP) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 	var all []named
 	var down []Outage
 	held := 0
@@ -496,7 +496,7 @@ func (d *Door) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 
 // published is the server's ONE source of what an app serves: its own Catalog
 // when a caller supplied one, the binary's embedded catalog otherwise.
-func (d *Door) published(app string) []Op {
+func (d *MCP) published(app string) []Op {
 	if d.Catalog != nil {
 		return d.Catalog(app)
 	}
@@ -507,7 +507,7 @@ func (d *Door) published(app string) []Op {
 // and the app that owns it — asking the fleet ONCE if the tables are cold.
 //
 // Both halves have to be answered by one lookup, and that is the whole reason
-// this is a function. The tables are written together by [Door.gather] and a
+// this is a function. The tables are written together by [MCP.gather] and a
 // process remembers nothing between requests, so a server that has just started —
 // or has just answered a tools/call for a client that cached tools/list across a
 // reconnect — holds neither. Resolving the name first and discovering second
@@ -521,7 +521,7 @@ func (d *Door) published(app string) []Op {
 // operation's own id still arrives at its own handler; it must, because describe
 // hands back the child's descriptor bytes verbatim and those carry the child's
 // own name.
-func (d *Door) find(c *zip.Ctx, name string, at At) (op, app string) {
+func (d *MCP) find(c *zip.Ctx, name string, at At) (op, app string) {
 	if op, app = d.lookup(name); app != "" {
 		return op, app
 	}
@@ -529,7 +529,7 @@ func (d *Door) find(c *zip.Ctx, name string, at At) (op, app string) {
 	return d.lookup(name)
 }
 
-func (d *Door) lookup(name string) (op, app string) {
+func (d *MCP) lookup(name string) (op, app string) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	if id, published := d.alias[name]; published {

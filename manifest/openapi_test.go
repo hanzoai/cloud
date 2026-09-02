@@ -14,7 +14,7 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 )
 
-// TestNoAppClaimsAHostDoor: no manifest row may claim a host endpoint exactly.
+// TestNoAppClaimsAHostEndpoint: no manifest row may claim a host endpoint exactly.
 //
 // Specificity is what makes the host's static route win over ai's "/v1" — a
 // static path beats the wildcard containing it whatever order they register in.
@@ -23,15 +23,15 @@ import (
 // route with both handlers chained, and the host's GET would sit BEHIND the
 // proxy handler and never run. Same trap, same shape, as the MCP endpoint.
 //
-// It asks openapi.Routed rather than openapi.Door because the trap needs a route
+// It asks openapi.Routed rather than openapi.Host because the trap needs a route
 // to spring: the two INDEX endpoints are answered ahead of the router precisely
 // because a row already claims where they sit — ai's "/v1" remainder is one of
 // them — so a claim there merges with nothing. See openapi.Routed.
-func TestNoAppClaimsAHostDoor(t *testing.T) {
+func TestNoAppClaimsAHostEndpoint(t *testing.T) {
 	for _, a := range Apps {
 		for _, p := range a.Prefixes {
 			if openapi.Routed(p) {
-				t.Fatalf("app %q claims %q, one of the host's own endpoints (openapi.Door). A Load "+
+				t.Fatalf("app %q claims %q, one of the host's own endpoints (openapi.Host). A Load "+
 					"there registers All(%q), which fiber merges with the host's GET into one "+
 					"route — the endpoint would sit behind the proxy handler and never run, and the "+
 					"fleet would answer for the whole API with %s's single-app view of it. Claim "+
@@ -41,7 +41,7 @@ func TestNoAppClaimsAHostDoor(t *testing.T) {
 	}
 }
 
-// TestTheManifestAloneMisroutesTheSpecDoor is the production defect, recorded at
+// TestTheManifestAloneMisroutesTheSpecEndpoint is the production defect, recorded at
 // the layer that causes it.
 //
 // Ask the router what the manifest ALONE does with /v1/openapi.json and the
@@ -55,7 +55,7 @@ func TestNoAppClaimsAHostDoor(t *testing.T) {
 // what the host's registration is for, kept true so that the day an app row does
 // name the path deeper, this goes red and someone reads why the host claims it.
 // The fix itself is pinned where it lives, end to end, in cmd/cloud/openapi_test.go.
-func TestTheManifestAloneMisroutesTheSpecDoor(t *testing.T) {
+func TestTheManifestAloneMisroutesTheSpecEndpoint(t *testing.T) {
 	if to := destination(t, router(t), openapi.Path); to != "ai" {
 		t.Fatalf("the manifest routes %s to %q, not to the /v1 catch-all this fleet has always "+
 			"sent it to. Something claimed the spec endpoint — check that cmd/cloud's spec() still "+

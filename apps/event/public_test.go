@@ -119,32 +119,32 @@ func TestAdmitPublic_CannotReachAttribution(t *testing.T) {
 	}
 }
 
-// TestAdmitPublic_DoorOwnsTheTenant pins the two-endpoint reality after the fix, through
+// TestAdmitPublic_EndpointOwnsTheTenant pins the two-endpoint reality after the fix, through
 // the REAL normalizer — the one function that stamps tenant_id. Whichever tenant the
 // endpoint supplies, the row carries EXACTLY that and never the org the body named:
 //
 //   - the org is always the one the CREDENTIAL resolved to (handle, event.go), and
 //     never a body claim. There is no reserved anonymous tenant any more, so both
 //     cases here are real orgs.
-func TestAdmitPublic_DoorOwnsTheTenant(t *testing.T) {
-	for _, doorOrg := range []string{"acme", "yadota"} {
+func TestAdmitPublic_EndpointOwnsTheTenant(t *testing.T) {
+	for _, endpointOrg := range []string{"acme", "yadota"} {
 		out, _ := admitPublic([]CaptureEvent{{
 			Type: "pageview", GroupID: "maxpower", PersonID: "victim",
 			Properties: map[string]any{"org": "maxpower", "tenant_id": "maxpower"},
 		}})
 		if len(out) != 1 {
-			t.Fatalf("endpoint %q: want 1 admitted event", doorOrg)
+			t.Fatalf("endpoint %q: want 1 admitted event", endpointOrg)
 		}
-		f, ok := normalize(doorOrg, time.Now(), out[0])
+		f, ok := normalize(endpointOrg, time.Now(), out[0])
 		if !ok {
-			t.Fatalf("endpoint %q: want routable", doorOrg)
+			t.Fatalf("endpoint %q: want routable", endpointOrg)
 		}
-		if f.org != doorOrg {
-			t.Fatalf("fact org = %q, want the endpoint's %q", f.org, doorOrg)
+		if f.org != endpointOrg {
+			t.Fatalf("fact org = %q, want the endpoint's %q", f.org, endpointOrg)
 		}
 		if f.attributes["group_id"] != "" || f.person != "" || len(f.attributes) != 0 {
 			t.Fatalf("endpoint %q: a body claim reached the fact: group=%q person=%q attrs=%v",
-				doorOrg, f.attributes["group_id"], f.person, f.attributes)
+				endpointOrg, f.attributes["group_id"], f.person, f.attributes)
 		}
 	}
 }

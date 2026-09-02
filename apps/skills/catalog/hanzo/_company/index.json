@@ -16,21 +16,21 @@
       "name": "company_company",
       "path": "company_company/SKILL.md",
       "service": "company",
-      "sha256": "3d07794365722b3f0e70c4dceb6625f8b2ade24b26b4c87558b3603d16ae5d9d"
+      "sha256": "369c0fa36a2587806037294ed1f4c2b4ae7c81b2ee91efc625a04c586479e30b"
     },
     {
       "description": "Read company register: Returns the platform's whole formation register, newest activity first — every org's formation, not the caller's., Counts the platform's formations by stage — the register's shape in one read, so a queue that is growing is visible as a number rather than in",
       "name": "company_register",
       "path": "company_register/SKILL.md",
       "service": "company",
-      "sha256": "32d6728b5ab029b7fad86762080cd0058d9d3bc4e2de75edc0d1eabbe5b31e00"
+      "sha256": "156a0abc4faa1cc53e5564510786c8dfd66613373628decfd0f9a99e2292e512"
     },
     {
       "description": "Read company review: Reports the founders whose KYC is not yet settled, oldest formation first, so the queue drains in the order founders have been waiting..",
       "name": "company_review",
       "path": "company_review/SKILL.md",
       "service": "company",
-      "sha256": "4e7d31ed251d097d25f696a9c2c5c48e2999d5010f1141665d7006882cbb46e5"
+      "sha256": "504f6982a09e45edf834d7ecd0df886dea49eda954452edd43229e0462d0acd4"
     }
   ],
   "spec_version": "8.0.0"

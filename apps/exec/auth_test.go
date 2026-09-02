@@ -152,7 +152,7 @@ func TestUnsetKeyFailsClosedOnEverySpelling(t *testing.T) {
 	}
 }
 
-// TestTheOtherDoorsFailClosed is the finding no path list could ever have covered.
+// TestTheOtherEndpointsFailClosed is the finding no path list could ever have covered.
 //
 // A typed op is ALSO an MCP tool and an op-plane op. MCP's tools/call invokes the
 // op directly (zip typed.go:474, registeredOp.direct) — no route, so no route
@@ -163,7 +163,7 @@ func TestUnsetKeyFailsClosedOnEverySpelling(t *testing.T) {
 // context. It carries no validated principal and no admission marker, so it is
 // refused — which is the property, rather than a third gate that has to be kept
 // in step with the other two.
-func TestTheOtherDoorsFailClosed(t *testing.T) {
+func TestTheOtherEndpointsFailClosed(t *testing.T) {
 	p := servePeer(t)
 	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "pwned", "", 0, nil }
 	mount(t)

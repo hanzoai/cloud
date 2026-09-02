@@ -253,7 +253,7 @@ func TestTraffic_UnansweredScreensAreCountedApart(t *testing.T) {
 // A held verdict carries strings from the SCORER, which is an input like any
 // other. Clamped on the way in, so one entry's size is a published fact and
 // count × size is a real byte bound.
-func TestTraffic_HeldStringsAreClampedAtTheDoor(t *testing.T) {
+func TestTraffic_HeldStringsAreClampedAtTheEndpoint(t *testing.T) {
 	tr := NewTraffic()
 	s := sig("acme", "fp1", "203.0.113.1", "/v1/models")
 	tr.Hold(s, Hold{

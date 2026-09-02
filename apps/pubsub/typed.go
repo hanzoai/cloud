@@ -70,7 +70,7 @@ import (
 type ops struct{ s *cloud.Service[state] }
 
 // state is empty on purpose: the endpoint owns no store. Its whole state is the
-// package's running server (srv) and the one cached client connection (door).
+// package's running server (srv) and the one cached client connection (conn).
 type state struct{}
 
 // routes registers the tenant endpoint. Registration order is match order, but

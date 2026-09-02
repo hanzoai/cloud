@@ -66,8 +66,8 @@ var useful = []string{
 	"post_deploy_applications_by_name_sync", "GetUser", "GetUserPreference",
 }
 
-// TestTheDoorDoesNotProjectACredentialOpItsChildServes.
-func TestTheDoorDoesNotProjectACredentialOpItsChildServes(t *testing.T) {
+// TestTheEndpointDoesNotProjectACredentialOpItsChildServes.
+func TestTheEndpointDoesNotProjectACredentialOpItsChildServes(t *testing.T) {
 	kid := startNamed(t, "console", append(append([]string{}, dangerous...), useful...)...)
 	h := host(t, []string{"console"}, map[string]*child{"console": kid})
 
@@ -187,14 +187,14 @@ func TestTheProductSurfaceLeadsTheList(t *testing.T) {
 	}
 }
 
-// TestTheDoorSAYSHowMuchItWithheld.
+// TestTheEndpointSAYSHowMuchItWithheld.
 //
 // This package's whole thesis is that a silently shortened list is the same
 // defect as a stale one: the caller cannot tell "serves nothing" from "did not
 // answer" — or, now, from "was not allowed to say". A policy that shortens the
 // list quietly would reintroduce exactly that, so the count and the rule ride on
 // _meta beside the outage report.
-func TestTheDoorSAYSHowMuchItWithheld(t *testing.T) {
+func TestTheEndpointSAYSHowMuchItWithheld(t *testing.T) {
 	kid := startNamed(t, "console", append(append([]string{}, dangerous...), useful...)...)
 	h := host(t, []string{"console"}, map[string]*child{"console": kid})
 

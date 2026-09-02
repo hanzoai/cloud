@@ -421,7 +421,7 @@ func writeTurn(b *strings.Builder, e Event) {
 
 // collapse folds a payload's whitespace onto one line so one turn is one line in
 // the brief — a JSON blob pretty-printed across forty lines would spend the
-// whole budget on indentation. Length is door.go's clip, which is already the
+// whole budget on indentation. Length is fleet.go's clip, which is already the
 // package's one way to cut a string somebody will read.
 func collapse(s string) string { return strings.Join(strings.Fields(s), " ") }
 

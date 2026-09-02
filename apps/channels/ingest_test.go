@@ -161,8 +161,8 @@ func putAllowlist(t *testing.T, e *testEnv, org string, body map[string]any) {
 
 // ── transport spies ──────────────────────────────────────────────────────────
 
-// doorCall is one recorded transport invocation.
-type doorCall struct {
+// endpointCall is one recorded transport invocation.
+type endpointCall struct {
 	org     string
 	root    string
 	room    string
@@ -170,29 +170,29 @@ type doorCall struct {
 	text    string
 }
 
-// doorRec records transport invocations. Mutex-guarded so recorders stay
+// endpointRec records transport invocations. Mutex-guarded so recorders stay
 // race-clean if a caller ever drives them from a goroutine.
-type doorRec struct {
+type endpointRec struct {
 	mu    sync.Mutex
 	id    string
 	fail  error
-	calls []doorCall
+	calls []endpointCall
 }
 
-func (r *doorRec) hit(c doorCall) (string, error) {
+func (r *endpointRec) hit(c endpointCall) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.calls = append(r.calls, c)
 	return r.id, r.fail
 }
 
-func (r *doorRec) setFail(err error) {
+func (r *endpointRec) setFail(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.fail = err
 }
 
-func (r *doorRec) count() int {
+func (r *endpointRec) count() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.calls)
@@ -204,11 +204,11 @@ func (r *doorRec) count() int {
 // was touched", which is what they actually mean — and unlike an index it does
 // not depend on a turn's reply losing a race with the message under test. An
 // allowed message is answered now, so both arrive on the same transport.
-func (r *doorRec) find(t *testing.T, substr string) doorCall {
+func (r *endpointRec) find(t *testing.T, substr string) endpointCall {
 	t.Helper()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var hit []doorCall
+	var hit []endpointCall
 	for _, c := range r.calls {
 		if strings.Contains(c.text, substr) {
 			hit = append(hit, c)
@@ -220,7 +220,7 @@ func (r *doorRec) find(t *testing.T, substr string) doorCall {
 	return hit[0]
 }
 
-func (r *doorRec) call(t *testing.T, i int) doorCall {
+func (r *endpointRec) call(t *testing.T, i int) endpointCall {
 	t.Helper()
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -235,83 +235,83 @@ func (r *doorRec) call(t *testing.T, i int) doorCall {
 // Discord's real HTTP path is proven in apps/integrations/ingress_test.go
 // (C2-4), symmetric with the other transports' existing send-path tests.
 
-func spyTelegram(t *testing.T) *doorRec {
+func spyTelegram(t *testing.T) *endpointRec {
 	t.Helper()
-	rec := &doorRec{}
-	saved := telegramDoor
-	telegramDoor = func(_ context.Context, org string, chatID, replyTo int64, text string) error {
-		_, err := rec.hit(doorCall{org: org, room: strconv.FormatInt(chatID, 10), replyTo: strconv.FormatInt(replyTo, 10), text: text})
+	rec := &endpointRec{}
+	saved := telegramEndpoint
+	telegramEndpoint = func(_ context.Context, org string, chatID, replyTo int64, text string) error {
+		_, err := rec.hit(endpointCall{org: org, room: strconv.FormatInt(chatID, 10), replyTo: strconv.FormatInt(replyTo, 10), text: text})
 		return err
 	}
-	t.Cleanup(func() { telegramDoor = saved })
+	t.Cleanup(func() { telegramEndpoint = saved })
 	return rec
 }
 
-func spySlack(t *testing.T) *doorRec {
+func spySlack(t *testing.T) *endpointRec {
 	t.Helper()
-	rec := &doorRec{}
-	saved := slackDoor
-	slackDoor = func(_ context.Context, org, channel, threadTS, text string) error {
-		_, err := rec.hit(doorCall{org: org, room: channel, replyTo: threadTS, text: text})
+	rec := &endpointRec{}
+	saved := slackEndpoint
+	slackEndpoint = func(_ context.Context, org, channel, threadTS, text string) error {
+		_, err := rec.hit(endpointCall{org: org, room: channel, replyTo: threadTS, text: text})
 		return err
 	}
-	t.Cleanup(func() { slackDoor = saved })
+	t.Cleanup(func() { slackEndpoint = saved })
 	return rec
 }
 
-func spyTeams(t *testing.T) *doorRec {
+func spyTeams(t *testing.T) *endpointRec {
 	t.Helper()
-	rec := &doorRec{}
-	saved := teamsDoor
-	teamsDoor = func(_ context.Context, org, serviceURL, conversationID, text string) error {
-		_, err := rec.hit(doorCall{org: org, root: serviceURL, room: conversationID, text: text})
+	rec := &endpointRec{}
+	saved := teamsEndpoint
+	teamsEndpoint = func(_ context.Context, org, serviceURL, conversationID, text string) error {
+		_, err := rec.hit(endpointCall{org: org, root: serviceURL, room: conversationID, text: text})
 		return err
 	}
-	t.Cleanup(func() { teamsDoor = saved })
+	t.Cleanup(func() { teamsEndpoint = saved })
 	return rec
 }
 
-func spyDiscord(t *testing.T) *doorRec {
+func spyDiscord(t *testing.T) *endpointRec {
 	t.Helper()
-	rec := &doorRec{id: "m-1"}
-	saved := discordDoor
-	discordDoor = func(_ context.Context, org, channelID, replyTo, text string) (string, error) {
-		return rec.hit(doorCall{org: org, room: channelID, replyTo: replyTo, text: text})
+	rec := &endpointRec{id: "m-1"}
+	saved := discordEndpoint
+	discordEndpoint = func(_ context.Context, org, channelID, replyTo, text string) (string, error) {
+		return rec.hit(endpointCall{org: org, room: channelID, replyTo: replyTo, text: text})
 	}
-	t.Cleanup(func() { discordDoor = saved })
+	t.Cleanup(func() { discordEndpoint = saved })
 	return rec
 }
 
-func spyGitHub(t *testing.T) *doorRec {
+func spyGitHub(t *testing.T) *endpointRec {
 	t.Helper()
-	rec := &doorRec{id: "gh-c-1"}
-	saved := githubDoor
-	githubDoor = func(_ context.Context, org, room, text string) (string, error) {
-		return rec.hit(doorCall{org: org, room: room, text: text})
+	rec := &endpointRec{id: "gh-c-1"}
+	saved := githubEndpoint
+	githubEndpoint = func(_ context.Context, org, room, text string) (string, error) {
+		return rec.hit(endpointCall{org: org, room: room, text: text})
 	}
-	t.Cleanup(func() { githubDoor = saved })
+	t.Cleanup(func() { githubEndpoint = saved })
 	return rec
 }
 
-func spyLinear(t *testing.T) *doorRec {
+func spyLinear(t *testing.T) *endpointRec {
 	t.Helper()
-	rec := &doorRec{id: "ln-c-1"}
-	saved := linearDoor
-	linearDoor = func(_ context.Context, org, room, text string) (string, error) {
-		return rec.hit(doorCall{org: org, room: room, text: text})
+	rec := &endpointRec{id: "ln-c-1"}
+	saved := linearEndpoint
+	linearEndpoint = func(_ context.Context, org, room, text string) (string, error) {
+		return rec.hit(endpointCall{org: org, room: room, text: text})
 	}
-	t.Cleanup(func() { linearDoor = saved })
+	t.Cleanup(func() { linearEndpoint = saved })
 	return rec
 }
 
-func spyWhatsApp(t *testing.T) *doorRec {
+func spyWhatsApp(t *testing.T) *endpointRec {
 	t.Helper()
-	rec := &doorRec{id: "wamid.1"}
-	saved := whatsappDoor
-	whatsappDoor = func(_ context.Context, org, to, replyTo, text string) (string, error) {
-		return rec.hit(doorCall{org: org, room: to, replyTo: replyTo, text: text})
+	rec := &endpointRec{id: "wamid.1"}
+	saved := whatsappEndpoint
+	whatsappEndpoint = func(_ context.Context, org, to, replyTo, text string) (string, error) {
+		return rec.hit(endpointCall{org: org, room: to, replyTo: replyTo, text: text})
 	}
-	t.Cleanup(func() { whatsappDoor = saved })
+	t.Cleanup(func() { whatsappEndpoint = saved })
 	return rec
 }
 

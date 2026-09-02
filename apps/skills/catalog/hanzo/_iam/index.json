@@ -16,203 +16,203 @@
       "name": "iam_account",
       "path": "iam_account/SKILL.md",
       "service": "iam",
-      "sha256": "e99b3bf341bd04036d3e01cf3eb0ed35a4d5fe10b290a50f5be1950c053f27ad"
+      "sha256": "61aa9050905270798e8f85ae245458eecdc9e697cc090ba333d788cd50d087d6"
     },
     {
       "description": "Read iam applications: Returns the applications in one organization, newest first — each product or site your people sign in to, with the sign-in methods and redirect URIs it allows., Returns one application: its sign-in methods, its allowed redirect URIs and the client credentia",
       "name": "iam_applications",
       "path": "iam_applications/SKILL.md",
       "service": "iam",
-      "sha256": "672579ba5999345bed66fc5defd58006d34f77bbd761fdbe4426b01598c8cf05"
+      "sha256": "dd82de882029481956d3aed3c4060f9df87de417590643166292cdf6b403503a"
     },
     {
       "description": "Read iam audit logs: Returns your organization's audit trail, newest first — who did what, when, and from where., Returns one audit entry in full: the action, the person or key behind it, and the request it came in on..",
       "name": "iam_audit-logs",
       "path": "iam_audit-logs/SKILL.md",
       "service": "iam",
-      "sha256": "493b3a83fdb8862a291a549bdeb1c5e2ce60fdb2131a093ed194ba5c6d04d10b"
+      "sha256": "cd1e1f2ad6576b9e299e690e8791489b8aa2c0a7f49ecb8e0f3fd48c7ec09593"
     },
     {
       "description": "Read iam auth: Returns everything a login screen needs to draw itself for one application: its branding, and each sign-in method it offers with the provider details that method needs., Returns the sign-in methods one application actually has switched on, so a login screen can ren",
       "name": "iam_auth",
       "path": "iam_auth/SKILL.md",
       "service": "iam",
-      "sha256": "c15b7ba6c04ed934f169575436ecab9ae3a614fbde16a8276fd6bb89cf7241a6"
+      "sha256": "4161c0aa5bacc66b4f8ebd0d844a4ac4b0a5a4f23d1c52830bd4fa78b86cec7f"
     },
     {
       "description": "Read iam certs: Returns your organization's signing certificates, newest first — the keys the tokens your applications verify are signed with., Returns one signing certificate — its algorithm, its validity window and its public half..",
       "name": "iam_certs",
       "path": "iam_certs/SKILL.md",
       "service": "iam",
-      "sha256": "461e471a28c7ed5c535a4e93f7d0582b1066c4df75cd79e8101d2a86559fc750"
+      "sha256": "bf00bb8e3c91f5530d2d7d83630bbc6768b0855b2300bcf2d3ffe982de96ab16"
     },
     {
       "description": "Read iam consent: Returns the calling person's own privacy and communication choices..",
       "name": "iam_consent",
       "path": "iam_consent/SKILL.md",
       "service": "iam",
-      "sha256": "9a15c7dc079ffb301ef957ca5948fdef7480d2a7dd2ee2f1ef6962fb38875c38"
+      "sha256": "cddc597e74d1106f3215aa7cda430a812aa451eb8a17e14c02e29fe8af9af83d"
     },
     {
       "description": "Read iam invitations: Returns your organization's invitations, newest first — who has been asked to join, on what terms, and how many seats each invitation still has left., Returns one invitation: who it is for, what it grants on acceptance, and when it expires..",
       "name": "iam_invitations",
       "path": "iam_invitations/SKILL.md",
       "service": "iam",
-      "sha256": "c13ea479d90f1ab6200d26705d181433612953f9b63cad4e431bffce570f1fc1"
+      "sha256": "4bbe49f3b794ea990dfb8ee12ec0980892a80b1a413f2cb791c261245a7caa06"
     },
     {
       "description": "Read iam keys: Returns an organization's API keys, newest first — what each is called, what it may reach, and its publishable half., Resolve a PUBLISHABLE key to the organization that owns it, Resolve a SECRET key to the principal it authenticates.",
       "name": "iam_keys",
       "path": "iam_keys/SKILL.md",
       "service": "iam",
-      "sha256": "4b931d07ddd878da9d96bb5c0f93430bae631dc641191786b2f8b02ef838f990"
+      "sha256": "f17d973ab442d46f669447e958b51489389af7c4be5eef37b45544e9c3983d22"
     },
     {
       "description": "Read iam linked accounts: Returns the sign-in identities linked to the calling person's account — every provider they can currently sign in with..",
       "name": "iam_linked-accounts",
       "path": "iam_linked-accounts/SKILL.md",
       "service": "iam",
-      "sha256": "7b29dbb16ea9b5fb4bde3640b50af49001447b88cec1b5b2f80f7c524360a91c"
+      "sha256": "2eafc22c717a0e362f80b6355abd75fe603ae9a4cd2f9e3860e4a7528ebb9b82"
     },
     {
       "description": "Read iam memberships: Answers either question about who belongs where: which organizations one person can act in, or who can act in one organization..",
       "name": "iam_memberships",
       "path": "iam_memberships/SKILL.md",
       "service": "iam",
-      "sha256": "4f865b4eb632826946b8df89c32b318cb87de6d6b9d0d11bdf04278fb0ba7e93"
+      "sha256": "75a40cf2ceb0df54171f53edd459d021c2987a25c5d939e50637d956005dd042"
     },
     {
       "description": "Read iam oauth: Starts a sign-in — the address you send a browser to, and the beginning of every OAuth and OpenID Connect flow., Completes the round-trip: it resolves and burns the single-use transaction (checking expiry + browser binding), exchanges and verifies the IdP response",
       "name": "iam_oauth",
       "path": "iam_oauth/SKILL.md",
       "service": "iam",
-      "sha256": "e195d24f50a9f5da28aafebae1da759b4a92f37cb9f04228804450a0cf319f08"
+      "sha256": "bcc5e990aa8bda7db67a9e00f2db18902836988575c126f9f9f41fbfe4d1f866"
     },
     {
       "description": "Read iam organizations: Returns the organizations you can act in, the ones you belong to first and the rest after, newest first, narrowed by an optional query against the name or the display name., Returns one organization: its display, its defaults and the sign-in rules everyone",
       "name": "iam_organizations",
       "path": "iam_organizations/SKILL.md",
       "service": "iam",
-      "sha256": "c73f6ee143b11ba329a3a62877578bc6593cef25991daa0910cd211421e0778a"
+      "sha256": "1ec895cabfcb1c5cdf5db3eb6955994fcc9997e1848d40e8e8c17f8a722248b0"
     },
     {
       "description": "Read iam permissions: Returns the permissions in one organization, newest first — each one a grant saying which people or roles may do what, and to which resources., Returns one permission: who it grants to, what it allows, and the resources it covers..",
       "name": "iam_permissions",
       "path": "iam_permissions/SKILL.md",
       "service": "iam",
-      "sha256": "7ac20050b610184e1b1a83d2189b38a5f84ba31c4445a0fc7280a0a880da7aa5"
+      "sha256": "b40eb0172bf6a39752ee23c18ab04849f9dad9d8044c2a38219b2fd5d2011d90"
     },
     {
       "description": "Read iam projects: Returns your organization's projects, newest first — the scope people pick between when their work is separated by product or client rather than by team., Returns one project: what it is called and how it is set up..",
       "name": "iam_projects",
       "path": "iam_projects/SKILL.md",
       "service": "iam",
-      "sha256": "136f615df004bd321e14e7d962aa334ee2d76de9c79245a3372c2eeb49c119e7"
+      "sha256": "933ad53bbda9a5a09f1550a759fb3d9e1b9c6a01a3f8adf6298ca6401642f872"
     },
     {
       "description": "Read iam providers: Returns your organization's providers, newest first — the identity providers your people sign in with, and the senders and connectors your applications go through., Returns one provider: what it connects to and how it is configured..",
       "name": "iam_providers",
       "path": "iam_providers/SKILL.md",
       "service": "iam",
-      "sha256": "929ab12c7a17fa6fa9d6a771757c4cd5883edc6e5a6427f25bacf0ea11ee8f0b"
+      "sha256": "651a7f111f40ea6a0ab24fb8b5820fcc2d1e852ef10ab9923be429442be3ff27"
     },
     {
       "description": "Read iam registry: Publishes the public key your registry uses to verify the tokens issued above — the one URL to configure so the registry trusts logins without holding any secret of its own., Signs a container client in to your registry..",
       "name": "iam_registry",
       "path": "iam_registry/SKILL.md",
       "service": "iam",
-      "sha256": "a35b9688bc604ca353546ce36fe3acc06c1a9f63bb610bd43fe8cf95a6bf02f1"
+      "sha256": "1a3e241072ed8a116f908a7995c80b06c92c5500f9ae2a3e463834dd3766bda2"
     },
     {
       "description": "Read iam roles: Returns your organization's roles, newest first — each a named group of people that permissions are granted to., Returns one role: who is in it, and the roles it includes..",
       "name": "iam_roles",
       "path": "iam_roles/SKILL.md",
       "service": "iam",
-      "sha256": "b0231cae760e7a101c10a46cbfaa522b8292cff52eefee7411168e129af31b46"
+      "sha256": "e54e9f7f1c722a54ca8b8602ffdc2a05413129c56e521f53ccf27569aa81fba7"
     },
     {
       "description": "Read iam scim: Returns the kinds of record this directory provisions and the address of each, so your identity provider discovers them rather than having them configured by hand., Returns one provisionable record kind in full., Returns the attribute definitions this directory und",
       "name": "iam_scim",
       "path": "iam_scim/SKILL.md",
       "service": "iam",
-      "sha256": "47f3cf5e2cb3764e06921b2339d0b4697b1dde09111c2059170a6501d7b08f38"
+      "sha256": "ef532027f4a9a94e03db02974af90b5f3b31c26ca8220a579ed6f61c28803a6a"
     },
     {
       "description": "Read iam service accounts: Returns your organization's service accounts — what each is called and when it was created..",
       "name": "iam_service-accounts",
       "path": "iam_service-accounts/SKILL.md",
       "service": "iam",
-      "sha256": "557bc083e7ac48a3985afbfe54e67175b564dde6c566b8804fd83e787dec46fa"
+      "sha256": "ca7dde10aafc4cfa34fe54a335474a97962d8c64cc11bd9fbc8ae2d5accb6979"
     },
     {
       "description": "Read iam sessions: Returns who is currently signed in to an organization, newest first, and can be narrowed to one person or one application., Returns one person's session in one application — when it began and which browsers or devices are still carrying it..",
       "name": "iam_sessions",
       "path": "iam_sessions/SKILL.md",
       "service": "iam",
-      "sha256": "95b49c23a2d6a1b197367c2d5e3f55660cdf62818b913f16b2105460c1c7fe26"
+      "sha256": "0d5552880055f282c147d21d1b3c114febf9584e9f4fc0f92ff0ace57f705849"
     },
     {
       "description": "Read iam teams: Returns your organization's teams, newest first — each a named set of people that roles and permissions are granted to., Returns one team: who is in it..",
       "name": "iam_teams",
       "path": "iam_teams/SKILL.md",
       "service": "iam",
-      "sha256": "8ea29890bab51d9472a9ceeea11fd9c2469e1cd4717cc40eb5fad5695595582d"
+      "sha256": "12fa0946974575cf3e003830883f9dcff4fdbb7d34edb51f59cc8bb8a050cb14"
     },
     {
       "description": "Read iam tokens: Returns the access tokens issued in your organization, newest first, and can be narrowed to one organization., Returns one access token: who and what it was issued to, and when it expires..",
       "name": "iam_tokens",
       "path": "iam_tokens/SKILL.md",
       "service": "iam",
-      "sha256": "3a605fa39e602556cbe4bc4fe76919a6cd2540444ea881adb6974aa96f958db2"
+      "sha256": "1b2e9a5dc3edabcd3c8172877e62ee686495348dfa2d0864da5a91c1f70193f7"
     },
     {
       "description": "Read iam users: Returns a page of the people in an organization, with the total so you can page through the rest., Returns one person in your organization, addressed by their username or by their email address..",
       "name": "iam_users",
       "path": "iam_users/SKILL.md",
       "service": "iam",
-      "sha256": "578ae873b18a8d6bd3f042303e9251e82fb5b854e16134ffd37f2376c43b700e"
+      "sha256": "344b6b706c18bf7f509425f68779f976f3cf433ca0b1265408bba2a254e1d029"
     },
     {
       "description": "Read iam web3: Starts a wallet sign-in: it returns a one-time challenge for the wallet to sign..",
       "name": "iam_web3",
       "path": "iam_web3/SKILL.md",
       "service": "iam",
-      "sha256": "a359a066b6cd36b5e30fa28e426732be72ce374e4ec5574068ccb6159921470f"
+      "sha256": "9006ef0d5fa04bf1a91e63bd8c49e687f35c4a5385e36f8297a33eda37a172a5"
     },
     {
       "description": "Read iam webauthn: Starts a passkey sign-in: it returns the challenge the person's authenticator signs., Starts enrolling a passkey for the signed-in person: it returns the options their browser hands to the authenticator..",
       "name": "iam_webauthn",
       "path": "iam_webauthn/SKILL.md",
       "service": "iam",
-      "sha256": "457595af9a2b2a102063ab431e4cb2a301b49bdc39df54d1f1a3ef7e50b7ffe5"
+      "sha256": "c9b3a6be6f4acc589338601f811448914fb9577d45bd278c7757ed7f59e01cd5"
     },
     {
       "description": "Read iam webauthn credentials: Returns the passkeys and security keys registered to one person, newest first — which device each lives on and when it was registered., Returns one passkey or security key: whose it is, what device it lives on, and when it was registered..",
       "name": "iam_webauthn-credentials",
       "path": "iam_webauthn-credentials/SKILL.md",
       "service": "iam",
-      "sha256": "7f6e207160ec8e9d28861fbf8f93f18673216a1f737011ee5315cebff8bc1737"
+      "sha256": "2be7cba441d590a7ae7f128a3b7c4610d7ce316b0e285ce72f0b5f6ff1659394"
     },
     {
       "description": "Read iam well known: Publishes the public keys that verify the tokens issued here — the one URL you point a service at so it can check a token itself, offline, without calling back and without holding any secret of ours., Returns the OpenID Connect discovery document — the one UR",
       "name": "iam_well-known",
       "path": "iam_well-known/SKILL.md",
       "service": "iam",
-      "sha256": "340858f9003d3baddbdad5c5ee5e731a5bed229b0ada44c810f19449f829ce63"
+      "sha256": "2bfbbb3940bd958130bcc72ad4e05b6765063d5de783a7abfaf77721f9ae0d23"
     },
     {
       "description": "Read iam whoami: Tells you who the current caller is — the lightweight check a page makes on load to decide whether to render signed-in or signed-out..",
       "name": "iam_whoami",
       "path": "iam_whoami/SKILL.md",
       "service": "iam",
-      "sha256": "35e1ff4bf3f60a638b50df6067e77cd8f18392bbaec18ccacd7defbcee98f70e"
+      "sha256": "1edd58fafd7db8f340b069cdd1e788ffd91d3e43cef67675b0f34e30a322feaf"
     },
     {
       "description": "Read iam workspaces: Returns your organization's workspaces, newest first — the scope a team works in, alongside projects rather than instead of them., Returns one workspace: what it is called and how it is set up..",
       "name": "iam_workspaces",
       "path": "iam_workspaces/SKILL.md",
       "service": "iam",
-      "sha256": "9e8c74d24689c371b9509c4235e62add9c67f9391cce63ab5373d02fb1edbc4a"
+      "sha256": "b6463f0f0fbdcd050f9264d00133ed61614b9788250924dd393ee92d491c3449"
     }
   ],
   "spec_version": "8.0.0"

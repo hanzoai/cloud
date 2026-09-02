@@ -21,7 +21,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
-// door_honesty_test.go — the endpoint told every client it was fine while storing nothing.
+// endpoint_honesty_test.go — the endpoint told every client it was fine while storing nothing.
 //
 // EVERY wire shape /v1/event publishes, posted without a resolvable tenant, answered
 // 200 {"accepted":0,"dropped":1}. The projection refuses a kind it cannot name

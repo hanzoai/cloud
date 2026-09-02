@@ -16,28 +16,28 @@
       "name": "metrics_health",
       "path": "metrics_health/SKILL.md",
       "service": "metrics",
-      "sha256": "73466a081067482624ad4077756cd10b086726a0de6172d8c244e7de55b3e68b"
+      "sha256": "97ff9d4683ca1944982c194035d361bbbc15398974ba2461c08580c48a815f5e"
     },
     {
       "description": "Read metrics logs: How many log records this deployment holds for your org, Search your org's logs by label, time and substring.",
       "name": "metrics_logs",
       "path": "metrics_logs/SKILL.md",
       "service": "metrics",
-      "sha256": "8ed0047b0681fc8e941b46a38cc885d1785077953a5bf3d86e082b05d748ef9f"
+      "sha256": "b09a091cc87766aab2fd47500454d5480ef32b39d91872e0cdf09a8f731249a4"
     },
     {
       "description": "Read metrics query: Read your org's series back over a time range.",
       "name": "metrics_query",
       "path": "metrics_query/SKILL.md",
       "service": "metrics",
-      "sha256": "da8faa88d6c69fce27bdc0b25f3e906b7b64eb917ae9d010427ae5e661ae927e"
+      "sha256": "b7caa595a17c4c28f6661ea3b62c7477c7d5da48d71ae1fbaf4233afd17ec73b"
     },
     {
       "description": "Read metrics traces: How many spans this deployment holds for your org, Recent spans for your org over a time range, Every span of one trace — the waterfall.",
       "name": "metrics_traces",
       "path": "metrics_traces/SKILL.md",
       "service": "metrics",
-      "sha256": "d29f649eaa1a722315e5bf522fb0b9a94e55b33e69d95e94ab45e089afeef54c"
+      "sha256": "0fc4b3f0081893022f38934dc42f8bfd72c76df1a7e73dc3e91e7281c2d82a88"
     }
   ],
   "spec_version": "8.0.0"

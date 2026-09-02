@@ -16,14 +16,14 @@
       "name": "marketplace_listings",
       "path": "marketplace_listings/SKILL.md",
       "service": "marketplace",
-      "sha256": "8fcca634ec488d701ba3316eae8e1c167f8864b8b0a1849414ef1387dd8b0761"
+      "sha256": "de7b5e61b597a6e2b1441fa2d8a2acbaeb3757e0badbf374a7e5b650352327b1"
     },
     {
       "description": "Read marketplace marketplace: Discover lists every tool and agent the caller can reach in their own org and project, enriched with any public listing's title, category and price, and with installed=true on the ones already activated for that scope..",
       "name": "marketplace_marketplace",
       "path": "marketplace_marketplace/SKILL.md",
       "service": "marketplace",
-      "sha256": "7d0de49dedce5d1df9a962c8a50402857af27aa4177c57e2a4c48a9c0924c70b"
+      "sha256": "b9b7f41acf4c3714e9aa5a953b947333c39db3f2ae8f5d53aa58eabf62010a61"
     }
   ],
   "spec_version": "8.0.0"

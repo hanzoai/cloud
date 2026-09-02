@@ -70,7 +70,7 @@ type books struct{ live, test *OrgStore[*sqlstore.Store] }
 
 // of picks the store and the name one call is about.
 //
-// The org is folded through [OrgNamespace] — the ONE door that turns a validated
+// The org is folded through [OrgNamespace] — the ONE function that turns a validated
 // org into a name — so a ledger cannot be opened under a spelling that reaches
 // another tenant's file, and the name a write ships under is the name it opened
 // under.

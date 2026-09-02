@@ -16,21 +16,21 @@
       "name": "mq_health",
       "path": "mq_health/SKILL.md",
       "service": "mq",
-      "sha256": "a80685a8054d8b1fb922c49f1bfec8101d2bda14478f7da71ad660ac134ce6dd"
+      "sha256": "f5829aa4ca378bbcc4bc285db3894cbe08541cdcfd9ac8d533e02baf619e98dd"
     },
     {
       "description": "Read mq info: Returns the broker's identity and the org's stream count..",
       "name": "mq_info",
       "path": "mq_info/SKILL.md",
       "service": "mq",
-      "sha256": "102eb26f424cf7199eebda54e222e1d9cb8f0e527c4a228293dfa50ff46d3257"
+      "sha256": "388ea36592b685fef80940e329aa97ca9a22e5559538467ac642bd91228efe99"
     },
     {
       "description": "Read mq stream: Returns the org's streams, name-ordered, with their live state., Returns one stream's configuration and live state., Reads stored messages without a consumer: by sequence, by newest on a subject, or walking a subject forward from a sequence..",
       "name": "mq_stream",
       "path": "mq_stream/SKILL.md",
       "service": "mq",
-      "sha256": "377fabc28f992eabe4a709b75925f994a1fff8e91c50b08b43ddb3dc94c38f00"
+      "sha256": "75e559c9ff7ace7795d7626b168c567f80cf922c2cb63f178fed380cc92f78ef"
     }
   ],
   "spec_version": "8.0.0"

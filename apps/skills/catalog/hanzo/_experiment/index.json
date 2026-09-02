@@ -16,21 +16,21 @@
       "name": "experiment_assign",
       "path": "experiment_assign/SKILL.md",
       "service": "experiment",
-      "sha256": "26af685e01a986de4fee507559f731a5f94a6390a0df06dbcc2f19c834fe6fa7"
+      "sha256": "30b14073e4a96ed81d3a63b0734e354829d7acd81a573af71f342b40b4f45bdb"
     },
     {
       "description": "Read experiment experiment: Is every experiment in the caller's org, with its variants, status and decision, ordered by project then id., Is one experiment's definition and lifecycle: variants, weights, control arm, status and winner..",
       "name": "experiment_experiment",
       "path": "experiment_experiment/SKILL.md",
       "service": "experiment",
-      "sha256": "53c041d89897e214d7c3c7242ecd961bc2e1abc7af3a1e8ffb465b488f002199"
+      "sha256": "be01a48ca094f034a0b1afbbba68cb0f2f0755cd0e5b1aef0d996d6190796414"
     },
     {
       "description": "Read experiment health: Is whether the experiments subsystem is mounted and serving in this process..",
       "name": "experiment_health",
       "path": "experiment_health/SKILL.md",
       "service": "experiment",
-      "sha256": "e17354ac4d16d7534169f4798da210ab4f33ceffc02e13b46205f6fcb73d8927"
+      "sha256": "7789f0cbb17c97a9a5251aed8dc6b1a7914c626b822e93755cfe901e8848ce88"
     }
   ],
   "spec_version": "8.0.0"

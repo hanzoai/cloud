@@ -26,10 +26,10 @@ type Assistants interface {
 	Reply(ctx context.Context, agent string, org string, said string) (string, error)
 }
 
-// aiDoor is the platform AI surface, reached over the loopback the rest of the
+// aiEndpoint is the platform AI surface, reached over the loopback the rest of the
 // fleet already uses. Base and key are configuration; on a cluster the key comes
 // from KMS like every other credential.
-type aiDoor struct {
+type aiEndpoint struct {
 	base string
 	key  string
 	http *http.Client
@@ -46,7 +46,7 @@ func assistantsFromEnv() Assistants {
 	if key == "" {
 		return nil
 	}
-	return &aiDoor{base: base, key: key, http: &http.Client{Timeout: 30 * time.Second}}
+	return &aiEndpoint{base: base, key: key, http: &http.Client{Timeout: 30 * time.Second}}
 }
 
 // Reply asks the assistant for its next turn.
@@ -54,7 +54,7 @@ func assistantsFromEnv() Assistants {
 // The model is NOT named here. Which model an assistant runs on is the catalog's
 // decision, resolved behind this endpoint — naming one in a telecom package is how
 // a model change becomes a change in six unrelated repositories.
-func (a *aiDoor) Reply(ctx context.Context, agent, org, said string) (string, error) {
+func (a *aiEndpoint) Reply(ctx context.Context, agent, org, said string) (string, error) {
 	req := map[string]any{
 		"assistant": agent,
 		"messages":  []map[string]string{{"role": "user", "content": said}},

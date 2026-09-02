@@ -16,14 +16,14 @@
       "name": "gateway_config",
       "path": "gateway_config/SKILL.md",
       "service": "gateway",
-      "sha256": "d5d6745ea3f678966bc8a47bed0b9676d886d05ce41f488568aa9059dddcc3ef"
+      "sha256": "2fe3b848a3da06cfe08e83403e9d79bf786b68d5e7911b02d258c33aa8e0295b"
     },
     {
       "description": "Read gateway traffic: Report who is calling this org's API right now.",
       "name": "gateway_traffic",
       "path": "gateway_traffic/SKILL.md",
       "service": "gateway",
-      "sha256": "fc6498083c4e92af60839e034f2d50ca4b5c9faf6a6c61efd8e243c1825bbe25"
+      "sha256": "07457557104aff0224b4017e763e964d0a1f721ae48eb30314d8f872c32ad1bd"
     }
   ],
   "spec_version": "8.0.0"

@@ -2,7 +2,7 @@ package event
 
 import "testing"
 
-// TestOneWireThreeSpellingsOneMeaning is the claim /v1/event's own door makes and
+// TestOneWireThreeSpellingsOneMeaning is the claim /v1/event's own endpoint makes and
 // the one an SDK generated from its document relies on: the endpoint publishes
 // three shapes, and whatever the batch can express the bare object and the bare
 // array express too.

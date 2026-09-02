@@ -13,8 +13,8 @@ import (
 // client and egress through the ONE existing chat.postMessage path, reached over
 // the plane (integrations.SendSlackAt).
 
-// slackDoor is the send path; tests spy it, prod never repoints.
-var slackDoor = func(ctx context.Context, org, channel, threadTS, text string) error {
+// slackEndpoint is the send path; tests spy it, prod never repoints.
+var slackEndpoint = func(ctx context.Context, org, channel, threadTS, text string) error {
 	_, err := post(ctx, org, plane.ChatSendIn{Provider: "slack", Room: channel, ReplyTo: threadTS, Text: text})
 	return err
 }
@@ -54,7 +54,7 @@ func slackNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
 // closed inside SendSlackAt via TokenFor(org, "slack"): no per-org token, no
 // send — channels never sees a token, so no extra binding gate is needed.
 func slackEgress(ctx context.Context, _ *cloud.Service[state], org string, m Message) (Delivery, error) {
-	if err := slackDoor(ctx, org, m.Room.ID, m.ReplyTo, renderText(m)); err != nil {
+	if err := slackEndpoint(ctx, org, m.Room.ID, m.ReplyTo, renderText(m)); err != nil {
 		return Delivery{}, err
 	}
 	// chat.postMessage's ts is not surfaced by the existing helper — accepted

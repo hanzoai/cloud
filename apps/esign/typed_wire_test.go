@@ -460,12 +460,12 @@ func TestRefusalKeepsTheBundlesOwnEnvelope(t *testing.T) {
 	}
 }
 
-// TestSignersDoorResolvesTheTokenNotTheClaim pins the order the whole recipient
+// TestSignersEndpointResolvesTheTokenNotTheClaim pins the order the whole recipient
 // surface rests on: the token selects the tenant, and the org segment is only
 // checked against that answer. A claim naming another tenant is the SAME 404 an
 // unknown token gets, so the refusal never separates "no such token" from "not
 // yours" — and no per-tenant file is touched on the way to either.
-func TestSignersDoorResolvesTheTokenNotTheClaim(t *testing.T) {
+func TestSignersEndpointResolvesTheTokenNotTheClaim(t *testing.T) {
 	app, org, _, token := seeded(t)
 
 	if code, body := do(t, app, http.MethodGet, "/v1/esign/o/"+org+"/sign/"+token, "", nil); code != http.StatusOK {

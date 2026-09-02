@@ -20,20 +20,20 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 )
 
-// doors_test.go — the ingest SURFACE is one set, and these are its proofs.
+// endpoints_test.go — the ingest SURFACE is one set, and these are its proofs.
 //
-// doors (event.go) is the only answer to "what is an ingest endpoint"; the router
+// endpoints (event.go) is the only answer to "what is an ingest endpoint"; the router
 // derives from it, and the tests below keep it that way.
 //
-// Every gate assertion here is QUANTIFIED OVER doors rather than written against a
+// Every gate assertion here is QUANTIFIED OVER endpoints rather than written against a
 // path list, so an endpoint added tomorrow inherits the whole contract instead of
 // needing someone to remember to extend a table. The one deliberately hand-written
-// list is wantDoors, which is the contract itself — the anchor that makes a silent
+// list is wantEndpoints, which is the contract itself — the anchor that makes a silent
 // surface change fail rather than pass.
 
-// wantDoors is the ingest surface as a CONTRACT: the exact set of endpoints, each
+// wantEndpoints is the ingest surface as a CONTRACT: the exact set of endpoints, each
 // with the WIRE and the ORIGIN TAG it is bound to, written out by hand on purpose.
-// Everything else in this package derives from doors, so without one literal to
+// Everything else in this package derives from endpoints, so without one literal to
 // compare against, deleting an endpoint or smuggling one in would keep every
 // derived test green. Changing this list is changing the public surface, and it
 // should take an edit here to do it.
@@ -52,7 +52,7 @@ import (
 // 2026-07-31 and its wire kept — decodeEvent sniffs `distinct_id`/`api_key` and hands
 // the PostHog body to decodeInsights — so the surface shrank without dropping a
 // caller. sourcePostHog survives as a $source value on rows the old endpoint wrote.
-var wantDoors = []door{
+var wantEndpoints = []endpoint{
 	{path: "/v1/event", decode: decodeEvent, source: sourceEvent},
 }
 
@@ -66,10 +66,10 @@ func samePtr(a, b any) bool {
 }
 
 // sameWire asks samePtr's question about two decoders, typed: only a decode can be
-// compared to a decode, which is what the doors contract needs.
+// compared to a decode, which is what the endpoints contract needs.
 func sameWire(a, b decode) bool { return samePtr(a, b) }
 
-// retiredDoors are paths that WERE ingest endpoints and must now be gone from every
+// retiredEndpoints are paths that WERE ingest endpoints and must now be gone from every
 // surface — not routed, and not carved on a site host either. An endpoint is not
 // retired until it is absent from BOTH surfaces, which is the half that used to be
 // forgotten.
@@ -88,7 +88,7 @@ func sameWire(a, b decode) bool { return samePtr(a, b) }
 // Every entry is spelled as the address it HAD, because that is what a stale
 // caller still sends. None of them is rewritten by the /v1/event fold — a
 // retired path is retired at the spelling it was retired at.
-var retiredDoors = []string{
+var retiredEndpoints = []string{
 	"/v1/ingest",
 	// /v1/insights/e — the PostHog WIRE's own path. The wire is still served, on
 	// /v1/event; only the second path is gone. insights.hanzo.ai's /e, /batch and
@@ -97,9 +97,9 @@ var retiredDoors = []string{
 	"/v1/analytics", "/v1/analytics/batch", "/v1/todo",
 }
 
-func doorPaths() []string {
-	p := make([]string, len(doors))
-	for i, d := range doors {
+func endpointPaths() []string {
+	p := make([]string, len(endpoints))
+	for i, d := range endpoints {
 		p[i] = d.path
 	}
 	return p
@@ -239,9 +239,9 @@ func sameSet(a, b []string) bool {
 // admittedWire returns the body, from cands, that THIS endpoint's own wire decodes
 // into exactly one event the PROJECTION admits. Picking the body through the endpoint's
 // real decoder + the real projection is what lets every test below quantify over
-// doors without a per-wire lookup table beside it — the thing whose duplication
+// endpoints without a per-wire lookup table beside it — the thing whose duplication
 // caused the drift in the first place.
-func admittedWire(t *testing.T, d door, cands ...string) string {
+func admittedWire(t *testing.T, d endpoint, cands ...string) string {
 	t.Helper()
 	for _, b := range cands {
 		evs, err := d.decode([]byte(b))
@@ -258,7 +258,7 @@ func admittedWire(t *testing.T, d door, cands ...string) string {
 
 // droppedWire is the twin: exactly one decoded event the PROJECTION refuses (a
 // commerce/custom kind), which is what proves capability rather than reachability.
-func droppedWire(t *testing.T, d door, cands ...string) string {
+func droppedWire(t *testing.T, d endpoint, cands ...string) string {
 	t.Helper()
 	for _, b := range cands {
 		evs, err := d.decode([]byte(b))
@@ -300,44 +300,44 @@ const (
 // identifyFor / groupFor give the endpoint its OWN wire's person- /
 // group-binding event, picking whichever candidate that endpoint's decoder
 // accepts and the projection refuses.
-func identifyFor(t *testing.T, d door) string {
+func identifyFor(t *testing.T, d endpoint) string {
 	return droppedWire(t, d, canonIdentify, posthogIdentify, teamIdentify)
 }
 
-func groupFor(t *testing.T, d door) string {
+func groupFor(t *testing.T, d endpoint) string {
 	return droppedWire(t, d, canonGroup, posthogGroup, teamGroup)
 }
 
-func pageviewFor(t *testing.T, d door) string {
+func pageviewFor(t *testing.T, d endpoint) string {
 	return admittedWire(t, d, canonPageview, posthogPage, teamPageview)
 }
 
-func commerceFor(t *testing.T, d door) string {
+func commerceFor(t *testing.T, d endpoint) string {
 	return droppedWire(t, d, canonCommerce, posthogEvent, teamCommerce)
 }
 
 // ── the surface is one set ──────────────────────────────────────────────────
 
-// TestIngestSurfaceIsExactlyTheContract anchors doors against the hand-written
+// TestIngestSurfaceIsExactlyTheContract anchors endpoints against the hand-written
 // contract. It is the test that makes every other test in this file meaningful:
-// they all derive their tables from doors, so they would happily stay green while
+// they all derive their tables from endpoints, so they would happily stay green while
 // the surface changed underneath them.
 func TestIngestSurfaceIsExactlyTheContract(t *testing.T) {
-	want := make([]string, len(wantDoors))
-	for i, d := range wantDoors {
+	want := make([]string, len(wantEndpoints))
+	for i, d := range wantEndpoints {
 		want[i] = d.path
 	}
-	if !sameSet(doorPaths(), want) {
+	if !sameSet(endpointPaths(), want) {
 		t.Fatalf("ingest surface = %v, contract = %v — adding or removing an endpoint is a\n"+
-			"public surface change; update wantDoors deliberately", doorPaths(), want)
+			"public surface change; update wantEndpoints deliberately", endpointPaths(), want)
 	}
 	// Same paths; now the BINDING behind each one. An endpoint whose wire or origin
 	// tag moved is a changed endpoint even though the path set is untouched.
-	byPath := make(map[string]door, len(doors))
-	for _, d := range doors {
+	byPath := make(map[string]endpoint, len(endpoints))
+	for _, d := range endpoints {
 		byPath[d.path] = d
 	}
-	for _, w := range wantDoors {
+	for _, w := range wantEndpoints {
 		got := byPath[w.path]
 		if got.decode == nil {
 			t.Errorf("endpoint %s has no wire: an endpoint is a path BOUND to a decoder", w.path)
@@ -355,7 +355,7 @@ func TestIngestSurfaceIsExactlyTheContract(t *testing.T) {
 	}
 }
 
-// TestEveryDoorStampsItsOwnSource is the behavioral half of the source binding: the
+// TestEveryEndpointStampsItsOwnSource is the behavioral half of the source binding: the
 // contract above pins the table, this pins that the value declared there is the value
 // that reaches the ROW. Without it, source could be pinned in the table and dropped on
 // the way to the warehouse and both halves would still look right.
@@ -363,9 +363,9 @@ func TestIngestSurfaceIsExactlyTheContract(t *testing.T) {
 // $source is the signal the alias sunset is decided on — an endpoint may be retired
 // when its volume reaches zero — so the value declared in the table has to be the value
 // that reaches the column.
-func TestEveryDoorStampsItsOwnSource(t *testing.T) {
+func TestEveryEndpointStampsItsOwnSource(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
-	for _, d := range doors {
+	for _, d := range endpoints {
 		w := fakeWarehouse(t)
 		app := mountApp(t)
 		if code, body := doBody(t, app, http.MethodPost, d.path, "user-dave", "acme", pageviewFor(t, d)); code != http.StatusOK {
@@ -385,7 +385,7 @@ func TestEveryDoorStampsItsOwnSource(t *testing.T) {
 // does not land.
 func TestApiHostAnonymousWritesNothing(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
-	for _, d := range doors {
+	for _, d := range endpoints {
 		for _, host := range []string{"api.hanzo.ai", "hanzo.ai"} {
 			w := fakeWarehouse(t)
 			app := mountApp(t)
@@ -399,11 +399,11 @@ func TestApiHostAnonymousWritesNothing(t *testing.T) {
 	}
 }
 
-// TestRoutedPostSetIsExactlyTheDoors reads the REGISTERED route table back out of the
+// TestRoutedPostSetIsExactlyTheEndpoints reads the REGISTERED route table back out of the
 // app and proves the POST surface is the endpoint set — nothing more, nothing
 // less. This is what a hand-written app.Post beside the loop would trip, which is
 // exactly how the three lists drifted apart before.
-func TestRoutedPostSetIsExactlyTheDoors(t *testing.T) {
+func TestRoutedPostSetIsExactlyTheEndpoints(t *testing.T) {
 	app := mountApp(t)
 	var posts []string
 	// GetRoutes(true) drops the `use` entries — middleware, which fiber keeps in the
@@ -417,15 +417,15 @@ func TestRoutedPostSetIsExactlyTheDoors(t *testing.T) {
 			posts = append(posts, r.Path)
 		}
 	}
-	// The POST surface is the doors PLUS the two routes on this surface that are
-	// registered by hand, each because it is NOT a `doors` row:
+	// The POST surface is the endpoints PLUS the two routes on this surface that are
+	// registered by hand, each because it is NOT a `endpoints` row:
 	//
 	//   - /v1/event/{project}/envelope|store — the obs error wire the event endpoint
 	//     carries. It forwards to the o11y plane's installed consumer
 	//     (cloud.ObsErrorIngest) and is DSN-authenticated there: a wire on the one
 	//     event endpoint, not a new endpoint for handle to admit.
 	//   - /v1/event/replay — the session-replay snapshot endpoint (replay.go). A
-	//     `doors` row is a wire that decodes to []CaptureEvent and flows through the
+	//     `endpoints` row is a wire that decodes to []CaptureEvent and flows through the
 	//     ONE write core onto the event plane; a snapshot batch is an opaque rrweb
 	//     recording produced to a different consumer on a different transport, and it
 	//     lands no warehouse row at all. It cannot be a row here without either a
@@ -433,20 +433,20 @@ func TestRoutedPostSetIsExactlyTheDoors(t *testing.T) {
 	//     meaning for CaptureEvent. It shares ADMISSION — eventTenant, and the same
 	//     refusals — which is the part this file exists to hold shut, and
 	//     replay_test.go quantifies that gate over it directly.
-	want := append(doorPaths(), "/v1/event/:project/envelope", "/v1/event/:project/store", replayPath)
+	want := append(endpointPaths(), "/v1/event/:project/envelope", "/v1/event/:project/store", replayPath)
 	if !sameSet(posts, want) {
-		t.Fatalf("registered POST routes = %v, want doors + the obs error wire = %v — every other\n"+
-			"ingest route must come from doors, and nothing else may be registered as a POST here", posts, want)
+		t.Fatalf("registered POST routes = %v, want endpoints + the obs error wire = %v — every other\n"+
+			"ingest route must come from endpoints, and nothing else may be registered as a POST here", posts, want)
 	}
 }
 
-// TestEveryDoorIsRoutedAndAdmits is the positive half on the API host: each declared
+// TestEveryEndpointIsRoutedAndAdmits is the positive half on the API host: each declared
 // endpoint actually exists (never 404) and, for a credential that resolves, reaches the
 // write core (503, no datastore in the harness).
-func TestEveryDoorIsRoutedAndAdmits(t *testing.T) {
+func TestEveryEndpointIsRoutedAndAdmits(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
-	for _, d := range doors {
+	for _, d := range endpoints {
 		code, body := doBody(t, app, http.MethodPost, d.path, "user-dave", "acme", pageviewFor(t, d))
 		if code == http.StatusNotFound {
 			t.Errorf("endpoint %s is declared but not routed (404)", d.path)
@@ -458,17 +458,17 @@ func TestEveryDoorIsRoutedAndAdmits(t *testing.T) {
 	}
 }
 
-// TestRetiredDoorIsGone is the deletion proof: a retired endpoint must 404 on the API
-// host and be absent from the doors table.
-func TestRetiredDoorIsGone(t *testing.T) {
+// TestRetiredEndpointIsGone is the deletion proof: a retired endpoint must 404 on the API
+// host and be absent from the endpoints table.
+func TestRetiredEndpointIsGone(t *testing.T) {
 	api := mountApp(t)
-	for _, p := range retiredDoors {
+	for _, p := range retiredEndpoints {
 		if code, body := doHost(t, api, p, "", "", "api.hanzo.ai", canonPageview); code != http.StatusNotFound {
 			t.Errorf("retired endpoint %s is still routed on the API host: %d (%s)", p, code, body)
 		}
-		for _, d := range doors {
+		for _, d := range endpoints {
 			if d.path == p {
-				t.Errorf("retired endpoint %s is still declared in doors", p)
+				t.Errorf("retired endpoint %s is still declared in endpoints", p)
 			}
 		}
 	}
@@ -476,12 +476,12 @@ func TestRetiredDoorIsGone(t *testing.T) {
 
 // ── the gate, quantified over every endpoint ────────────────────────────────
 
-// TestEveryDoorFailsClosedOnUnresolvableCredential is THE admission gate. A caller that
+// TestEveryEndpointFailsClosedOnUnresolvableCredential is THE admission gate. A caller that
 // PRESENTED a credential which does not resolve is refused 403 on every endpoint —
 // never downgraded, because a downgrade files a misconfigured key's events where its
 // owner cannot read them.
-func TestEveryDoorFailsClosedOnUnresolvableCredential(t *testing.T) {
-	for _, d := range doors {
+func TestEveryEndpointFailsClosedOnUnresolvableCredential(t *testing.T) {
+	for _, d := range endpoints {
 		app := mountApp(t)
 		stubResolver(t, func(string) (string, bool) { return "", false })
 		for _, hdr := range []map[string]string{
@@ -496,16 +496,16 @@ func TestEveryDoorFailsClosedOnUnresolvableCredential(t *testing.T) {
 	}
 }
 
-// TestEveryDoorRefusesTheAnonymousCaller is the capability gate. With no credential of
+// TestEveryEndpointRefusesTheAnonymousCaller is the capability gate. With no credential of
 // any kind, on a RECOGNIZED BRAND HOST, a commerce payload is refused — never stored,
 // and never at full capability into a real org.
 //
 // 503 is the failure signal here, not the success one: it would mean the request
 // reached the write core. Paired failure: give handle a host fallback and these turn 503.
-func TestEveryDoorRefusesTheAnonymousCaller(t *testing.T) {
+func TestEveryEndpointRefusesTheAnonymousCaller(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
-	for _, d := range doors {
+	for _, d := range endpoints {
 		for _, host := range []string{"hanzo.ai", "api.hanzo.ai"} {
 			code, body := doHost(t, app, d.path, "", "", host, commerceFor(t, d))
 			if code == http.StatusServiceUnavailable {
@@ -518,22 +518,22 @@ func TestEveryDoorRefusesTheAnonymousCaller(t *testing.T) {
 	}
 }
 
-// TestEveryDoorAdmitsAValidatedPrincipal is the "the gate is not just a wall" half: a
+// TestEveryEndpointAdmitsAValidatedPrincipal is the "the gate is not just a wall" half: a
 // validated bearer keeps FULL capability on every endpoint, so the commerce payload a
 // credential-less caller is refused for is admitted here (503 = reached the write core).
-func TestEveryDoorAdmitsAValidatedPrincipal(t *testing.T) {
+func TestEveryEndpointAdmitsAValidatedPrincipal(t *testing.T) {
 	app := mountApp(t)
-	for _, d := range doors {
+	for _, d := range endpoints {
 		if code, body := doBody(t, app, http.MethodPost, d.path, "user-dave", "acme", commerceFor(t, d)); code != http.StatusServiceUnavailable {
 			t.Errorf("endpoint %s with a validated bearer = %d (%s), want 503 (admitted at full capability)", d.path, code, body)
 		}
 	}
 }
 
-// TestEveryDoorAdmitsAResolvedKey: the same for out-of-band keys — a resolvable sk-
+// TestEveryEndpointAdmitsAResolvedKey: the same for out-of-band keys — a resolvable sk-
 // and a resolvable pk- both reach the write core at full capability on every endpoint.
-func TestEveryDoorAdmitsAResolvedKey(t *testing.T) {
-	for _, d := range doors {
+func TestEveryEndpointAdmitsAResolvedKey(t *testing.T) {
+	for _, d := range endpoints {
 		app := mountApp(t)
 		stubResolver(t, func(string) (string, bool) { return "acme", true })
 		for _, hdr := range []map[string]string{
@@ -554,7 +554,7 @@ func TestEveryDoorAdmitsAResolvedKey(t *testing.T) {
 // so `POST /v1/event`, the endpoint every Hanzo product beacons to, shipped in
 // every generated SDK as a call with nowhere to put the event.
 //
-// It quantifies over untypedByDesign, not over doors, because that ledger IS the set
+// It quantifies over untypedByDesign, not over endpoints, because that ledger IS the set
 // of operations zip's registry cannot describe — so a refusal added there tomorrow
 // owes its bodies by construction rather than by someone remembering. And it reads
 // the DOCUMENT, not the registry, because the document is what ships.
@@ -647,12 +647,12 @@ func publishedOps(t *testing.T) map[string]publishedOp {
 	return ops
 }
 
-// TestEveryDoorDeclaresItsPolymorphicWire is the doors-specific half: the canonical
+// TestEveryEndpointDeclaresItsPolymorphicWire is the endpoints-specific half: the canonical
 // four accept three shapes on one path, and naming ONE of them would publish an
 // ingest API that cannot batch — which is most of what @hanzo/event does.
-func TestEveryDoorDeclaresItsPolymorphicWire(t *testing.T) {
+func TestEveryEndpointDeclaresItsPolymorphicWire(t *testing.T) {
 	published := publishedOps(t)
-	for _, d := range doors {
+	for _, d := range endpoints {
 		op := published["POST "+d.path]
 		if op.RequestBody == nil {
 			t.Errorf("POST %s publishes no requestBody", d.path)

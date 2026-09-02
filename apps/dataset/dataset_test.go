@@ -729,9 +729,9 @@ func TestTheHorizonExcludesTheImmatureTail(t *testing.T) {
 	}
 }
 
-// TestAWindowYoungerThanItsHorizonIsRefusedAtTheDoor: saying so at declare time
+// TestAWindowYoungerThanItsHorizonIsRefusedAtTheEndpoint: saying so at declare time
 // beats a ready dataset with zero rows, which looks like a tenant with no activity.
-func TestAWindowYoungerThanItsHorizonIsRefusedAtTheDoor(t *testing.T) {
+func TestAWindowYoungerThanItsHorizonIsRefusedAtTheEndpoint(t *testing.T) {
 	app := mountHTTP(t, newPlane(&fake{}))
 	now := time.Now().UTC()
 	in := riskDatasetSpec{

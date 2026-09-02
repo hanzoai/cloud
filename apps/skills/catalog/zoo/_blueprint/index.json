@@ -16,21 +16,21 @@
       "name": "blueprint_blueprint",
       "path": "blueprint_blueprint/SKILL.md",
       "service": "blueprint",
-      "sha256": "96b062d0a2f352542921aac00a9603f361b417e6e9ce2c9abe1ebd0258820209"
+      "sha256": "c798c782c197e6bcc391a0761db950c7e8279f56c8ef5ca0805ab650bc9e7a74"
     },
     {
       "description": "Read blueprint health: Reports blueprint liveness and echoes the compute rate card in force..",
       "name": "blueprint_health",
       "path": "blueprint_health/SKILL.md",
       "service": "blueprint",
-      "sha256": "cd992265e4d361eeed6010ae6c0dcda2dce0cf4e5f0762e34ddcea17b990de26"
+      "sha256": "767cdcf536eaf0892bb82c6beb6a79ea38d8d4a64fdd056ac9932196cd44258e"
     },
     {
       "description": "Read blueprint sbom: A blueprint's bill of images and what running it costs.",
       "name": "blueprint_sbom",
       "path": "blueprint_sbom/SKILL.md",
       "service": "blueprint",
-      "sha256": "514ba0d77aca729d38e50f400e465ad2f171a1d32da395c04284a940a4b672c2"
+      "sha256": "d822deb174f3b37a85caf09b5388585e50cb09be049aa27631c450252ddf9831"
     }
   ],
   "spec_version": "8.0.0"

@@ -79,8 +79,8 @@ func watchTeaching(t *testing.T) <-chan caught {
 	return seen
 }
 
-// doorApp is the credit endpoint with a handler that answers like the real one.
-func doorApp(t *testing.T, status int, body string) *zip.App {
+// endpointApp is the credit endpoint with a handler that answers like the real one.
+func endpointApp(t *testing.T, status int, body string) *zip.App {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	plane.Unbind()
@@ -89,7 +89,7 @@ func doorApp(t *testing.T, status int, body string) *zip.App {
 	cloud.SetRiskScorer(func(context.Context, string, cloud.RiskQuery) (cloud.RiskVerdict, error) {
 		return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
 	})
-	app := zip.New(zip.Config{Logger: luxlog.New("doortest"), DisableStartupMessage: true})
+	app := zip.New(zip.Config{Logger: luxlog.New("endpointtest"), DisableStartupMessage: true})
 	// settling supplies the ledger and the receipt read the settlement credit needs
 	// (settle_test.go). What an endpoint TEACHES is this file's subject and what it
 	// CREDITS is not, but the two run at the same point and the credit runs first, so an
@@ -187,7 +187,7 @@ func TestPaymentFacts_StatesThePeerThatArmsTheFanOut(t *testing.T) {
 	}
 }
 
-// TestPaymentAxes_MatchWhatTheDoorActuallyStates holds the boot declaration to the
+// TestPaymentAxes_MatchWhatTheEndpointActuallyStates holds the boot declaration to the
 // endpoint.
 //
 // The unarmed axis is announced at boot precisely so it cannot read as a rule that
@@ -198,7 +198,7 @@ func TestPaymentFacts_StatesThePeerThatArmsTheFanOut(t *testing.T) {
 // Mutation proof: state a device in [paymentFacts] without moving it out of
 // [paymentUnarmed] (or add an axis to [paymentAxes] the endpoint never states) and this
 // fails.
-func TestPaymentAxes_MatchWhatTheDoorActuallyStates(t *testing.T) {
+func TestPaymentAxes_MatchWhatTheEndpointActuallyStates(t *testing.T) {
 	// Everything the endpoint can observe, stated at once, so this is the endpoint's
 	// whole reach rather than one sample of it.
 	facts := paymentFacts("198.51.100.22", "US", 4200, "USD")
@@ -232,7 +232,7 @@ func TestPaymentAxes_MatchWhatTheDoorActuallyStates(t *testing.T) {
 // reading a history nothing wrote.
 func TestTeachSettlement_ASettledTopUpTeachesThePayer(t *testing.T) {
 	seen := watchTeaching(t)
-	app := doorApp(t, http.StatusOK,
+	app := endpointApp(t, http.StatusOK,
 		`{"transactionId":"`+settledReceipt+`","balanceCents":4200,"status":"ok","processorRef":"`+settledRef+`"}`)
 	if code := post(t, app); code != http.StatusOK {
 		t.Fatalf("topup: %d, want 200", code)
@@ -300,7 +300,7 @@ func TestTeachSettlement_KeysOnTheProcessorReferenceFirst(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			seen := watchTeaching(t)
-			if code := post(t, doorApp(t, http.StatusOK, tc.body)); code != http.StatusOK {
+			if code := post(t, endpointApp(t, http.StatusOK, tc.body)); code != http.StatusOK {
 				t.Fatalf("topup: %d", code)
 			}
 			if got := await(t, seen); got.in.Settlement != tc.want {
@@ -336,7 +336,7 @@ func TestTeachSettlement_TeachesNothingWithoutASettlement(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			seen := watchTeaching(t)
-			post(t, doorApp(t, tc.status, tc.body))
+			post(t, endpointApp(t, tc.status, tc.body))
 			none(t, seen)
 		})
 	}
@@ -380,7 +380,7 @@ func TestTeachSettlement_CannotFailTheSettledPayment(t *testing.T) {
 			}
 			t.Cleanup(func() { teach = prior })
 
-			if code := post(t, doorApp(t, http.StatusOK, body)); code != http.StatusOK {
+			if code := post(t, endpointApp(t, http.StatusOK, body)); code != http.StatusOK {
 				t.Fatalf("a settled top-up answered %d because the risk plane could not be told "+
 					"about it", code)
 			}

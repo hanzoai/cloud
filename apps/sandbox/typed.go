@@ -35,7 +35,7 @@ import (
 // ops is the typed-op receiver. A bound METHOD is the only form cmd/zipdoc can
 // lift prose from — a closure returned by a factory is a call expression with no
 // doc comment to read, which is exactly why the two ticket routes below are two
-// methods over one core rather than one `open(door)` factory.
+// methods over one core rather than one `open(view)` factory.
 type ops struct{ s *Service }
 
 // ── the collection ──────────────────────────────────────────────────────────
@@ -267,7 +267,7 @@ func (o ops) screenTicket(ctx context.Context, in *sandboxRef) (*ticketGrant, er
 
 // ticketFor is the one mint both endpoints share, so neither can drift from the
 // other about what a ticket is or how long it lasts.
-func (o ops) ticketFor(ctx context.Context, in *sandboxRef, door string) (*ticketGrant, error) {
+func (o ops) ticketFor(ctx context.Context, in *sandboxRef, view string) (*ticketGrant, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -290,6 +290,6 @@ func (o ops) ticketFor(ctx context.Context, in *sandboxRef, door string) (*ticke
 	return &ticketGrant{
 		Ticket:    tok,
 		ExpiresIn: int(ticketTTL / time.Second),
-		URL:       "/v1/sandbox/" + m.ID + "/" + door + "?ticket=" + tok,
+		URL:       "/v1/sandbox/" + m.ID + "/" + view + "?ticket=" + tok,
 	}, nil
 }

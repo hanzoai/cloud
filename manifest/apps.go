@@ -297,7 +297,7 @@ var Apps = []App{
 	{Name: "social", Prefixes: []string{"/v1/social"}},
 	{Name: "standing", Prefixes: []string{"/v1/standing"}},
 	// The INGESTION endpoint is load-bearing, not decorative: apps/event/event.go's
-	// `doors` table serves /v1/event, and every beacon the products emit lands on it.
+	// `endpoints` table serves /v1/event, and every beacon the products emit lands on it.
 	// Listing only the read endpoints (as this row did) sent every write to commerce's
 	// bare "/v1" catch-all, which does not serve them — 405, silently, for every event
 	// in the fleet. The row was harmless while each app called its own routes(); it
@@ -327,7 +327,7 @@ var Apps = []App{
 	// The PostHog wire's own path stays gone: insights.hanzo.ai's /e, /batch and
 	// /capture rewrite onto /v1/event, so no caller moved, and "/v1/insights/e" is
 	// not claimed here — a prefix is a claim that this app ANSWERS the path, and the
-	// endpoint is retired (retiredDoors, apps/event/doors_test.go). /v1/todo is NOT here
+	// endpoint is retired (retiredEndpoints, apps/event/endpoints_test.go). /v1/todo is NOT here
 	// and never was: the todo product owns that name.
 	{Name: "event", Prefixes: []string{"/v1/event"}},
 	// The CI half of the delivery plane, beside /v1/deploy and /v1/git. It
@@ -383,7 +383,7 @@ var Apps = []App{
 	{Name: "security", Prefixes: []string{"/v1/security"}},
 	{Name: "integrations", Prefixes: []string{"/v1/integrations"}},
 	// The browser tag config is served by the projects app, which holds both the
-	// handler and the project store it reads (apps/projects/tagdoor.go); it is under
+	// handler and the project store it reads (apps/projects/tags.go); it is under
 	// that app's prefix, so this row does not name it. A prefix must be claimed
 	// exactly once — two apps claiming one panics the host build.
 	{Name: "destination", Prefixes: []string{"/v1/destination"}},

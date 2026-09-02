@@ -16,14 +16,14 @@
       "name": "author_author",
       "path": "author_author/SKILL.md",
       "service": "author",
-      "sha256": "271a602525375dcbb88dbbec070c120d06bca60feda6b1b77780be76b8faddd9"
+      "sha256": "6aa81466b766620d1a7b8f6ffba59ddfc7d94de295b7893ad5baff2119b657ae"
     },
     {
       "description": "Read author basis: Returns the AUDIT TRAIL behind the caller's own royalty: every ledger row with the spend it was computed from, the share applied at the time, the platform's matching half, whether each row satisfies the formula, and the attribution edges that already existed wh",
       "name": "author_basis",
       "path": "author_basis/SKILL.md",
       "service": "author",
-      "sha256": "2e788186376b3475eb8c35cca1189f63699f2f66078c1bc9d9087e11fe6aad36"
+      "sha256": "3163e71ce27ba8f4ee3288ac9e12c663635338089251703559728e4afc92d94e"
     }
   ],
   "spec_version": "8.0.0"

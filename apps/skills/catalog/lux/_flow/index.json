@@ -16,21 +16,21 @@
       "name": "flow_runs",
       "path": "flow_runs/SKILL.md",
       "service": "flow",
-      "sha256": "0c6791a943a0c2ad8fcdc4d61a1530b07cd15234b0f0b64c62a72f704277cd38"
+      "sha256": "dac4ca53902b62334aab002342b3a51f1f3e9f745dab371e08a6a80f9b26aaae"
     },
     {
       "description": "Read flow status: Status reports whether the flow service is reachable and which version it runs..",
       "name": "flow_status",
       "path": "flow_status/SKILL.md",
       "service": "flow",
-      "sha256": "44b7135729808a057811246e24d863669ebf6596ef930dc6ff1aee359e0a2852"
+      "sha256": "dc20cbc565c0a6befe48900a0c70db8487152027544c10ee3bfd1e98ccacd0dd"
     },
     {
       "description": "Read flow workflows: Workflows lists the caller's workflows, paged., Workflow reads one of the caller's workflows — the full record, graph included..",
       "name": "flow_workflows",
       "path": "flow_workflows/SKILL.md",
       "service": "flow",
-      "sha256": "e08773ea0da84a559b6dded41194d317c210a25b0267c5bcb5b44ce67d226f51"
+      "sha256": "58639ffb99b4660ed0c86a8ce49a358533fb8c85887dbef5e68e5b5e637caa6a"
     }
   ],
   "spec_version": "8.0.0"

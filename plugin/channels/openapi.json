@@ -455,7 +455,7 @@
             "type": "boolean"
           },
           "media": {
-            "description": "Media is whether the transport renders an ATTACHMENT natively. False\neverywhere, and a send is not refused for it: renderText flattens each\nattachment to one `kind: url (mime)` line after the text rather than dropping\nit. A transport whose egress hands its door the raw text would drop the\nattachment instead, and an attachment-only send would reach the platform\nwith nothing to say — which is why the flag and the flattening are pinned\ntogether.",
+            "description": "Media is whether the transport renders an ATTACHMENT natively. False\neverywhere, and a send is not refused for it: renderText flattens each\nattachment to one `kind: url (mime)` line after the text rather than dropping\nit. A transport whose egress passes the raw text straight through would drop the\nattachment instead, and an attachment-only send would reach the platform\nwith nothing to say — which is why the flag and the flattening are pinned\ntogether.",
             "type": "boolean"
           },
           "thread": {

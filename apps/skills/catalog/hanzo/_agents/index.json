@@ -16,56 +16,56 @@
       "name": "agents_activity",
       "path": "agents_activity/SKILL.md",
       "service": "agents",
-      "sha256": "1d8d18739949beaed134ce1d05b0f922b4f6534ba6937904e72955d69f29fdd6"
+      "sha256": "1afb1cb9dbb5016960a5ad71f39c899e78ba704872b564856a67e313eb3aa620"
     },
     {
       "description": "Read agents agents: Returns every agent defined in the caller's org, each with the number of runs recorded against it., Returns one agent with its system prompt and its 20 most recent runs..",
       "name": "agents_agents",
       "path": "agents_agents/SKILL.md",
       "service": "agents",
-      "sha256": "8d436e8f18bf5f6a5bcdf8d2b16a3766be2203dee23eb13b86e0985904bd5ae9"
+      "sha256": "9152eb304833866d9708e9a14be96aeba226595a51200f0563eeba781aee88b2"
     },
     {
       "description": "Read agents builds: Returns the public index of every published build, most recently updated first, so a gallery can link straight to the story behind each product., Returns the readable build of one product: the agent session that produced it, turn by turn — the prompts, the rea",
       "name": "agents_builds",
       "path": "agents_builds/SKILL.md",
       "service": "agents",
-      "sha256": "d309987456844a1654f56c0401fb5ca6c1cb699036dac7e0762be63369259aad"
+      "sha256": "456be603989dacdac7a93e86398960b8acf974289b67e78b16a0d37d3619ed00"
     },
     {
       "description": "Read agents chat: List the agent threads in your org, Read one agent thread in full, List the agent presets available to a caller.",
       "name": "agents_chat",
       "path": "agents_chat/SKILL.md",
       "service": "agents",
-      "sha256": "3f3f5daabab250f2b0ecb2ba675fcf8c31a05a5268b51d0b218d7b10002b55d4"
+      "sha256": "f5666b24ddde06631458690f0bf7fb90c0f2f598978d9c5c31779d9de197da08"
     },
     {
       "description": "Read agents metrics: Serves the invocations-over-time histogram for the org's Agents dashboard..",
       "name": "agents_metrics",
       "path": "agents_metrics/SKILL.md",
       "service": "agents",
-      "sha256": "6cc4025f5ba95a738674c8c1fcfe036269361b4f50412852fc500a0cfc0ace95"
+      "sha256": "76ff52c28f6b3486aefb0188ab7031912a38a2fb33090d26d470e2e61b745ff8"
     },
     {
       "description": "Read agents runs: Returns the org's agent runs across EVERY agent, newest first — what ran here, for whom, on which model, how long it took, and why it failed., Returns one agent's execution history, newest first — each run's input, its output or its error, and how long it took..",
       "name": "agents_runs",
       "path": "agents_runs/SKILL.md",
       "service": "agents",
-      "sha256": "3e6c87e5fa2ff141a3d77e87316b05152290497ecc237c472f7271868be300fa"
+      "sha256": "6fe60c36201058a4767517305a729f173a0b7391fccfd585f949fa6d6873d21b"
     },
     {
       "description": "Read agents sessions: Returns the caller org's live sessions, newest first — each with its event count, its direct-child count and a one-line preview of its latest event., Live session and event updates for the caller's org, as Server-Sent Events., Returns one session with its di",
       "name": "agents_sessions",
       "path": "agents_sessions/SKILL.md",
       "service": "agents",
-      "sha256": "a4e72f230fbf9f8354087d21f2ff59aede1dcd3662cbca67570fcf134266c38d"
+      "sha256": "2822532292f44c6129f78a75493975ee2799013ff2225c4e19d475afb5357fab"
     },
     {
       "description": "Read agents targets: Returns every machine registered to the caller's org, newest first, each with its live session load., Returns one registered machine, with its live session load..",
       "name": "agents_targets",
       "path": "agents_targets/SKILL.md",
       "service": "agents",
-      "sha256": "22333a8989e117d3793676a8e561236adfcd0b460a05da88b91ddf6775a1b575"
+      "sha256": "ba6c32cc26e642fb6b45c9c5b76e6527304ed2e4f1a853a87093410535f9e37d"
     }
   ],
   "spec_version": "8.0.0"

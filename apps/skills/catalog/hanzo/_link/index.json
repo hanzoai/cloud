@@ -16,28 +16,28 @@
       "name": "link_devices",
       "path": "link_devices/SKILL.md",
       "service": "link",
-      "sha256": "7237a9eb1844c70a6b8c84462e3b35618808738e5f27670c698cca6983fff108"
+      "sha256": "8aa32619fdae2308a151cac8b738881baa0065dd36d77674c5207de4fd5075bb"
     },
     {
       "description": "Read link link: Lists your linked accounts and the devices they sit on., Reads one linked account..",
       "name": "link_link",
       "path": "link_link/SKILL.md",
       "service": "link",
-      "sha256": "4481d032cf3c3dae9e35148b7efa6ffa1028d37d06d2eff0643c5ab78d808da8"
+      "sha256": "70350cfea13bb6f75499167c0f1583de1d809fdf0052d0130145e3c324317d56"
     },
     {
       "description": "Read link route: Gets the failover order across your linked accounts..",
       "name": "link_route",
       "path": "link_route/SKILL.md",
       "service": "link",
-      "sha256": "333b532d02347108663103cce43322575a5202f949d04141f2f5fb01f6425f6a"
+      "sha256": "a2332dc3e4bfc7f10d67ab43f04a2ea528f3e8c97436c8c7fa1793264fb37a50"
     },
     {
       "description": "Read link usage: Shows one provider account's own usage dashboard., Breaks down what the gateway routed through each of your accounts., Shows plan consumption and Hanzo spend side by side..",
       "name": "link_usage",
       "path": "link_usage/SKILL.md",
       "service": "link",
-      "sha256": "64ed6bc58f170aa50c598049b16dbb65cbf311a57083c7c30880702387e47fc7"
+      "sha256": "369091b6be056a7732400673cb7657578a4806f0e10ffd4d43c0d4caed83d18c"
     }
   ],
   "spec_version": "8.0.0"

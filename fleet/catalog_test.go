@@ -179,7 +179,7 @@ func TestListingStartsNothing(t *testing.T) {
 	refuse := func(string) (string, string, error) {
 		return "", "", errors.New("nothing may be asked to answer a tools/list")
 	}
-	d := &Door{apps: apps, owner: map[string]string{}}
+	d := &MCP{apps: apps, owner: map[string]string{}}
 
 	first, down, _ := d.gather(nil, refuse)
 	if len(down) != 0 {
@@ -206,7 +206,7 @@ func TestListingStartsNothing(t *testing.T) {
 	}
 }
 
-// TestEverySubsystemThePublicDoorListsIsInTheCatalog is the gate that replaces
+// TestEverySubsystemThePublicEndpointListsIsInTheCatalog is the gate that replaces
 // the runtime fallback. The MCP server reads the catalog and asks nothing, so an
 // app the generator skipped publishes NOTHING — it would offer fewer tools than
 // the fleet routes, silently, and no request would fail to say so.
@@ -214,7 +214,7 @@ func TestListingStartsNothing(t *testing.T) {
 // present-and-empty is a legitimate answer (an app that serves no typed op);
 // ABSENT is not, and it is what this refuses. The remedy is one command, so it is
 // named rather than described.
-func TestEverySubsystemThePublicDoorListsIsInTheCatalog(t *testing.T) {
+func TestEverySubsystemThePublicEndpointListsIsInTheCatalog(t *testing.T) {
 	var missing []string
 	for _, a := range manifest.Apps {
 		if manifest.Coresident(a.Name) {

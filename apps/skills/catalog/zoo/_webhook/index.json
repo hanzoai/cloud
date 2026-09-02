@@ -16,14 +16,14 @@
       "name": "webhook_deliveries",
       "path": "webhook_deliveries/SKILL.md",
       "service": "webhook",
-      "sha256": "c876e3dc2f1c639e321b8bc131d495fb35768b3c839b9bfd7b1c0abfae5adf8c"
+      "sha256": "cdab8248c0b012dca4f6ac6707b7b64200c7b12888da35263666ad21ad6371ea"
     },
     {
       "description": "Read webhook webhook: Returns every webhook endpoint the caller's org has registered, newest first, each with its 7-day delivery and failure counts., Returns one of the caller org's webhook endpoints with its 7-day delivery and failure counts, signing secret redacted..",
       "name": "webhook_webhook",
       "path": "webhook_webhook/SKILL.md",
       "service": "webhook",
-      "sha256": "b740ac0df02af751fb900b7266efa26209c416276f9e853d7a851082e49c75da"
+      "sha256": "f429cab765243d64f18ee9f1a06850206aca574fcb9ab6bd0c23dbfd44bf0478"
     }
   ],
   "spec_version": "8.0.0"

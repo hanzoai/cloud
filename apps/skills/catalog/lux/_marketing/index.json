@@ -16,56 +16,56 @@
       "name": "marketing_audiences",
       "path": "marketing_audiences/SKILL.md",
       "service": "marketing",
-      "sha256": "a6937475beae83243dc20021014588e54528c700a295a071b27ce18364cb75e4"
+      "sha256": "f08a10966044258876ca136761301e6593e51180748fab4819a331746b6ccb75"
     },
     {
       "description": "Read marketing calendar: Returns the org's calendar, latest scheduled first, optionally narrowed to one status., Returns one of the caller org's posts, including the exact error behind a failed publish..",
       "name": "marketing_calendar",
       "path": "marketing_calendar/SKILL.md",
       "service": "marketing",
-      "sha256": "031f16565306ea53e42aaf3cbdf4479bcbb8d4f038b39c9ca56099eaed67d073"
+      "sha256": "4dc995d34917b55ffa2cd464b67e8fdbdfbe20c07ac3c07ed9089c1957436d12"
     },
     {
       "description": "Read marketing campaigns: Returns the org's campaigns, most recently updated first, optionally narrowed to one lifecycle status., Returns one of the caller org's campaigns..",
       "name": "marketing_campaigns",
       "path": "marketing_campaigns/SKILL.md",
       "service": "marketing",
-      "sha256": "fb1159865517c2f3f13aa97a59179d968edfeec5e56715e1fca80f465ad3aeb2"
+      "sha256": "c1f934b539dbfc6c6c754d7ffd062c3302c4b53a672c60102681d13258ed9f88"
     },
     {
       "description": "Read marketing promos: Returns every promo the deployment offers with its live counters: how many orgs have redeemed it and how many redemptions remain under the cap., Prices a promo against a plan and seat count., Returns the caller org's OWN redemption of a promo — an org-scope",
       "name": "marketing_promos",
       "path": "marketing_promos/SKILL.md",
       "service": "marketing",
-      "sha256": "0c64b027bbbe6a6b6f3697694d688d3d27ae2016959cf0307faa1c15c65201d4"
+      "sha256": "755240e47d5b0511a03490b1209b070f82370f548fcccd90c73229f49f080dea"
     },
     {
       "description": "Read marketing sequences: Returns the org's drip sequences, most recently updated first., Returns one of the caller org's sequences together with its steps in send order., Returns who is walking one sequence, most recently enrolled first, with each walk's current step and next du",
       "name": "marketing_sequences",
       "path": "marketing_sequences/SKILL.md",
       "service": "marketing",
-      "sha256": "a3782ff5351ca079214ae76b40b8ab598e4759f92ba51ab66857cb4fc1281a44"
+      "sha256": "1e20aed0cc9f92cc0e1adb8c9a4ee79e59ae00325769fbd69afa24e289da320d"
     },
     {
       "description": "Read marketing summary: Rolls up the caller org's campaigns: how many there are, how many are active, and the summed budget and spend in cents..",
       "name": "marketing_summary",
       "path": "marketing_summary/SKILL.md",
       "service": "marketing",
-      "sha256": "dbcd0eeb6d24a110b5f5ef8e24a2e195f6f136ddc7bec0c6fa7519c815c1ea32"
+      "sha256": "ac949089b5c3890de283ade2f1e55d61c92571ac81569d589df7c5d0b0d04bf1"
     },
     {
       "description": "Read marketing suppressions: Returns the org's opt-out list, newest first — everyone the send gate will refuse to deliver to..",
       "name": "marketing_suppressions",
       "path": "marketing_suppressions/SKILL.md",
       "service": "marketing",
-      "sha256": "db8e279654570865c59a9430528258556021f134fae9bdeae24c0ba2f3dadb54"
+      "sha256": "b364b7151cf94ff136962f567cffc84dc24ba700d00746d7f2a6925eec088631"
     },
     {
       "description": "Read marketing unsubscribe: Is the PUBLIC one-click endpoint (no principal): a recipient clicks the signed link in an email footer..",
       "name": "marketing_unsubscribe",
       "path": "marketing_unsubscribe/SKILL.md",
       "service": "marketing",
-      "sha256": "c88f652f9956ab439a8f99b8cb868e98e5b68d4176f55c401b13e45a08b5020a"
+      "sha256": "26309ad751145e19fcb2ce2822c5bdbb39198594feb20c157aedc3fa0e83474f"
     }
   ],
   "spec_version": "8.0.0"

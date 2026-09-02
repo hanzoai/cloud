@@ -16,21 +16,21 @@
       "name": "dataset_dataset",
       "path": "dataset_dataset/SKILL.md",
       "service": "dataset",
-      "sha256": "b7caeea0869773e20ce1281fd3a475a5ebe8df6bdb10bcafcf3401580940f552"
+      "sha256": "fe537e447fd5c60038bab69b529415e462ae08e875491803e589f91b5b5780a2"
     },
     {
       "description": "Read dataset export: Read a version's rows back, one page at a time.",
       "name": "dataset_export",
       "path": "dataset_export/SKILL.md",
       "service": "dataset",
-      "sha256": "e2a14e79dc7f3070f068e0bc9e06c8f9d803d5bf9f4b28d4b062cda8da8cf0d0"
+      "sha256": "31944b36e120239771f483c4d6ea4ae2b10bc71f18df995103846b6e572e06c6"
     },
     {
       "description": "Read dataset lineage: Show where a version's rows came from, and whether that can still be demonstrated.",
       "name": "dataset_lineage",
       "path": "dataset_lineage/SKILL.md",
       "service": "dataset",
-      "sha256": "08db4434a0db5cdf6e1189cf9a51590700466a1d456491643b7fd2009ab78c23"
+      "sha256": "74f21d3af4fa1f4fe15bc3ce7acba756b4ccb4a13bd537015291cf1beea47fe6"
     }
   ],
   "spec_version": "8.0.0"

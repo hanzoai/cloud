@@ -93,10 +93,10 @@ var (
 // seeding exists to prevent, pointed the other way.
 var warehouseTables = []string{"event.act", "event.clip", "event.error", "event.log", "event.span"}
 
-// ingestDoors are the ingest endpoints whose admission outcome is counted. One
+// ingestEndpoints are the ingest endpoints whose admission outcome is counted. One
 // endpoint today (POST /v1/event, the ONE event endpoint); the list exists so
 // seeding stays honest when a second one is added.
-var ingestDoors = []string{"event"}
+var ingestEndpoints = []string{"event"}
 
 // planeInstruments resolves the data-plane instruments and seeds them. Lazy:
 // see the note above and metrics_http.go's instruments().
@@ -104,7 +104,7 @@ func planeInstruments() {
 	planeOnce.Do(func() {
 		m := otel.Meter(meterName)
 		ingestItems, _ = m.Int64Counter("hanzo_ingest_items_total",
-			metric.WithDescription("Items offered to an ingest endpoint, by door and admission outcome (accepted/dropped)."))
+			metric.WithDescription("Items offered to an ingest endpoint, by endpoint and admission outcome (accepted/dropped)."))
 		planeRows, _ = m.Int64Counter("hanzo_plane_rows_written_total",
 			metric.WithDescription("Rows written to an event-warehouse table."))
 		alertEgress, _ = m.Int64Counter("hanzo_alert_delivery_total",
@@ -126,7 +126,7 @@ func seedCounters() {
 			planeRows.Add(ctx, 0, metric.WithAttributes(attribute.String("table", t)))
 		}
 	}
-	for _, d := range ingestDoors {
+	for _, d := range ingestEndpoints {
 		for _, outcome := range []string{"accepted", "dropped"} {
 			if ingestItems != nil {
 				ingestItems.Add(ctx, 0, metric.WithAttributes(
@@ -154,19 +154,19 @@ func seedCounters() {
 // ratio, not a count: "88% of what was offered was dropped" is an outage,
 // "8,000 items were dropped" is a number whose meaning depends on a second
 // series nobody fetched.
-func ObserveIngest(door string, accepted, dropped int) {
+func ObserveIngest(path string, accepted, dropped int) {
 	planeInstruments()
-	if ingestItems == nil || door == "" {
+	if ingestItems == nil || path == "" {
 		return
 	}
 	ctx := context.Background()
 	if accepted > 0 {
 		ingestItems.Add(ctx, int64(accepted), metric.WithAttributes(
-			attribute.String("door", door), attribute.String("outcome", "accepted")))
+			attribute.String("door", path), attribute.String("outcome", "accepted")))
 	}
 	if dropped > 0 {
 		ingestItems.Add(ctx, int64(dropped), metric.WithAttributes(
-			attribute.String("door", door), attribute.String("outcome", "dropped")))
+			attribute.String("door", path), attribute.String("outcome", "dropped")))
 	}
 }
 

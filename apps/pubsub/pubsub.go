@@ -236,10 +236,10 @@ func claimable(host string, port int) error {
 	return ln.Close()
 }
 
-// Shutdown stops the door's client connection and the embedded server on
+// Shutdown stops the cached client connection and the embedded server on
 // graceful cloud shutdown. Idempotent.
 func Shutdown(_ context.Context) error {
-	closeDoor()
+	disconnect()
 	if srv != nil {
 		srv.Shutdown()
 		srv = nil
@@ -263,10 +263,10 @@ func Shutdown(_ context.Context) error {
 // and a second connection policy, free to drift from these on the day one of
 // them changed.
 
-// door holds this process's ONE client connection to the plane, dialed on first
+// conn holds this process's ONE client connection to the plane, dialed on first
 // use and reused by every product riding it. Guarded so a burst of concurrent
 // first requests dials once; re-dials after a close rather than latching.
-var door struct {
+var conn struct {
 	mu sync.Mutex
 	nc *nats.Conn
 }
@@ -277,20 +277,20 @@ var door struct {
 // every caller is a typed op and there is one honest answer to "the bus is not
 // reachable": the endpoint is up, the plane behind it is not.
 func Bus() (jetstream.JetStream, *nats.Conn, error) {
-	door.mu.Lock()
-	defer door.mu.Unlock()
-	if door.nc == nil || door.nc.IsClosed() {
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
+	if conn.nc == nil || conn.nc.IsClosed() {
 		nc, err := dial()
 		if err != nil {
 			return nil, nil, zip.Errorf(http.StatusServiceUnavailable, "bus unreachable: %v", err)
 		}
-		door.nc = nc
+		conn.nc = nc
 	}
-	js, err := jetstream.New(door.nc)
+	js, err := jetstream.New(conn.nc)
 	if err != nil {
 		return nil, nil, zip.Errorf(http.StatusServiceUnavailable, "bus unreachable: %v", err)
 	}
-	return js, door.nc, nil
+	return js, conn.nc, nil
 }
 
 // dial opens that connection. In-process when THIS process runs the embedded
@@ -310,14 +310,14 @@ func dial() (*nats.Conn, error) {
 	return nats.Connect(URL(), opts...)
 }
 
-// closeDoor releases the connection on Shutdown, so a remount dials the new
+// disconnect releases the connection on Shutdown, so a remount dials the new
 // server instead of a dead pipe.
-func closeDoor() {
-	door.mu.Lock()
-	defer door.mu.Unlock()
-	if door.nc != nil {
-		door.nc.Close()
-		door.nc = nil
+func disconnect() {
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
+	if conn.nc != nil {
+		conn.nc.Close()
+		conn.nc = nil
 	}
 }
 

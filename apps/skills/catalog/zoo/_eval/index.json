@@ -16,49 +16,49 @@
       "name": "eval_datasets",
       "path": "eval_datasets/SKILL.md",
       "service": "eval",
-      "sha256": "168a84de1133da85e1a29c877416e23177376dba96633a1a098d5d3aea1563d5"
+      "sha256": "1c293520b0853b3a83306cf4520cc391784458adba07385c021de549cb9bc110"
     },
     {
       "description": "Read eval evaluators: Is the judges your org has defined, each with its judge model, criteria and the score name it writes under..",
       "name": "eval_evaluators",
       "path": "eval_evaluators/SKILL.md",
       "service": "eval",
-      "sha256": "9cba78618f11736c4ef42924b33a6b247fdbea06f5acc279a1623237337a0ddb"
+      "sha256": "b2640218205b314c2b7263cba33ad26286aa5a8a5c8c2de9de3af1d9f1805858"
     },
     {
       "description": "Read eval metrics: Is your org's AI overview board over a window: totals (generations, prompt and completion tokens, cost in cents, errors, success rate, distinct models and users), a gap-filled time series, a per-model breakdown with the long tail folded into \"other\", and latenc",
       "name": "eval_metrics",
       "path": "eval_metrics/SKILL.md",
       "service": "eval",
-      "sha256": "3a1ce1f2b4b25107ed41bebd7b15b381c05751b82ce432666040a3701edd0213"
+      "sha256": "5320756fe0ce7a33fbd62ead0199d25db20b3fddbd09b7ebd5940362ebc6fee7"
     },
     {
       "description": "Read eval rubrics: Is the score shapes your org has declared — each name's data type, its numeric bounds and its allowed categories..",
       "name": "eval_rubrics",
       "path": "eval_rubrics/SKILL.md",
       "service": "eval",
-      "sha256": "8e3bfd802a352c25d41ad672632fc362b9c1b9ffc2f506e1783bd51ebaa3af4b"
+      "sha256": "10db304f94b0293ad5f6a51711684d7a014828b0e1ccbb6017f1efff717f9913"
     },
     {
       "description": "Read eval runs: Is your past runs and how they scored — the dataset and model, the judge model, how many examples were attempted and how many scored, the average score, and when it happened..",
       "name": "eval_runs",
       "path": "eval_runs/SKILL.md",
       "service": "eval",
-      "sha256": "8ef2eba6fcc99a5f586f9835731ef301b7fe5957d10e5d4c276044014fdd2f73"
+      "sha256": "7d580c8822ffa532580f92de8b42fab7db789966ae02f04fe73d1ca98bdd3422"
     },
     {
       "description": "Read eval scores: Is the score events your org has recorded, narrowed by any of name, runName and traceId..",
       "name": "eval_scores",
       "path": "eval_scores/SKILL.md",
       "service": "eval",
-      "sha256": "26e8eb1d5915791474efbbf753606554d433c7c629ca9b8f9ebed96ea3023b79"
+      "sha256": "9df7d56250da1ea6d7870a447965e2700641d8d123abed5760f90096b7ab210c"
     },
     {
       "description": "Read eval traces: Is the traces behind your evaluations — one per model call an evaluation made, carrying its input, output, model and timing — narrowed by any of sessionId, runName and datasetName..",
       "name": "eval_traces",
       "path": "eval_traces/SKILL.md",
       "service": "eval",
-      "sha256": "6914bb73cd9e97ef8bcf48e5d72011fc7896e082000e0758bfa0b8270a46facb"
+      "sha256": "8b32cf8aa454473c95aa677dec9bf82a9399637363647a7fc5cdbabf48ab15aa"
     }
   ],
   "spec_version": "8.0.0"

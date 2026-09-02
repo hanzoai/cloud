@@ -42,7 +42,7 @@
 //	POST   /v1/projects/:slug/releases/:release/activate   flip the pointer (go live / roll back)
 //
 // The browser half — GET /v1/projects/tags, the public pk-keyed pixel config —
-// is served from tagdoor.go, here because this process owns the store it reads.
+// is served from tags.go, here because this process owns the store it reads.
 //
 // Deploy pipeline: a deploy uploads the built static site to OUR S3
 // (CLOUD_PROJECTS_BUCKET on s3.hanzo.ai) under "<org>/<slug>/", marks the
@@ -407,7 +407,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// The public per-site tag endpoint (GET /v1/projects/tags), served by THIS process
 	// because it reads THIS process's project store in-process — the same reason the key/site/scope
 	// resolvers above are registered here rather than reached across the plane.
-	mountTagDoor(app, s)
+	mountTags(app, s)
 
 	// The site edge must hand the browser the bytes we published, unedited: a
 	// An edge with a document rewriter on breaks every hydrating app the

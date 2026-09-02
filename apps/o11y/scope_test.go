@@ -82,7 +82,7 @@ func do(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 // the raw X-Org-Id and was reachable unauthenticated, which is a different defect
 // with a different fix (build.go hands it principal.Org). A trust boundary is a
 // property of a process, not of a header name.
-func TestTypedOpsSeeTheirCallerThroughEveryDoor(t *testing.T) {
+func TestTypedOpsSeeTheirCallerThroughEveryEndpoint(t *testing.T) {
 	const path = "/v1/o11y/status?product=not-a-real-service"
 
 	// No Bridge — the standalone binary, and the tools/call path.

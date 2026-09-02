@@ -7,7 +7,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// door.go is this plane's half of the FLEET'S ONE MCP SERVER.
+// offer.go is this plane's half of the FLEET'S ONE MCP SERVER.
 //
 // The other half is a build artifact and has to be: 549 typed ops across 112
 // lazily-mounted plugins, projected once and served as bytes, so tools/list —
@@ -34,16 +34,16 @@ import (
 // NAMES a caller, and hands it a tools/call no catalogue claimed. An anonymous
 // list still costs a memcpy and starts nothing.
 
-// Door is the per-caller tool source this subsystem contributes to its own MCP
+// Offer is the per-caller tool source this subsystem contributes to its own MCP
 // server. The composition root hands it to cloud.Serve (plugin/tools/main.go), which
 // is the one place a subsystem's contributions to the binary are stated.
-func Door() zip.Source { return door{} }
+func Offer() zip.Source { return offer{} }
 
-// door reads the registry through the SAME context resolvers the typed ops use —
+// offer reads the registry through the SAME context resolvers the typed ops use —
 // scopeOf for a listing, principalOf for a dispatch — so the caller a tool is
 // listed for and the caller it runs as are resolved by one function each, and
 // never from anything the caller wrote.
-type door struct{}
+type offer struct{}
 
 // Tools is the caller's own callable set: every tool the tool plane offers this
 // (org, project) that is both ACTIVATED and DISPATCHABLE.
@@ -58,7 +58,7 @@ type door struct{}
 // are "<server>_<tool>", so two servers' "search" cannot collide — and zip drops
 // any name the fleet's projection already holds, so a tenant can never shadow a
 // product op.
-func (door) Tools(ctx context.Context) []map[string]any {
+func (offer) Tools(ctx context.Context) []map[string]any {
 	scope, err := scopeOf(ctx)
 	if err != nil {
 		// An empty list and a broken identity hop look identical from outside, and
@@ -95,7 +95,7 @@ func (door) Tools(ctx context.Context) []map[string]any {
 // unit and audit record. A refusal comes back as the tool plane's own error text,
 // which zip renders as MCP isError content — so a model reads "tool not activated
 // for this org/project" rather than a transport failure it cannot act on.
-func (door) Call(ctx context.Context, name string, args json.RawMessage) (any, error) {
+func (offer) Call(ctx context.Context, name string, args json.RawMessage) (any, error) {
 	in := toolCall{Name: name, Arguments: map[string]any{}}
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &in.Arguments); err != nil {

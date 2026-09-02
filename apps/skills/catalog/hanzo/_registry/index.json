@@ -16,35 +16,35 @@
       "name": "registry_images",
       "path": "registry_images/SKILL.md",
       "service": "registry",
-      "sha256": "681d1e2c1f1f2ace59b2147c7abcfd7fea1a21ee2cf86ab04966812b1f672e05"
+      "sha256": "838ad4d69326e7875ba006f6474e22df8ff6cdc597072800cfaa916bd8c94f12"
     },
     {
       "description": "Read registry packages: Packages lists the org's npm packages — `<org>` and `@<org>/…` — from the npm registry's search index, optionally narrowed by a query within that scope..",
       "name": "registry_packages",
       "path": "registry_packages/SKILL.md",
       "service": "registry",
-      "sha256": "a96814cc7ac14797bc9d989c247207e28038d21e149f9891f2388027c75b0460"
+      "sha256": "c2437d740ecff4a4e7b103ebc66f08ad63e45d01d9430d3793903a4aadfecd89"
     },
     {
       "description": "Read registry projects: Projects lists the namespaces the caller can see with what each holds: the org's slug, its repository count on the OCI catalog, and its package count on the npm registry..",
       "name": "registry_projects",
       "path": "registry_projects/SKILL.md",
       "service": "registry",
-      "sha256": "8a15e34e24aea7cf1cc9a0cbeb3033fe868c458a0615d8676c4d2fd4ce304ce2"
+      "sha256": "b1e88bba3b8a104e8220361dd55a9d2d9b2f22980b0b39665af4681c189827a0"
     },
     {
       "description": "Read registry status: Status reports whether the OCI and npm registries are reachable and, when the OCI half is auth-gated, which token realm its challenge advertises — an honest lens for \"is the registry plane up\", never a fabricated ok..",
       "name": "registry_status",
       "path": "registry_status/SKILL.md",
       "service": "registry",
-      "sha256": "d63d4e368761ddeb06f4c94607beb4a0c855d64d290867313a155449349849b0"
+      "sha256": "06e56bca0ae6b1d7eed1d255d24e9e451a68392aa8f64f1040445577163162e1"
     },
     {
       "description": "Read registry tags: Tags lists one org-owned repository's tags, read live from the OCI registry..",
       "name": "registry_tags",
       "path": "registry_tags/SKILL.md",
       "service": "registry",
-      "sha256": "f48f338fc6b8ccbe0de4ea8bcea7a6073fcfe74331467810e0668b0f951805cd"
+      "sha256": "358496b2fb259bde19d4827893b5d5a496e52d47379e8aa33f864d3a9cc60267"
     }
   ],
   "spec_version": "8.0.0"

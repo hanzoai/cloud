@@ -16,63 +16,63 @@
       "name": "git_blob",
       "path": "git_blob/SKILL.md",
       "service": "git",
-      "sha256": "0d1f809f7fbb2e6e6c109dc4154d74e690efe19c869da765aa6b1b891c27bb15"
+      "sha256": "8802989a60123d101a9031cb40e7c982e697312aaba15e14310a3119223b9a9e"
     },
     {
       "description": "Read git commits: Read a repository's commit log.",
       "name": "git_commits",
       "path": "git_commits/SKILL.md",
       "service": "git",
-      "sha256": "20fb6b7947380a7165c4188ec0aa611a5bd89e6425afe51ea25d7ce4fac7f377"
+      "sha256": "9a82d510717119c321fd5a8b37517406cb4635a46e338ebd97323e945be3369f"
     },
     {
       "description": "Read git explore: Discover public repositories across every org.",
       "name": "git_explore",
       "path": "git_explore/SKILL.md",
       "service": "git",
-      "sha256": "bc39cbae0c1c8e3e6b27d5a68755e1027c5619057c9c12f7cf802c12a4624ed7"
+      "sha256": "7ef921b279c55d0b040956ce3d094446ce0ed4c876eac88ada23afd370956732"
     },
     {
       "description": "Read git git: Browse your org's repositories, Open a repository's home page.",
       "name": "git_git",
       "path": "git_git/SKILL.md",
       "service": "git",
-      "sha256": "121c3bf72c6dcad7f717faaf18f263b10ac86f4a44bde349f9e6ecb41a5d92b6"
+      "sha256": "b7ec9faf11c48afd64e3f2972c232bc0317a8baf40a6a4681526137272019f77"
     },
     {
       "description": "Read git info: Advertise a repository's refs to a git client, Advertise a repository's refs to a git client.",
       "name": "git_info",
       "path": "git_info/SKILL.md",
       "service": "git",
-      "sha256": "f64cfc8782c6b11eb39d0796e3c28293d9d0952211478af7988bf7589c5b1d97"
+      "sha256": "3ad5bf4a7ef548e2d78b32c1d1ba6bf0b5ee7483302cd3bf843cfd034808653e"
     },
     {
       "description": "Read git keys: Returns the SSH public keys registered to the caller's org — the keys that authenticate `git clone git@<host>:<org>/<repo>.git`..",
       "name": "git_keys",
       "path": "git_keys/SKILL.md",
       "service": "git",
-      "sha256": "cbdbc4a7183bbe23a35f199c4bdc5056869c52c6ffcb0c42fbc32add00f2400a"
+      "sha256": "7754f747a04fdf3c86badefd0c70ac424ceb8197bce69e63ed188e471d48a17c"
     },
     {
       "description": "Read git repos: Returns the repos in the caller's scope, most recently updated first., Returns one repo with its live ref state: every branch name and the resolved HEAD commit., Returns one file's bytes at one revision..",
       "name": "git_repos",
       "path": "git_repos/SKILL.md",
       "service": "git",
-      "sha256": "399af6bebfcd3505450839c303f269a2f7e950116b8f651896eaa73c47677235"
+      "sha256": "2e3efa9cafad26d4763c828be7758e14ad0d923a2cc279aeb43710fd437279b0"
     },
     {
       "description": "Read git tree: Browse a directory inside a repository.",
       "name": "git_tree",
       "path": "git_tree/SKILL.md",
       "service": "git",
-      "sha256": "8352a414dc8ac2961add38235f4313b8a6a2c8db073e91b63795ba2e8cabdfe8"
+      "sha256": "99aac12322a8248d020d86f2b760a08298f9f5a27e72d8be9363ede780b5d249"
     },
     {
       "description": "Read git usage: Returns per-repo and total storage bytes for the caller's org — the queryable, per-tenant number commerce and o11y meter on..",
       "name": "git_usage",
       "path": "git_usage/SKILL.md",
       "service": "git",
-      "sha256": "60115e78f90da0a23185d11304497df7572c2cfa51bab56487ea71331cc9565a"
+      "sha256": "1914254a0d5aba0f2034d1e30a90555761531e9cbe9824992b7541625772df9d"
     }
   ],
   "spec_version": "8.0.0"

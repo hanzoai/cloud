@@ -1006,7 +1006,7 @@ func TestForgedIdentityHeadersBuyNothing(t *testing.T) {
 	}
 }
 
-// TestAnUnreachableAuthorityRefusesAtTheDoor: a REAL IAM access token through the
+// TestAnUnreachableAuthorityRefusesAtTheEndpoint: a REAL IAM access token through the
 // REAL boundary does produce a principal — and the seat still depends on an answer
 // from the process that owns the space rows. When that process cannot answer,
 // the refusal must come from the missing answer and never from an assumption of
@@ -1015,7 +1015,7 @@ func TestForgedIdentityHeadersBuyNothing(t *testing.T) {
 // The discriminating control is the SAME token against an authority that answers.
 // Without it this passes on any deployment that admits nobody, which is exactly
 // what this file's fixture used to be.
-func TestAnUnreachableAuthorityRefusesAtTheDoor(t *testing.T) {
+func TestAnUnreachableAuthorityRefusesAtTheEndpoint(t *testing.T) {
 	iamIssuer(t)
 	member := "Bearer " + access(t, ada)
 

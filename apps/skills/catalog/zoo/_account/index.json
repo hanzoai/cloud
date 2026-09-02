@@ -16,35 +16,35 @@
       "name": "account_appearance",
       "path": "account_appearance/SKILL.md",
       "service": "account",
-      "sha256": "5119b4788d075a1d388f5851a19af0d6a1c1a491d350be9f033577e4ca710bf2"
+      "sha256": "09835b028ed87e7f24facf73f269de136b602a5425eb52467f4634a7bc482eea"
     },
     {
       "description": "Read account avatar: Fetch a profile photo.",
       "name": "account_avatar",
       "path": "account_avatar/SKILL.md",
       "service": "account",
-      "sha256": "e4b5ea1f5760641366359088fb6f0ab9c338b5f60f5a90f0aa52a69604075ad3"
+      "sha256": "3bbbd357cdcdac2a200cc0829b87f51d48731d32ad7d5367ca735a5ec080c0f7"
     },
     {
       "description": "Read account csrf: IssueCSRFToken mints the anti-forgery token a browser echoes as X-CSRF-Token on every change it asks for..",
       "name": "account_csrf",
       "path": "account_csrf/SKILL.md",
       "service": "account",
-      "sha256": "bf847a105e561be241a53f4681bb37297bd6cef0cf868179869d0a34fa4c3b49"
+      "sha256": "3bebf9bf7f60429a9180f94b0432bf929778b95b4fc3e1719e82c197e75399e3"
     },
     {
       "description": "Read account embed: Reports whether one of this brand's shared embedded apps (cms, erp, help) may be framed by the caller and is actually running, so a console module can choose between the embed and the provision panel..",
       "name": "account_embed",
       "path": "account_embed/SKILL.md",
       "service": "account",
-      "sha256": "7dcce1e86217e1f300661ae803f0deb29494bf0bd7ce894cac21911551101df4"
+      "sha256": "c6254cd367788947db9b012dc7e78fe2e3434cfebd950e8208aee752e4ae60a6"
     },
     {
       "description": "Read account keys: Returns the caller's own API keys — every type they hold, read AUTHORITATIVELY from IAM rather than from the session claim, which lags a key minted moments ago..",
       "name": "account_keys",
       "path": "account_keys/SKILL.md",
       "service": "account",
-      "sha256": "d8ad12ec46970c1e6973b69485c6015faae8e0bf3a60b6244c01f47d34207a35"
+      "sha256": "ea926b8255349cb68ad990e8d811a41354c4eef58cafa1a8559f16bffc81f344"
     }
   ],
   "spec_version": "8.0.0"

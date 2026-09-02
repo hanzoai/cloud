@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	describeKeyDoors()
+	describeKeyEndpoints()
 }
 
 // ---- /v1/iam/keys — the two key endpoints, at their nouns ----
@@ -37,7 +37,7 @@ func init() {
 // an organization and a secret key names a principal. One address answering both
 // would be an address whose answer type depends on its input, and the caller
 // that ships a key in a browser would be one parameter away from a person.
-func describeKeyDoors() {
+func describeKeyEndpoints() {
 	openapi.Describe("/v1/iam/keys/org", http.MethodGet,
 		"Resolve a PUBLISHABLE key to the organization that owns it",
 		"Answers which organization a publishable key belongs to — what a service calls to "+

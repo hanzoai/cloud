@@ -16,7 +16,7 @@ package s3
 // half existed, so a file plane with no public store answered 503 to every
 // upload and every download — a Drive that lists and cannot carry a byte.
 //
-// This is the other half. The bytes ride the ONE public door the deployment
+// This is the other half. The bytes ride the ONE public endpoint the deployment
 // already has, and the two mints answer with this address instead of refusing.
 // A caller does not choose between them and does not learn which it got: it
 // receives {url, method} and follows it, exactly as before.

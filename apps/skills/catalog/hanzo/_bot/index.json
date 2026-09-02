@@ -16,14 +16,14 @@
       "name": "bot_runs",
       "path": "bot_runs/SKILL.md",
       "service": "bot",
-      "sha256": "fbb61221f1f5bbad84e9e1d5e1f1258e8f2c65d7623591753888ab171f5257a2"
+      "sha256": "e15014e6be500923db74468f5442df07fd6bf5aa2bf3492a9ff06cd4acd66aca"
     },
     {
       "description": "Read bot runtime: Relay one of the bot runtime's own operational paths.",
       "name": "bot_runtime",
       "path": "bot_runtime/SKILL.md",
       "service": "bot",
-      "sha256": "d9063c51a62bac5702c7d6bc2082d09fbc1956ba60d36f6d650b0d699bf70388"
+      "sha256": "c7934d4859acca0853f4371120d15172e5cce046c2a21a6383d31e210b982275"
     }
   ],
   "spec_version": "8.0.0"

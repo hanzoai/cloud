@@ -19,7 +19,7 @@
 // cloud owns the tenant boundary; the PLANE's schema is owned by hanzoai/o11y.
 //
 // This file holds the WIRE TYPES and the ONE WRITE CORE (ingestEvents) every endpoint
-// funnels into. It owns no route: which paths accept an event is doors (event.go),
+// funnels into. It owns no route: which paths accept an event is endpoints (event.go),
 // and admission is handle (event.go). CaptureEvent below is the shape all wires
 // normalize onto, which is why the canonical and PostHog decoders can share one
 // pipeline instead of forking it.
@@ -597,7 +597,7 @@ func projectKey(c *zip.Ctx) string {
 // by ingestEvents, which the plane normalizer carries into attributes['$source'], so
 // the ONE event.fact table stays honest about origin WITHOUT a second table or a
 // schema migration: $source is queryable in the attributes map. One tag per endpoint,
-// and doors (event.go) is the only list that binds them.
+// and endpoints (event.go) is the only list that binds them.
 //
 // There is no 'capture' tag: rows carrying it were written by the retired
 // /v1/event{,/batch} and /v1/todo name-aliases of the canonical wire. Those

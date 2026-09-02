@@ -16,21 +16,21 @@
       "name": "models_access",
       "path": "models_access/SKILL.md",
       "service": "models",
-      "sha256": "2b75fd0f2f5673c08cf116688941194aeaacaf185b5dbeecf752edcfc8b7fe01"
+      "sha256": "b125178affc5501db7f470ad142116d27e92ea5d72852b0aa3028f4a1c883253"
     },
     {
       "description": "Read models models: Returns the list of available models from the routing table..",
       "name": "models_models",
       "path": "models_models/SKILL.md",
       "service": "models",
-      "sha256": "d44e601376b73935db4171ff18afc835dcd8e983fbd67d40686099211035ba4b"
+      "sha256": "3f32af3c4eddd372678cd30d4397e52c4346c986e5ee8c1ae8010c3a45c8bdce"
     },
     {
       "description": "Read models providers: Public, secret-free list of the providers serving the models that GET /v1/models lists — the same source, projected..",
       "name": "models_providers",
       "path": "models_providers/SKILL.md",
       "service": "models",
-      "sha256": "117140905980d09abd75dcee610840f00b5f55ea1016c633182bd909f8dbfe8e"
+      "sha256": "22dfc4149ce5c88cd3961f19f295d04164364bc4f093bca74145e924dca4be82"
     }
   ],
   "spec_version": "8.0.0"

@@ -54,7 +54,7 @@ const tenantOp = "probe_tenant"
 
 // subsystem is one plugin process's worth of machinery: the identity boundary, one
 // typed op, its EDGE endpoint on its own socket (zip's /mcp, what cloud.Serve
-// leaves where the framework puts it), and its PLANE endpoint (cloud.Door). It
+// leaves where the framework puts it), and its PLANE endpoint (cloud.UseMCP). It
 // returns the two addresses a host can reach it at.
 func subsystem(t *testing.T) (edge, plane string) {
 	t.Helper()
@@ -68,7 +68,7 @@ func subsystem(t *testing.T) (edge, plane string) {
 		return &seen{Org: org, OrgOK: ok, Validated: principal.ValidatedFrom(ctx)}, nil
 	}, zip.WithOperationID(tenantOp), zip.WithSummary("what this op resolves about its caller"))
 
-	Door(app)
+	UseMCP(app)
 
 	dir := planetest.Dir(t)
 	edge, plane = filepath.Join(dir, "edge.sock"), filepath.Join(dir, "plane.sock")
@@ -80,11 +80,11 @@ func subsystem(t *testing.T) (edge, plane string) {
 	return edge, plane
 }
 
-// doors composes the fleet's MCP server at BOTH of its addresses over that one
+// endpoints composes the fleet's MCP server at BOTH of its addresses over that one
 // subsystem: the edge's, forwarding into the subsystem's edge endpoint, and the
 // fleet's own internal socket, forwarding into its plane endpoint. Exactly the
 // pair cmd/cloud registers (locate / inside).
-func doors(t *testing.T) (fromEdge, fromInside *zip.App) {
+func endpoints(t *testing.T) (fromEdge, fromInside *zip.App) {
 	t.Helper()
 	edge, plane := subsystem(t)
 
@@ -95,7 +95,7 @@ func doors(t *testing.T) (fromEdge, fromInside *zip.App) {
 		func(string) (string, string, error) { return edge, manifest.FrameworkMCPPath, nil })
 	// The MCP server lists from the build-time catalog and asks nothing, so a
 	// child this binary did not build publishes nothing and every route below is
-	// "unknown tool". Saying what it publishes is what fleet.Door.Catalog is for;
+	// "unknown tool". Saying what it publishes is what fleet.MCP.Catalog is for;
 	// the Doc is the sentence its own WithSummary carries, so what the MCP server
 	// lists and what the op says about itself cannot drift apart here.
 	d.Catalog = func(string) []fleet.Op {
@@ -111,7 +111,7 @@ func doors(t *testing.T) (fromEdge, fromInside *zip.App) {
 // socket, and the op resolves the tenant — which is what every tool the agent
 // calls needs and what none of them got.
 func TestInsideTheFleetTheCallerReachesTheOp(t *testing.T) {
-	_, inside := doors(t)
+	_, inside := endpoints(t)
 
 	got := tool(t, inside, "hanzo", "hanzo/z@hanzo.ai")
 
@@ -134,7 +134,7 @@ func TestInsideTheFleetTheCallerReachesTheOp(t *testing.T) {
 // endpoint work by trusting what it was handed would pass the test above and fail
 // this one.
 func TestForgedIdentityStillDiesAtTheEdge(t *testing.T) {
-	edge, _ := doors(t)
+	edge, _ := endpoints(t)
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + tenantOp + `","arguments":{}}}`
 	req, err := http.NewRequest("POST", "http://cloud"+manifest.MCPPath, strings.NewReader(body))
@@ -164,7 +164,7 @@ func TestForgedIdentityStillDiesAtTheEdge(t *testing.T) {
 // without a validated user, and it refuses one here for the same reason: a caller
 // that names a tenant and nobody has named its own authority.
 func TestInsideTheFleetAnOrgAloneIsStillRefused(t *testing.T) {
-	_, inside := doors(t)
+	_, inside := endpoints(t)
 
 	got := tool(t, inside, "hanzo", "")
 
@@ -200,7 +200,7 @@ func accepts(t *testing.T, addr string) {
 
 // tool runs tenantOp through one endpoint as (org, user) and reads back what the
 // op resolved.
-func tool(t *testing.T, door *zip.App, org, user string) seen {
+func tool(t *testing.T, endpoint *zip.App, org, user string) seen {
 	t.Helper()
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + tenantOp + `","arguments":{}}}`
 	req, err := http.NewRequest("POST", "http://cloud"+manifest.MCPPath, strings.NewReader(body))
@@ -212,7 +212,7 @@ func tool(t *testing.T, door *zip.App, org, user string) seen {
 	if user != "" {
 		req.Header.Set(zip.HeaderUser, user)
 	}
-	resp, err := door.Test(req, zip.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true})
+	resp, err := endpoint.Test(req, zip.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("POST %s: %v", manifest.MCPPath, err)
 	}

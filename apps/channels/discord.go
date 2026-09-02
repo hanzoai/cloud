@@ -19,8 +19,8 @@ import (
 // message from that room.
 var errNoRoute = errors.New("channels: no reply route for this room")
 
-// discordDoor is the send path; tests spy it, prod never repoints.
-var discordDoor = func(ctx context.Context, org, channelID, replyTo, text string) (string, error) {
+// discordEndpoint is the send path; tests spy it, prod never repoints.
+var discordEndpoint = func(ctx context.Context, org, channelID, replyTo, text string) (string, error) {
 	return post(ctx, org, plane.ChatSendIn{Provider: "discord", Room: channelID, ReplyTo: replyTo, Text: text})
 }
 
@@ -60,7 +60,7 @@ func discordEgress(ctx context.Context, s *cloud.Service[state], org string, m M
 	if !ok {
 		return Delivery{}, errNoRoute
 	}
-	id, err := discordDoor(ctx, org, m.Room.ID, m.ReplyTo, renderText(m))
+	id, err := discordEndpoint(ctx, org, m.Room.ID, m.ReplyTo, renderText(m))
 	if err != nil {
 		return Delivery{}, err
 	}

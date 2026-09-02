@@ -136,7 +136,7 @@ func Guard(s Scope, h zip.Handler) zip.Handler {
 // handler, Refusal is the line a typed op writes because there is no handler to
 // wrap, and this Nexts. Five subsystems had written their own group gate, and
 // each spelled the refusal itself, so the sentence a caller reads depended on
-// which door it knocked at.
+// which endpoint it knocked at.
 func Gate(s Scope) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !s.Admits(AuthorityOf(c)) {

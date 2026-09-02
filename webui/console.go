@@ -187,8 +187,8 @@ const terminal = "/*"
 // allow may be nil, which means this handler cannot tell an unserved address from
 // an unserved METHOD and answers 404 for both. That is the old behaviour, kept
 // only for a caller with no router to ask.
-func Handler(fsys fs.FS, door zapmcp.Handler, allow Allow) (http.Handler, error) {
-	h, err := newConsoleHandler(fsys, door)
+func Handler(fsys fs.FS, mcp zapmcp.Handler, allow Allow) (http.Handler, error) {
+	h, err := newConsoleHandler(fsys, mcp)
 	if err != nil {
 		return nil, err
 	}
@@ -208,10 +208,10 @@ func Handler(fsys fs.FS, door zapmcp.Handler, allow Allow) (http.Handler, error)
 // of ~10KB out of RAM and is always the release that is actually mounted.
 type consoleHandler struct {
 	fsys fs.FS
-	// door is this process's MCP server — zip's, handed in whole. The console does
+	// mcp is this process's MCP server — zip's, handed in whole. The console does
 	// not implement MCP and holds no tool list; it holds the one address a machine
 	// calls and the value that answers there.
-	door zapmcp.Handler
+	mcp zapmcp.Handler
 	// allow is the router's answer to "what methods serve this path". nil means
 	// nobody can be asked, and then an unserved METHOD is indistinguishable from an
 	// unserved ADDRESS — which is the whole defect this field exists to close.
@@ -224,16 +224,16 @@ type consoleHandler struct {
 // rather than as a bad source. nil is the separate, stated case of "no bundle in
 // this process" and is not an error.
 //
-// The door is REQUIRED. A terminal handler with no MCP server cannot answer
+// The handler is REQUIRED. A terminal handler with no MCP server cannot answer
 // the one address in the process that is guaranteed not to be a console route,
 // and the SPA fallback is the wrong answer there in the most damaging possible
 // way — the bug this package was already carrying, pointing the other way.
-func newConsoleHandler(fsys fs.FS, door zapmcp.Handler) (*consoleHandler, error) {
-	if door == nil {
+func newConsoleHandler(fsys fs.FS, mcp zapmcp.Handler) (*consoleHandler, error) {
+	if mcp == nil {
 		return nil, fmt.Errorf("webui: no MCP server: the terminal handler answers one and cannot invent it")
 	}
 	if fsys == nil {
-		return &consoleHandler{door: door}, nil
+		return &consoleHandler{mcp: mcp}, nil
 	}
 	if _, err := fs.Stat(fsys, "index.html"); err != nil {
 		// A POLLED source is allowed to be empty right now. It re-reads on an
@@ -253,7 +253,7 @@ func newConsoleHandler(fsys fs.FS, door zapmcp.Handler) (*consoleHandler, error)
 			return nil, fmt.Errorf("webui: console source has no index.html: %w", err)
 		}
 	}
-	return &consoleHandler{fsys: fsys, door: door}, nil
+	return &consoleHandler{fsys: fsys, mcp: mcp}, nil
 }
 
 // methods is the guarded read of allow: no router to ask means no claim about the
@@ -281,7 +281,7 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// endpoint went. It answers with the process's OWN MCP server, so a plugin
 	// whose route zip never mounted is served here and a host that claimed the
 	// path with a signpost never arrives.
-	if h.mcpDoor(w, r, upath) {
+	if h.serveMCP(w, r, upath) {
 		return
 	}
 

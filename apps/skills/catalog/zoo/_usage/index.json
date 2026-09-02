@@ -16,21 +16,21 @@
       "name": "usage_analytics",
       "path": "usage_analytics/SKILL.md",
       "service": "usage",
-      "sha256": "8f74e94cca090156f71a14b5e3c21f0cf3a4432f97b601d8a39b30a9060ab631"
+      "sha256": "29886d4b333656f9aeb6b214f29a8ee09c8a3e0928bafa68e17eb769b8f6ed38"
     },
     {
       "description": "Read usage samples: Is the PER-PROVIDER view: one connected account's own consumption of its own plan — \"my plan is 47% through its 6h window, resets at 14:20\"..",
       "name": "usage_samples",
       "path": "usage_samples/SKILL.md",
       "service": "usage",
-      "sha256": "73c8547b6c743750ec5f235a9d5a695cb1803bff1de7cc613401da299f343ac1"
+      "sha256": "7d1c50a51097768f426c2b3db3bb9126d87405eb41aa45d383bef9de28eb01ed"
     },
     {
       "description": "Read usage summary: Answers GET /v1/usage/summary: the caller's own usage footprint over one window — the categorized spend roll-up from the commerce ledger, the org's LLM usage totals from the warehouse, and the caller's OWN linked provider accounts beside the org's Zoo-routed u",
       "name": "usage_summary",
       "path": "usage_summary/SKILL.md",
       "service": "usage",
-      "sha256": "2be9d5c5362aba94b36b66f42e59bf5952d1425990628b8906bf494c36f74adc"
+      "sha256": "2770bc5feae7b5d353d4379cb49db1bf7ee4bfdc4ed8ceb6b311b48252416bdd"
     }
   ],
   "spec_version": "8.0.0"

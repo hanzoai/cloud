@@ -32,7 +32,7 @@ import (
 //
 // The observable, as everywhere in this package: 503 ⇒ the event was ADMITTED and
 // reached requireDatastore (no warehouse in the harness) — i.e. it would have become a
-// row. 401 `ingest_key_required` (refusedAnon, door_honesty_test.go) ⇒ the projection
+// row. 401 `ingest_key_required` (refusedAnon, endpoint_honesty_test.go) ⇒ the projection
 // refused EVERY event before the write core. 403 ⇒ refused at the gate. So "must not
 // become a row" is exactly "must not 503".
 //
@@ -71,14 +71,14 @@ func TestAnonCommerce_RefusedOnEveryBrandHost(t *testing.T) {
 // no longer a rule this endpoint enforces — there is no site-host endpoint. apps/sites'
 // TestSiteHostNeverIngests pins that a site host serves bytes and is terminal.
 
-// TestAnonIdentity_RefusedAtEveryDoor: `identify` and `group` are the two kinds that
+// TestAnonIdentity_RefusedAtEveryEndpoint: `identify` and `group` are the two kinds that
 // bind an event to a named person and a named group. A caller nobody vouched for may
 // write neither, on any endpoint — the fields are gone AND the kinds are dropped, which
 // is belt and braces on purpose (the projection is the load-bearing half).
-func TestAnonIdentity_RefusedAtEveryDoor(t *testing.T) {
+func TestAnonIdentity_RefusedAtEveryEndpoint(t *testing.T) {
 	roomyRate(t)
 	app := mountApp(t)
-	// Each endpoint is probed in ITS OWN wire (identifyFor/groupFor, doors_test.go). The
+	// Each endpoint is probed in ITS OWN wire (identifyFor/groupFor, endpoints_test.go). The
 	// bodies used to be two canonical-wire literals applied to every endpoint, which only
 	// worked while every endpoint spoke that wire: the team endpoint accepts a bare
 	// ARRAY and answers an object body 400, so a shared literal measured decoder
@@ -87,8 +87,8 @@ func TestAnonIdentity_RefusedAtEveryDoor(t *testing.T) {
 	// (401) and "refused because the body is the wrong shape" (400) are different facts,
 	// and this test is about the first one — which is exactly what asserting the CODE
 	// pins.
-	for _, pick := range []func(*testing.T, door) string{identifyFor, groupFor} {
-		for _, d := range doors {
+	for _, pick := range []func(*testing.T, endpoint) string{identifyFor, groupFor} {
+		for _, d := range endpoints {
 			body := pick(t, d)
 			code, got := doHost(t, app, d.path, "", "", "hanzo.ai", body)
 			refusedAnon(t, "anonymous "+body+" on "+d.path, code, got)
@@ -96,15 +96,15 @@ func TestAnonIdentity_RefusedAtEveryDoor(t *testing.T) {
 	}
 }
 
-// TestAnonymousRefusedOnEveryDoor: a keyless beacon is refused on every endpoint, with
+// TestAnonymousRefusedOnEveryEndpoint: a keyless beacon is refused on every endpoint, with
 // no switch to turn it back on. It used to be ACCEPTED into a reserved tenant and
 // answered 200 — the switch that governed it defaulted ON, so the silent-accept was
 // the shipped behaviour and only an operator who knew the flag existed could stop it.
 // Attribution is the key now, so there is nothing left to gate.
-func TestAnonymousRefusedOnEveryDoor(t *testing.T) {
+func TestAnonymousRefusedOnEveryEndpoint(t *testing.T) {
 	roomyRate(t)
 	app := mountApp(t)
-	for _, d := range doors {
+	for _, d := range endpoints {
 		code, body := doHost(t, app, d.path, "", "", "hanzo.ai", pageviewFor(t, d))
 		if code != http.StatusUnauthorized {
 			t.Errorf("anonymous %s = %d (%s), want 401", d.path, code, body)

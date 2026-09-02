@@ -207,8 +207,8 @@ func TestNothingToSearchForIsNotAMatchForEverything(t *testing.T) {
 	}
 }
 
-// TestTheSearchDoorAnswers carries the term out to the wire.
-func TestTheSearchDoorAnswers(t *testing.T) {
+// TestTheSearchEndpointAnswers carries the term out to the wire.
+func TestTheSearchEndpointAnswers(t *testing.T) {
 	app := mountGraph(t)
 	assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)
 	assertFact(t, app, "", "acme/svc/worker", "owner", "acme/team/platform", true)
@@ -247,9 +247,9 @@ func TestSearchCannotCrossAGraphDatabase(t *testing.T) {
 	}
 }
 
-// TestSearchIsOnTheGraphQLDoorToo keeps the two endpoints from drifting: one
+// TestSearchIsOnTheGraphQLEndpointToo keeps the two endpoints from drifting: one
 // schema, one op, both addresses.
-func TestSearchIsOnTheGraphQLDoorToo(t *testing.T) {
+func TestSearchIsOnTheGraphQLEndpointToo(t *testing.T) {
 	app := mountGraph(t)
 	assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)
 	assertFact(t, app, "", "acme/svc/worker", "runtime", "rust", false)

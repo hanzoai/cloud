@@ -49,9 +49,9 @@ import (
 // cloud.Terminal (git.go) therefore stays: it writes the 410 in-band so a
 // co-mounted /v1 ErrorHandlerJSON cannot flatten the propagated error to 500.
 
-// buildDoor is where a forge delivery belongs. Stated once, in the message a
+// buildEndpoint is where a forge delivery belongs. Stated once, in the message a
 // caller actually receives, so the answer carries its own fix.
-const buildDoor = "https://platform.hanzo.ai/v1/git-webhook"
+const buildEndpoint = "https://platform.hanzo.ai/v1/git-webhook"
 
 // The prose. "Cannot be a typed op" is not "must be undocumented": a raw route
 // carries an operationId and a tag and nothing else, which no consumer of the
@@ -70,7 +70,7 @@ const buildDoor = "https://platform.hanzo.ai/v1/git-webhook"
 func init() {
 	openapi.Describe("/v1/git/webhook", http.MethodPost,
 		"Retired — forge pushes build via platform.hanzo.ai",
-		"GONE (410). Push-to-deploy belongs to POST "+buildDoor+", which owns the build "+
+		"GONE (410). Push-to-deploy belongs to POST "+buildEndpoint+", which owns the build "+
 			"system-of-record and dispatches BuildKit Jobs. git.hanzo.ai delivers there "+
 			"through ONE forge-wide system webhook covering every repository; a repo opts "+
 			"in by committing hanzo.yml, not by owning a hook of its own.\n\n"+
@@ -94,5 +94,5 @@ func webhook(*cloud.Service[state], *zip.Ctx) error {
 	return zip.Errorf(http.StatusGone,
 		"POST /v1/git/webhook is retired. Send forge deliveries to %s instead — on "+
 			"git.hanzo.ai this is already the forge-wide system webhook, and a repo opts "+
-			"in by committing hanzo.yml.", buildDoor)
+			"in by committing hanzo.yml.", buildEndpoint)
 }

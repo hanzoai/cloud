@@ -16,28 +16,28 @@
       "name": "tel_calls",
       "path": "tel_calls/SKILL.md",
       "service": "tel",
-      "sha256": "17174acaed77c4b136adf24c4e0e6e60484437e4ca0f0337b6387f52db3d2557"
+      "sha256": "f80143a31f8bd77fb5b3dcc8792dbb11bff0705f4b862066b2a91c0b4b09764c"
     },
     {
       "description": "Read tel messages: Lists the messages this org has sent or received, newest first..",
       "name": "tel_messages",
       "path": "tel_messages/SKILL.md",
       "service": "tel",
-      "sha256": "c9267e8b1e08ffa5aecac2489558eb3342f046198a23968a1c306caf289dbea8"
+      "sha256": "b742802b14e60e650bcf67427eb6d96403c4e7fcc9af6fd7ac107b4c1a242640"
     },
     {
       "description": "Read tel numbers: Lists the phone numbers this org HOLDS — the ones it has bought and not released., Asks the carrier what is available to buy..",
       "name": "tel_numbers",
       "path": "tel_numbers/SKILL.md",
       "service": "tel",
-      "sha256": "7cea193e10fbc4ded67f0d9f71705c126f654c00415755db8f5c69e48df1fd98"
+      "sha256": "309a9b21cb5ef06a84494817e4addbd086179c7b8bca3740c42dcdcb616f2d2f"
     },
     {
       "description": "Read tel summary: Counts what this org holds on the telephony plane: its numbers, its calls and its messages..",
       "name": "tel_summary",
       "path": "tel_summary/SKILL.md",
       "service": "tel",
-      "sha256": "066da7c3cc40aa3f75b7311c7fb558e753bb53af4c935a6c2369880b36da65e2"
+      "sha256": "c1aca8b373666829569e08436c06ac400786cd14c926f22c35ed72b1789bb7d6"
     }
   ],
   "spec_version": "8.0.0"

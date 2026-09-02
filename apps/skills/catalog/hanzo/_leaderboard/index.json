@@ -16,21 +16,21 @@
       "name": "leaderboard_activity",
       "path": "leaderboard_activity/SKILL.md",
       "service": "leaderboard",
-      "sha256": "179cfbab6836255a3ee7daec1bbb0c4bb534e24a692a419721db28fbfad9aaa0"
+      "sha256": "a27e266b7a13887a80f1a06d546014cc1e6247c5c68fad64c162bac86c4f39dd"
     },
     {
       "description": "Read leaderboard leaderboard: Leaderboard ranks AI usage over a window, either the users of the caller's own org or organizations against each other, and always reports the caller's own standing even when it falls outside the returned page..",
       "name": "leaderboard_leaderboard",
       "path": "leaderboard_leaderboard/SKILL.md",
       "service": "leaderboard",
-      "sha256": "bd6c146368005a848d133482228cc990e6bf3feba4ef9cee4262deebdacdfa1c"
+      "sha256": "03ffb3ab88fd75ffd53bf025fda4cd165e764772dbbb6de6dc9a876f0b248df3"
     },
     {
       "description": "Read leaderboard optin: Returns the caller's own public-listing preference and their org's, each with whether the caller may change it..",
       "name": "leaderboard_optin",
       "path": "leaderboard_optin/SKILL.md",
       "service": "leaderboard",
-      "sha256": "c01f21a9a4a7a350dde3a138f3f7157e33ffbe842cf3b9d1f77f47c510fee03c"
+      "sha256": "c035f7e1cb5f3f3f75c8c3d0826e5d7c4d134fd7c7383f7563671bd4aebfaab2"
     }
   ],
   "spec_version": "8.0.0"

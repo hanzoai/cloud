@@ -180,9 +180,9 @@ func TestUnknownKeyRefusedAndWritesNothing(t *testing.T) {
 	}
 }
 
-// TestDeletedSiteStopsRecordingAtTheDoor is the CTO's rule end to end: the same key
+// TestDeletedSiteStopsRecordingAtTheEndpoint is the CTO's rule end to end: the same key
 // that was landing rows stops landing them the moment its project is gone.
-func TestDeletedSiteStopsRecordingAtTheDoor(t *testing.T) {
+func TestDeletedSiteStopsRecordingAtTheEndpoint(t *testing.T) {
 	roomyRate(t)
 	live := map[string]Attribution{siteKey: {Org: "acme", Project: "shop"}}
 	stubKeys(t, live)
@@ -302,13 +302,13 @@ func TestAttributeProjectIsPureAndTotal(t *testing.T) {
 	}
 }
 
-// TestTheKeyDoorNeedsNoComposition: the cross-process resolver is the package DEFAULT, so
+// TestTheKeyEndpointNeedsNoComposition: the cross-process resolver is the package DEFAULT, so
 // every binary that links this package resolves a project key — the one that mounts
 // analytics and the one that only calls Admit (apps/integrations serves the
 // OpenRouter webhook). While a Mount installed it, a key resolved in one process and
 // named nothing in the next, and no behavioural test inside this package could see
 // that, because the package is correct either way. So the default itself is asserted.
-func TestTheKeyDoorNeedsNoComposition(t *testing.T) {
+func TestTheKeyEndpointNeedsNoComposition(t *testing.T) {
 	if _, ok := bootKeys.(planeKeys); !ok {
 		t.Fatalf("a process that mounts nothing resolves keys through %T, not the plane; "+
 			"every project key it is handed would name no org", bootKeys)

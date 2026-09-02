@@ -16,35 +16,35 @@
       "name": "world_limits",
       "path": "world_limits/SKILL.md",
       "service": "world",
-      "sha256": "ff5c2a6aa5364498ed7fe4bbfce537ed0344414333d862135ad969050490ac47"
+      "sha256": "f1bda7be8628d86f75b55520c811a7500fcfcef2c3ad8f09f08302495f3220eb"
     },
     {
       "description": "Read world news: Returns the caller's merged world-news feed: every source their project's pipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed — fetched concurrently, narrowed by the pipeline's keyword/region/source filters, deduplicated by link and so",
       "name": "world_news",
       "path": "world_news/SKILL.md",
       "service": "world",
-      "sha256": "267cf7abf1801fffcab8dc84cd3bcf49bef28a43be88b5a218fe717e90b977f1"
+      "sha256": "d474cc54c319df92025ce04f1d2b472400d6d1f339b76ee0f782503545999b0d"
     },
     {
       "description": "Read world pipeline: Returns the caller project's news pipeline: which feeds it reads and how the merged result is filtered..",
       "name": "world_pipeline",
       "path": "world_pipeline/SKILL.md",
       "service": "world",
-      "sha256": "4db8ee517cad55b351af5300b38ab38cc47638c8b891df7e7400d89edcf80997"
+      "sha256": "83042220af4af2d1393c8a48c6b08d028ab1b8948bcc9b9310bcfaf9d691c898"
     },
     {
       "description": "Read world stream: Live news refreshes for the caller's org and project, as Server-Sent Events..",
       "name": "world_stream",
       "path": "world_stream/SKILL.md",
       "service": "world",
-      "sha256": "57b2aecef83c1ff1f36aef0c654e2df740f2c9280d870659b15cc02918d1ba87"
+      "sha256": "64b2e2575c7cf4b48dcb138282ba2fa0299408d505757eb9bb31d08765bb9ae7"
     },
     {
       "description": "Read world world: Answers GET /v1/world — the product's public endpoint, naming every wire this surface answers on..",
       "name": "world_world",
       "path": "world_world/SKILL.md",
       "service": "world",
-      "sha256": "4ffb01ac9ab99d2bf547ae733cd92036a01887d18a32271f92b1069318c8bddf"
+      "sha256": "034f1ac4e3c7760d4f49ba1177b5c76c7b3054b978b301a2e77fcbb0b50c7131"
     }
   ],
   "spec_version": "8.0.0"

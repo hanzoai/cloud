@@ -30,7 +30,7 @@ import (
 // validator each to run it and each to get the same answer, which none of them can
 // promise the others. So the code runs in one place, and what travels is data.
 //
-// That is also why the evaluator is a separate door from Load. A reader holding
+// That is also why the evaluator is a separate entry from Load. A reader holding
 // only Load cannot execute a repository's file, whatever the repository names it.
 //
 // WHERE EVAL MAY BE CALLED. A generator is repository-supplied code, so running one

@@ -219,7 +219,7 @@ func TestTheTokenTheControlAsksForIsAccepted(t *testing.T) {
 	// covered a page on another *.hanzo.ai host: such a page CAN set a custom
 	// header, so a token was the only thing separating it from the console.
 	//
-	// Sec-Fetch-Site separates them at the door and needs no token: that page's
+	// Sec-Fetch-Site separates them on arrival and needs no token: that page's
 	// request says `same-site`, and only the console's says `same-origin`. A
 	// legitimate caller from another org is not forgery and is not refused here —
 	// the old assertion could not tell those apart because a token was all it had.

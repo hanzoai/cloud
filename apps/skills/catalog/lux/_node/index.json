@@ -16,14 +16,14 @@
       "name": "node_connect",
       "path": "node_connect/SKILL.md",
       "service": "node",
-      "sha256": "5556f0d82e768eaac77acd20c5c2a2a8372d7bc57dce551d2cba4ab21eb88515"
+      "sha256": "e3dd0ada56aeb2d9381c5be4c97ad89cdebe116bef589ea23ff94a6dbca10337"
     },
     {
       "description": "Read node node: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported..",
       "name": "node_node",
       "path": "node_node/SKILL.md",
       "service": "node",
-      "sha256": "12e2506802da7cfd043d6b8bf8f8989ae7cd31f3200cbdcfb21d6f2acc990e8f"
+      "sha256": "209f168a35dd900c36bcdc57cd70e28499290eeaa39eeaf556c0d2712e4bb9ca"
     }
   ],
   "spec_version": "8.0.0"

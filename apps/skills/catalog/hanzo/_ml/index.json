@@ -16,14 +16,14 @@
       "name": "ml_health",
       "path": "ml_health/SKILL.md",
       "service": "ml",
-      "sha256": "fee0c664743e22487ff62a593d07806bcf19750e56857625b7054dcc726013ec"
+      "sha256": "1d8122a14707c8962880bc3c6c1e8c52e3ecba5135344f6d08f94dcdae872500"
     },
     {
       "description": "Read ml models: Lists the inference models deployed in the caller's org., Returns one deployed inference model..",
       "name": "ml_models",
       "path": "ml_models/SKILL.md",
       "service": "ml",
-      "sha256": "2a98f72b2f241bf10a8ea44dcf988f4180277b3c68a861069e5e273924ece8f5"
+      "sha256": "dd157a3d07a8ff3f660b5084849b542e546e6a331e187888ed526cffa5dd55e0"
     }
   ],
   "spec_version": "8.0.0"

@@ -25,7 +25,7 @@ import (
 	contract "github.com/hanzoai/cloud/plane"
 )
 
-// TestFan_ThePeerAxisIsReachableFromTheCreditDoor.
+// TestFan_ThePeerAxisIsReachableFromTheCreditEndpoint.
 //
 // [onFan] is the only half of the rule that can see account farming, because farming
 // is unremarkable from every account taken by itself — the pattern exists ONLY in
@@ -40,7 +40,7 @@ import (
 //
 // Mutation proof: drop [plane.SignalPeer] from [paymentFacts] (or the peer link from
 // [plane.prior]) and this fails with action=allow.
-func TestFan_ThePeerAxisIsReachableFromTheCreditDoor(t *testing.T) {
+func TestFan_ThePeerAxisIsReachableFromTheCreditEndpoint(t *testing.T) {
 	probe.reset(true)
 	mountApp(t)
 	p := mounted.State.plane
@@ -162,7 +162,7 @@ func TestObserve_ASettledPaymentTeachesTheModel(t *testing.T) {
 	}
 }
 
-// TestObserve_ABurstSplitAcrossTwoDoorsAccruesOnOneSubject — the accrual half of the
+// TestObserve_ABurstSplitAcrossTwoEndpointsAccruesOnOneSubject — the accrual half of the
 // CROSS-ENDPOINT proof, over the shape the settling process actually states.
 //
 // commerce has ONE card money move and the binary opens TWO addresses onto it: the
@@ -179,12 +179,12 @@ func TestObserve_ASettledPaymentTeachesTheModel(t *testing.T) {
 //
 // The commerce half — that both endpoints really do resolve one payer and state
 // distinct keys — is proven at the endpoints, in
-// [commerce.TestPayments_ABurstSplitAcrossBothDoorsIsOneAccrual].
+// [commerce.TestPayments_ABurstSplitAcrossBothEndpointsIsOneAccrual].
 //
 // Mutation proof: namespace the observation by endpoint (prefix the subject, or the
 // tenant, with which address it came from) and the final decide allows, because each
 // half of the burst is then a history of its own with nothing over the bound.
-func TestObserve_ABurstSplitAcrossTwoDoorsAccruesOnOneSubject(t *testing.T) {
+func TestObserve_ABurstSplitAcrossTwoEndpointsAccruesOnOneSubject(t *testing.T) {
 	probe.reset(true)
 	mountApp(t)
 	p := mounted.State.plane
@@ -196,11 +196,11 @@ func TestObserve_ABurstSplitAcrossTwoDoorsAccruesOnOneSubject(t *testing.T) {
 	// is what both endpoints resolve through the one payer rule.
 	const each = "11000000000000"
 	const payer = "acme"
-	doors := []string{"sq_pay_browser_", "sq_pay_typed_"}
+	endpoints := []string{"sq_pay_browser_", "sq_pay_typed_"}
 	for i := range 6 {
 		out, err := planeObserve(asPeer(orgA), &contract.RiskObserveIn{
 			Stage: cloud.StagePayment, Kind: contract.KindPayer, Subject: payer,
-			Settlement: doors[i%2] + itoa(i),
+			Settlement: endpoints[i%2] + itoa(i),
 			Signals:    []contract.Signal{{Name: contract.SignalNano, Value: each}},
 		})
 		if err != nil {
@@ -272,7 +272,7 @@ func TestObserve_RefusesAnObservationItCannotConvergeOn(t *testing.T) {
 	}
 }
 
-// TestObserve_CannotBePreEmptedThroughThePublicLearnDoor.
+// TestObserve_CannotBePreEmptedThroughThePublicLearnEndpoint.
 //
 // The record deduplicates on (tenant, id) and the FIRST writer of an id wins. So an
 // id this plane will later mint for itself is an id a caller can claim in advance,
@@ -283,7 +283,7 @@ func TestObserve_RefusesAnObservationItCannotConvergeOn(t *testing.T) {
 //
 // Mutation proof: delete the [reservedOf] guard in [riskEvent.observation] and the
 // settlement below learns nothing, because the caller got there first.
-func TestObserve_CannotBePreEmptedThroughThePublicLearnDoor(t *testing.T) {
+func TestObserve_CannotBePreEmptedThroughThePublicLearnEndpoint(t *testing.T) {
 	probe.reset(true)
 	mountApp(t)
 	p := mounted.State.plane

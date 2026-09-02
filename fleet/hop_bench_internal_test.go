@@ -2,7 +2,7 @@ package fleet
 
 // What the co-resident short-circuit is worth, measured rather than asserted.
 //
-// Both benchmarks reach the SAME door on the same app — one through its socket,
+// Both benchmarks reach the SAME endpoint on the same app — one through its socket,
 // one through memory — so the difference is the hop and nothing else. Measured on
 // a 20-core box, tmpfs, 300 iterations:
 //

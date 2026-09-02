@@ -16,91 +16,91 @@
       "name": "trust_controls",
       "path": "trust_controls/SKILL.md",
       "service": "trust",
-      "sha256": "477972463a41e29e2999d1c0ba3026ae51d1d8f622eae97709cfd8d5a0cec9fb"
+      "sha256": "8fe015061e63b9b0c682c034c29ea0d8b9b6215ca21bebb962589f8501054d09"
     },
     {
       "description": "Read trust coverage: Reads coverage: per framework, how many clauses have an automated control behind them, how many are partial, and how many have none — each carrying the unit it is counted in, because \"12 of 20\" is not a fact until you know what the 20 are., Reads one framewor",
       "name": "trust_coverage",
       "path": "trust_coverage/SKILL.md",
       "service": "trust",
-      "sha256": "bd7fe0b1e2129fdf767b9b002e6b7be799dbbf8c49f3bc4fdc0bebdb4228b212"
+      "sha256": "18ba7fb70fc592c781f550b7adf18896536102cae0d9895fbf19bda4f1c6d01d"
     },
     {
       "description": "Read trust documents: Lists your organization's documents..",
       "name": "trust_documents",
       "path": "trust_documents/SKILL.md",
       "service": "trust",
-      "sha256": "71625244f06342fb7f5b5914c5599e9b75f8e2ef2470a293c64f206afcceffd4"
+      "sha256": "22f2bfc5b805ed559419280c040132798dd9aa70865a88dee9720b9af230e0d6"
     },
     {
       "description": "Read trust evidence: Reads the audit rows that stand behind one control, over a window..",
       "name": "trust_evidence",
       "path": "trust_evidence/SKILL.md",
       "service": "trust",
-      "sha256": "800a038488c045f0f5b617c6957a25a693610fae608988e4d63d2daace2aa5c1"
+      "sha256": "afe117f39df8cf54681a1446a6ed31096f87c6f3c04367848f8adbee87ab86d2"
     },
     {
       "description": "Read trust faq: Lists your knowledge base — the questions a reviewer asks, answered once..",
       "name": "trust_faq",
       "path": "trust_faq/SKILL.md",
       "service": "trust",
-      "sha256": "0626bfa2274c9ca58647f73ef40c6616ae7857d4a670abb3016b035872ded6bb"
+      "sha256": "2f196ba6fc1db7b459be4c5725c85d5e4f80496f305d1445f28a46acdc2a6a52"
     },
     {
       "description": "Read trust frameworks: Lists the frameworks coverage is computed against, and how many clauses each publishes..",
       "name": "trust_frameworks",
       "path": "trust_frameworks/SKILL.md",
       "service": "trust",
-      "sha256": "590dee3ee979df98515f687bdabadc15c18b038bf51dd69f83786b94b58ed7ea"
+      "sha256": "85ed5e770b5e4378e3c09e7559dda50338e8dd33f88b493b0f2814a61d394557"
     },
     {
       "description": "Read trust policies: Lists your organization's published policies..",
       "name": "trust_policies",
       "path": "trust_policies/SKILL.md",
       "service": "trust",
-      "sha256": "f108f8f666e8e91427020d4304210f16986f539fbd7491b5d2314f73e430f487"
+      "sha256": "ff0f53ebb4257e69aad1890fec6965709a226243934f6d511bbda2b3ee6b1325"
     },
     {
       "description": "Read trust profile: Reads your organization's trust-centre profile — the name, tagline and summary a visitor sees, whether the centre is published, and where to send somebody who wants a gated document..",
       "name": "trust_profile",
       "path": "trust_profile/SKILL.md",
       "service": "trust",
-      "sha256": "52a16913fa161ea9a7e4ec40129ac47327c53b339719844e3aa41b6706596a8a"
+      "sha256": "9e54a0a4cfab8ca4d6b28b0fb2543d94246de3daa62ef8e0330afb84825a7f0c"
     },
     {
       "description": "Read trust published: Reads a published trust centre — the whole thing in one answer: the organization's profile, its control inventory, coverage computed against each framework's whole published clause list, its documents, subprocessors, policies, knowledge base, updates and ris",
       "name": "trust_published",
       "path": "trust_published/SKILL.md",
       "service": "trust",
-      "sha256": "8ba317aa53da707f3d3e98865a0427552e6e2b25c51feffba0f71f4655ce5e9a"
+      "sha256": "a32daad3a826c03838ef7ec0c62dd06d05e08bdfc09682d5f339cc61602760e5"
     },
     {
       "description": "Read trust risk: Reads your risk profile — the label and value pairs describing what your organization handles and how..",
       "name": "trust_risk",
       "path": "trust_risk/SKILL.md",
       "service": "trust",
-      "sha256": "bb83a93374d6b8fe870512438d97c1d4d65de1728e222aadfdb01109fa183806"
+      "sha256": "9a491e6dc5f52ce47fb4b1ba0fdbb7bd963ec37e595e8adcb70bafdc49a18f11"
     },
     {
       "description": "Read trust subprocessors: Lists the third parties your organization sends data to, each naming what it is for..",
       "name": "trust_subprocessors",
       "path": "trust_subprocessors/SKILL.md",
       "service": "trust",
-      "sha256": "c4ff78c8db2ec2a3535aa69769a0cd60cc666efa1547d303644ff18378722a67"
+      "sha256": "00a01f15f5639ac408f04362730b1ac9c0dce9ef8575e396ebddada6e2f5a6d0"
     },
     {
       "description": "Read trust trust: Reads YOUR organization's whole trust centre, including the addresses of your own gated documents..",
       "name": "trust_trust",
       "path": "trust_trust/SKILL.md",
       "service": "trust",
-      "sha256": "1830c422e66c44afc3848875c9acb0ae374eebab874d4b8b79a2ccebb260b585"
+      "sha256": "17a89eb8acb33f396828a85931add8e3c5d29b7ed2b37f86d13aaad88fcfdfe2"
     },
     {
       "description": "Read trust updates: Lists your trust-centre updates, newest as you ordered them..",
       "name": "trust_updates",
       "path": "trust_updates/SKILL.md",
       "service": "trust",
-      "sha256": "d575fa65214454991df69e4ea22f78b6077eb6d0320a2cbcd812fffcd38f6a6a"
+      "sha256": "86959b89597fd5edbacda8efbb55835d77362f4994c9e84d50dcc8d66144d714"
     }
   ],
   "spec_version": "8.0.0"

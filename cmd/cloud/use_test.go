@@ -97,7 +97,7 @@ func lazyDead(t *testing.T, name, prefix string) manifest.App {
 // reads of /v1/openapi.json failed as "i/o timeout" while the very next line of
 // the log shows the same path answering 200 in a millisecond.
 //
-// doorlimit_test.go already passed thirty seconds inline, twice — this is that
+// endpointlimit_test.go already passed thirty seconds inline, twice — this is that
 // value, in one place, for every call site. Thirty seconds still catches a
 // handler that never returns, which is the only thing a deadline here is for.
 var deadline = zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true}

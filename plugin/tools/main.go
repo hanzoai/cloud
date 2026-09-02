@@ -32,7 +32,7 @@ func main() {
 		// be projected is the caller's OWN tools — its connectors, skills, agents,
 		// and the external servers it enabled — because those are rows. The host
 		// declares this app Open (manifest/apps.go) and asks it per caller.
-		Door: tools.Door(),
+		Offer: tools.Offer(),
 	}}, []string{"tools"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

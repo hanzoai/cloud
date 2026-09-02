@@ -13,7 +13,7 @@ package team
 // chunter:class:DirectMessage (a room between people). Until now the ONLY way to
 // reach one was the transactor WebSocket — a client opens a socket, replays the
 // model, and issues findAll. That is right for the SPA, which holds a live query
-// open, and it is the wrong and only door for everything else: a second surface
+// open, and it is the wrong and only way in for everything else: a second surface
 // reading the same rooms had to speak the document protocol to list them.
 //
 // So these two ops are not a second store. They read the SAME documents the
@@ -484,7 +484,7 @@ func (b *roomBridge) openRoom(ctx context.Context, in *teamRoomNew) (*teamRoom, 
 	}
 	// A private room nobody is in cannot be entered by anyone, including the
 	// caller: it would be a document only an admin could reach. Refused at the
-	// door rather than created and then explained.
+	// way in rather than created and then explained.
 	if in.Private && len(in.Members) == 0 {
 		return nil, zip.ErrBadRequest("a private room needs at least one member")
 	}

@@ -39,7 +39,7 @@ func roomFixture(t *testing.T, org string, names ...string) (*roomBridge, *sessi
 }
 
 // TestListRoomsReadsTheTransactorsOwnDocuments is the property the whole
-// surface rests on: these ops are a second DOOR, never a second store. A channel
+// surface rests on: these ops are a second ENDPOINT, never a second store. A channel
 // created through the transactor write path appears in the REST listing with no
 // sync step, because both read the same per-space docs table.
 func TestListRoomsReadsTheTransactorsOwnDocuments(t *testing.T) {

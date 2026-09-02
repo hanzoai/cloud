@@ -16,21 +16,21 @@
       "name": "auto_connectors",
       "path": "auto_connectors/SKILL.md",
       "service": "auto",
-      "sha256": "a8028d5b1c8a0970bafb352c74f9bf7ac7b7aed329af34ad3c4ede6d7b5277be"
+      "sha256": "b22b632abd16a6ce84d39c6c8d4b7257535c6cba60501445d70eb05da0b4c84e"
     },
     {
       "description": "Read auto flows: Returns the caller org's automations, most-recently-updated first., Returns one automation and its latest version., Returns one flow's versions, newest first..",
       "name": "auto_flows",
       "path": "auto_flows/SKILL.md",
       "service": "auto",
-      "sha256": "c35388dc267e82203f06202241fd56da74ddcc4f1d607281a6ad8a01219a4641"
+      "sha256": "37f2b649725595489cfb6fdf1488452f4a9103fc727bea6e15fa70a19f98bc07"
     },
     {
       "description": "Read auto runs: Returns the caller org's run history, newest first., Returns one run..",
       "name": "auto_runs",
       "path": "auto_runs/SKILL.md",
       "service": "auto",
-      "sha256": "107f76022bfb68faaa2b88054c78698f89ec57c92ff80f691d9d3b25459e0b18"
+      "sha256": "eb9c4b68d739aef6b4e6d96bd9be229c1aa5de81fd29725a92bbd5cb922d6b68"
     }
   ],
   "spec_version": "8.0.0"

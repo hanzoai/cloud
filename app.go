@@ -240,7 +240,7 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 // keeping those two apart is the whole of package fleet. Its hanzo.ai/unavailable
 // list means nothing while a healthy subsystem has no way to say the first one.
 //
-// nil in, empty out. A program that declares no Plugin.Door still HAS a
+// nil in, empty out. A program that declares no Plugin.Offer still HAS a
 // per-caller half; it simply holds no tools. It is consulted once per tools/list
 // that names an org, answers nothing, and zip then returns the same pre-rendered
 // bytes it always did — the memcpy that makes tools/list free is untouched (zip

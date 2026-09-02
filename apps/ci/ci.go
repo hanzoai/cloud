@@ -6,7 +6,7 @@
 //	head ──build──▶ built ──pin──▶ declared ──reconcile──▶ running
 //
 // That line spans all three surfaces of the delivery plane, which is why it
-// belongs beside the CD half rather than behind a door of its own. /v1/deploy
+// belongs beside the CD half rather than behind a prefix of its own. /v1/deploy
 // already sits behind the gateway's IAM identity; this surface answered a valid
 // hanzo.id bearer with a bare 401, because it sat behind a gate that reads an
 // X-Org-Id header instead. Mounting it here is what makes one identity read the

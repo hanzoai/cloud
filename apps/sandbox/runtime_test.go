@@ -200,7 +200,7 @@ func TestLeaseRefusesAForcedRuntimeBeforeItBuildsAnything(t *testing.T) {
 // person measuring the two runtimes writes down Firecracker's name beside
 // gVisor's numbers. That is why the assertion is on the status AND on the
 // absence of a row, and why the granted runtime is reported at all.
-func TestTheDoorRefusesARuntimeAClientCraftedForItself(t *testing.T) {
+func TestTheEndpointRefusesARuntimeAClientCraftedForItself(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
 	s, err := New(cloud.Deps{DataDir: t.TempDir()})

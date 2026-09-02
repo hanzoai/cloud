@@ -10,7 +10,7 @@ package websearch
 //
 // PAIRED: the refusal sits beside the two callers that must get through, the
 // service key the chat server presents and a caller's own bearer, or it would pass
-// just as well against a door that refuses everyone.
+// just as well against a endpoint that refuses everyone.
 
 import (
 	"io"

@@ -39,7 +39,7 @@ import (
 // prefix itself, so an operation declared through it — directly or through one of
 // its groups — is the program's operation. A group taken off the bare zip app
 // underneath is a different App, and an operation declared there is the program's
-// too: it answers at the program's addresses, in its document, on its MCP door
+// too: it answers at the program's addresses, in its document, on its MCP endpoint
 // and at its call plane.
 func shapes(r cloud.Router) []string {
 	h := func(context.Context, *cloud.Unit) (*ok, error) { return &ok{OK: true}, nil }

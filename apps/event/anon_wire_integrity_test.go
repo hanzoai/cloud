@@ -111,12 +111,12 @@ func TestUnresolvableAccessKeyBearerRefuses(t *testing.T) {
 	app := mountApp(t)
 	body := `{"batch":[{"type":"pageview","distinctId":"anon-1","path":"/pricing"}]}`
 	for _, key := range []string{"sk-nonexistent-0001", "pk-nonexistent-0001"} {
-		for _, door := range doors {
-			code, got := postAuth(t, app, door.path, "Bearer "+key, body)
+		for _, endpoint := range endpoints {
+			code, got := postAuth(t, app, endpoint.path, "Bearer "+key, body)
 			if code != http.StatusForbidden {
 				t.Errorf("POST %s with unresolvable %q = %d (%s), want 403 — a misconfigured "+
 					"platform key must refuse, never file the caller's events under $public",
-					door.path, key, code, got)
+					endpoint.path, key, code, got)
 			}
 		}
 	}

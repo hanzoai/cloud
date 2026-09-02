@@ -1,4 +1,4 @@
-// Package door is the fleet's agent MCP server as three addresses, and nothing
+// Package mcp is the fleet's agent MCP server as three addresses, and nothing
 // else.
 //
 // It is a LEAF on purpose: the routing table (manifest) states the MCP
@@ -6,7 +6,7 @@
 // import the other — each has tests that reach into the other's package, which
 // Go refuses as a cycle. A value both need lives where both can read it
 // without reading each other, the way brand does for the issuer.
-package door
+package mcp
 
 const (
 	// Path is the fleet's one agent MCP address: POST /v1/mcp, served by the host

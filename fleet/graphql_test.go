@@ -89,8 +89,8 @@ func fromTree(app string) []byte {
 	return raw
 }
 
-// doorTo builds the endpoint over one app's real document, pointed at an address.
-func doorTo(t *testing.T, app, addr string) *fleet.Graph {
+// endpointTo builds the endpoint over one app's real document, pointed at an address.
+func endpointTo(t *testing.T, app, addr string) *fleet.Graph {
 	t.Helper()
 	subsets, err := openapi.Subsets([]string{app}, fromTree, func(string) string { return "" })
 	if err != nil {
@@ -126,7 +126,7 @@ func run(t *testing.T, g *fleet.Graph, q string, vars map[string]any) fleet.Resp
 // arrives at the owning app as the REST call that name stands for.
 func TestAFieldBecomesTheOperationsOwnRequest(t *testing.T) {
 	c := echo(t, `{"assertions":[]}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	if g.Fields() == 0 {
 		t.Fatal("the endpoint published no fields at all")
@@ -152,7 +152,7 @@ func TestAFieldBecomesTheOperationsOwnRequest(t *testing.T) {
 // whoever asked.
 func TestTheCallersIdentityRidesToTheChild(t *testing.T) {
 	c := echo(t, `{"assertions":[]}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	run(t, g, `{ graphRead { assertions { value } } }`, nil)
 
@@ -166,7 +166,7 @@ func TestTheCallersIdentityRidesToTheChild(t *testing.T) {
 // JSON the operation already accepts.
 func TestABodyIsSentAsTheRequestBody(t *testing.T) {
 	c := echo(t, `{"recorded":1}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	res := run(t, g, `mutation {
 		graphAssert(body: {assertions: [{entity: "e", relation: "r", value: "v", names: true}]})
@@ -196,7 +196,7 @@ func TestABodyIsSentAsTheRequestBody(t *testing.T) {
 // from its query gets those values on the wire.
 func TestVariablesAreResolvedBeforeSending(t *testing.T) {
 	c := echo(t, `{"assertions":[]}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	res := run(t, g, `query Look($e: String!, $n: Int) { graphRead(entity: $e, limit: $n) { assertions { id } } }`,
 		map[string]any{"e": "acme/svc/api", "n": 3})
@@ -212,7 +212,7 @@ func TestVariablesAreResolvedBeforeSending(t *testing.T) {
 // filled must not be sent as the literal text of its own name.
 func TestAVariableWithNoValueIsRefused(t *testing.T) {
 	c := echo(t, `{}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	res := run(t, g, `query Look($e: String!) { graphRead(entity: $e) { assertions { id } } }`, nil)
 	if len(res.Errors) != 1 {
@@ -229,7 +229,7 @@ func TestAVariableWithNoValueIsRefused(t *testing.T) {
 // decorative: a caller that asked for one key gets one key.
 func TestASelectionNarrowsTheAnswer(t *testing.T) {
 	c := echo(t, `{"relations":["owner"],"rule":["later"],"bound":100}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	res := run(t, g, `{ graphVocabulary { relations } }`, nil)
 	if len(res.Errors) > 0 {
@@ -253,7 +253,7 @@ func TestASelectionNarrowsTheAnswer(t *testing.T) {
 // of them, which is what a caller means by it.
 func TestASelectionReachesIntoAList(t *testing.T) {
 	c := echo(t, `{"assertions":[{"value":"a","source":"s1"},{"value":"b","source":"s2"}]}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	res := run(t, g, `{ graphRead { assertions { value } } }`, nil)
 	top, _ := res.Data["graphRead"].(map[string]any)
@@ -276,7 +276,7 @@ func TestASelectionReachesIntoAList(t *testing.T) {
 // twice in one request possible.
 func TestAliasesAnswerUnderTheNameTheCallerChose(t *testing.T) {
 	c := echo(t, `{"relations":["owner"]}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	res := run(t, g, `{ mine: graphVocabulary { relations } }`, nil)
 	if _, ok := res.Data["mine"]; !ok {
@@ -291,7 +291,7 @@ func TestAliasesAnswerUnderTheNameTheCallerChose(t *testing.T) {
 // REST spends two round trips on, answered in one.
 func TestTwoRootFieldsAreOneRequest(t *testing.T) {
 	c := echo(t, `{"relations":["owner"]}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	res := run(t, g, `{
 		vocab: graphVocabulary { relations }
@@ -315,7 +315,7 @@ func TestTwoRootFieldsAreOneRequest(t *testing.T) {
 // TestFragmentsAreExpanded covers the last thing real clients send.
 func TestFragmentsAreExpanded(t *testing.T) {
 	c := echo(t, `{"relations":["owner"],"bound":100}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	res := run(t, g, "{ graphVocabulary { ...V } }\nfragment V on Vocabulary { relations }", nil)
 	if len(res.Errors) > 0 {
@@ -334,7 +334,7 @@ func TestFragmentsAreExpanded(t *testing.T) {
 // see on its own.
 func TestAFragmentThatSpreadsItselfIsRefused(t *testing.T) {
 	c := echo(t, `{}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	if res := run(t, g, "{ graphVocabulary { ...V } }\nfragment V on Vocabulary { ...V }", nil); len(res.Errors) == 0 {
 		t.Fatal("a self-spreading fragment must be refused, not run")
@@ -347,7 +347,7 @@ func TestAFragmentThatSpreadsItselfIsRefused(t *testing.T) {
 // answer still has a shape, and the reason names the field it belongs to.
 func TestAnUnknownFieldIsAnErrorAndANull(t *testing.T) {
 	c := echo(t, `{"relations":[]}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	res := run(t, g, `{ graphVocabulary { relations } noSuchField }`, nil)
 	if len(res.Errors) != 1 {
@@ -368,7 +368,7 @@ func TestAnUnknownFieldIsAnErrorAndANull(t *testing.T) {
 // data at all, because execution did not start.
 func TestAQueryThatCannotBeParsedNeverBegins(t *testing.T) {
 	c := echo(t, `{}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	res := run(t, g, `{ graphVocabulary { relations `, nil)
 	if len(res.Errors) == 0 {
@@ -379,7 +379,7 @@ func TestAQueryThatCannotBeParsedNeverBegins(t *testing.T) {
 	}
 }
 
-// TestTheDoorReachesARealPluginOverItsSocket is the end-to-end hop, against a
+// TestTheEndpointReachesARealPluginOverItsSocket is the end-to-end hop, against a
 // child composed the way its plugin main composes it.
 //
 // The observable is the CHILD'S OWN VERDICT. A plugin sanitizes identity at its
@@ -388,9 +388,9 @@ func TestAQueryThatCannotBeParsedNeverBegins(t *testing.T) {
 // the field and reported what that app said rather than answering for it. What it
 // does not prove is a successful authenticated call: that needs a credential the
 // child validates, which is IAM's boundary and not this endpoint's.
-func TestTheDoorReachesARealPluginOverItsSocket(t *testing.T) {
+func TestTheEndpointReachesARealPluginOverItsSocket(t *testing.T) {
 	kid := darkChild(t, "graph", graph.Use)
-	g := doorTo(t, "graph", kid.addr)
+	g := endpointTo(t, "graph", kid.addr)
 
 	res := run(t, g, `{ graphVocabulary { relations } }`, nil)
 	if len(res.Errors) != 1 {
@@ -419,7 +419,7 @@ func keys(m map[string]any) []string {
 // a single caller can make this host dial at once.
 func TestAQueryWiderThanTheCeilingIsRefused(t *testing.T) {
 	c := echo(t, `{"relations":[]}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	var b strings.Builder
 	b.WriteString("{")
@@ -449,7 +449,7 @@ func TestAQueryWiderThanTheCeilingIsRefused(t *testing.T) {
 // ceiling on abuse, not a budget ordinary callers can trip over.
 func TestAQueryAtTheCeilingStillRuns(t *testing.T) {
 	c := echo(t, `{"relations":[]}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	var b strings.Builder
 	b.WriteString("{")
@@ -470,7 +470,7 @@ func TestAQueryAtTheCeilingStillRuns(t *testing.T) {
 // fragment spreads.
 func TestSelectionsDeeperThanTheCeilingAreRefused(t *testing.T) {
 	c := echo(t, `{}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	q := "{ graphVocabulary " + strings.Repeat("{ a ", 60) + strings.Repeat("} ", 60) + "}"
 	if res := run(t, g, q, nil); len(res.Errors) == 0 {
@@ -486,7 +486,7 @@ func TestSelectionsDeeperThanTheCeilingAreRefused(t *testing.T) {
 // names the address that does answer.
 func TestAnIntrospectionQueryIsToldWhereTheSchemaIs(t *testing.T) {
 	c := echo(t, `{}`)
-	g := doorTo(t, "graph", c.addr)
+	g := endpointTo(t, "graph", c.addr)
 
 	for _, q := range []string{
 		`{ __schema { queryType { name } } }`,

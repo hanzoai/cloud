@@ -25,7 +25,7 @@
 // deliberately leaves where the framework puts it (manifest.FrameworkMCPPath),
 // over the private ZAP socket the host started it on; or, for a caller that
 // reached this host from INSIDE, the same MCP server on the app's own plane
-// socket (manifest.MCPPath, cloud.Door). [At] resolves the name to whichever of
+// socket (manifest.MCPPath, cloud.UseMCP). [At] resolves the name to whichever of
 // the two that caller may use, and zip.App.Start is what makes either reachable:
 // idempotent, and the SAME single-flighted path a request to the app's prefix
 // takes, so a burst of concurrent askers still produces one child.
@@ -41,7 +41,7 @@
 // [Answer.Err] is never swallowed. A catalogue that silently drops the app it
 // could not reach is indistinguishable from one whose app serves nothing, and
 // those are the same defect the stale file was: the caller cannot tell. Every
-// caller here reports its failures by name — see [Door] for the wire shape.
+// caller here reports its failures by name — see [MCP] for the wire shape.
 package fleet
 
 import (
@@ -72,7 +72,7 @@ import (
 // header a caller wrote and re-mints one only from a credential it verified; its
 // PLANE address sits on the canonical socket no edge route reaches, where a
 // caller's identity is its own statement, trusted exactly as far as that socket
-// makes it (cloud.Door). Which of the two a caller may be forwarded to is a
+// makes it (cloud.UseMCP). Which of the two a caller may be forwarded to is a
 // property of where that caller reached THIS host, and the composition root is
 // the only thing that knows both — so it says, rather than the dispatch
 // assuming.
@@ -132,8 +132,8 @@ func ask(ctx context.Context, at At, name string, req *fasthttp.Request) Answer 
 	// tools/list marshalled a fasthttp request into ZAP frames and sent it down a
 	// unix socket to a handler in this very process.
 	//
-	// The door is App.MCP, which IS the native handler — a frame in, a frame out,
-	// no HTTP semantics to shed. The socket path reaches the SAME door; it just
+	// The handler is App.MCP, the native one — a frame in, a frame out,
+	// no HTTP semantics to shed. The socket path reaches the SAME handler; it just
 	// pays an encode, a syscall and a decode to get there.
 	if a := zip.Serving(name); a != nil {
 		return here(ctx, a, name, req)

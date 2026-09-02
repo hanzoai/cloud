@@ -62,14 +62,14 @@ func postBody(t *testing.T, app *zip.App, path, body, auth string) (int, Capture
 
 // ── the evidence for the endpoint ────────────────────────────────────────────
 
-// TestCanonicalDoorDecodesTeamBatch pins the fold that retired the /collect
+// TestCanonicalEndpointDecodesTeamBatch pins the fold that retired the /collect
 // endpoint as a distinct wire: the canonical decode now dispatches the team
 // SPA's bare snake_case array by shape (isTeamArray), so a repoint of
 // ANALYTICS_COLLECTOR_URL at the canonical endpoint loses nothing. This INVERTS the
 // old TestCanonicalWireSilentlyDropsTeamBatch, which pinned the
 // accepted-then-dropped failure the fold fixed: the person id, the timestamp
 // and the kind all survive now.
-func TestCanonicalDoorDecodesTeamBatch(t *testing.T) {
+func TestCanonicalEndpointDecodesTeamBatch(t *testing.T) {
 	evs, err := decodeIngest([]byte(teamWire))
 	if err != nil {
 		t.Fatalf("decodeIngest: %v", err)
@@ -450,12 +450,12 @@ func resolvedTeamOrg(t *testing.T, app *zip.App, bearer string) (string, bool) {
 
 // ── the endpoint ─────────────────────────────────────────────────────────────
 
-// TestTeamDoorIsRegistered proves the canonical endpoint carries the team wire:
+// TestTeamEndpointIsRegistered proves the canonical endpoint carries the team wire:
 // /v1/event dispatches the team array by shape (isTeamArray), so team events
 // survive admission and REACH the write core — 503 in this warehouse-less
 // harness. A wrong or missing route would 404/405; a decode regression that
 // silently dropped the batch would answer 200 dropped=2.
-func TestTeamDoorIsRegistered(t *testing.T) {
+func TestTeamEndpointIsRegistered(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	app := mountApp(t)
 	tok := teamToken(t, "acme", "a-real-team-secret", nil, time.Now().Add(time.Hour).Unix())

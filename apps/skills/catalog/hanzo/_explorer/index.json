@@ -16,14 +16,14 @@
       "name": "explorer_indexers",
       "path": "explorer_indexers/SKILL.md",
       "service": "explorer",
-      "sha256": "93c852f77cf795f512f6844788d4a9a61f5fc02d4b52752af136579d03512f2d"
+      "sha256": "02d1636ced0468f2e72997825496920a7948dfd3e9c47297a9d422fbc0a2a7d3"
     },
     {
       "description": "Read explorer oracles: Reports the on-chain price/data oracles from the graph's O-Chain PriceFeed registry..",
       "name": "explorer_oracles",
       "path": "explorer_oracles/SKILL.md",
       "service": "explorer",
-      "sha256": "635b7c3998beb7c0641087ccac2034b8dd2255f6daf6824076810f46026c4685"
+      "sha256": "21d1943d559cedc0b0b8b85b69ccba1e23299303493af426e380fd5947c358b5"
     }
   ],
   "spec_version": "8.0.0"

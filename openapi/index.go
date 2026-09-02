@@ -50,7 +50,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hanzoai/cloud/manifest/door"
+	"github.com/hanzoai/cloud/manifest/mcp"
 	"github.com/zap-proto/zip"
 )
 
@@ -60,7 +60,7 @@ const (
 	RootPath = "/v1"
 	// IndexPath is one capability's index as the DOCUMENT spells it; the
 	// router registers the same address as [indexRoute]. Both spellings are
-	// answered by [Door], which is asked with either.
+	// answered by [Host], which is asked with either.
 	IndexPath  = "/v1/{name}"
 	indexRoute = "/v1/:name"
 )
@@ -176,12 +176,12 @@ func Discover(d *Document) (*Root, map[string]*Index) {
 			// The same surface as a query language. An endpoint nobody is told about is
 			// half-shipped, and this index is the one call a caller already makes.
 			"graphql": {Href: GraphPath},
-			"mcp":     {Href: door.Path},
+			"mcp":     {Href: mcp.Path},
 			// Where to authenticate, beside where to call. The MCP server 401s with a
 			// WWW-Authenticate naming this same document (RFC 9728), which is how a
 			// spec-following MCP client discovers it — but only AFTER being refused.
 			// A caller reading the index learns both in the one call it already makes.
-			"auth": {Href: door.Metadata},
+			"auth": {Href: mcp.Metadata},
 		},
 	}
 	per := make(map[string]*Index, len(ops))
@@ -255,7 +255,7 @@ func UseIndex(app *zip.App, subsets func() ([]Part, error)) {
 				return nil, err
 			}
 		}
-		return &rendered{doors: out, known: addressesOf(d)}, nil
+		return &rendered{endpoints: out, known: addressesOf(d)}, nil
 	})
 
 	app.Use(zip.H(func(c *zip.Ctx) error {
@@ -294,7 +294,7 @@ func answer(c *zip.Ctx, r *rendered) ([]byte, bool) {
 	if path != RootPath && leaf(path) == "" {
 		return nil, false
 	}
-	body, mine := r.doors[path]
+	body, mine := r.endpoints[path]
 	return body, mine
 }
 
@@ -399,7 +399,7 @@ func leaf(path string) string {
 // The document itself is dropped — see [UseIndex] — and this is deliberately
 // the small residue of it. Per address that is a method list and two booleans.
 type rendered struct {
-	doors map[string][]byte
+	endpoints map[string][]byte
 	known *addresses
 }
 

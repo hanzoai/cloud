@@ -98,20 +98,20 @@ func TestWebhookIsGoneForEveryDelivery(t *testing.T) {
 	}
 }
 
-// TestWebhookRefusalNamesTheDoorThatBuilds is the reason this route is kept at
+// TestWebhookRefusalNamesTheEndpointThatBuilds is the reason this route is kept at
 // all rather than deleted. A deleted route 404s, and a 404 from this estate is
 // the signal that has twice been read as "the API is switched off" — Hanzo Git
 // serves /v1, so /api/v1 404s and looks identical to a disabled server. The
 // refusal therefore has to carry its own fix in the body an operator reads.
-func TestWebhookRefusalNamesTheDoorThatBuilds(t *testing.T) {
+func TestWebhookRefusalNamesTheEndpointThatBuilds(t *testing.T) {
 	app := mountApp(t)
 	body := forgePayload("hanzoai", "cloud", "refs/heads/main", "c3501b3", "z")
 	code, out := postHook(t, app, map[string]string{"X-Git-Event": "push"}, body)
 	if code != http.StatusGone {
 		t.Fatalf("want 410, got %d", code)
 	}
-	if !strings.Contains(out, buildDoor) {
-		t.Fatalf("the refusal must name %s so the answer carries its own fix; got: %s", buildDoor, out)
+	if !strings.Contains(out, buildEndpoint) {
+		t.Fatalf("the refusal must name %s so the answer carries its own fix; got: %s", buildEndpoint, out)
 	}
 }
 

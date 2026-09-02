@@ -20,7 +20,7 @@ import (
 // so every client-side route would 404 and the product would look broken while
 // the process looked healthy. Refuse it where the source is named.
 func TestBundleWithoutShellIsRefused(t *testing.T) {
-	_, err := Handler(fstest.MapFS{"_next/static/chunk.js": {Data: []byte("//")}}, testDoor(), nil)
+	_, err := Handler(fstest.MapFS{"_next/static/chunk.js": {Data: []byte("//")}}, testEndpoint(), nil)
 	if err == nil {
 		t.Fatal("Handler accepted a bundle with no index.html — every deep link would 404")
 	}
@@ -34,7 +34,7 @@ func TestBundleWithoutShellIsRefused(t *testing.T) {
 // terminal handler. It must keep the API namespaces honest and must NOT invent a
 // page: an empty 200 of HTML is the one answer a public endpoint may never give.
 func TestNoBundleIsA503_NotAShell(t *testing.T) {
-	h, err := Handler(nil, testDoor(), nil)
+	h, err := Handler(nil, testEndpoint(), nil)
 	if err != nil {
 		t.Fatalf("Handler(nil): %v — no bundle is a stated case, not an error", err)
 	}
@@ -80,7 +80,7 @@ func TestReleaseSwapIsServedImmediately(t *testing.T) {
 		"_next/static/chunks/aaaa1111.js": {Data: []byte("//a")},
 	})
 
-	h, err := Handler(src, testDoor(), nil)
+	h, err := Handler(src, testEndpoint(), nil)
 	if err != nil {
 		t.Fatalf("Handler: %v", err)
 	}
@@ -143,7 +143,7 @@ func (p *polledFS) swap(m fstest.MapFS) { p.cur.Store(&m) }
 func TestAPolledSourceMountsEmptyAndRecovers(t *testing.T) {
 	src := &polledFS{}
 
-	h, err := Handler(src, testDoor(), nil)
+	h, err := Handler(src, testEndpoint(), nil)
 	if err != nil {
 		t.Fatalf("a polled source must mount while empty — it is what can still fill in: %v", err)
 	}

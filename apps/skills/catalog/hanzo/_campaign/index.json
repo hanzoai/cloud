@@ -16,21 +16,21 @@
       "name": "campaign_campaign",
       "path": "campaign_campaign/SKILL.md",
       "service": "campaign",
-      "sha256": "ed81ec6fd8ec048e239112732a368df290e31ec44f753b87ba544937f6057e29"
+      "sha256": "ea1720736eaf28ca5ebd4d6bd6d620d4366dcab7fde3cc0e52327327f1b02fb0"
     },
     {
       "description": "Read campaign metrics: Returns a campaign's results over a window: the analytics funnel (impressions, clicks, conversions, revenue, visitors), the spend each channel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and ROAS..",
       "name": "campaign_metrics",
       "path": "campaign_metrics/SKILL.md",
       "service": "campaign",
-      "sha256": "43ae1c1d85c3119ae9f40dc4289f229baeec1f4b6a2cec3804c6efc9f83f235e"
+      "sha256": "9024cdcb8ad838a4cb8bc5df31e4e62c4ea0be4bf2b51e5601fdc14b420365a5"
     },
     {
       "description": "Read campaign summary: Returns the org's go-to-market roll-up: how many campaigns exist, how many are live, their total budget in cents, and which channel executors this deployment can actually reach..",
       "name": "campaign_summary",
       "path": "campaign_summary/SKILL.md",
       "service": "campaign",
-      "sha256": "409bac53d3d698602ad997fdb63ed01ef929efb0f67e6e55451dbcfdbb2e8070"
+      "sha256": "272f433f07b3961d869b03240c3fa627743e21663ef4856c4cb974967ee0cc62"
     }
   ],
   "spec_version": "8.0.0"

@@ -113,8 +113,8 @@ func run() error {
 	// app main and this one is hand-written. Without it this app's tools are the
 	// only ones in the fleet a caller from INSIDE reaches through the edge, so the
 	// identity boundary deletes that caller's principal and all 365 of them refuse
-	// it — see cloud.Door.
-	cloud.Door(app)
+	// it — see cloud.UseMCP.
+	cloud.UseMCP(app)
 	if stop, err := cloud.ServePlane("o11y", luxlog.Default()); err != nil {
 		luxlog.Default().Warn("plane: socket not served", "app", "o11y", "err", err)
 	} else {

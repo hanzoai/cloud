@@ -1,6 +1,6 @@
 package risk
 
-// policy_door_test.go — the decision regime has ONE address, and a write there
+// policy_endpoint_test.go — the decision regime has ONE address, and a write there
 // answers the policy it wrote and nothing else.
 //
 // These are the tests that fail if the dissolution is undone. The regime used to

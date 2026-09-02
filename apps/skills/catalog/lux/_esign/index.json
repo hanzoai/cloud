@@ -16,21 +16,21 @@
       "name": "esign_documents",
       "path": "esign_documents/SKILL.md",
       "service": "esign",
-      "sha256": "220d2960851ef6fa6b199f137afb6fc3e5c8691d4409313f4d6e562af2a1d520"
+      "sha256": "0de26f5526ca4df5bf855722a9d8389f65ec73e4687c4bfe034448dd09176896"
     },
     {
       "description": "Read esign health: Reports whether the e-signature surface is mounted..",
       "name": "esign_health",
       "path": "esign_health/SKILL.md",
       "service": "esign",
-      "sha256": "c88997de79c4cd156b5552caeba0aa4ee62c0b98a87ca8c26904dd517e86c47f"
+      "sha256": "2a78beb04b0a5c92708348a119550be204eb1c5437b18cdf7a8346b22955250e"
     },
     {
       "description": "Read esign o: Opens a document you were asked to sign, using your signing link..",
       "name": "esign_o",
       "path": "esign_o/SKILL.md",
       "service": "esign",
-      "sha256": "b34ffe508b2f7d1fde7fa6c500f32a81738d103a49031ecdd7e2eacd182dd997"
+      "sha256": "6c5f6d02c39e636cff6b326f0a31fdc1cf555cf725e58c3c67e3d4da4a5392d1"
     }
   ],
   "spec_version": "8.0.0"

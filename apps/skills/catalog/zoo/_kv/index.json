@@ -16,14 +16,14 @@
       "name": "kv_history",
       "path": "kv_history/SKILL.md",
       "service": "kv",
-      "sha256": "436955945d945eff4f2d22fbca09a66601d99fdfb7199315ba2f3be92ea737bf"
+      "sha256": "659f4001e1a16b872f82097b252a8eb916bfc09582a72bc26d6565d6fad8fb0b"
     },
     {
       "description": "Read kv kv: Get returns one key's current value and revision..",
       "name": "kv_kv",
       "path": "kv_kv/SKILL.md",
       "service": "kv",
-      "sha256": "cb9f1bf9a51ab09990a948cce51565e9390ac8538b78e8444c50f66a985a412a"
+      "sha256": "dd2146450b761472e158fc4e67560e6ffcd576773b8f11c2429fd3e9e730027b"
     }
   ],
   "spec_version": "8.0.0"

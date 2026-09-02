@@ -16,7 +16,7 @@ package platform
 // surface — the apps/exec incident exactly. `admit` is the same predicate the
 // wrapper applied (cloud.Scope.Admits over cloud.AuthorityOf, refused with the
 // scope's own sentence), called as the first line of every op, so all three
-// endpoints ask one question. TestTheDeliveryBoardIsShutToANonAdminOnEveryDoor
+// endpoints ask one question. TestTheDeliveryBoardIsShutToANonAdminOnEveryEndpoint
 // drives the MCP server specifically, because that is the one a route test cannot
 // see.
 //

@@ -45,9 +45,9 @@ const anonClick = `{"batch":[{"type":"event","event":"$click","distinctId":"anon
 
 // ── the feature: an anonymous interaction lands ──────────────────────────────
 
-// TestAnonAutocapture_ClickAdmittedThroughThePublicDoor is the headline. No bearer, no
+// TestAnonAutocapture_ClickAdmittedThroughThePublicEndpoint is the headline. No bearer, no
 // key, no team token — the exact shape hanzo.ai emits — and it reaches the write core.
-func TestAnonAutocapture_ClickAdmittedThroughThePublicDoor(t *testing.T) {
+func TestAnonAutocapture_ClickAdmittedThroughThePublicEndpoint(t *testing.T) {
 	roomyRate(t)
 	app := mountApp(t)
 	code, body := postAnon(t, app, "/v1/event", anonClick, nil)

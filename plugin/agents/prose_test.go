@@ -23,11 +23,11 @@ import (
 
 // TestEveryPublishedFieldIsDescribed fails on any property of the coding op's
 // published shapes that carries no description. It stands the op up by CALLING
-// codingDoor, so it is downstream of the one registration this program makes rather
+// codingEndpoint, so it is downstream of the one registration this program makes rather
 // than beside a copy of it.
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "agents", DisableStartupMessage: true})
-	codingDoor(app)
+	codingEndpoint(app)
 	doc, err := openapi.Spec(app, openapi.Info{Title: "agents", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)

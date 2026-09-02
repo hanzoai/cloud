@@ -367,15 +367,15 @@ func TestInsightsHealthIsUnconditional(t *testing.T) {
 
 // ── the refusals are MEASURED, not asserted ─────────────────────────────────
 
-// TestArrayBodiedDoorsStillAnswer200 is the measurement behind canonWireReason: the
+// TestArrayBodiedEndpointsStillAnswer200 is the measurement behind canonWireReason: the
 // four endpoints on an array-tolerant wire accept a BARE JSON ARRAY body today. That is
 // exactly the request a typed In would turn into a 400 (zip's op.invoke unmarshals
 // every non-empty body into the struct), so this is the refusal's evidence rather
 // than its restatement. If a later zip can declare a polymorphic body, this test is
 // what tells you the conversion is safe.
-func TestArrayBodiedDoorsStillAnswer200(t *testing.T) {
+func TestArrayBodiedEndpointsStillAnswer200(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
-	for _, d := range doors {
+	for _, d := range endpoints {
 		var body string
 		switch {
 		case sameWire(d.decode, decodeIngest):

@@ -16,14 +16,14 @@
       "name": "ci_fleet",
       "path": "ci_fleet/SKILL.md",
       "service": "ci",
-      "sha256": "b2d951cbaedfb374e91495c51cf1b196d39270b4412948c472a7667416560cbb"
+      "sha256": "24a15766eb6d658335a65464df2d9c948684a86fc565fccb30a98505510fdc51"
     },
     {
       "description": "Read ci runs: Lists recent builds: the repo, the branch, the commit and how each run ended, newest first..",
       "name": "ci_runs",
       "path": "ci_runs/SKILL.md",
       "service": "ci",
-      "sha256": "1f0953c6d661547acb814fa65dae740b62c95a0d9d9b43612bc768ff5674c85b"
+      "sha256": "4875248e6eb9775d32ce47ecfb6b49231e6abf40f96c7f6080c11dbd34f5ff32"
     }
   ],
   "spec_version": "8.0.0"

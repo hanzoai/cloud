@@ -39,14 +39,14 @@ import (
 //
 // Three properties this must not lose, and how it keeps them:
 //
-//   - THE GATE. [Door.gather] refuses a name before it writes the routing table,
+//   - THE GATE. [MCP.gather] refuses a name before it writes the routing table,
 //     and that is still the only gate. A refused name never reaches [group], so
-//     it is in no enum; never reaches [Door.lookup], so [Door.call] cannot
+//     it is in no enum; never reaches [MCP.lookup], so [MCP.call] cannot
 //     dispatch it through an envelope any more than it could directly; and
-//     [Door.describe] answers out of the same gathered set, so it cannot be read
+//     [MCP.describe] answers out of the same gathered set, so it cannot be read
 //     either. One rule, one place, three paths through it.
 //   - ONE DISPATCH. The envelope is a DECODING, not a second route: it yields
-//     the (name, message) a direct tools/call carries, and [Door.call] runs the
+//     the (name, message) a direct tools/call carries, and [MCP.call] runs the
 //     same owner lookup and the same hop on both.
 //   - NO DESCRIPTOR REMEMBERED. Describe re-asks its owner, always. Names and
 //     prose come from the catalog for a subsystem that is not running (see
@@ -66,7 +66,7 @@ import (
 // server's tools are the app names themselves.
 //
 // The prefix was also carrying a second job, and that is the part worth stating
-// rather than rediscovering: [Door.composed] used it to tell one of THIS
+// rather than rediscovering: [MCP.composed] used it to tell one of THIS
 // server's tools from an operation a child declared. A convention doing
 // load-bearing work is a convention that will be broken by someone who thinks it
 // is cosmetic — so that test is now a membership check against the server's own
@@ -76,7 +76,7 @@ import (
 //
 // It is the fetch half of the surface — the enums say what exists, this says
 // what an operation takes — and it is exported because the fleet's own agent
-// runs are clients of this server like any other (apps/agents/door.go).
+// runs are clients of this server like any other (apps/agents/fleet.go).
 //
 // It shares a namespace with the app names, so no subsystem may be called
 // `describe` — asserted against the manifest in fleet/grouped_test.go, which is
@@ -228,7 +228,7 @@ func describeTool() map[string]any {
 // BEFORE anything is asked — and because the composed set is what the deployment
 // runs, which does not change between requests, while what an app is serving at
 // this instant does.
-func (d *Door) composed(tool string) bool { return slices.Contains(d.apps, tool) }
+func (d *MCP) composed(tool string) bool { return slices.Contains(d.apps, tool) }
 
 // envelope is what a subsystem tool carries: the operation to run, and that
 // operation's own arguments.
@@ -283,7 +283,7 @@ func callBody(id json.RawMessage, op string, input json.RawMessage) []byte {
 // describe answers the one question a surface of names leaves open: what does
 // this operation take?
 //
-// It ASKS — a fresh [Door.gather], which is also the gate — and hands back the
+// It ASKS — a fresh [MCP.gather], which is also the gate — and hands back the
 // owning subsystem's OWN descriptor bytes, the same ones the flat list used to
 // carry. So an operation is describable exactly when it is listable and exactly
 // when it is callable: there is one set, computed one way, and no third answer.
@@ -291,7 +291,7 @@ func callBody(id json.RawMessage, op string, input json.RawMessage) []byte {
 // reports whether it got one. It is the fetch half of a surface whose enums
 // carry names: one subsystem is reached, and only because a caller named an
 // operation it serves.
-func (d *Door) descriptor(c *zip.Ctx, t named, at At) (json.RawMessage, bool) {
+func (d *MCP) descriptor(c *zip.Ctx, t named, at At) (json.RawMessage, bool) {
 	hop := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(hop)
 	c.Fiber().Request().CopyTo(hop)
@@ -315,7 +315,7 @@ func (d *Door) descriptor(c *zip.Ctx, t named, at At) (json.RawMessage, bool) {
 	return nil, false
 }
 
-func (d *Door) describe(c *zip.Ctx, req message, args json.RawMessage, at At) error {
+func (d *MCP) describe(c *zip.Ctx, req message, args json.RawMessage, at At) error {
 	var in struct {
 		Op string `json:"op"`
 	}
@@ -344,7 +344,7 @@ func (d *Door) describe(c *zip.Ctx, req message, args json.RawMessage, at At) er
 		}))
 	}
 	// The same answer for "nobody serves it" and "policy withheld it", for the
-	// same reason [Door.call] gives one answer for both: naming which it was
+	// same reason [MCP.call] gives one answer for both: naming which it was
 	// would turn the server into an oracle for the surface it just declined to
 	// expose.
 	return c.JSON(200, rpcErr(req.ID, -32602, "unknown tool: "+in.Op))

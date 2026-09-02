@@ -16,14 +16,14 @@
       "name": "help_articles",
       "path": "help_articles/SKILL.md",
       "service": "help",
-      "sha256": "e89e07f3745b212a43c1a44f81649c7f897d732c34b4fbc6e89dc88b371f4c4e"
+      "sha256": "3d00cdcd56a7849cba50e117dac08835f872285b6cd55441e634e0a7e8b61ac4"
     },
     {
       "description": "Read help categories: Returns the knowledge-base sections for the public center's navigation — but ONLY the sections that front at least one Published, public article, so an internal (agent-only) category name or description never leaks..",
       "name": "help_categories",
       "path": "help_categories/SKILL.md",
       "service": "help",
-      "sha256": "4b17ba8ba3eb7f403c19164eb00c21efbe7bc141eee52cd55faea8de9789eacb"
+      "sha256": "b7875ed3f7bbb77712ab8e0cdfd9cd2747c40e7243361f2ea68f1d34d77465c8"
     }
   ],
   "spec_version": "8.0.0"

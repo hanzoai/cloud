@@ -16,280 +16,280 @@
       "name": "admin_affiliate",
       "path": "admin_affiliate/SKILL.md",
       "service": "admin",
-      "sha256": "99136d507a2e93f876f0214d1648eaa852312835e6ca4d49adb10f164dda0353"
+      "sha256": "5cacc5703eed793cab6a10a7427973c1cee037f42d112df80aeab6368e2cdef8"
     },
     {
       "description": "Read admin aimetrics: Is the fleet AI board: LLM generations over gen_ai spans (count, cost, avg/p95 latency, per-model), per-model usage from the live cloud_usage ledger, and the eval plane (traces, scores, score names, runs, and the average-score trend)..",
       "name": "admin_aimetrics",
       "path": "admin_aimetrics/SKILL.md",
       "service": "admin",
-      "sha256": "5e4e8e56c2c6eb3317ea936125a83de3c4f3a4d3cb46a94f97b5342de3209f88"
+      "sha256": "23e542e48cc5d957ade82941e93e8e7190328b806a815dc572b0f5e16eca03d4"
     },
     {
       "description": "Read admin analytics: Is the SaaS product-analytics board over the caller's tenant window: active customers, new and churned, retention, MRR, ARPU, the usage trend and the top customers by spend — every number folded from the commerce ledger, not sampled..",
       "name": "admin_analytics",
       "path": "admin_analytics/SKILL.md",
       "service": "admin",
-      "sha256": "6c9b74866088c14ceffe087fbabae2088f6cd8a390d6a03d0aa1a88e1fcc9a46"
+      "sha256": "bdb241618b4acb5d1be7944e0d556a79a43296807d23b4ebb9d6afae46e8c4db"
     },
     {
       "description": "Read admin applications: Lists IAM applications for one owner org, forwarded VERBATIM from IAM's application list..",
       "name": "admin_applications",
       "path": "admin_applications/SKILL.md",
       "service": "admin",
-      "sha256": "2497f0643dd65ce05afbd7281995a99bbdd3f14a3ace3a26d73153e10cef6f3f"
+      "sha256": "6a9ae1dadcc7e50ed45c7f10ca4ee028e74d51531c5e025d6319982eaddffb22"
     },
     {
       "description": "Read admin audit: Reads one chain of cloud's tamper-evident audit trail, newest first, with that chain's live integrity attached so a listing can be badged as verified., Walks EVERY hash chain this deployment keeps and reports each one: which chains were checked, how many records",
       "name": "admin_audit",
       "path": "admin_audit/SKILL.md",
       "service": "admin",
-      "sha256": "a1ca3f2d9f02aeed53f1261b22272852b9186872b88a1b185bbd944636f306ab"
+      "sha256": "af28e2ac3bce2c0f53697735b7dd0341513978d37fef22487bcd9df9fe3f559b"
     },
     {
       "description": "Read admin author: Returns the platform's whole author program — every org's author record, not the caller's — with each one's repository and deploy counts and a fleet roll-up of the money accrued, pending and paid., Returns the audit trail behind ONE author's royalty — the same ",
       "name": "admin_author",
       "path": "admin_author/SKILL.md",
       "service": "admin",
-      "sha256": "f720c3f02b83ee72ebe58181156aeb542a38505503c31abb5b034d0a507bfb5b"
+      "sha256": "d9f85597d12d7f89d6616f702e40ff12026ecc8d08b5bf65f381783dc677715e"
     },
     {
       "description": "Read admin bases: Lists the tenant Base instances in the caller's window — a SuperAdmin sees every tenant's, anyone else only their own subtree's..",
       "name": "admin_bases",
       "path": "admin_bases/SKILL.md",
       "service": "admin",
-      "sha256": "87f17d6b715ce66fac6c53bee8d8ab749ac246623a8ef62cc7e598c0dbccb8e1"
+      "sha256": "5455b26caf1fe014bec6179ea8a9f237829a26ed9be48b5565dce2836c97c86a"
     },
     {
       "description": "Read admin caps: Reads one org's usage caps: its spend alerts plus the derived period spend, over/warn state and reset time..",
       "name": "admin_caps",
       "path": "admin_caps/SKILL.md",
       "service": "admin",
-      "sha256": "a5eb0596789f58a46b87613982b4ce231e540d072433c2262db2a1704a1799e0"
+      "sha256": "28d2f2d175a6245b0b19653e09b9be0fa3c8e8ec00a656c19bc8f097604421b8"
     },
     {
       "description": "Read admin compute: Rolls the fleet's compute usage up to one row per (org, app, project, kind): how many distinct machines ran in the window, how many are still active, what they billed, and when each group last emitted an event..",
       "name": "admin_compute",
       "path": "admin_compute/SKILL.md",
       "service": "admin",
-      "sha256": "fdd429793fc39708643b610540fbdf7c56fd3b6e848940f1e90bb5f920817e50"
+      "sha256": "592f55ebb4e913884d296bc83e0f452e815b41dadd302703d3642d6d4a549433"
     },
     {
       "description": "Read admin customers: Lists every customer org at a glance, sorted by slug: owner email, plan, suspend status, member count, balance, month-to-date spend and MRR., Answers GET /v1/admin/customers/:org..",
       "name": "admin_customers",
       "path": "admin_customers/SKILL.md",
       "service": "admin",
-      "sha256": "cebfc3c7d767e97fbd2853caa4327201964536da927fb5e3ada0cd70f41bed9a"
+      "sha256": "9e3568f206c6e218d213ac80f2156392b2f2bbe9883006e4b996e36d97b18184"
     },
     {
       "description": "Read admin dataroom: Roster lists every published trust centre in the deployment with the size of its queue — the platform's view of who is running one and who is leaving people waiting..",
       "name": "admin_dataroom",
       "path": "admin_dataroom/SKILL.md",
       "service": "admin",
-      "sha256": "b71c93787e4415a1ff507414ab85d87a9d5848ee7fff2dba59389af1cf3a466e"
+      "sha256": "10458689c1f90deb22ae5dbb9e41d0c304e907d5c8570759daf88dd6eefb96ea"
     },
     {
       "description": "Read admin finance: Answers GET /v1/admin/finance..",
       "name": "admin_finance",
       "path": "admin_finance/SKILL.md",
       "service": "admin",
-      "sha256": "9df7f15bc13d1d86606f25ddd86c9f2eea09bc109d86410e24f367beece3f041"
+      "sha256": "6a968ad4f9ffe428ade07335e2b1f861d0b1018588d6c5116eb50f73ffffb778"
     },
     {
       "description": "Read admin flags: Reads the platform control-plane board: every runtime launch/release switch (waitlist, public signup, subsystem activation, gateway limits, network ids) with its LIVE value and where that value came from — a stored definition or the compiled-in default..",
       "name": "admin_flags",
       "path": "admin_flags/SKILL.md",
       "service": "admin",
-      "sha256": "58a8372362d46561224619744d612c4fbcaf0bc48022c1b3394137311f00591d"
+      "sha256": "63852e4aa2977f5d3ba91b69af477d38d25c6b7db1f87f0aa7008f4e72645023"
     },
     {
       "description": "Read admin grants: Reads the credit-grant ledger across ALL orgs, newest first — who granted what to whom, when, and from which money bucket..",
       "name": "admin_grants",
       "path": "admin_grants/SKILL.md",
       "service": "admin",
-      "sha256": "55ec5a9d747fc14cb9cee426d7c5744e9bb75cfc235271d4ca57f9421c0c73c6"
+      "sha256": "7382e972b8dae80c688627d16facd648ac0f44b8f6faafad4f6ae6ae827b1a87"
     },
     {
       "description": "Read admin infra: Serves the whole DigitalOcean infrastructure board: droplets, volumes, DOKS clusters and load balancers, each cross-referenced against every cluster's live Kubernetes state so the board can say what is safe to destroy and what is not..",
       "name": "admin_infra",
       "path": "admin_infra/SKILL.md",
       "service": "admin",
-      "sha256": "1fc69be5ce4875a9c729f0ab21da077c64be82f6b72310642c4b09d1afb65ca4"
+      "sha256": "4f6e822d172a16defc00e106db074454c324009548c6f2e038d4586cdf23ceeb"
     },
     {
       "description": "Read admin invoices: Answers GET /v1/admin/invoices..",
       "name": "admin_invoices",
       "path": "admin_invoices/SKILL.md",
       "service": "admin",
-      "sha256": "10c3f7da21a1f29e613bd2b2c01e949e5ef22f94f3a39ab8afea0052eb6a3eeb"
+      "sha256": "1bfacfc3245073edb666d4681a2ef284f5b904584b7b56b0c6d273a2ea8c3baf"
     },
     {
       "description": "Read admin me: Answers with the validated operator identity — who the console is signed in as, which tier they are, and how wide their tenant window is..",
       "name": "admin_me",
       "path": "admin_me/SKILL.md",
       "service": "admin",
-      "sha256": "be0a606624c1ac7c349a3255e494e84cff2d5cfa51485a5816def27003148230"
+      "sha256": "e3d01e51d0825544c051f0cf5df9579df28ca42c75c174ac7c4e92c52dd63bd2"
     },
     {
       "description": "Read admin metrics: Answers GET /v1/admin/metrics by aggregating commerce.events directly (fleet-wide, no per-org fan-out)..",
       "name": "admin_metrics",
       "path": "admin_metrics/SKILL.md",
       "service": "admin",
-      "sha256": "f8968955c80330ad736d6b09638354bce61143ad9347395c73e0c2918500d57d"
+      "sha256": "a5361fe2bc734e22e62cd62af731f21be4d310d6b3c688d154bcfa30fdcb511e"
     },
     {
       "description": "Read admin money: moneyBoardHandler answers GET /v1/admin/money..",
       "name": "admin_money",
       "path": "admin_money/SKILL.md",
       "service": "admin",
-      "sha256": "79a250978c65fdba8e9782cb147bafb07f5b5218e137f11c35f74f4434396840"
+      "sha256": "e5f03471cefa21656f9a95dcdbe4b6969765493279a0eba37aa40c3f20513475"
     },
     {
       "description": "Read admin o11y: Is the fleet-wide observability board: LLM usage (requests, tokens, cost, errors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in ms, error rate, top services), fleet log volume, and the O11yAI generation rollup — all aggregated across EVE",
       "name": "admin_o11y",
       "path": "admin_o11y/SKILL.md",
       "service": "admin",
-      "sha256": "6a6da54b91e9ce203258c34003f155b9cf34fb55be285f90f1c80a81d7b2fa47"
+      "sha256": "fabc4236e430de451979ac6ebe63a81c572bfa836428b14f12b078017271d0f1"
     },
     {
       "description": "Read admin orgs: Lists the tenant directory one row per org, sorted by slug: member count and the org's month-to-date spend and credit balance, read live from IAM and commerce..",
       "name": "admin_orgs",
       "path": "admin_orgs/SKILL.md",
       "service": "admin",
-      "sha256": "5257c18dbbe50675bc99d052c53af10f114a63ecad73abbb389c021dcb7f50ed"
+      "sha256": "1f9517b0c699ed3a8ab17058ae43101c0b70e1b98627e426f2b1f7800a14346a"
     },
     {
       "description": "Read admin overview: Is the Platform Overview tiles: how many orgs and users are in the caller's tenant window, the fleet workload counts, and month-to-date spend and credits..",
       "name": "admin_overview",
       "path": "admin_overview/SKILL.md",
       "service": "admin",
-      "sha256": "96989cc5dd772a8224bfde77fb3a3b15e7031d783a8defbbccca0ad30db91fe0"
+      "sha256": "b3c54b8cd345998c2cb41d019741b124aa644bdcbf52e49eaa27a13ca1a63a3a"
     },
     {
       "description": "Read admin plugins: Reports what each host is actually running: every loaded plugin with its version, pid, uptime, reload and restart counts, and its measured CPU, RSS, thread and fd cost — read from the kernel, which is only answerable at all because a plugin is a process..",
       "name": "admin_plugins",
       "path": "admin_plugins/SKILL.md",
       "service": "admin",
-      "sha256": "077ad0594f037d025359bdc0f57ac7223fa5418e6a980f21a46e8c6300a7c108"
+      "sha256": "00dd2bcdd8b1402bcba93de675646bf78ac387e61e1c4ebf9cc15aafbf85e0c9"
     },
     {
       "description": "Read admin pricing: Returns the full model and provider catalog annotated with each entry's enablement state, for the operator console., Returns every item an operator has set an enablement state on — its global state (off, beta or ga) and the orgs granted its beta..",
       "name": "admin_pricing",
       "path": "admin_pricing/SKILL.md",
       "service": "admin",
-      "sha256": "6a6151d4c886b07105fa84a0f8356fad2fd60d137f66f1227d878ef9709c1220"
+      "sha256": "74775c8b66524d81c8606d7e19cfc851050dc9b25df6827922774f86d39e477d"
     },
     {
       "description": "Read admin products: Lists the fleet workload registry: every operator App CR across the platform namespaces with its declared vs running image tag, reconciled health/phase and drift verdict..",
       "name": "admin_products",
       "path": "admin_products/SKILL.md",
       "service": "admin",
-      "sha256": "27aa0f4c38fbd5c62f8772c65b75dfe320e942b3c1bba119efc5877f648d25a6"
+      "sha256": "dfd5a8c522e1c698597b3e397829c1b4199071a921640ea2abf822e96e79fee8"
     },
     {
       "description": "Read admin promos: Reads the current platform plan promo — the singleton discount offer, e.g..",
       "name": "admin_promos",
       "path": "admin_promos/SKILL.md",
       "service": "admin",
-      "sha256": "909304db4854aae01e971fd0da51f57159fa15420325de79089324f7e4a252e0"
+      "sha256": "89e472bcc3df17c3af564dd563254c80c2057b5161c7df55889b828a72f85492"
     },
     {
       "description": "Read admin providers: Serves GET /v1/admin/providers/credit — the per-provider upstream credit ledger..",
       "name": "admin_providers",
       "path": "admin_providers/SKILL.md",
       "service": "admin",
-      "sha256": "2d59ce717d5ab3fa57ee4428b7d8bb03224dd9cee2529506093475c64be53b3c"
+      "sha256": "867f84ee9693954ca9dde2b73210927bc7244dea6158232a807cdcdb27d8c5be"
     },
     {
       "description": "Read admin provisioning: Lists every collection in the deployment's vector store with its size and geometry, across all tenants., Totals the collections, vectors and storage across the whole vector store..",
       "name": "admin_provisioning",
       "path": "admin_provisioning/SKILL.md",
       "service": "admin",
-      "sha256": "6792950d8e7078b2958fcbad177e632ceba567024cb50bb7328bd0ca81e0f72d"
+      "sha256": "8dc58d5eebb7d22581104e89aeb69e233d68b1d95141c4c6176bec28dbc24938"
     },
     {
       "description": "Read admin referral: Returns every referral edge in the directory with a fleet summary..",
       "name": "admin_referral",
       "path": "admin_referral/SKILL.md",
       "service": "admin",
-      "sha256": "03780dc7937c51dcd3708f131bc9628562be13a3c252973073440edba3583ee4"
+      "sha256": "d4ea41a6c8aefb51dfe1d9844726784c15a8d4e61f2c261afaa7b4ea410d0d89"
     },
     {
       "description": "Read admin revenue: Is the fleet money board: total prepaid balances held, total realized spend, MRR, ARPU, a per-customer table sorted highest-revenue first, and a real 30-day spend trend from the usage ledger..",
       "name": "admin_revenue",
       "path": "admin_revenue/SKILL.md",
       "service": "admin",
-      "sha256": "03aad1b247ab8ac5b6bc00b905e87c80ec200c7bf93872012b942f2d83f04975"
+      "sha256": "a278eb4b0c8387815286c40ed19f462740786580d812c5405df6debc6ee3c155"
     },
     {
       "description": "Read admin roles: Lists IAM roles for one owner org, forwarded VERBATIM from IAM's role list..",
       "name": "admin_roles",
       "path": "admin_roles/SKILL.md",
       "service": "admin",
-      "sha256": "b9408e1df03a93b57931748303ccfa56b56ce775e8f2b219d9d397a6b8d344a8"
+      "sha256": "13f3e638a835a579e1b7139ba1b257ea88e9783199e053cb34f12d299d1ff8c6"
     },
     {
       "description": "Read admin search: Lists the search indexes with their document counts and timestamps., Totals the documents across every search index..",
       "name": "admin_search",
       "path": "admin_search/SKILL.md",
       "service": "admin",
-      "sha256": "a203041bf03d079a06126a194620c41cd6988bd896d18edeaefc351888703f72"
+      "sha256": "5aba794e38778027e8f63886dce4ed3410bebb399aab08da801620b73ece1b7d"
     },
     {
       "description": "Read admin services: Reads the launch board: every hosted service in the registry with its LIVE waitlist mode, evaluated through the flag engine..",
       "name": "admin_services",
       "path": "admin_services/SKILL.md",
       "service": "admin",
-      "sha256": "f20f0d3874cd3f4f4c96f5df9b015d63af7d15d32f9ae0b91d0c36e23012de8c"
+      "sha256": "f65759bb4120e52ae2ca93d47bd4310c37e8cef555e5db30c92f7bda2c825a5c"
     },
     {
       "description": "Read admin subscriptions: Answers GET /v1/admin/subscriptions..",
       "name": "admin_subscriptions",
       "path": "admin_subscriptions/SKILL.md",
       "service": "admin",
-      "sha256": "92f6b31ce1ca8cdf8e49ba9977b86e276cd7672812dffd5b9505b0ed18d12512"
+      "sha256": "b50b058454c56ac84c9aba513b97312c8e0106540711a0d0c4cc97eb3d20d321"
     },
     {
       "description": "Read admin subsystems: subsystems answers GET /v1/admin/subsystems..",
       "name": "admin_subsystems",
       "path": "admin_subsystems/SKILL.md",
       "service": "admin",
-      "sha256": "ea61a344437b170f2cbbc2fc8b229289f2c7dde1b60f38a30b8b8a80d8b7f7d6"
+      "sha256": "3b1d032312ed7b0e2e1c9f78ad104bc90eea0f39e8594ff1f6faba7c89b71de4"
     },
     {
       "description": "Read admin treasury: Returns the whole treasury board for a SuperAdmin: the reserve fund report, the recent double-entry journal, and the Lux L1 anchor status of the ledger root..",
       "name": "admin_treasury",
       "path": "admin_treasury/SKILL.md",
       "service": "admin",
-      "sha256": "24ee20d8be97982d411872c8278db6d9221cd305cd228e421f898968b90ce869"
+      "sha256": "b693159504c653d5b06a56519725fd842b855ae5f02b5e23d0d1c63c32e6d030"
     },
     {
       "description": "Read admin usage: Returns the trailing 30 days of AI usage: one org's when org names one, else the whole fleet's — the spend, the tokens and the requests, the daily curve behind them, and the split by model., Splits our upstream AI usage by how it was FUNDED: one row per (provide",
       "name": "admin_usage",
       "path": "admin_usage/SKILL.md",
       "service": "admin",
-      "sha256": "ddad5cd83900f611b237ff2b30beff94c678ebbad6f41f7ade03a40bcb3cf4d1"
+      "sha256": "6a92e830b43e88646b65c7c98e4d611ccf8fbce909f345c85ec9258daa20114b"
     },
     {
       "description": "Read admin users: Lists the user directory across the caller's tenant window, one page at a time..",
       "name": "admin_users",
       "path": "admin_users/SKILL.md",
       "service": "admin",
-      "sha256": "e9c6de2ebd42ceaaee3840d124425b9ab2449622772c58db3e341e96b4561226"
+      "sha256": "63aa598649ac85eab2d8f937d5291d7a161e2ff2a1b4611ced3238718d81da1e"
     },
     {
       "description": "Read admin volumes: Returns the realtime block-storage board: the DigitalOcean volume fleet (count, capacity, monthly list cost, per-volume region and attachment) plus the analytics datastore's OWN fill, read from its system.disks..",
       "name": "admin_volumes",
       "path": "admin_volumes/SKILL.md",
       "service": "admin",
-      "sha256": "c640b96a60b8926c002c1f94577586cb2658730b5b6dfa6d29d0370ea6aa49d2"
+      "sha256": "5660ad0ac5e0d6c7e43198f1a0ac6f7916fa5ecffbe7191c15f5398a7f86b221"
     },
     {
       "description": "Read admin waitlist: Reads one waitlist's leaderboard from the Lux waitlist engine — position, points and referral standing per entry — proxied server-authed with the engine secret, never a client credential..",
       "name": "admin_waitlist",
       "path": "admin_waitlist/SKILL.md",
       "service": "admin",
-      "sha256": "7c193c3cbfbec0b01e06ae3cd522b41f38c4bd6e287525d28a22e7fffa956f23"
+      "sha256": "258112e6f9f6ab4a2fdaa3a3aa80e127fef9236743c7b8028a04d0ced7ed3c1e"
     }
   ],
   "spec_version": "8.0.0"

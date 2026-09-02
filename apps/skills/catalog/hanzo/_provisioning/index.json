@@ -16,49 +16,49 @@
       "name": "provisioning_datastore",
       "path": "provisioning_datastore/SKILL.md",
       "service": "provisioning",
-      "sha256": "e83a494daeef3442a9fa4673d02f27cf14b7ad40b2a43f8ba5d5f2dd1be80567"
+      "sha256": "f608185667d70bd11035f57f67d7db32df6f3d7f821f10fa3406173eca3f3936"
     },
     {
       "description": "Read provisioning docdb: ListDocDB lists the caller org's Hanzo DocDB document databases., GetDocDB returns one Hanzo DocDB database's metadata..",
       "name": "provisioning_docdb",
       "path": "provisioning_docdb/SKILL.md",
       "service": "provisioning",
-      "sha256": "b2ff0fdadf079600995d8f44834e35e67e4b54072655f38bbf7003929607695a"
+      "sha256": "4b4633c62c1fa56684a21a4d62a8436c4f27100b977d1be75fb930c138764752"
     },
     {
       "description": "Read provisioning kv: ListKV lists the caller org's Hanzo KV stores., GetKV returns one Hanzo KV store's metadata..",
       "name": "provisioning_kv",
       "path": "provisioning_kv/SKILL.md",
       "service": "provisioning",
-      "sha256": "1a319591566ae2883de0ee62fa9237579681f62d18914447e77fec630bcb30fc"
+      "sha256": "ef9071ac729c96bb3cb4cfdbff2d1a1da6c3ccbc18ec83067be5fd37a1c35072"
     },
     {
       "description": "Read provisioning s3: Lists the caller org's object-storage buckets., Returns one bucket's metadata..",
       "name": "provisioning_s3",
       "path": "provisioning_s3/SKILL.md",
       "service": "provisioning",
-      "sha256": "8d5eafde92a5cfaab5cb40d6baa1b6dfb232718e7b9b5565d3ebc5c3df9cce26"
+      "sha256": "eb43fb5d2efa59029c9fabac3a30500c96e954334948ec9875ed33e73f312491"
     },
     {
       "description": "Read provisioning search: Lists the caller org's search indexes., Returns one search index's metadata..",
       "name": "provisioning_search",
       "path": "provisioning_search/SKILL.md",
       "service": "provisioning",
-      "sha256": "ecfd662110513cf49bcbf847e9662eaf7bf588e81064d0643fa4de033e142eab"
+      "sha256": "8a25d7ca05378b1c0ee9554913d8972068e621f87e4d831efc16136c7cad7a48"
     },
     {
       "description": "Read provisioning sql: ListSQL lists the caller org's Hanzo SQL databases., GetSQL returns one Hanzo SQL database's metadata..",
       "name": "provisioning_sql",
       "path": "provisioning_sql/SKILL.md",
       "service": "provisioning",
-      "sha256": "84ad908dbff92f43611c00f7a1cae1d2ad50e232737ad11f1626b5f0c0c8f7b4"
+      "sha256": "3a0da9324fe96b4090779cbf81041174ced7ce51da62dd2849b97f584f82763e"
     },
     {
       "description": "Read provisioning vector: Lists the caller org's vector collections., Returns one vector collection's metadata..",
       "name": "provisioning_vector",
       "path": "provisioning_vector/SKILL.md",
       "service": "provisioning",
-      "sha256": "636e2e7b6e0cca663af4af4f890956abecf3237da40847ba87b9ea0e6c792eae"
+      "sha256": "d83513bb76224a07ede57bd1e36e5ae1c658665c0976879fd05ad0eae1472b66"
     }
   ],
   "spec_version": "8.0.0"

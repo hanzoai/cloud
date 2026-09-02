@@ -148,7 +148,7 @@ func TestTheIndexShadowsNoPublishedRead(t *testing.T) {
 	app := host(t)
 	reads, acts := 0, 0
 	for path, methods := range d.Paths {
-		if !oneSegment.MatchString(path) || openapi.Door(path) {
+		if !oneSegment.MatchString(path) || openapi.Host(path) {
 			continue // these are the host's own; everything else belongs to an app
 		}
 		resp, body := reply(t, app, path)

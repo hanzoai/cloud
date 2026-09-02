@@ -17,14 +17,14 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 )
 
-// door is a document whose whole /v1/thing surface is one wildcard — what the
+// endpoint is a document whose whole /v1/thing surface is one wildcard — what the
 // router honestly reports for `app.All("/v1/thing/*")`.
-func door(prefix string) *openapi.Document {
+func endpoint(prefix string) *openapi.Document {
 	return &openapi.Document{
 		Paths: map[string]openapi.PathItem{
 			prefix + "/{wildcard1}": {
-				"get":  {OperationID: "get_door"},
-				"post": {OperationID: "post_door"},
+				"get":  {OperationID: "get_endpoint"},
+				"post": {OperationID: "post_endpoint"},
 			},
 		},
 	}
@@ -40,8 +40,8 @@ func behind(paths ...string) func() (*openapi.Document, error) {
 	}
 }
 
-func TestProjectReplacesTheDoorWithWhatIsBehindIt(t *testing.T) {
-	doc := door("/v1/thing")
+func TestProjectReplacesTheEndpointWithWhatIsBehindIt(t *testing.T) {
+	doc := endpoint("/v1/thing")
 	err := openapi.Project(doc, []openapi.Relay{{
 		Source: "github.com/hanzoai/thing", Prefix: "/v1/thing",
 		Behind: behind("/v1/thing/a", "/v1/thing/b"),
@@ -70,7 +70,7 @@ func TestProjectRefusesARelayThatPublishesNothing(t *testing.T) {
 	empty := func() (*openapi.Document, error) {
 		return &openapi.Document{Paths: map[string]openapi.PathItem{}}, nil
 	}
-	err := openapi.Project(door("/v1/thing"), []openapi.Relay{{
+	err := openapi.Project(endpoint("/v1/thing"), []openapi.Relay{{
 		Source: "github.com/hanzoai/thing", Prefix: "/v1/thing", Behind: empty,
 	}})
 	if err == nil {
@@ -85,7 +85,7 @@ func TestProjectRefusesARelayThatPublishesNothing(t *testing.T) {
 // what the router could see on its own.
 func TestProjectRefusesARelayThatCouldNotDescribeItself(t *testing.T) {
 	boom := errors.New("dial: connection refused")
-	err := openapi.Project(door("/v1/thing"), []openapi.Relay{{
+	err := openapi.Project(endpoint("/v1/thing"), []openapi.Relay{{
 		Source: "github.com/hanzoai/thing", Prefix: "/v1/thing",
 		Behind: func() (*openapi.Document, error) { return nil, boom },
 	}})
@@ -97,8 +97,8 @@ func TestProjectRefusesARelayThatCouldNotDescribeItself(t *testing.T) {
 // PLACEMENT, which is why x-app exists at all: an operation published through the
 // wrong relay is unreachable there, so it is a routing bug in the registry that
 // registered it — and the message has to name that registry.
-func TestProjectRefusesAnOperationOutsideItsOwnDoor(t *testing.T) {
-	err := openapi.Project(door("/v1/thing"), []openapi.Relay{{
+func TestProjectRefusesAnOperationOutsideItsOwnEndpoint(t *testing.T) {
+	err := openapi.Project(endpoint("/v1/thing"), []openapi.Relay{{
 		Source: "github.com/hanzoai/thing", Prefix: "/v1/thing",
 		Behind: behind("/v1/thing/a", "/v1/billing/charge"),
 	}})
@@ -116,7 +116,7 @@ func TestProjectRefusesAnOperationOutsideItsOwnDoor(t *testing.T) {
 // shape, whether the two claimants are two apps or an app and the registry behind
 // its relay.
 func TestProjectRefusesOneSchemaNameWithTwoShapes(t *testing.T) {
-	doc := door("/v1/thing")
+	doc := endpoint("/v1/thing")
 	doc.Components = &openapi.Components{Schemas: map[string]any{"None": map[string]any{"type": "object"}}}
 	err := openapi.Project(doc, []openapi.Relay{{
 		Source: "github.com/hanzoai/thing", Prefix: "/v1/thing",
@@ -139,7 +139,7 @@ func TestProjectRefusesOneSchemaNameWithTwoShapes(t *testing.T) {
 // wildcard is the one the matcher picks, so the relay's operation there would name
 // a handler no request reaches.
 func TestProjectLeavesTheHostsOwnRouteAlone(t *testing.T) {
-	doc := door("/v1/thing")
+	doc := endpoint("/v1/thing")
 	doc.Paths["/v1/thing/a"] = openapi.PathItem{"get": {OperationID: "hostsOwn"}}
 	if err := openapi.Project(doc, []openapi.Relay{{
 		Source: "github.com/hanzoai/thing", Prefix: "/v1/thing",
@@ -158,7 +158,7 @@ func TestProjectLeavesTheHostsOwnRouteAlone(t *testing.T) {
 // A relay with no route does not apply — the same law Register and Describe obey,
 // and what makes one binary per app work: the relay registry is process-wide and a
 // describe run mounts one subsystem.
-func TestRelayWithNoDoorDoesNotApply(t *testing.T) {
+func TestRelayWithNoEndpointDoesNotApply(t *testing.T) {
 	doc := &openapi.Document{Paths: map[string]openapi.PathItem{"/v1/other": {"get": {OperationID: "x"}}}}
 	if err := openapi.Project(doc, []openapi.Relay{{
 		Source: "github.com/hanzoai/thing", Prefix: "/v1/thing",
@@ -231,13 +231,13 @@ func TestTableRefusesARouteTheRegistrySaysNothingAbout(t *testing.T) {
 
 // Two relays at one route is two answers to one question, and it is a programming
 // error at wire time — the same shape Register and Describe refuse.
-func TestFrontRefusesTwoRelaysAtOneDoor(t *testing.T) {
+func TestFrontRefusesTwoRelaysAtOneEndpoint(t *testing.T) {
 	defer func() {
 		if recover() == nil {
 			t.Error("Front accepted a second relay for one prefix")
 		}
 	}()
-	r := openapi.Relay{Source: "a", Prefix: "/v1/one-door-test", Behind: behind("/v1/one-door-test/x")}
+	r := openapi.Relay{Source: "a", Prefix: "/v1/one-endpoint-test", Behind: behind("/v1/one-endpoint-test/x")}
 	openapi.Front(r)
-	openapi.Front(openapi.Relay{Source: "b", Prefix: "/v1/one-door-test", Behind: r.Behind})
+	openapi.Front(openapi.Relay{Source: "b", Prefix: "/v1/one-endpoint-test", Behind: r.Behind})
 }

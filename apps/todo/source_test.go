@@ -639,7 +639,7 @@ func TestAmbientCookieWritesNeedCSRF(t *testing.T) {
 	})
 }
 
-// ── the anti-CSRF gate, on every door ────────────────────────────────────────
+// ── the anti-CSRF gate, on every endpoint ────────────────────────────────────────
 
 // A typed op is TWO fields of one registry entry — the route's handler and the
 // op — and zip wraps only the handler. Six seams reach the op: the REST route,
@@ -673,7 +673,7 @@ func tab(t *testing.T, app *zip.App, method, path string, body any, head map[str
 	return resp.StatusCode, string(raw)
 }
 
-// mcpCall makes one JSON-RPC call at the MCP door — the seam that reaches the op
+// mcpCall makes one JSON-RPC call at the MCP endpoint — the seam that reaches the op
 // without passing the route's handler.
 func mcpCall(t *testing.T, app *zip.App, method string, params map[string]any, head map[string]string) string {
 	t.Helper()
@@ -712,7 +712,7 @@ func planeCall(t *testing.T, app *zip.App, id string, head map[string]string) (i
 	return resp.StatusCode, string(b)
 }
 
-// graphCall makes one call at the GRAPH door, the third seam that reaches an op
+// graphCall makes one call at the GRAPH endpoint, the third seam that reaches an op
 // without passing the route's handler. It is browser-reachable exactly as MCP is:
 // a JSON body under a CORS-simple content type, so no preflight.
 func graphCall(t *testing.T, app *zip.App, query string, head map[string]string) string {
@@ -734,7 +734,7 @@ func graphCall(t *testing.T, app *zip.App, query string, head map[string]string)
 // graphQuery renders one op as the graph request that reaches it.
 //
 // The field is the op's OWN id — the same id the MCP tool carries, because both
-// are one registry entry projected twice — so a door is added to the table below
+// are one registry entry projected twice — so a endpoint is added to the table below
 // without a second list of names to keep in step. Every Out in that table carries
 // `number`, which is the one selection this needs.
 func graphQuery(kind, field string, args map[string]any) string {
@@ -814,14 +814,14 @@ func claimRow(t *testing.T) Issue {
 	return Issue{}
 }
 
-// TestEveryWriteIsGatedOnEveryDoorAndEveryHeader.
+// TestEveryWriteIsGatedOnEveryEndpointAndEveryHeader.
 //
 // The gate has to hold across THREE independent axes, and a test that fixes two
 // of them measures almost nothing:
 //
-//   - the DOOR. A typed op is not one entry point. zip wraps the route's handler
+//   - the ENDPOINT. A typed op is not one entry point. zip wraps the route's handler
 //     and calls the op directly over MCP, the call plane, GraphQL, the CLI and
-//     Here — so the gate lives in the ops' own preambles, and every door has to
+//     Here — so the gate lives in the ops' own preambles, and every endpoint has to
 //     be shown to reach it. Worse than skipped: cloud.Router.Group installs at
 //     the ROOT gated on path, so a /v1/todo gate runs on /mcp and immediately
 //     continues, while the depth-0 identity middleware still authenticates the
@@ -848,7 +848,7 @@ func claimRow(t *testing.T) Issue {
 // Every row is a signed-in tab: a real session cookie, which is ambient, and no
 // CSRF token. The three writes must be refused, and must leave the forge and the
 // index untouched.
-func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
+func TestEveryWriteIsGatedOnEveryEndpointAndEveryHeader(t *testing.T) {
 	// basic64 is `user:password` — a WELL-FORMED Basic credential. Under
 	// Authorization the boundary reads it and the caller is explicit; under
 	// X-Authorization the boundary never tries Basic at all and falls through to
@@ -925,11 +925,11 @@ func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
 				list := mcpCall(t, app, "tools/list", nil, nil)
 				for _, op := range ops {
 					if !strings.Contains(list, `"`+op.tool+`"`) {
-						t.Fatalf("%s is not on the MCP door, so the mcp rows assert nothing:\n%s", op.tool, list)
+						t.Fatalf("%s is not on the MCP endpoint, so the mcp rows assert nothing:\n%s", op.tool, list)
 					}
 				}
 
-				for _, door := range []string{"rest", "mcp", "graph", "plane"} {
+				for _, endpoint := range []string{"rest", "mcp", "graph", "plane"} {
 					for _, op := range ops {
 						f.mu.Lock()
 						before := len(f.writes)
@@ -946,7 +946,7 @@ func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
 
 						var code int
 						var body string
-						switch door {
+						switch endpoint {
 						case "rest":
 							code, body = tab(t, app, op.method, op.path, op.body, head)
 						case "mcp":
@@ -969,37 +969,37 @@ func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
 
 						switch {
 						case op.changes && !explicit:
-							// THE REFUSAL ITSELF, on whichever door, and in the words of
+							// THE REFUSAL ITSELF, on whichever endpoint, and in the words of
 							// THIS gate — so a refusal for some other reason cannot stand
 							// in for one that never happened. MCP answers a handler error
-							// as isError content rather than a status, so that door is
+							// as isError content rather than a status, so that endpoint is
 							// asserted on the words.
-							if (door == "rest" || door == "plane") && code != http.StatusForbidden {
+							if (endpoint == "rest" || endpoint == "plane") && code != http.StatusForbidden {
 								// 403 and not 404: on the plane an unknown op id answers
 								// "unknown op", which is also a refusal and proves nothing.
 								t.Errorf("%s %s with %s: %q and a session cookie = %d %q, want 403",
-									door, op.name, header, cred.value, code, body)
+									endpoint, op.name, header, cred.value, code, body)
 							}
-							if door != "rest" && !strings.Contains(body, "CSRF") {
+							if endpoint != "rest" && !strings.Contains(body, "CSRF") {
 								t.Errorf("%s %s with %s: %q and a session cookie answered %q, want the anti-CSRF refusal",
-									door, op.name, header, cred.value, body)
+									endpoint, op.name, header, cred.value, body)
 							}
 							// AND IT NEVER HAPPENED. A gate that answers 403 after the write
 							// is an audit trail, and the row the forge kept would carry the
 							// victim's own name.
 							//
 							// Errorf and not Fatalf, which is the difference between a matrix
-							// and a tripwire: the doors are the axis being measured, and
+							// and a tripwire: the endpoints are the axis being measured, and
 							// stopping at the first one that leaks says nothing about the two
 							// after it. Both sides of the state are re-read per cell, so a
-							// leak in one door does not corrupt the next one's baseline.
+							// leak in one endpoint does not corrupt the next one's baseline.
 							if len(reached) != 0 {
 								t.Errorf("SECURITY: %s %s with %s: %q reached the forge from a cross-site page with no CSRF token: %+v",
-									door, op.name, header, cred.value, reached)
+									endpoint, op.name, header, cred.value, reached)
 							}
 							if now.Assignee != was.Assignee || now.Status != was.Status {
 								t.Errorf("SECURITY: %s %s with %s: %q took work item #%d from a cross-site page with no CSRF token (%q/%q -> %q/%q)",
-									door, op.name, header, cred.value, claimNum, was.Assignee, was.Status, now.Assignee, now.Status)
+									endpoint, op.name, header, cred.value, claimNum, was.Assignee, was.Status, now.Assignee, now.Status)
 							}
 						case op.changes && explicit:
 							// THE CONTROL, and the whole answer to "was any of this
@@ -1013,11 +1013,11 @@ func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
 								// to whoever is asking and never to an argument.
 								if now.Assignee != head["X-User-Id"] || now.Status != "in_progress" {
 									t.Errorf("%s claim with an explicit credential left #%d as %q/%q, want held by %s and in_progress — %s",
-										door, claimNum, now.Assignee, now.Status, head["X-User-Id"], body)
+										endpoint, claimNum, now.Assignee, now.Status, head["X-User-Id"], body)
 								}
 								continue
 							}
-							if door == "plane" {
+							if endpoint == "plane" {
 								// A bodyless plane call carries no title and no issue
 								// number, so the op refuses on its own input rather than
 								// writing. What matters is WHOSE refusal it is: past the
@@ -1031,21 +1031,21 @@ func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
 							}
 							if len(reached) == 0 {
 								t.Errorf("%s %s with an explicit credential reached the forge with nothing: %d %q — "+
-									"the refusals above are then refusals of a write that never worked", door, op.name, code, body)
+									"the refusals above are then refusals of a write that never worked", endpoint, op.name, code, body)
 							}
 						default:
-							// Reads are not gated, on either door: a read changes nothing,
+							// Reads are not gated, on either endpoint: a read changes nothing,
 							// and requiring a token to open a board would mean fetching one
 							// before the page that fetches one.
-							if door == "rest" && code != http.StatusOK {
+							if endpoint == "rest" && code != http.StatusOK {
 								t.Errorf("rest read with %s: %q = %d %q, want 200", header, cred.value, code, body)
 							}
-							if door == "plane" && strings.Contains(body, "CSRF") {
+							if endpoint == "plane" && strings.Contains(body, "CSRF") {
 								t.Errorf("plane read with %s: %q = %d %q, want the read to pass — "+
 									"a read changes nothing", header, cred.value, code, body)
 							}
-							if door != "rest" && (strings.Contains(body, `"isError":true`) || strings.Contains(body, "CSRF")) {
-								t.Errorf("%s read with %s: %q answered %q, want the issue", door, header, cred.value, body)
+							if endpoint != "rest" && (strings.Contains(body, `"isError":true`) || strings.Contains(body, "CSRF")) {
+								t.Errorf("%s read with %s: %q answered %q, want the issue", endpoint, header, cred.value, body)
 							}
 						}
 					}

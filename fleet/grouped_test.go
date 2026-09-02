@@ -119,9 +119,9 @@ func declaring(t *testing.T, by map[string][]string) *zip.App {
 // what the MCP server publishes
 // ---------------------------------------------------------------------------
 
-// TestTheDoorPublishesOneToolPerSubsystem is the shape of the answer: a tool per
+// TestTheEndpointPublishesOneToolPerSubsystem is the shape of the answer: a tool per
 // app that has something to offer, plus describe. Nothing else.
-func TestTheDoorPublishesOneToolPerSubsystem(t *testing.T) {
+func TestTheEndpointPublishesOneToolPerSubsystem(t *testing.T) {
 	h := declaring(t, map[string][]string{
 		"ai":    {"post_chat_completions", "get_models"},
 		"git":   {"post_git_repos", "get_git_repos"},
@@ -488,7 +488,7 @@ func TestDescribeOfANameNobodyServesIsRefused(t *testing.T) {
 //	tools/call        console{op:CreateServiceAccountKey} does not run it
 //	describe          its schema cannot be read either
 //
-// All three are the same gate: [fleet.Door.gather] refuses before it writes the
+// All three are the same gate: [fleet.MCP.gather] refuses before it writes the
 // routing table, and list, call and describe all read that one gathered set.
 func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 	kid := startNamed(t, "console", "CreateServiceAccountKey", "GetUser", "post_chat_completions")
@@ -566,7 +566,7 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 	}
 }
 
-// TestAColdDoorDispatchesAPublishedNameOnTheFirstCall is the path a real client
+// TestAColdEndpointDispatchesAPublishedNameOnTheFirstCall is the path a real client
 // takes and the fixtures above do not: a process that has answered no
 // tools/list has an empty routing table AND an empty published-name table, and
 // it must fill BOTH before it decides the name is nobody's.
@@ -575,7 +575,7 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 // nothing between requests. So the very first thing a restarted MCP server
 // sees can be a tools/call naming an operation it has never gathered, spelled
 // the way it published it an hour ago.
-func TestAColdDoorDispatchesAPublishedNameOnTheFirstCall(t *testing.T) {
+func TestAColdEndpointDispatchesAPublishedNameOnTheFirstCall(t *testing.T) {
 	kid := routed(t, "projects", "/v1/projects/:slug/deploy")
 	h := host(t, []string{"projects"}, map[string]*child{"projects": kid})
 

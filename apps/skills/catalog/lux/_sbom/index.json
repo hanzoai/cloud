@@ -16,14 +16,14 @@
       "name": "sbom_health",
       "path": "sbom_health/SKILL.md",
       "service": "sbom",
-      "sha256": "6a890c131c2296ba29f3bb05959eff775d5c812aeb6b0418eced0bee145d6caa"
+      "sha256": "b901335aab0cc8c35014d87680ba8347dac1fafb2a687f18f3416ce77acb3438"
     },
     {
       "description": "Read sbom sbom: Resolve returns everything inside one container image, addressed by its digest or by its image ref..",
       "name": "sbom_sbom",
       "path": "sbom_sbom/SKILL.md",
       "service": "sbom",
-      "sha256": "3d9be2f1852e98585e1e69f6e49a0729cb1459129ba369334357b3ddedcb1b04"
+      "sha256": "c0c6b4ff3f4e4a1615344019d79cfea6478f260d50ba3fe10d347fabb21ba631"
     }
   ],
   "spec_version": "8.0.0"

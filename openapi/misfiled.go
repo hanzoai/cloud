@@ -89,13 +89,13 @@ func misfiled(path, app string) (string, bool) {
 		return r, false
 	case app == "ai" && Wire[strings.TrimPrefix(r, "/v1/")]:
 		return r, false
-	case app == "openapi" && Door(path):
+	case app == "openapi" && Host(path):
 		// The host's own endpoints (HIP-0139 §3.2): the document, its well-known
 		// alias and command projection, the agent MCP server, and the index a client
 		// follows from the root. Each is an address every SDK generator, MCP
 		// client or bare-URL caller reaches before it knows anything else, so
 		// each is where the protocol puts it rather than under a capability's
-		// name. Asked of [Door] so the set is stated once.
+		// name. Asked of [Host] so the set is stated once.
 		return r, false
 	}
 	return r, true

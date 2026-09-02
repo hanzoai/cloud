@@ -21,8 +21,8 @@ import (
 // org holds no capability over that room.
 var errRoomNotBound = errors.New("channels: room not bound to org")
 
-// telegramDoor is the sender; tests spy it, prod never repoints.
-var telegramDoor = func(ctx context.Context, org string, chatID, replyTo int64, text string) error {
+// telegramEndpoint is the sender; tests spy it, prod never repoints.
+var telegramEndpoint = func(ctx context.Context, org string, chatID, replyTo int64, text string) error {
 	room := strconv.FormatInt(chatID, 10)
 	reply := ""
 	if replyTo != 0 {
@@ -104,7 +104,7 @@ func telegramEgress(ctx context.Context, s *cloud.Service[state], org string, m 
 	// Best-effort reply threading: an unparseable ReplyTo degrades to a
 	// top-level send rather than failing the message.
 	replyTo, _ := strconv.ParseInt(m.ReplyTo, 10, 64)
-	if err := telegramDoor(ctx, org, chatID, replyTo, renderText(m)); err != nil {
+	if err := telegramEndpoint(ctx, org, chatID, replyTo, renderText(m)); err != nil {
 		return Delivery{}, err
 	}
 	// sendMessage's message id is not surfaced by the existing helper —

@@ -62,7 +62,7 @@
 //	GET  /v1/event/insights/health        the insights surface is serving
 //	GET  /v1/event/health       subsystem health (datastore connectivity + lens tables)
 //
-//	WRITE (the ingest endpoint — see doors, event.go)
+//	WRITE (the ingest endpoint — see endpoints, event.go)
 //	POST /v1/event                  the canonical wire (object | array | {batch:[…]});
 //	                                decodeEvent sniffs the PostHog wire here too
 //	POST /v1/event/:project/envelope|store   the Sentry error wire, same endpoint
@@ -224,11 +224,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 		zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 
 	// Capture (WRITE) side — the ingest that fills the event plane. Every ingest
-	// endpoint is registered HERE and only here, from doors (event.go): one Post per
+	// endpoint is registered HERE and only here, from endpoints (event.go): one Post per
 	// declared endpoint, no hand-written path beside it. An endpoint contributes its
 	// WIRE and nothing else — admission (handle) and the write core (ingestEvents)
 	// are shared — so this is one pipeline behind N paths, and a path that is not in
-	// doors is not an ingest endpoint anywhere: not routed, and not carved on a site
+	// endpoints is not an ingest endpoint anywhere: not routed, and not carved on a site
 	// host either.
 	//
 	// EVERY endpoint is untyped, and none of them is a candidate. A typed op
@@ -242,7 +242,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// which cannot decode into any struct In: zip's op.invoke answers 400 on a body
 	// it cannot unmarshal, and it answers 200 with a receipt. See LLM.md; each
 	// endpoint names its own blocker.
-	for _, d := range doors {
+	for _, d := range endpoints {
 		app.Post(d.path, cloud.Handle(s, d.ingest))
 	}
 
@@ -299,7 +299,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Post("/v1/event/:project/store", obsError)
 
 	// The session-replay snapshot endpoint (replay.go). Registered HERE, by hand,
-	// for the same reason the Sentry wire above is: it is not an entry in `doors`,
+	// for the same reason the Sentry wire above is: it is not an entry in `endpoints`,
 	// and it cannot be. An endpoint in that table is a wire that decodes to
 	// []CaptureEvent and flows through the ONE write core onto the event plane; a
 	// snapshot batch is an opaque rrweb recording bound for a different consumer on

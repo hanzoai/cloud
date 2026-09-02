@@ -91,8 +91,8 @@ func host(t *testing.T) *zip.App {
 	return app
 }
 
-// TestTheSpecDoorIsTheHostsNotACatchAlls is the defect, as a test.
-func TestTheSpecDoorIsTheHostsNotACatchAlls(t *testing.T) {
+// TestTheSpecEndpointIsTheHostsNotACatchAlls is the defect, as a test.
+func TestTheSpecEndpointIsTheHostsNotACatchAlls(t *testing.T) {
 	app := host(t)
 
 	code, ctype, body := do(t, app, openapi.Path)
@@ -136,14 +136,14 @@ func TestTheSpecDoorIsTheHostsNotACatchAlls(t *testing.T) {
 // endpoint fell into — a static path wins RIGHT UP UNTIL an app row claims it
 // exactly, and then fiber merges the patterns and the host's handler sits
 // silently behind a proxy — but the mechanism is a manifest row, and
-// manifest.TestNoAppClaimsAHostDoor asks it there, of openapi.Door, for both
+// manifest.TestNoAppClaimsAHostEndpoint asks it there, of openapi.Host, for both
 // endpoints at once. The full-fleet version belongs here beside
-// TestTheSpecDoorIsTheHostsNotACatchAlls and cannot be written yet: that test
+// TestTheSpecEndpointIsTheHostsNotACatchAlls and cannot be written yet: that test
 // is red on this tree because openapi.Fleet refuses the whole compose over a
 // duplicate operationId (get_billing_portal_methods, two billing routes), so
 // the host answers 500 on BOTH endpoints. Add it in the commit that fixes the
 // compose.
-func TestTheCommandDoorOpensOnTheHostsOwnApp(t *testing.T) {
+func TestTheCommandEndpointIsTheHostsOwnApp(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	spec(app, []string{"kms", "flags"})
 
@@ -253,7 +253,7 @@ func TestTheDocumentIsScopedToWhatTheDeploymentRuns(t *testing.T) {
 		t.Fatal("a scoped deployment published NOTHING")
 	}
 	for p := range served {
-		if openapi.Door(p) {
+		if openapi.Host(p) {
 			continue // the endpoints themselves, which every deployment serves
 		}
 		if !strings.HasPrefix(p, "/v1/kms") && !strings.HasPrefix(p, "/v1/flags") {
