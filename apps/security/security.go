@@ -416,7 +416,7 @@ func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 		AmountCents: fee,
 		Project:     principal.Project(c),
 		RequestID:   c.RequestID(),
-		ClientIP:    clientIP(c),
+		ClientIP:    cloud.ClientIP(c),
 	})
 
 	// Audit: the scan happened, by whom, with what tally. The redacted findings
@@ -543,7 +543,7 @@ func emitAudit(s *cloud.Service[state], c *zip.Ctx, org string, sc Scan) {
 		Outcome:   audit.Outcome{Result: "ok", Status: 201},
 		Method:    c.Method(),
 		Path:      c.Path(),
-		SourceIP:  clientIP(c),
+		SourceIP:  cloud.ClientIP(c),
 		RequestID: c.RequestID(),
 	}
 	if _, err := s.State.audit.Append(c.Context(), rec); err != nil {
@@ -563,9 +563,3 @@ func projectScope(c *zip.Ctx) string {
 	}
 	return p
 }
-
-// clientIP is the caller's address, by the ONE rule — cloud.ClientIP. It lands in
-// a durable audit record, and the LEFT-most X-Forwarded-For entry (and X-Real-Ip)
-// are values the client writes: an address chosen by the party being audited is
-// not evidence.
-func clientIP(c *zip.Ctx) string { return cloud.ClientIP(c) }

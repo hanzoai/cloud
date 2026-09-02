@@ -154,7 +154,7 @@ func Toll(m *metering.Client, commerce CommerceClient) zip.Authorizer {
 			Service:     in.Service,
 			RequestID:   c.RequestID(),
 			Status:      "success",
-			ClientIP:    clientIP(c),
+			ClientIP:    ClientIP(c),
 		}
 		if _, err := m.Record(ctx, u); err != nil {
 			return Denied(err)
