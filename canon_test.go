@@ -151,3 +151,50 @@ func TestOneFactHasOneHome(t *testing.T) {
 		}
 	}
 }
+
+// A SHUTDOWN NOBODY REGISTERS DOES NOT RUN. An app declares teardown by
+// exporting Shutdown, and the only thing that calls it is the Shutdown field of
+// the Plugin its own plugin/<app>/main.go declares. Omit that one line and the
+// package still compiles, its tests still pass — they call Shutdown directly —
+// and the store stays open and the goroutine keeps running for the life of the
+// process. Ten apps were in that state, provisioning among them, whose Shutdown
+// stops a meter started at mount.
+func TestEveryExportedShutdownIsRegistered(t *testing.T) {
+	apps, err := filepath.Glob("apps/*")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	declares := regexp.MustCompile(`(?m)^func Shutdown\(`)
+	for _, dir := range apps {
+		name := filepath.Base(dir)
+		files, _ := filepath.Glob(filepath.Join(dir, "*.go"))
+		exported := false
+		for _, f := range files {
+			if strings.HasSuffix(f, "_test.go") {
+				continue
+			}
+			b, err := os.ReadFile(f)
+			if err == nil && declares.Match(b) {
+				exported = true
+				break
+			}
+		}
+		if !exported {
+			continue
+		}
+		main := filepath.Join("plugin", name, "main.go")
+		b, err := os.ReadFile(main)
+		if err != nil && strings.HasSuffix(name, "s") {
+			// apps/functions is served by plugin/function: the plugin takes the
+			// singular where the package keeps the plural.
+			main = filepath.Join("plugin", strings.TrimSuffix(name, "s"), "main.go")
+			b, err = os.ReadFile(main)
+		}
+		if err != nil {
+			continue // an app with no plugin of its own has nothing to register with
+		}
+		if !strings.Contains(string(b), "Shutdown:") {
+			t.Errorf("apps/%s exports Shutdown and %s never registers it, so it never runs", name, main)
+		}
+	}
+}
