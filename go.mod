@@ -36,6 +36,7 @@ require (
 	github.com/hanzoai/types v0.1.1
 	github.com/hanzokv/go/v9 v9.22.0
 	github.com/hanzos3/go v1.0.2
+	github.com/hanzozt/sdk-golang v1.6.1
 	github.com/luxfi/log v1.6.0
 	github.com/luxfi/node v1.36.15
 	github.com/luxfi/trace v1.4.0
@@ -105,7 +106,6 @@ require (
 	github.com/hanzozt/foundation/v2 v2.0.92 // indirect
 	github.com/hanzozt/identity v1.0.129 // indirect
 	github.com/hanzozt/metrics v1.4.6 // indirect
-	github.com/hanzozt/sdk-golang v1.6.1 // indirect
 	github.com/hanzozt/secretstream v0.1.51 // indirect
 	github.com/hanzozt/transport/v2 v2.0.216 // indirect
 	github.com/kataras/go-events v0.0.3 // indirect
