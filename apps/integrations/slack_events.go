@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -93,7 +92,7 @@ func slackBridgeReady(s *cloud.Service[state]) {
 // sandbox when the model picks that tool.
 func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	slackBridgeReady(s)
-	secret := slackSigningSecret()
+	secret := slackSigningSecret(s)
 	if secret == "" {
 		return zip.Errorf(http.StatusServiceUnavailable, "slack events not configured")
 	}
@@ -191,7 +190,7 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 // asynchronously via the command's response_url on the channel.
 func slackCommands(s *cloud.Service[state], c *zip.Ctx) error {
 	slackBridgeReady(s)
-	secret := slackSigningSecret()
+	secret := slackSigningSecret(s)
 	if secret == "" {
 		return zip.Errorf(http.StatusServiceUnavailable, "slack events not configured")
 	}
@@ -616,9 +615,21 @@ func slackPostResponseURL(ctx context.Context, responseURL, responseType, text s
 	return nil
 }
 
-// ── config (env, read at call time — operator-injected from KMS) ────────────
+// ── config ─────────────────────────────────────────────────────────────────
 
-func slackSigningSecret() string { return strings.TrimSpace(os.Getenv("SLACK_SIGNING_SECRET")) }
+// slackSigningSecret resolves the Slack signing secret from KMS by the ref in
+// SLACK_SIGNING_SECRET_REF.
+//
+// The env used to carry the secret itself, projected into a k8s Secret and
+// mounted here — which puts a decrypted value in etcd, in a volume and in this
+// process's environment, readable by anything that can read the pod. Now the
+// env carries only the reference and the value is fetched when it is needed.
+//
+// Unset or unresolvable yields "", which both callers already answer with a 503:
+// Slack verification fails closed rather than accepting an unverified body.
+func slackSigningSecret(s *cloud.Service[state]) string {
+	return string(s.SecretFromEnv(context.Background(), "SLACK_SIGNING_SECRET_REF"))
+}
 
 // Which agent answers is not a variable here at all: a slash command asks channels
 // for the room's binding (agentRefFor), the same row a mention is answered from.

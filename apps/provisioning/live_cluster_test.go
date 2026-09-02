@@ -41,7 +41,7 @@ func liveService(t *testing.T) *cloud.Service[state] {
 		t.Fatalf("no cluster: %v", err)
 	}
 	orch.rbacTimeout = 90 * time.Second
-	return &cloud.Service[state]{Base: cloud.Base{Log: log}, State: state{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(), orch: orch}}
+	return &cloud.Service[state]{Base: cloud.Base{Log: log}, State: state{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(cloud.Deps{}), orch: orch}}
 }
 
 func createLive(t *testing.T, s *cloud.Service[state], kind, org, name string) provisionResult {
