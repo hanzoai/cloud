@@ -1,60 +1,44 @@
-// pin.go — the last step of a release, and the ONLY one that deploys.
+// pin.go — what a declaration is made of: the values file, the version, the
+// registry proof and the git write. declare.go is the one caller and the one act.
 //
 // A release builds an image, proves it boots, and mints a tag. None of that makes
 // it live. cd.hanzo.ai does not watch the registry: the ApplicationSet at
 // universe `infra/k8s/hanzo-cd/applicationset-fleet.yaml` runs a git generator over
-// `charts/app/values/*/*.yaml` in hanzoai/universe, and the `hanzo-cloud`
-// Application it generates renders `charts/app` against `values/hanzo/cloud.yaml`.
-// The `image.tag` scalar in that file IS what runs. Until it moves, a release is a
-// published image nobody pulls.
+// `charts/app/values/*/*.yaml` in hanzoai/universe, and the Application it
+// generates renders `charts/app` against that file. The `image.tag` scalar in it IS
+// what runs. Until it moves, a release is a published image nobody pulls.
 //
-// THE VALUES FILE, NOT AN OPERATOR CR. There is a `hanzo.ai/v1` App CRD, and no
+// THE VALUES FILE, NOT AN OPERATOR CR. There is a `hanzo.ai/v1` App CRD and no
 // `cloud` CR for it: cloud is reconciled by cd.hanzo.ai from the values file. So
 // the values file is what this writes, because it is what the cluster reads.
 //
 // ── the rules are charts/app/pin.sh's rules ─────────────────────────────────
 //
 // universe carries the reference implementation of moving a pin safely, and every
-// other service's CI calls it. This is that rule set, expressed in Go, refusal for
-// refusal: non-semver, an image the registry cannot serve, a version older than the
-// current pin, a repository the caller chose rather than the one the values file
-// declares, and a service with no values file. Only the tag scalar is rewritten, in
-// place, so the comment block those files carry survives byte-for-byte.
+// other service's CI calls it. The pieces here are that rule set for the one writer
+// of those files that is NOT pin.sh: the file reader that rewrites the tag scalar
+// in place so the comment block survives byte-for-byte, the semver order behind
+// declare's rollback refusal, the anonymous ghcr token flow that proves an image is
+// pullable before main points at it, and the git env that carries the credential.
 //
-// WHY NOT SHELL OUT TO pin.sh, which would keep one implementation. Because it
-// cannot run here and could not pin this service if it did:
-//
-//   - The runtime image is alpine with `git`, and no `bash`, `curl` or `jq`
-//     (Dockerfile's final stage installs ca-certificates, tzdata, sqlcipher-libs,
-//     git, tini; a live pod confirms bash/curl/jq absent). pin.sh needs all three —
-//     `#!/usr/bin/env bash`, `mapfile`, `[[ =~ ]]`, curl and jq for the registry
-//     probe. The container runs as nonroot, so it cannot install them either.
-//     Carrying three more packages in the production image to shell out to logic
-//     this package already has is a worse trade than expressing the rules here:
-//     the semver gate is splitReleaseImage (STRICTER than pin.sh — it requires the
-//     `v`), and the registry probe is registryPullToken below, the anonymous ghcr
-//     token flow.
-//
-//   - pin.sh strips the leading `v` and pins the bare form, because that is what
-//     the registries of the services that call it hold. Cloud's registry holds the
-//     `v`: ghcr.io/hanzoai/cloud:v1.801.335 resolves, 1.801.335 is a 404. pin.sh
-//     would therefore fail its own pullability probe on every cloud release. It
-//     fails CLOSED (refuses, never writes a bad pin), so a human running it against
-//     cloud is safe — it simply cannot be the mechanism here.
+// pin.sh cannot run here and could not pin this service if it did: the runtime is
+// alpine with `git` and no `bash`, `curl` or `jq`, as nonroot, so it cannot install
+// them either — and pin.sh strips the leading `v` while cloud's registry holds it
+// (ghcr.io/hanzoai/cloud:v1.801.335 resolves, 1.801.335 is a 404), so its own
+// pullability probe would refuse every cloud release. It fails CLOSED, so a human
+// running it is safe; it simply cannot be the mechanism in-process.
 //
 // The divergence that matters is not which language the rules are in, it is whether
-// the two can disagree about what gets written. They cannot: the tag this pins is
+// the two can disagree about what gets written. They cannot: the tag declare pins is
 // the exact string it proved pullable, so a pin can never name an image that is not
-// there. That is stronger than pin.sh's "strip the v, then probe", and it is what
-// removes the prefix question entirely.
+// there.
 //
 // NO ROLLBACK LEVER. pin.sh takes PIN_ROLLBACK=1 because a human may deliberately
 // need to go backward. Nothing on this path ever should: a release claims a version
-// strictly greater than every one already claimed or published, so a backward pin
-// here is always a bug, never an intention. There is no env knob to misread —
-// backward is refused, full stop. The deliberate rollback lever stays
-// where a deliberate act belongs, with the human running pin.sh.
-
+// strictly greater than every one already claimed, so a backward pin here is a bug
+// rather than an intention, and declare refuses it outright with no env knob to
+// misread. The deliberate rollback stays where a deliberate act belongs — a revert
+// on universe, signed by whoever meant it.
 package platform
 
 import (
@@ -286,43 +270,6 @@ func (v semver) less(o semver) bool {
 	return v.patch < o.patch
 }
 
-// ── the refusals (pure) ──────────────────────────────────────────────────────
-
-// checkPin applies every rule that does not need the network and reports whether
-// the file must change. changed=false means the pin already reads tag, which is a
-// success with nothing to do — a re-run of an unchanged tree is a no-op, not an
-// empty commit.
-func checkPin(f *pinFile, repository, tag string) (changed bool, err error) {
-	// The repository comes from the FILE, never from the caller. A release hands
-	// over a VERSION for a service, not an image of its choosing: the worst a
-	// careless or compromised build can then do is move its own service to another
-	// of its own published versions. A mismatch means the release built something
-	// other than what this service declares, and pinning that tag would point
-	// production at an image nobody built.
-	if f.repository != repository {
-		return false, fmt.Errorf("%s declares image.repository %s but the release built %s — refusing to pin a tag of one repository into another",
-			filepath.Base(f.path), f.repository, repository)
-	}
-	if f.current == tag {
-		return false, nil
-	}
-	// Monotonic. A re-run of an old build must not roll production back by
-	// surprise. Both sides must parse: an unreadable current pin means nothing here
-	// can tell which way it would move.
-	cur, ok := parseSemver(f.current)
-	if !ok {
-		return false, fmt.Errorf("%s is pinned at %q, which is not semver — refusing to move a pin that cannot be ordered", filepath.Base(f.path), f.current)
-	}
-	next, ok := parseSemver(tag)
-	if !ok {
-		return false, fmt.Errorf("%q is not semver — refusing to pin", tag)
-	}
-	if next.less(cur) {
-		return false, fmt.Errorf("%s is pinned at %s and %s is older — refusing to roll production back", filepath.Base(f.path), f.current, tag)
-	}
-	return true, nil
-}
-
 // registryBase is the OCI registry root. A var (not a const) ONLY so tests can point
 // it at an httptest server; production always uses the real registry.
 var registryBase = "https://ghcr.io"
@@ -516,121 +463,4 @@ func pinToken(s *cloud.Service[state], ctx context.Context) (string, error) {
 		return "", fmt.Errorf("%s is empty", pinTokenRef)
 	}
 	return token, nil
-}
-
-// pinUniverse moves the ONE value that makes an image live: image.tag in
-// charts/app/values/<namespace>/<service>.yaml in hanzoai/universe, which
-// cd.hanzo.ai reconciles.
-//
-// It clones the branch CD reads, applies the rule set above, proves the tag is
-// pullable, rewrites the one scalar, commits and pushes. Every refusal returns an
-// error: the caller must be able to say "the image is built, smoke-passed and
-// tagged but NOT live", because a release that claims otherwise is worse than one
-// that fails.
-//
-// THE RACE. universe is the repository the whole fleet deploys through, so another
-// service can land its own pin between the clone and the push. The push is a plain
-// fast-forward — never forced — so that case is REJECTED rather than silently
-// overwriting someone else's deploy. It is then retried, bounded, by re-reading the
-// new tip and re-applying: a pin is idempotent, and re-applying re-runs the whole
-// rule set against what is now declared, so a concurrent pin that already moved
-// this service PAST our version is correctly refused by the monotonic rule instead
-// of being clobbered. Nothing is merged — there is one line, and the newest read of
-// it wins.
-func pinUniverse(s *cloud.Service[state], ctx context.Context, service, image, sha string) error {
-	repository, tag, err := splitReleaseImage(image)
-	if err != nil {
-		return err
-	}
-	token, err := pinToken(s, ctx)
-	if err != nil {
-		return fmt.Errorf("pin credential: %w", err)
-	}
-	env := pinGitEnv(token)
-
-	ctx, cancel := context.WithTimeout(ctx, pinDeadline)
-	defer cancel()
-
-	dir, err := os.MkdirTemp("", "pin-universe-")
-	if err != nil {
-		return fmt.Errorf("workdir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(dir) }()
-
-	// Shallow and single-branch: the pin needs the tip of the branch CD reads and
-	// nothing else, and this runs in a production pod.
-	if _, err := runGit(ctx, "", env, "clone", "--depth", "1", "--single-branch",
-		"--branch", universeBranch, universeRemote, dir); err != nil {
-		return fmt.Errorf("clone %s: %w", universeRemote, err)
-	}
-
-	for attempt := 1; attempt <= pinAttempts; attempt++ {
-		if attempt > 1 {
-			// Re-read the new tip and drop our rejected commit. reset --hard makes
-			// the next apply run against what is declared NOW, not against a stale
-			// read plus our edit.
-			if _, err := runGit(ctx, dir, env, "fetch", "--depth", "1", "origin", universeBranch); err != nil {
-				return fmt.Errorf("re-read %s: %w", universeBranch, err)
-			}
-			if _, err := runGit(ctx, dir, env, "reset", "--hard", "FETCH_HEAD"); err != nil {
-				return fmt.Errorf("re-read %s: %w", universeBranch, err)
-			}
-		}
-
-		path, err := resolvePinFile(dir, service)
-		if err != nil {
-			return err
-		}
-		f, err := readPinFile(path)
-		if err != nil {
-			return err
-		}
-		changed, err := checkPin(f, repository, tag)
-		if err != nil {
-			return err
-		}
-		if !changed {
-			s.Log.Info("pin already live", "service", service, "tag", tag, "file", filepath.Base(path))
-			return nil
-		}
-		// Prove the image before production is pointed at it — build first, pin
-		// second, never the reverse.
-		if err := imagePullable(ctx, repository, tag); err != nil {
-			return err
-		}
-
-		was := f.current
-		f.setTag(tag)
-		if err := f.write(tag); err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		if _, err := runGit(ctx, dir, env, "add", "--", rel); err != nil {
-			return err
-		}
-		msg := fmt.Sprintf("%s %s -> %s\n\nBuilt from %s and published as %s:%s, verified pullable before this\npin moved. cd.hanzo.ai reconciles the change from here.",
-			service, was, tag, sha, repository, tag)
-		if _, err := runGit(ctx, dir, env,
-			"-c", "user.name="+pinCommitUser, "-c", "user.email="+pinCommitEmail,
-			"commit", "-m", msg); err != nil {
-			return err
-		}
-
-		out, err := runGit(ctx, dir, env, "push", "origin", "HEAD:refs/heads/"+universeBranch)
-		if err == nil {
-			s.Log.Info("pin moved: the image is live once CD syncs",
-				"service", service, "from", was, "to", tag, "file", filepath.Base(path), "attempt", attempt)
-			return nil
-		}
-		if !pushRaced(out) {
-			return fmt.Errorf("push pin: %w", err)
-		}
-		s.Log.Info("another pin landed first; re-reading the tip",
-			"service", service, "tag", tag, "attempt", attempt)
-	}
-	return fmt.Errorf("pin %s to %s: %d concurrent pins landed first — image %s:%s is tagged but NOT live",
-		service, tag, pinAttempts, repository, tag)
 }
