@@ -164,7 +164,7 @@ type botList struct {
 // still lists without it.
 //
 // Response: {"bots":[{"id":"drop-a","name":"bot-a","status":"running","agent":"bot-a","binding":{"machineId":"drop-a","agentName":"bot-a","status":"running"}}]}
-func (o ops) listBots(ctx context.Context, _ *noArgs) (*botList, error) {
+func (o ops) listBots(ctx context.Context, _ *cloud.Unit) (*botList, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -370,7 +370,7 @@ func (o ops) getBot(ctx context.Context, in *botRef) (*botView, error) {
 
 // deleteBot tears down both halves of a bot: it unbinds the agent (best-effort — a
 // bot with no binding still deletes), then terminates the machine. Answers 204.
-func (o ops) deleteBot(ctx context.Context, in *botRef) (*struct{}, error) {
+func (o ops) deleteBot(ctx context.Context, in *botRef) (*cloud.Unit, error) {
 	c, org, id, err := botOp(ctx, in)
 	if err != nil {
 		return nil, err
@@ -567,7 +567,7 @@ func (o ops) getAgent(ctx context.Context, in *machineRef) (*agentBinding, error
 // unbindAgent detaches the agent runtime from one of the caller org's
 // machines. The machine stays — this halts the bot, it does not terminate the
 // compute. Answers 204.
-func (o ops) unbindAgent(ctx context.Context, in *machineRef) (*struct{}, error) {
+func (o ops) unbindAgent(ctx context.Context, in *machineRef) (*cloud.Unit, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -597,7 +597,7 @@ type bindingList struct {
 // machines are running which cloud Agent, with vm's own reconciled status.
 //
 // Response: {"agentBindings":[{"machineId":"drop-a","agentName":"bot-a","status":"running","publicIp":"1.2.3.4"}]}
-func (o ops) listAgents(ctx context.Context, _ *noArgs) (*bindingList, error) {
+func (o ops) listAgents(ctx context.Context, _ *cloud.Unit) (*bindingList, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err

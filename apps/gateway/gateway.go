@@ -109,9 +109,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 		zip.WithTags("gateway"))
 }
 
-// noArgs is the input of an op that takes none: no body, no query, no path param.
-type noArgs struct{}
-
 // caller is the ONE identity client both config ops ask. It returns the caller's
 // VALIDATED org (principal.OrgFrom — never an input field, which is caller-supplied)
 // together with the request, because this surface gates on two facts the org alone
@@ -164,7 +161,7 @@ const anonymousLane = ""
 // allowlist and pre-auth per-IP flood cap in force, plus the caller's own authenticated
 // rate ceiling, edge-cache TTLs and accepted-method allowlist. A SuperAdmin may inspect
 // a specific tenant's effective policy with ?org=<slug>.
-func (o ops) read(ctx context.Context, _ *noArgs) (*edge.Policy, error) {
+func (o ops) read(ctx context.Context, _ *cloud.Unit) (*edge.Policy, error) {
 	c, org, err := caller(ctx)
 	if err != nil {
 		return nil, err
@@ -301,7 +298,7 @@ func (o ops) write(ctx context.Context, in *edge.Policy) (*edge.Policy, error) {
 // Scoped to the caller's own validated organization. A SuperAdmin may inspect a
 // specific tenant with ?org=<slug>, or the lane that has no tenant — every caller
 // the identity boundary could not validate — with an empty ?org=.
-func (o ops) traffic(ctx context.Context, _ *noArgs) (*edge.TrafficView, error) {
+func (o ops) traffic(ctx context.Context, _ *cloud.Unit) (*edge.TrafficView, error) {
 	c, org, err := caller(ctx)
 	if err != nil {
 		return nil, err

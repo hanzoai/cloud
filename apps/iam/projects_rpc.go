@@ -57,7 +57,7 @@ func exposeProjects() {
 // nil handle is a boot-order fault, and an empty list would read as "this org has
 // no projects" — a lie that a caller would act on by offering to create one that
 // already exists.
-func projects(ctx context.Context, _ *struct{}) (*plane.Projects, error) {
+func projects(ctx context.Context, _ *cloud.Unit) (*plane.Projects, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("projects: no org on the call")

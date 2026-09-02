@@ -392,7 +392,7 @@ func (o ops) verifyDomain(ctx context.Context, in *domainRef) (*domainView, erro
 // The default host is permanent and cannot be removed: that is 400, not 404. A host
 // that is neither attached nor claimed here is 404. Requires a validated principal;
 // 403 without one.
-func (o ops) removeDomain(ctx context.Context, in *domainRef) (*noContent, error) {
+func (o ops) removeDomain(ctx context.Context, in *domainRef) (*cloud.Unit, error) {
 	s := o.s
 	_, org, err := o.caller(ctx)
 	if err != nil {

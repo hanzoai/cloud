@@ -245,7 +245,7 @@ type healthView struct {
 // Health reports subsystem liveness and the wired verification provider. Fail-open
 // on purpose: it never probes the external provider, so a provider outage cannot
 // fail liveness.
-func (o ops) health(ctx context.Context, _ *noInput) (*healthView, error) {
+func (o ops) health(ctx context.Context, _ *cloud.Unit) (*healthView, error) {
 	return &healthView{Status: "ok", Provider: o.s.State.idv.Name()}, nil
 }
 
@@ -271,7 +271,7 @@ type statusView struct {
 // Status is the org's honest posture read: the wired provider and the per-status
 // tally of its verifications. It is deliberately NOT a boolean "compliant" — it
 // reports counts of provider-reported states and carries the boundary disclaimer.
-func (o ops) status(ctx context.Context, _ *noInput) (*statusView, error) {
+func (o ops) status(ctx context.Context, _ *cloud.Unit) (*statusView, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -309,10 +309,6 @@ type subjectSummary struct {
 	// CreatedAt is the unix second the subject was recorded.
 	CreatedAt int64 `json:"createdAt"`
 }
-
-// noInput is the In of an op addressed entirely by the caller's principal: it
-// takes nothing off the wire.
-type noInput struct{}
 
 // listIn bounds a list read.
 type listIn struct {

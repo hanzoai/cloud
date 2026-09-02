@@ -14,6 +14,7 @@
 package sandbox
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 
 	"github.com/hanzoai/cloud/plane"
@@ -49,7 +50,7 @@ func SandboxAttach(ctx context.Context, in *plane.AttachIn) (*plane.Attached, er
 // SandboxEnd end a sandbox's lease.
 //
 // Calls plane.SandboxEnd on sandbox over the peer plane.
-func SandboxEnd(ctx context.Context, in *plane.EndIn) (*struct{}, error) {
+func SandboxEnd(ctx context.Context, in *plane.EndIn) (*cloud.Unit, error) {
 	return plane.Ask[plane.EndIn, struct{}](ctx, App, plane.SandboxEnd, in)
 }
 

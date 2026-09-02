@@ -62,11 +62,6 @@ import (
 // method value — also the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it
-// takes nothing off the wire. The dataroom collection reads are org-scoped, so
-// the org IS the address and there is no parameter to bind.
-type noInput struct{}
-
 // bundleMessage is the human sentence in a dataroom refusal, for the Error()
 // string an off-HTTP caller sees. The bundle's envelope is a single `error` key
 // (its err() helper, and its top-level catch), which is a SHAPE OF ITS OWN — this
@@ -179,7 +174,7 @@ type dataroomDocuments struct {
 // Tenant isolation is the per-org store itself: there is one SQLite file per org
 // and the org is never a parameter, so no input the caller controls can address
 // another tenant's documents. Metadata only — the bytes come from the file route.
-func (o ops) listDocuments(ctx context.Context, _ *noInput) (*dataroomDocuments, error) {
+func (o ops) listDocuments(ctx context.Context, _ *cloud.Unit) (*dataroomDocuments, error) {
 	var out dataroomDocuments
 	if err := o.call(ctx, "documents.list", nil, &out); err != nil {
 		return nil, err
@@ -246,7 +241,7 @@ type dataroomRooms struct {
 //
 // Documents are not included — a room's contents come from reading the single
 // room.
-func (o ops) listDatarooms(ctx context.Context, _ *noInput) (*dataroomRooms, error) {
+func (o ops) listDatarooms(ctx context.Context, _ *cloud.Unit) (*dataroomRooms, error) {
 	var out dataroomRooms
 	if err := o.call(ctx, "datarooms.list", nil, &out); err != nil {
 		return nil, err
@@ -487,7 +482,7 @@ type dataroomLinks struct {
 //
 // Archived links are omitted entirely. A link reports only THAT a password is
 // set — the stored form is a bcrypt hash and no route returns it.
-func (o ops) listDataroomLinks(ctx context.Context, _ *noInput) (*dataroomLinks, error) {
+func (o ops) listDataroomLinks(ctx context.Context, _ *cloud.Unit) (*dataroomLinks, error) {
 	var out dataroomLinks
 	if err := o.call(ctx, "links.list", nil, &out); err != nil {
 		return nil, err

@@ -875,7 +875,7 @@ func loadProject(s *cloud.Service[state], ctx context.Context, org, slug string)
 // the same rows console and the builder render, because there is only one store
 // behind both. It requires a validated principal (403 without one) and is keyed
 // by that principal's org, so it never contains another tenant's project.
-func (o ops) list(ctx context.Context, _ *void) (*projectsProjects, error) {
+func (o ops) list(ctx context.Context, _ *cloud.Unit) (*projectsProjects, error) {
 	c, org, err := o.callerOf(ctx)
 	if err != nil {
 		return nil, err
@@ -1114,7 +1114,7 @@ func (o ops) update(ctx context.Context, in *projectsUpdate) (*projectsProject, 
 // Scope: a validated principal is required (403 without one) and the project is
 // resolved within that principal's org, so another tenant's slug is a 404 and
 // nothing of theirs is touched.
-func (o ops) del(ctx context.Context, in *projectsRef) (*void, error) {
+func (o ops) del(ctx context.Context, in *projectsRef) (*cloud.Unit, error) {
 	_, org, err := o.callerOf(ctx)
 	if err != nil {
 		return nil, err

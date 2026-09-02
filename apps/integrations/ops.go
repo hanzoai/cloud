@@ -146,10 +146,6 @@ func authed(ctx context.Context, forbidden string) (string, error) {
 // an unvalidated caller with. Named once so the typed and raw halves cannot drift.
 const principalRequired = "a validated principal is required"
 
-// noArgs is the In of an op addressed entirely by the caller's principal: it takes
-// nothing off the wire.
-type noArgs struct{}
-
 // providerRef addresses one connector by the :provider path segment.
 type providerRef struct {
 	// Provider is the registry id of the connector — "slack", "github",

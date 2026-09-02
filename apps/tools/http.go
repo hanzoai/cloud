@@ -159,7 +159,7 @@ type activationSet struct {
 // project. Activation is what makes a tool dispatchable and what makes it visible
 // to an agent, so this is the set the MCP tool list is drawn from — every other
 // tool in the registry is discoverable but refused at call time.
-func (o toolOps) getActivation(ctx context.Context, _ *noInput) (*activationSet, error) {
+func (o toolOps) getActivation(ctx context.Context, _ *cloud.Unit) (*activationSet, error) {
 	scope, err := scopeOf(ctx)
 	if err != nil {
 		return nil, err
@@ -238,7 +238,7 @@ type mcpServerList struct {
 // Each record carries the URL and the name of the header its credential is
 // injected into; the credential VALUE lives only in KMS and is never returned,
 // so hasSecret is the whole of what this surface says about it.
-func (o toolOps) listServers(ctx context.Context, _ *noInput) (*mcpServerList, error) {
+func (o toolOps) listServers(ctx context.Context, _ *cloud.Unit) (*mcpServerList, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -398,7 +398,7 @@ type serverRef struct {
 // tools leave the registry. Scoped to the caller's org, so an id belonging to
 // another tenant is a 404 and not a delete. Answers 204 with no body; a server
 // this org does not have is 404.
-func (o toolOps) deleteServer(ctx context.Context, in *serverRef) (*noContent, error) {
+func (o toolOps) deleteServer(ctx context.Context, in *serverRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -573,7 +573,7 @@ type mcpCatalogSync struct {
 // one an org has already enabled, and dropping its description would not drop its
 // server. And it never touches CURATION: hidden, featured, an admin-set official
 // and a logo survive every sync, because the write does not name those columns.
-func (o toolOps) syncCatalog(ctx context.Context, _ *noInput) (*mcpCatalogSync, error) {
+func (o toolOps) syncCatalog(ctx context.Context, _ *cloud.Unit) (*mcpCatalogSync, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

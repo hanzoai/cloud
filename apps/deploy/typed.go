@@ -48,12 +48,6 @@ import (
 // same cluster the raw handlers beside it read.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op that takes nothing off the wire — no body, no query,
-// no path segment. Its whole input is the caller's own scope, which is never a
-// field: an In field is caller-supplied, so a tenant key read from one is a
-// cross-tenant read the caller asserted for itself.
-type noInput struct{}
-
 // appRef addresses ONE application by name.
 type appRef struct {
 	// Name is the application to read, from the path. It must be a DNS-1123 label

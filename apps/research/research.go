@@ -633,7 +633,7 @@ type projectsOut struct {
 // ListResearchProjects returns every research project in the caller's org with its
 // real totals — canonical and retained side by side — which is the ops board's
 // "every project + real totals" view.
-func (o ops) getProjects(ctx context.Context, _ *noInput) (*projectsOut, error) {
+func (o ops) getProjects(ctx context.Context, _ *cloud.Unit) (*projectsOut, error) {
 	st, org, err := o.orgStore(ctx)
 	if err != nil {
 		return nil, err
@@ -832,10 +832,6 @@ func (o ops) listArtifacts(ctx context.Context, in *artifactsIn) (*artifactsOut,
 	}
 	return &artifactsOut{Data: arts, Total: len(arts)}, nil
 }
-
-// noInput is the In of an op addressed entirely by the caller's principal: it takes
-// nothing off the wire. ONE of these for the whole package.
-type noInput struct{}
 
 // getArtifactBlob serves one artifact's stored bytes, hash-addressed by :sha256 and
 // org-scoped — the retrieval side of hash-addressing (the board fetches a snapshot by

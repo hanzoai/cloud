@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"database/sql"
 	"fmt"
@@ -259,7 +260,7 @@ type authoredPluginList struct {
 // mounted. The bundled CommonJS the runtime executes is never included, and
 // neither is any credential — a plugin names the connectors provider it needs and
 // reads the credential from ctx.auth at run time.
-func (o toolOps) listAuthoredPlugins(ctx context.Context, _ *noInput) (*authoredPluginList, error) {
+func (o toolOps) listAuthoredPlugins(ctx context.Context, _ *cloud.Unit) (*authoredPluginList, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

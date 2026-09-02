@@ -403,9 +403,6 @@ func Shutdown(context.Context) error {
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
-// noInput is the In of an op that takes nothing off the wire.
-type noInput struct{}
-
 // baseHealth is the base subsystem's own liveness answer.
 type baseHealth struct {
 	// Service is "base" — which subsystem answered.
@@ -421,6 +418,6 @@ type baseHealth struct {
 // /v1/base/* wildcard, so a liveness probe measures the process rather than an
 // optional feature, and the wildcard can never shadow it. It reads no tenant, so a
 // prober that sends no principal is answered rather than refused.
-func health(context.Context, *noInput) (*baseHealth, error) {
+func health(context.Context, *cloud.Unit) (*baseHealth, error) {
 	return &baseHealth{Service: "base", Status: "ok"}, nil
 }

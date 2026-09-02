@@ -172,7 +172,7 @@ func (o ops) listSubscriptions(ctx context.Context, in *repoRef) (*subscriptionL
 // that is not this repo's subscription is not found.
 //
 // Example: {"name": "widgets", "id": "sub_7c2e"}
-func (o ops) unsubscribe(ctx context.Context, in *childRef) (*noContent, error) {
+func (o ops) unsubscribe(ctx context.Context, in *childRef) (*cloud.Unit, error) {
 	t, name, err := o.scoped(ctx, in.Name)
 	if err != nil {
 		return nil, err
@@ -306,7 +306,7 @@ func (o ops) listMirrors(ctx context.Context, in *repoRef) (*mirrorList, error) 
 // remote itself — only this repo's intent to push there is dropped.
 //
 // Example: {"name": "widgets", "id": "mir_2d90"}
-func (o ops) deleteMirror(ctx context.Context, in *childRef) (*noContent, error) {
+func (o ops) deleteMirror(ctx context.Context, in *childRef) (*cloud.Unit, error) {
 	t, name, err := o.scoped(ctx, in.Name)
 	if err != nil {
 		return nil, err

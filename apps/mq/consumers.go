@@ -6,6 +6,7 @@ package mq
 // broker); the subject side (publish/subscribe) is pubsub's surface.
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -297,7 +298,7 @@ func (co consumers) get(ctx context.Context, in *twoIn) (*Consumer, error) {
 
 // delete removes a consumer and its delivery state; unacknowledged messages
 // stay in the stream.
-func (co consumers) delete(ctx context.Context, in *twoIn) (*struct{}, error) {
+func (co consumers) delete(ctx context.Context, in *twoIn) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

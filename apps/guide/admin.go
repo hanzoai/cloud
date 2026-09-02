@@ -101,7 +101,7 @@ func (st state) saveBlueprint(ctx context.Context, key string, bp Blueprint) (in
 // SuperAdmin authoring view of the platform blueprint, so it is refused 403 for
 // anyone else, including a per-org admin: the brand blueprint is shared platform
 // content, not a per-customer surface.
-func (o ops) getBlueprint(ctx context.Context, _ *noInput) (*blueprintView, error) {
+func (o ops) getBlueprint(ctx context.Context, _ *cloud.Unit) (*blueprintView, error) {
 	if !superAdminOK(ctx) {
 		return nil, errNotSuperAdmin
 	}
@@ -163,7 +163,7 @@ type blueprintVersionsView struct {
 // only: the documents are not returned. SuperAdmin only, like the rest of this
 // plane. The history is listable even when the current stored document no longer
 // parses, so a schema-drifted row can still be diagnosed.
-func (o ops) listBlueprintVersions(ctx context.Context, _ *noInput) (*blueprintVersionsView, error) {
+func (o ops) listBlueprintVersions(ctx context.Context, _ *cloud.Unit) (*blueprintVersionsView, error) {
 	if !superAdminOK(ctx) {
 		return nil, errNotSuperAdmin
 	}

@@ -65,13 +65,6 @@ import (
 // only bound form cmd/zipdoc can lift prose from. It carries STATE and no logic.
 type ops struct{ s *cloud.Service[state] }
 
-// void is "nothing on the wire", in either direction: the In of an op whose
-// whole input is its URL and its caller, and the Out of one that answers 204 No
-// Content. It is an ALIAS on purpose — an unnamed type publishes no schema, so a
-// 204 is documented as the empty answer it actually is rather than being given a
-// body it never sends.
-type void = struct{}
-
 // callerOf is the ONE identity resolution for a typed op: the validated request
 // and the tenant it acts in. Everything past it — the hosting gate, the meter,
 // the visibility gate, the moderation and operator-vouch branches — takes the

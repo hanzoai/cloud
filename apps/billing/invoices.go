@@ -81,7 +81,7 @@ func init() {
 // refusal.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) invoices(ctx context.Context, _ *noInput) (*plane.Invoices, error) {
+func (o ops) invoices(ctx context.Context, _ *cloud.Unit) (*plane.Invoices, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err

@@ -573,7 +573,7 @@ type liveness struct {
 // reports the credential.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func health(_ context.Context, _ *struct{}) (*liveness, error) {
+func health(_ context.Context, _ *cloud.Unit) (*liveness, error) {
 	return &liveness{Service: "commerce", Status: "ok"}, nil
 }
 

@@ -239,10 +239,6 @@ func admin(ctx context.Context) (string, error) {
 
 // ── the shapes the ops take and give ─────────────────────────────────────────
 
-// noInput is the In of an op that takes nothing off the wire — no body, no query
-// parameter, no path segment. Its whole input is the caller's validated principal.
-type noInput struct{}
-
 // objRef addresses one stored object. The id is the path segment: the URL is the
 // addressing authority, so it binds from there whatever a body says.
 type objRef struct {
@@ -408,7 +404,7 @@ func putOf[T interface{ validate() error }](ctx context.Context, s *cloud.Servic
 
 // deleteOf removes one (org, kind, id) object and hot-applies the shrunken
 // table. A nil result is the 204 every delete has always answered.
-func deleteOf(ctx context.Context, s *cloud.Service[state], kind, id string) (*struct{}, error) {
+func deleteOf(ctx context.Context, s *cloud.Service[state], kind, id string) (*cloud.Unit, error) {
 	org, err := admin(ctx)
 	if err != nil {
 		return nil, err
@@ -430,7 +426,7 @@ func deleteOf(ctx context.Context, s *cloud.Service[state], kind, id string) (*s
 
 // ListRoutes returns every routing rule the caller's org has configured, ordered
 // by id. A route maps an exact Host (and optional path prefix) to a service.
-func (o ops) listRoutes(ctx context.Context, _ *noInput) (*ingressRoutes, error) {
+func (o ops) listRoutes(ctx context.Context, _ *cloud.Unit) (*ingressRoutes, error) {
 	items, err := listOf[Route](ctx, o.s, KindRoute)
 	if err != nil {
 		return nil, err
@@ -465,7 +461,7 @@ func (o ops) putRoute(ctx context.Context, in *Route) (*Route, error) {
 // does not hold is 404.
 //
 // Example: {"id": "web"}
-func (o ops) deleteRoute(ctx context.Context, in *objRef) (*struct{}, error) {
+func (o ops) deleteRoute(ctx context.Context, in *objRef) (*cloud.Unit, error) {
 	return deleteOf(ctx, o.s, KindRoute, in.ID)
 }
 
@@ -474,7 +470,7 @@ func (o ops) deleteRoute(ctx context.Context, in *objRef) (*struct{}, error) {
 // ListServices returns every backend pool the caller's org has configured,
 // ordered by id. A service is the weighted round-robin target a route dispatches
 // to.
-func (o ops) listServices(ctx context.Context, _ *noInput) (*ingressServices, error) {
+func (o ops) listServices(ctx context.Context, _ *cloud.Unit) (*ingressServices, error) {
 	items, err := listOf[Upstream](ctx, o.s, KindService)
 	if err != nil {
 		return nil, err
@@ -510,7 +506,7 @@ func (o ops) putService(ctx context.Context, in *Upstream) (*Upstream, error) {
 // is 404.
 //
 // Example: {"id": "app-pool"}
-func (o ops) deleteService(ctx context.Context, in *objRef) (*struct{}, error) {
+func (o ops) deleteService(ctx context.Context, in *objRef) (*cloud.Unit, error) {
 	return deleteOf(ctx, o.s, KindService, in.ID)
 }
 
@@ -518,7 +514,7 @@ func (o ops) deleteService(ctx context.Context, in *objRef) (*struct{}, error) {
 
 // ListMiddlewares returns every edge transform the caller's org has configured,
 // ordered by id. A route names the ones it wants, in order.
-func (o ops) listMiddlewares(ctx context.Context, _ *noInput) (*ingressMiddlewares, error) {
+func (o ops) listMiddlewares(ctx context.Context, _ *cloud.Unit) (*ingressMiddlewares, error) {
 	items, err := listOf[Middleware](ctx, o.s, KindMiddleware)
 	if err != nil {
 		return nil, err
@@ -554,7 +550,7 @@ func (o ops) putMiddleware(ctx context.Context, in *Middleware) (*Middleware, er
 // hold is 404.
 //
 // Example: {"id": "strip-api"}
-func (o ops) deleteMiddleware(ctx context.Context, in *objRef) (*struct{}, error) {
+func (o ops) deleteMiddleware(ctx context.Context, in *objRef) (*cloud.Unit, error) {
 	return deleteOf(ctx, o.s, KindMiddleware, in.ID)
 }
 
@@ -566,7 +562,7 @@ func (o ops) deleteMiddleware(ctx context.Context, in *objRef) (*struct{}, error
 // across ALL orgs of TLS-marked routes and configured extraHosts, because one
 // process holds one certificate cache), and the ACME directory and account email
 // the process was started with.
-func (o ops) getTLS(ctx context.Context, _ *noInput) (*ingressTLS, error) {
+func (o ops) getTLS(ctx context.Context, _ *cloud.Unit) (*ingressTLS, error) {
 	org, err := admin(ctx)
 	if err != nil {
 		return nil, err
@@ -627,7 +623,7 @@ func (o ops) putTLS(ctx context.Context, in *TLSConfig) (*TLSConfig, error) {
 // posture (staging flag and certificate cache directory), how many hosts the
 // compiled route table currently serves, and how many the ACME HostPolicy will
 // issue a certificate for.
-func (o ops) status(ctx context.Context, _ *noInput) (*ingressStatus, error) {
+func (o ops) status(ctx context.Context, _ *cloud.Unit) (*ingressStatus, error) {
 	if _, err := admin(ctx); err != nil {
 		return nil, err
 	}

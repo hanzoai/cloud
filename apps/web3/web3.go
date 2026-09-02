@@ -158,9 +158,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // form cmd/zipdoc can lift prose from, so ops are methods and not closures.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the input of an op the URL fully addresses.
-type noInput struct{}
-
 // gate enforces the one boundary that applies to public ledger data: a validated
 // principal must be present. Without it this subsystem is an open RPC relay
 // anyone on the internet can point at the deployment's paid upstream.
@@ -197,7 +194,7 @@ type chainList struct {
 // ListChains reports the chains this deployment can reach. The list is the
 // declared registry, so it is exactly what /v1/web3/rpc will accept — a chain that
 // appears here is one this deployment actually has an upstream for.
-func (o ops) listChains(ctx context.Context, _ *noInput) (*chainList, error) {
+func (o ops) listChains(ctx context.Context, _ *cloud.Unit) (*chainList, error) {
 	if err := gate(ctx); err != nil {
 		return nil, err
 	}

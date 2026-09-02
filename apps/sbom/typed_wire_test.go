@@ -315,7 +315,7 @@ func TestResolveKeepsTheBytesTheRawHandlerSent(t *testing.T) {
 	app.Use(cloud.Bridge())
 	// The shape resolve had before the conversion, and the shape it has after.
 	app.Group("/v1/was").Get("/it", func(c *zip.Ctx) error { return c.JSON(200, view) })
-	zip.Get(app.Group("/v1/is"), "/it", func(context.Context, *noArgs) (*SbomView, error) { return &view, nil })
+	zip.Get(app.Group("/v1/is"), "/it", func(context.Context, *cloud.Unit) (*SbomView, error) { return &view, nil })
 
 	wasCode, was := do(t, app, "GET", "/v1/was/it", "", member)
 	isCode, is := do(t, app, "GET", "/v1/is/it", "", member)
@@ -358,7 +358,7 @@ func TestResolveKeepsTheBytesTheRawHandlerSent(t *testing.T) {
 // registrations at one address are a panic, not a second answer.
 func serveView(t *testing.T, app *zip.App, at string, v SbomView) string {
 	t.Helper()
-	zip.Get(app.Group("/v1/"+at), "/it", func(context.Context, *noArgs) (*SbomView, error) { return &v, nil })
+	zip.Get(app.Group("/v1/"+at), "/it", func(context.Context, *cloud.Unit) (*SbomView, error) { return &v, nil })
 	_, body := do(t, app, "GET", "/v1/"+at+"/it", "", member)
 	return strings.TrimSpace(string(body))
 }

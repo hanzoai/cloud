@@ -78,7 +78,7 @@ type botMember struct {
 // the space Employees they become, each with the member account uuid and
 // Person reference the roster addresses it by. An agents subsystem that is not
 // mounted answers an empty list, never an error.
-func (b *botsBridge) listBots(ctx context.Context, _ *none) (*botRoster, error) {
+func (b *botsBridge) listBots(ctx context.Context, _ *cloud.Unit) (*botRoster, error) {
 	if b.degraded {
 		return nil, unavailable()
 	}
@@ -117,7 +117,7 @@ func (b *botsBridge) listBots(ctx context.Context, _ *none) (*botRoster, error) 
 // idempotent, and admin only: mutating a space's roster requires the
 // gateway-minted admin flag, which a client can never forge. It answers how many
 // roster entries the reconcile touched.
-func (b *botsBridge) syncBots(ctx context.Context, _ *none) (*botSync, error) {
+func (b *botsBridge) syncBots(ctx context.Context, _ *cloud.Unit) (*botSync, error) {
 	if b.degraded {
 		return nil, unavailable()
 	}

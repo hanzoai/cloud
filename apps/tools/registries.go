@@ -186,7 +186,7 @@ type authoredSkillList struct {
 // bodies. GET /v1/tools/skills is the registry view — the brand's catalogue plus this
 // org's, with activation flags and no bodies; this is the EDITABLE set, so it
 // carries the content that view omits and nothing the org did not write.
-func (o toolOps) listAuthoredSkills(ctx context.Context, _ *noInput) (*authoredSkillList, error) {
+func (o toolOps) listAuthoredSkills(ctx context.Context, _ *cloud.Unit) (*authoredSkillList, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

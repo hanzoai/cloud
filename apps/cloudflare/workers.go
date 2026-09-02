@@ -8,6 +8,7 @@ package cloudflare
 // zone-scoped (/zones/{zone_id}/workers/routes).
 
 import (
+	"github.com/hanzoai/cloud"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -65,7 +66,7 @@ type WorkerScriptPut struct {
 
 // WorkersScriptList lists the Worker scripts on the org's Cloudflare account. Any
 // org member may read.
-func (o ops) workersScriptList(ctx context.Context, _ *noInput) (*cfResult, error) {
+func (o ops) workersScriptList(ctx context.Context, _ *cloud.Unit) (*cfResult, error) {
 	cl, acct, err := o.acctClient(ctx)
 	if err != nil {
 		return nil, err
@@ -189,7 +190,7 @@ func buildWorkerUpload(in WorkerScriptPut) ([]byte, string, error) {
 
 // WorkersSubdomainGet reads the org account's workers.dev subdomain — the name
 // under which every subdomain-enabled script is served. Any org member may read.
-func (o ops) workersSubdomainGet(ctx context.Context, _ *noInput) (*cfResult, error) {
+func (o ops) workersSubdomainGet(ctx context.Context, _ *cloud.Unit) (*cfResult, error) {
 	cl, acct, err := o.acctClient(ctx)
 	if err != nil {
 		return nil, err

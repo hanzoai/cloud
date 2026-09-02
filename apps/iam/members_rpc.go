@@ -132,7 +132,7 @@ func displayName(db orm.DB, user string) string {
 }
 
 // grant records one membership in the caller's org, idempotently.
-func grant(ctx context.Context, in *plane.GrantIn) (*struct{}, error) {
+func grant(ctx context.Context, in *plane.GrantIn) (*cloud.Unit, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("grant: no org on the call")
@@ -158,7 +158,7 @@ func grant(ctx context.Context, in *plane.GrantIn) (*struct{}, error) {
 //
 // The error is PROPAGATED: a wallet reading zero seats under-bills silently,
 // where a failure retries. This is the one read here that must not degrade.
-func seats(ctx context.Context, _ *struct{}) (*plane.Seats, error) {
+func seats(ctx context.Context, _ *cloud.Unit) (*plane.Seats, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("seats: no org on the call")

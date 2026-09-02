@@ -59,10 +59,6 @@ import (
 // the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op that takes nothing off the wire — it is addressed
-// entirely by the caller's validated principal.
-type noInput struct{}
-
 // payload is a JSON OBJECT whose keys depend on the answer. It is the Out of the
 // three reads that legitimately send two shapes from one address (see the package
 // note): the schema says "an object", which is true of every response they send, and
@@ -132,7 +128,7 @@ func pendingMsg(pending int64) string {
 // For an APPROVED author this read ALSO runs the accrual sweep opportunistically, so
 // the dashboard is self-updating. That is why the royalty AUDIT lives at its own
 // address: an audit must not move the money it is auditing.
-func (o ops) myAuthors(ctx context.Context, _ *noInput) (*payload, error) {
+func (o ops) myAuthors(ctx context.Context, _ *cloud.Unit) (*payload, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -633,7 +629,7 @@ type sweepCounts struct {
 // the per-period latch means running it twice accrues nothing the second time.
 //
 // A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
-func (o ops) adminSweep(ctx context.Context, _ *noInput) (*authorSweepResult, error) {
+func (o ops) adminSweep(ctx context.Context, _ *cloud.Unit) (*authorSweepResult, error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}

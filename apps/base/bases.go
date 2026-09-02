@@ -16,6 +16,7 @@ package base
 // has not been opened yet is a Base you can walk into, not an error.
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"os"
 	"path/filepath"
@@ -30,11 +31,6 @@ import (
 // reaches the published document, the MCP tool list and the generated SDKs.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
-
-// void is "nothing on the wire": the whole input of an op that is addressed by
-// its caller alone. An ALIAS, so it publishes no schema — the listing takes no
-// arguments and is documented as taking none.
-type void = struct{}
 
 // baseRef addresses ONE org's Base.
 type baseRef struct {
@@ -84,7 +80,7 @@ type baseOps struct{}
 // membership is an answer and not a failure.
 //
 // Response: [{"org":"hanzo","exists":true,"bytes":430080}]
-func (o baseOps) list(ctx context.Context, _ *void) (*baseList, error) {
+func (o baseOps) list(ctx context.Context, _ *cloud.Unit) (*baseList, error) {
 	// A deployment with no Base engine hosts no Bases, so it lists none — the
 	// truth about it, rather than a row per org claiming one that cannot exist.
 	if mounted == nil {

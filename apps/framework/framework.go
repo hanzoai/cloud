@@ -405,16 +405,6 @@ func body(c *zip.Ctx) (map[string]any, error) {
 // and calls the one engine operation it names, exactly as the raw handler did.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it
-// takes nothing off the wire.
-type noInput struct{}
-
-// noContent is the Out of an op that answers 204 with an empty body. It is an
-// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
-// 204 only when the Out type has no name, so a defined type here would publish
-// "200 with a body" about a route that answers 204 with none.
-type noContent = struct{}
-
 // ---- DocType registry ----
 
 // docTypeRef addresses one DocType by its address in the URL.
@@ -472,7 +462,7 @@ func (o ops) createDocType(ctx context.Context, in *DocType) (*DocType, error) {
 
 // listDocTypes returns every DocType defined in the caller's org. Another
 // tenant's definitions are never included: the org is part of the store key.
-func (o ops) listDocTypes(ctx context.Context, _ *noInput) (*docTypeList, error) {
+func (o ops) listDocTypes(ctx context.Context, _ *cloud.Unit) (*docTypeList, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
 		return nil, fail(err, "")
@@ -532,7 +522,7 @@ func (o ops) replaceDocType(ctx context.Context, in *DocType) (*DocType, error) 
 // validated nor read back — so there is no undo. Manager-only. Answers 204.
 //
 // Example: {"name": "Projects.Task"}
-func (o ops) deleteDocType(ctx context.Context, in *docTypeRef) (*noContent, error) {
+func (o ops) deleteDocType(ctx context.Context, in *docTypeRef) (*cloud.Unit, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
 		return nil, fail(err, "")
@@ -575,7 +565,7 @@ type module struct {
 // listModules returns every app lane compiled into this deployment and the
 // DocTypes each one installs. It describes the BINARY, not the org: what a given
 // org has actually installed is the per-module state below.
-func (o ops) listModules(ctx context.Context, _ *noInput) (*moduleList, error) {
+func (o ops) listModules(ctx context.Context, _ *cloud.Unit) (*moduleList, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
 		return nil, fail(err, "")
@@ -746,7 +736,7 @@ func (o ops) getDocument(ctx context.Context, in *docRef) (*docView, error) {
 // SUBMITTED document cannot be deleted — cancel it first. Answers 204.
 //
 // Example: {"doctype": "Projects.Task", "name": "TASK-00001"}
-func (o ops) deleteDocument(ctx context.Context, in *docRef) (*noContent, error) {
+func (o ops) deleteDocument(ctx context.Context, in *docRef) (*cloud.Unit, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
 		return nil, fail(err, "")
@@ -820,7 +810,7 @@ type summaryView struct {
 
 // summary reports how much of the DocType surface the caller's org uses: how
 // many DocTypes it has defined, and how many documents exist across them.
-func (o ops) summary(ctx context.Context, _ *noInput) (*summaryView, error) {
+func (o ops) summary(ctx context.Context, _ *cloud.Unit) (*summaryView, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
 		return nil, fail(err, "")

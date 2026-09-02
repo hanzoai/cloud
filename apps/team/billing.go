@@ -141,7 +141,7 @@ type planInfo struct {
 // 502 rather than a false "0 members".
 //
 // Response: {"plan": "pro", "active": true, "seats": 3, "guests": 1, "guestLimit": 3, "upgradeUrl": "https://billing.hanzo.ai"}
-func (b *billingService) readPlan(ctx context.Context, _ *none) (*planInfo, error) {
+func (b *billingService) readPlan(ctx context.Context, _ *cloud.Unit) (*planInfo, error) {
 	if b.degraded {
 		return nil, unavailable()
 	}

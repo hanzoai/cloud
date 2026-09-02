@@ -110,15 +110,3 @@ func noStore(ctx context.Context) {
 		c.SetHeader("Cache-Control", "no-store")
 	}
 }
-
-// none is NOTHING on the wire — the In of an op addressed entirely by the
-// caller's own identity, and the Out of one whose success carries no body. One
-// name because it is one value.
-//
-// It is an ALIAS for the anonymous empty struct, not a definition, on purpose:
-// zip declares a request or response SCHEMA only for a type that HAS a name, so
-// a named empty struct would document a body neither side sends — a required
-// `{}` request on an op that reads no body, and an empty object on a 204 that
-// carries nothing. Nameless, the document says what the wire does: no
-// requestBody, and "204 No Content".
-type none = struct{}

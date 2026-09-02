@@ -359,7 +359,7 @@ type fleetBoard struct {
 // is folded in independently: a broken one costs its own rows and nothing else.
 //
 // Response: {"units":[{"source":"byo","unit":"spark","kind":"worker","label":"spark","host":"spark","status":"online","spec":{"os":"linux","arch":"arm64","cpus":20,"gpus":1,"gpuModel":"NVIDIA GB10"},"metrics":{"gpuUtil":0.42,"at":"2026-07-27T09:00:00Z"},"sessions":0,"running":1,"queued":2}]}
-func (o ops) listFleet(ctx context.Context, _ *noArgs) (*fleetBoard, error) {
+func (o ops) listFleet(ctx context.Context, _ *cloud.Unit) (*fleetBoard, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err

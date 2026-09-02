@@ -143,7 +143,7 @@ type affiliateEarnings struct {
 //
 // Scoped server-side to the validated caller's affiliate; a caller that is not
 // one gets `isAffiliate:false`.
-func (o ops) earnings(ctx context.Context, _ *noInput) (*affiliateEarnings, error) {
+func (o ops) earnings(ctx context.Context, _ *cloud.Unit) (*affiliateEarnings, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -245,7 +245,7 @@ type affiliateLinks struct {
 // one batch — which is how the counters stay current without a database write
 // per click. Scoped to the validated caller's own affiliate; a non-affiliate
 // gets `isAffiliate:false` and the link cap.
-func (o ops) links(ctx context.Context, _ *noInput) (*affiliateLinks, error) {
+func (o ops) links(ctx context.Context, _ *cloud.Unit) (*affiliateLinks, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -548,7 +548,7 @@ type affiliateBoard struct {
 // the board. Only an approved affiliate has a rank. Requires a validated
 // principal; a signed-in non-affiliate may read the board but gets no personal
 // row.
-func (o ops) board(ctx context.Context, _ *noInput) (*affiliateBoard, error) {
+func (o ops) board(ctx context.Context, _ *cloud.Unit) (*affiliateBoard, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

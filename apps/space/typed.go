@@ -48,10 +48,6 @@ func (o ops) client() (*s3.Client, error) {
 	return cli, nil
 }
 
-// noInput is the In of an op that takes nothing off the wire. Its whole input is
-// the caller's validated principal, or in health's case nothing at all.
-type noInput struct{}
-
 // ── health ──────────────────────────────────────────────────────────────────
 
 // spaceHealth is the probe's ONE shape, answered under both of its statuses.
@@ -95,7 +91,7 @@ func (h *spaceHealth) StatusCode() int {
 // when they are not. It is deliberately NOT gated — liveness has to be probe-able
 // without a token — so it is the one operation here that names no space and bills
 // nothing.
-func (o ops) health(_ context.Context, _ *noInput) (*spaceHealth, error) {
+func (o ops) health(_ context.Context, _ *cloud.Unit) (*spaceHealth, error) {
 	r := &spaceHealth{Service: "space", Status: "ok"}
 	if !o.s.State.admin.Configured() {
 		r.Status, r.Ready = "degraded", false
@@ -140,7 +136,7 @@ type spaceList struct {
 // Billed per call: the balance is checked BEFORE anything is touched, so an
 // unfunded org is refused with nothing done, and the debit lands only once the
 // work has succeeded.
-func (o ops) listSpaces(ctx context.Context, _ *noInput) (*spaceList, error) {
+func (o ops) listSpaces(ctx context.Context, _ *cloud.Unit) (*spaceList, error) {
 	org, err := fare.Org(ctx)
 	if err != nil {
 		return nil, err
@@ -368,7 +364,7 @@ type driveRef struct {
 // Billed per call: the balance is checked BEFORE anything is touched, so an
 // unfunded org is refused with nothing deleted, and the debit lands only once the
 // drive is gone.
-func (o ops) deleteDrive(ctx context.Context, in *driveRef) (*struct{}, error) {
+func (o ops) deleteDrive(ctx context.Context, in *driveRef) (*cloud.Unit, error) {
 	org, err := fare.Org(ctx)
 	if err != nil {
 		return nil, err
@@ -660,7 +656,7 @@ func (o ops) writeFile(ctx context.Context, in *fileRef) (*fileURL, error) {
 // Billed per call: the balance is checked BEFORE anything is touched, so an
 // unfunded org is refused with nothing deleted, and the debit lands only once the
 // file is gone.
-func (o ops) deleteFile(ctx context.Context, in *fileRef) (*struct{}, error) {
+func (o ops) deleteFile(ctx context.Context, in *fileRef) (*cloud.Unit, error) {
 	org, space, drive, file, err := o.address(ctx, in)
 	if err != nil {
 		return nil, err
