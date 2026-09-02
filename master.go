@@ -75,10 +75,8 @@ var (
 // the rest are free.
 func BootMaster(dataDir string) { masterOnce.Do(func() { masterErr = resolveMaster(dataDir) }) }
 
-// Master is the key this process holds, or nil.
-func Master() []byte { return master }
-
-// MasterB64 is Master in the base64 form Config and the embedded KMS client carry.
+// MasterB64 is the key this process holds, in the base64 form Config and the
+// embedded KMS client carry. Empty when it holds none.
 func MasterB64() string {
 	if len(master) == 0 {
 		return ""
@@ -92,19 +90,6 @@ func MasterErr() error { return masterErr }
 
 // MasterFrom names where the key came from, for the boot line.
 func MasterFrom() string { return masterFrom }
-
-// Deployed reports whether this process was GIVEN its master key rather than
-// minting one over an empty data directory.
-//
-// It is [resolveMaster]'s own laptop-or-deployment answer, published so anything
-// else that must tell the two apart reads the one fact instead of inventing a
-// second notion of "production". A process that was handed a root has a secret
-// store behind it, so anything else it needs from that store is a configuration
-// error when absent — apps/account's anti-forgery key is the first caller.
-//
-// False before [BootMaster] runs, which is every test binary that does not boot
-// a server: a dev key and no key are the same answer to this question.
-func Deployed() bool { return masterFrom == MasterEnv || masterFrom == "ring" }
 
 func resolveMaster(dataDir string) error {
 	if endpoint := strings.TrimSpace(os.Getenv(RingEndpointEnv)); endpoint != "" {

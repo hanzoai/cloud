@@ -17,7 +17,7 @@ import (
 // A lazy plugin has exactly one trigger: a request reaching one of its prefixes.
 // That is what makes 112 services affordable, and it is also why the internal
 // plane was inert for all of them. A plane call goes straight to the app's
-// canonical socket (cloud.Peer / zip.DialApp) and never touches this router — so
+// canonical socket (cloud.Ask / zip.DialApp) and never touches this router — so
 // nothing started the child, nothing bound the socket, and the caller dialled a
 // path that does not exist. The x402 rail is the case that forced it: settling a
 // tool call means tools→x402→marketplace→wallets→commerce, five processes, four
