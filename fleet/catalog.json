@@ -6562,6 +6562,11 @@
    "read": true
   },
   {
+   "id": "get_team_public",
+   "doc": "Lists the rooms orgs have published, across every org.\n\nIt is NOT part of GET /rooms, and the separation is the point: that address\nanswers the CALLER'S rooms, so folding these in would put strangers' channels\nin somebody's own sidebar.\n\nIt reads the directory and never a tenant's store. Every field it can answer\nwith is one an org published by making a room public, so there is nothing here\nto scope by org — a directory only its own org can read is not a directory.\nAn authenticated principal is still required, because an anonymous crawler is\nnot who this is for.",
+   "read": true
+  },
+  {
    "id": "get_team_rooms",
    "doc": "Returns every room of the caller's org, across the spaces\nit owns, with the work facet each carries.\n\nIt reads the SAME Chunter documents the transactor serves, so a room opened\nin the Team client appears here with no sync, and a facet written here is read\nby anything holding the document. Direct messages are included: a room between\ntwo people is a room with no name, not a different kind of thing.",
    "read": true
