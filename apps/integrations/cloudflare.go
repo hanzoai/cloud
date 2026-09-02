@@ -21,6 +21,7 @@ package integrations
 // credential-acquisition methods. See the connector HIP / hanzo dns wiring.
 
 import (
+	cf "github.com/hanzoai/cloud/internal/cloudflare"
 	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
@@ -96,29 +97,10 @@ func init() {
 	})
 }
 
-// cfAPIBase is Cloudflare's API v4 origin. Overridable via CLOUDFLARE_API_BASE for
-// tests (an httptest server) and CF-compatible endpoints; read at call time so a
-// test can set it per-process. The default is the real Cloudflare API.
-func cfAPIBase() string {
-	if v := environ.Or("CLOUDFLARE_API_BASE", ""); v != "" {
-		return strings.TrimRight(v, "/")
-	}
-	return "https://api.cloudflare.com/client/v4"
-}
-
-// cfEnvelope is the shared Cloudflare API v4 response envelope shape.
-type cfEnvelope struct {
-	Success bool `json:"success"`
-	Errors  []struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	} `json:"errors"`
-}
-
 // cfVerifyResult is GET /user/tokens/verify's result. It carries the token id +
 // status only — NOT the token name or scopes.
 type cfVerifyResult struct {
-	cfEnvelope
+	cf.Envelope
 	Result struct {
 		ID     string `json:"id"`
 		Status string `json:"status"`
@@ -127,7 +109,7 @@ type cfVerifyResult struct {
 
 // cfAccountsResult is GET /accounts's result (best-effort account discovery).
 type cfAccountsResult struct {
-	cfEnvelope
+	cf.Envelope
 	Result []struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -173,7 +155,7 @@ func cloudflareVerify(ctx context.Context, in VerifyInput) (*ExchangeResult, err
 // cfTokenStatus calls GET /user/tokens/verify and returns the lower-cased status +
 // token id. The token rides ONLY the Authorization header — never a query or log.
 func cfTokenStatus(ctx context.Context, token string) (status, tokenID string, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfAPIBase()+"/user/tokens/verify", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cf.APIBase()+"/user/tokens/verify", nil)
 	if err != nil {
 		return "", "", fmt.Errorf("cloudflare verify: build request: %w", err)
 	}
@@ -201,7 +183,7 @@ func cfTokenStatus(ctx context.Context, token string) (status, tokenID string, e
 // cfDiscoverAccount best-effort resolves the first account the token can see. A
 // least-privilege token may be forbidden here; that is NOT fatal (returns "","").
 func cfDiscoverAccount(ctx context.Context, token string) (id, name string) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfAPIBase()+"/accounts?per_page=1", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cf.APIBase()+"/accounts?per_page=1", nil)
 	if err != nil {
 		return "", ""
 	}
