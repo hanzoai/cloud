@@ -118,7 +118,7 @@ func newDedicatedService(t *testing.T, orch orchestrator) *cloud.Service[state] 
 	t.Setenv("CLOUD_KMS_NODES", "")
 	t.Setenv("CLOUD_KMS_PASSPHRASE", "")
 	log := luxlog.New("module", "provdedtest")
-	return &cloud.Service[state]{Base: cloud.Base{Log: log}, State: state{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(cloud.Deps{}), orch: orch}}
+	return &cloud.Service[state]{Base: cloud.Base{Log: log}, State: state{store: newTestStore(t), sec: newSecrets(nil, log), reg: newRegistry(cloud.Deps{}), orch: orch}}
 }
 
 // doReq serves ONE request against ONE route that mount registers. mount takes
@@ -341,7 +341,7 @@ func TestDedicated_BillsProvisionAndFootprintToOrg(t *testing.T) {
 	orch := newFakeOrch()
 	s := &cloud.Service[state]{
 		Base:  cloud.Base{Log: log, Bill: cloud.NewMeter(cloud.Deps{Metering: m, Env: "mainnet"}, "provisioning")},
-		State: state{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(cloud.Deps{}), orch: orch},
+		State: state{store: newTestStore(t), sec: newSecrets(nil, log), reg: newRegistry(cloud.Deps{}), orch: orch},
 	}
 
 	// Provision debit -> caller org "acme", size in Model.

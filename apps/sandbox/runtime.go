@@ -223,7 +223,7 @@ type runtime struct {
 // interface so a test can stand in for KMS: one of the org's clusters, by
 // name, as the REST config that reaches it.
 type attached interface {
-	RESTForOrgCluster(org, project, name string) (*rest.Config, error)
+	RESTForOrgCluster(ctx context.Context, org, project, name string) (*rest.Config, error)
 }
 
 func newRuntime() *runtime {
@@ -321,7 +321,7 @@ func (r *runtime) at(ctx context.Context, org, cluster string) (*runtime, error)
 	}
 	// The default project scope: this core reads no principal, and the fleet
 	// keys its default shard exactly there (fleet.Registry).
-	cfg, err := r.attached.RESTForOrgCluster(org, "", cluster)
+	cfg, err := r.attached.RESTForOrgCluster(ctx, org, "", cluster)
 	if errors.Is(err, fleet.ErrNoCluster) {
 		return nil, zip.ErrNotFound("cluster not found")
 	}

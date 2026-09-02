@@ -132,7 +132,7 @@ func (o ops) listK8sClusters(ctx context.Context, _ *cloud.Unit) (*clusterList, 
 	for _, kc := range clusters {
 		out = append(out, k8sClusterView(kc))
 	}
-	out = append(out, byoClusters(o.Service, org, project(c))...)
+	out = append(out, byoClusters(ctx, o.Service, org, project(c))...)
 	return &clusterList{Clusters: out, Degraded: down}, nil
 }
 

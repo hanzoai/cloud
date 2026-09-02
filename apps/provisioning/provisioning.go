@@ -243,7 +243,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "provisioning")
 	s := &cloud.Service[state]{Base: b, State: state{
 		store: store,
-		sec:   openSecrets(deps.Brand, b.Log),
+		sec:   newSecrets(deps.KMS, b.Log),
 		reg:   newRegistry(deps),
 		orch:  newOrchestrator(),
 	}}

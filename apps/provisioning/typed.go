@@ -261,7 +261,7 @@ func (o ops) createShared(ctx context.Context, c *zip.Ctx, kind, org, name, proj
 	if secretfulKinds[kind] {
 		returnPw, username = pw, user
 		if o.s.State.sec.Enabled() {
-			if err := o.s.State.sec.Put(secretRef, []byte(pw)); err != nil {
+			if err := o.s.State.sec.Put(ctx, secretRef, []byte(pw)); err != nil {
 				_ = prov.Drop(ctx, physical, user)
 				o.s.Log.Error("kms put failed; rolled back backend", "kind", kind, "err", err)
 				return nil, zip.Errorf(http.StatusInternalServerError, "store secret failed")
@@ -276,7 +276,7 @@ func (o ops) createShared(ctx context.Context, c *zip.Ctx, kind, org, name, proj
 	if err != nil {
 		_ = prov.Drop(ctx, physical, user)
 		if storedRef != "" {
-			_ = o.s.State.sec.Delete(storedRef)
+			_ = o.s.State.sec.Delete(ctx, storedRef)
 		}
 		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
@@ -291,7 +291,7 @@ func (o ops) createShared(ctx context.Context, c *zip.Ctx, kind, org, name, proj
 		// Lost a concurrent race or DB error — undo the backend + secret.
 		_ = prov.Drop(ctx, physical, user)
 		if storedRef != "" {
-			_ = o.s.State.sec.Delete(storedRef)
+			_ = o.s.State.sec.Delete(ctx, storedRef)
 		}
 		if errors.Is(err, errConflict) {
 			return nil, zip.ErrConflict("resource already exists")
@@ -416,7 +416,7 @@ func (o ops) dropOf(ctx context.Context, kind, name string) error {
 		}
 	}
 	if r.SecretRef != "" {
-		if err := o.s.State.sec.Delete(r.SecretRef); err != nil {
+		if err := o.s.State.sec.Delete(ctx, r.SecretRef); err != nil {
 			o.s.Log.Warn("kms delete failed (continuing)", "ref", r.SecretRef, "err", err)
 		}
 	}

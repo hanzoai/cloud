@@ -70,7 +70,7 @@ func newTestService(t *testing.T, kinds ...string) (*cloud.Service[state], *mock
 	for _, k := range kinds {
 		reg[k] = mp
 	}
-	return &cloud.Service[state]{Base: cloud.Base{Log: log}, State: state{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: reg}}, mp
+	return &cloud.Service[state]{Base: cloud.Base{Log: log}, State: state{store: newTestStore(t), sec: newSecrets(nil, log), reg: reg}}, mp
 }
 
 func TestStore_InsertGetListDelete(t *testing.T) {
