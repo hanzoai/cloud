@@ -320,7 +320,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// will not parse is answered 403, never the decoder's 400. The ops keep
 	// their own sudo checks — the group wraps the routed path, while the call
 	// plane and MCP invoke an op directly.
-	admin := r.Group("/v1/admin/affiliate", sudoGate)
+	admin := r.Group("/v1/admin/affiliate", cloud.Gate(cloud.Super))
 	zip.Get(r, "/v1/admin/affiliate", o.adminList)
 	// The unified SuperAdmin referral analytics board (cross-tenant): top referrers,
 	// conversion, and the multi-level accrual liability. It reads the ONE attribution
@@ -335,17 +335,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Post(admin, "/:id/suspend", o.adminSuspend)
 	zip.Post(admin, "/:id/rate", o.adminSetRate)
 	zip.Post(admin, "/:id/payout", o.adminPayout)
-}
-
-// sudoGate is the routed admin family's first refusal: it answers the same 403
-// the ops answer, before the typed decoder has read a byte of the body. Without
-// it a non-admin probing with garbage learned the decoder ran first (400) —
-// the raw handlers always refused on authority before they bound anything.
-func sudoGate(c *zip.Ctx) error {
-	if c.IsAdmin() {
-		return c.Next()
-	}
-	return zip.ErrForbidden("SuperAdmin required")
 }
 
 // ── customer surface ─────────────────────────────────────────────────────────
@@ -848,8 +837,8 @@ type directoryOut struct {
 // read; a partner sees its own standing through its own dashboard. Bounded per
 // request.
 func (o ops) adminList(ctx context.Context, in *page) (*directoryOut, error) {
-	if !sudo(ctx) {
-		return nil, zip.ErrForbidden("SuperAdmin required")
+	if !cloud.Super.Admits(cloud.AuthorityIn(ctx)) {
+		return nil, cloud.Super.Refusal()
 	}
 	rows, err := o.s.State.store.ListAll(ctx, adminLimit(in.Limit))
 	if err != nil {
@@ -973,8 +962,8 @@ type referralsOut struct {
 // attribution spine the accrual itself walks, so the board and the ledger cannot
 // disagree. Amounts are integer cents.
 func (o ops) adminReferrals(ctx context.Context, _ *cloud.Unit) (*referralsOut, error) {
-	if !sudo(ctx) {
-		return nil, zip.ErrForbidden("SuperAdmin required")
+	if !cloud.Super.Admits(cloud.AuthorityIn(ctx)) {
+		return nil, cloud.Super.Refusal()
 	}
 	rows, err := o.s.State.store.ListAll(ctx, maxAdminLimit)
 	if err != nil {
@@ -1088,8 +1077,8 @@ type affiliateOut struct {
 // its code does not resolve and no sweep accrues to it. PLATFORM SUDO ONLY.
 // Audited.
 func (o ops) adminApprove(ctx context.Context, in *approval) (*affiliateOut, error) {
-	if !sudo(ctx) {
-		return nil, zip.ErrForbidden("SuperAdmin required")
+	if !cloud.Super.Admits(cloud.AuthorityIn(ctx)) {
+		return nil, cloud.Super.Refusal()
 	}
 	id := strings.TrimSpace(in.ID)
 	a, err := o.s.State.store.Approve(ctx, id, in.Code, time.Now().Unix())
@@ -1128,8 +1117,8 @@ type affiliateRef struct {
 // payable, and existing attribution edges are left standing — suspension ends
 // earning, it does not unwind history. PLATFORM SUDO ONLY. Audited.
 func (o ops) adminSuspend(ctx context.Context, in *affiliateRef) (*affiliateOut, error) {
-	if !sudo(ctx) {
-		return nil, zip.ErrForbidden("SuperAdmin required")
+	if !cloud.Super.Admits(cloud.AuthorityIn(ctx)) {
+		return nil, cloud.Super.Refusal()
 	}
 	id := strings.TrimSpace(in.ID)
 	a, err := o.s.State.store.Suspend(ctx, id, time.Now().Unix())
@@ -1191,8 +1180,8 @@ type payoutOut struct {
 //
 // Example: {"amountCents": 1200, "method": "credits", "reference": "ledger-1"}
 func (o ops) adminPayout(ctx context.Context, in *disbursal) (*payoutOut, error) {
-	if !sudo(ctx) {
-		return nil, zip.ErrForbidden("SuperAdmin required")
+	if !cloud.Super.Admits(cloud.AuthorityIn(ctx)) {
+		return nil, cloud.Super.Refusal()
 	}
 	if err := requireBody(ctx); err != nil {
 		return nil, err
@@ -1284,8 +1273,8 @@ type accrualsOut struct {
 // per run; a source whose spend cannot be read is skipped and picked up next
 // time, never half-accrued.
 func (o ops) adminSweep(ctx context.Context, _ *cloud.Unit) (*accrualsOut, error) {
-	if !sudo(ctx) {
-		return nil, zip.ErrForbidden("SuperAdmin required")
+	if !cloud.Super.Admits(cloud.AuthorityIn(ctx)) {
+		return nil, cloud.Super.Refusal()
 	}
 	sources, err := o.s.State.store.AllReferredOrgs(ctx, sweepLimit)
 	if err != nil {

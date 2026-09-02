@@ -35,12 +35,6 @@ import (
 // handlers reached it through cloud.Handle.
 type ops struct{ s *cloud.Service[state] }
 
-// sudo reports whether the caller is a validated platform SuperAdmin
-// (X-User-IsAdmin, set only for a verified SuperAdmin after SanitizeIdentity) —
-// the gate every /v1/admin route here fails closed on. False off the HTTP path:
-// no request, no attested admin.
-func sudo(ctx context.Context) bool { return cloud.AuthorityIn(ctx).Super }
-
 // actor is the validated user id (X-User-Id) an application or a user-level
 // referral edge is attributed to. Empty off the HTTP path, where the write
 // records no actor rather than inventing one — exactly what the raw handlers
