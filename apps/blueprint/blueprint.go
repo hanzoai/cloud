@@ -50,15 +50,14 @@
 package blueprint
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"embed"
 	"fmt"
 	"io/fs"
 	"net/http"
-	"os"
 	"path"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -326,19 +325,11 @@ func (o blueprintOps) health(ctx context.Context, _ *noIn) (*blueprintHealth, er
 // never zeroes a rate (which would make every deployment appear free).
 func rateCardFromEnv() RateCard {
 	rc := DefaultRateCard()
-	if v := envInt("CLOUD_BLUEPRINT_UCPU_HR"); v > 0 {
-		rc.MicroUSDPerVCPUHour = v
+	if v := environ.Int("CLOUD_BLUEPRINT_UCPU_HR", 0); v > 0 {
+		rc.MicroUSDPerVCPUHour = int64(v)
 	}
-	if v := envInt("CLOUD_BLUEPRINT_UGB_HR"); v > 0 {
-		rc.MicroUSDPerGBHour = v
+	if v := environ.Int("CLOUD_BLUEPRINT_UGB_HR", 0); v > 0 {
+		rc.MicroUSDPerGBHour = int64(v)
 	}
 	return rc
-}
-
-func envInt(k string) int64 {
-	n, err := strconv.ParseInt(strings.TrimSpace(os.Getenv(k)), 10, 64)
-	if err != nil {
-		return 0
-	}
-	return n
 }

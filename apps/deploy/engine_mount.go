@@ -38,18 +38,9 @@ func enginePrune() bool   { return os.Getenv("DEPLOY_ENGINE_PRUNE") == "true" }
 // of sweeping the fleet.
 func pruneFuse() PruneFuse {
 	return PruneFuse{
-		MaxDeletions: envInt("DEPLOY_ENGINE_PRUNE_MAX", 10),
+		MaxDeletions: environ.Int("DEPLOY_ENGINE_PRUNE_MAX", 10),
 		MaxRatio:     envFloat("DEPLOY_ENGINE_PRUNE_MAX_RATIO", 0.20),
 	}
-}
-
-func envInt(k string, d int) int {
-	if v := os.Getenv(k); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return d
 }
 
 func envFloat(k string, d float64) float64 {

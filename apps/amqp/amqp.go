@@ -32,12 +32,12 @@
 package amqp
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	"net"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	luxlog "github.com/luxfi/log"
@@ -64,10 +64,7 @@ var gateway *protocol.Broker
 func Use(app cloud.Router, deps cloud.Deps) error {
 	log := luxlog.Default().New("subsystem", "amqp")
 
-	port, err := envInt("CLOUD_AMQP_PORT", 5672)
-	if err != nil {
-		return err
-	}
+	port := environ.Int("CLOUD_AMQP_PORT", 5672)
 
 	b := protocol.NewBroker(protocol.Config{
 		Addr:        net.JoinHostPort("", strconv.Itoa(port)),
@@ -117,16 +114,4 @@ func Shutdown(_ context.Context) error {
 		gateway = nil
 	}
 	return nil
-}
-
-func envInt(k string, def int) (int, error) {
-	v := strings.TrimSpace(os.Getenv(k))
-	if v == "" {
-		return def, nil
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return 0, fmt.Errorf("amqp.Use:  bad %s %q: %w", k, v, err)
-	}
-	return n, nil
 }
