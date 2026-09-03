@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -76,7 +77,7 @@ type slackJoinOut struct {
 // Org admin, because it changes what the whole workspace sees: after it the agent
 // is a member of every public room and answers in all of them.
 func (o ops) slackJoin(ctx context.Context, _ *struct{}) (*slackJoinOut, error) {
-	org, _, err := caller(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
