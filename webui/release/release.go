@@ -70,9 +70,25 @@ type bundle struct {
 // console in both composition roots (cmd/cloud's TestSitesEdgeIsMountedInTheRouter
 // pins that order for the host), so "no resolver" means a caller mounted
 // them backwards.
+// first bounds the read that happens ON THE BOOT PATH.
+//
+// A published release is a handful of objects from a store that is either local
+// or one hop away, so a healthy read is milliseconds. An UNHEALTHY one used to
+// cost whatever the S3 client's own retries cost, unbounded, and boot waited:
+// measured against a dead store, 21 seconds before the process began listening.
+//
+// Nothing is lost by giving up early, because giving up is not the end of the
+// attempt — `Watch` is already running and fills the Source on its next tick.
+// The bound is therefore about STARTUP, not about the console: it decides how
+// long a process delays serving its API for a browser bundle nothing headless
+// asks for.
+const first = 2 * time.Second
+
 func Load(ctx context.Context, cfg Config, log luxlog.Logger) (*Source, error) {
 	s := &Source{cfg: cfg, admin: s3admin.New(), log: log.New("subsystem", "console")}
-	if _, err := s.refresh(ctx); err != nil {
+	boot, done := context.WithTimeout(ctx, first)
+	defer done()
+	if _, err := s.refresh(boot); err != nil {
 		// The SOURCE comes back beside the error, empty. A caller that wants to keep
 		// polling needs something to poll, and returning nil left it with nothing:
 		// the boot read failed, the composition root had no Source to Watch, and the

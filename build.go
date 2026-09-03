@@ -4,10 +4,14 @@ import (
 	"cmp"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/hanzoai/authz"
@@ -20,6 +24,7 @@ import (
 	"github.com/hanzoai/ha"
 	metrics "github.com/hanzoai/o11y/metrics"
 	sqlitedrv "github.com/hanzoai/sqlite"
+	"github.com/hanzoai/vfs/replica"
 	s3 "github.com/hanzos3/go"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -861,6 +866,28 @@ const durableBucket = "org-db"
 // may reap ".probe/*"; the objects are tiny and never read after the probe.
 const durableProbePrefix = ".probe/cas-"
 
+// reachable separates "the store answered and said no" from "the store was not
+// there". Only the second makes the probes that follow pointless, so only the
+// second short-circuits them — a store that refuses one call may still enforce
+// the atomicity the next one asks about.
+//
+// A deadline that expired IS unreachable for this purpose: something that cannot
+// answer inside the boot bound is not something boot should keep waiting on.
+func reachable(deadline error, err error) bool {
+	if deadline != nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return false
+	}
+	return !errors.Is(err, syscall.ECONNREFUSED) && !errors.Is(err, context.DeadlineExceeded)
+}
+
+// bootReach bounds every object-store read on the startup path. See the comment
+// at its use in the durability setup for why it is short.
+const bootReach = 2 * time.Second
+
 // peered reports whether this deployment runs MORE THAN ONE writer.
 //
 // It matters only where the durable plane is off: with no fence, ownership of an
@@ -908,6 +935,20 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*org.Durability, func() []
 	// misconfigured prod deployment is never SILENTLY non-durable (Red L2).
 	multiReplica := len(parsePeers(cfg.ShardPeers)) > 1
 
+	// bootReach is how long ANY of this may wait on the object store.
+	//
+	// Both reads below are optional in the sense that matters: a store that does
+	// not answer means local-only, which is a supported posture the next few
+	// lines take deliberately. Neither is a reason to delay serving the API.
+	//
+	// The old bounds were 10s and 15s, and they were sized for "how long might a
+	// healthy store take" when the question is "how long do we wait before
+	// concluding it is not there". A store that is local or one hop away answers
+	// in milliseconds; one that is DOWN refuses instantly and one that is HUNG
+	// never answers at all, so a long bound only ever buys the hung case, and
+	// pays for it on every boot. Measured against a dead store, these two plus
+	// the console read cost a child 34.5 seconds before it began listening.
+
 	// Durability is THE path — there is no operator toggle. It self-detects capability
 	// at boot: no object store reachable (dev / native-Go / no S3 creds) → local-only,
 	// same code path, graceful; a reachable store → PROVE its conditional-PUT atomicity
@@ -924,13 +965,17 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*org.Durability, func() []
 		disabledDurability(log, multiReplica, fmt.Sprintf("S3 client construction failed: %v", err))
 		return nil, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := ensureDurableBucket(ctx, admin, client); err != nil {
-		// Non-fatal: the bucket likely already exists; a later ship/hydrate retries.
-		log.Warn("durability bucket ensure failed (continuing)", "bucket", durableBucket, "err", err)
-	}
-	cancel()
-
+	// NOTHING ON THIS PATH WAITS ON THE OBJECT STORE. The bucket ensure that stood
+	// here was the same pure optimisation the VFS constructor carried — idempotent,
+	// its error logged and continued past, and retried by the first ship or hydrate
+	// that needs it — so all a boot copy could add was the wait.
+	//
+	// The atomicity probe below is NOT that, and the difference is why it moved
+	// rather than went: it is the safety property, and no byte of tenant data may be
+	// fenced against a store that has not answered it. It is asked by the first
+	// store that wants to be durable instead of by every process at startup, which
+	// is the same guarantee at a different moment — a probe nobody's data is waiting
+	// on is a probe nothing needs to block a listener.
 	// Prove the store enforces conditional-PUT atomically BEFORE fencing any tenant data
 	// (the auto-H2 self-check that replaces the old opt-in flag). A store that cannot be
 	// proven atomic fails SAFE to local-only + a loud alert — never a silent fence on a
@@ -944,14 +989,7 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*org.Durability, func() []
 	// is handed. (Safety note for that tier: a stale cached lease read only costs a claim
 	// retry, never safety — the S3 CAS is authoritative — so a write-through cache is
 	// sound over the SAME cond that backs both the lease and the data ships.)
-	cond := org.NewS3ConditionalStore(client, durableBucket)
-	probeCtx, probeCancel := context.WithTimeout(context.Background(), 15*time.Second)
-	err = org.ProbeCAS(probeCtx, cond, durableProbePrefix)
-	probeCancel()
-	if err != nil {
-		disabledDurability(log, multiReplica, fmt.Sprintf("object-store conditional-PUT atomicity NOT confirmed — %v", err))
-		return nil, nil
-	}
+	cond := proven(org.NewS3ConditionalStore(client, durableBucket), log)
 
 	// Membership: LIVE when in-cluster + CLOUD_PEER_SELECTOR is set (a rolling upgrade's
 	// changing pod set is tracked, a draining/dead pod is never elected an org's owner),
@@ -1489,4 +1527,60 @@ func masterKeyBytes(cfg *Config) []byte {
 		return nil
 	}
 	return master
+}
+
+// proven is a ConditionalStore that will not answer until the store behind it has
+// been shown to enforce conditional-PUT ATOMICALLY, and asks that question at the
+// first use rather than at startup.
+//
+// The property is unchanged and it is the whole point of the type: no byte of
+// tenant data is fenced against a store whose atomicity is unproven, because the
+// proof runs on the first call and a store that fails it answers nothing, ever.
+// What changed is WHO WAITS. Asked at boot, every process paid the probe before it
+// listened, including the overwhelming majority that never open a durable store at
+// all; asked here, it is paid once, by the first ship or hydrate, which is already
+// an operation on that store and already waiting on it.
+//
+// A failure is remembered. Re-probing per call would turn an unreachable store into
+// an unbounded retry on the data path, which is the shape that takes a deployment
+// down slowly rather than quickly.
+type provenStore struct {
+	store replica.ConditionalStore
+	log   luxlog.Logger
+	once  sync.Once
+	err   error
+}
+
+func proven(store replica.ConditionalStore, log luxlog.Logger) replica.ConditionalStore {
+	return &provenStore{store: store, log: log}
+}
+
+// ok runs the probe at most once and reports whether the store may be used.
+//
+// The deadline is the CALLER'S. A probe inherits the context of whatever needed the
+// store, so a hydrate that may wait ten seconds gets ten seconds and a request that
+// may wait one gets one — which is the bound the caller already chose, rather than a
+// second one invented here that would have to be wrong for one of them.
+func (p *provenStore) ok(ctx context.Context) error {
+	p.once.Do(func() {
+		if p.err = org.ProbeCAS(ctx, p.store, durableProbePrefix); p.err != nil {
+			p.err = fmt.Errorf("object-store conditional-PUT atomicity NOT confirmed — %w", p.err)
+			p.log.Error("durability REFUSED", "why", p.err)
+		}
+	})
+	return p.err
+}
+
+func (p *provenStore) Get(ctx context.Context, key string) ([]byte, string, error) {
+	if err := p.ok(ctx); err != nil {
+		return nil, "", err
+	}
+	return p.store.Get(ctx, key)
+}
+
+func (p *provenStore) PutIfVersion(ctx context.Context, key string, data []byte, expect string) (string, error) {
+	if err := p.ok(ctx); err != nil {
+		return "", err
+	}
+	return p.store.PutIfVersion(ctx, key, data, expect)
 }
