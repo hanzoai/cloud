@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/finance"
 	_ "github.com/hanzoai/cloud/internal/devmaster"
 	"github.com/hanzoai/cloud/internal/twopod"
 	"github.com/hanzoai/cloud/money"

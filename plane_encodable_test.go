@@ -33,7 +33,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -124,7 +124,7 @@ func TestNoPlaneTypeCarriesAnUnencodableKind(t *testing.T) {
 // SQLite store and the envelope keys behind it. One import would take the money's private
 // vocabulary and its whole dependency tree into the package every peer call links.
 func TestThePlaneCannotNameTheMetersUsage(t *testing.T) {
-	const forbidden = `"github.com/hanzoai/cloud/apps/metering"`
+	const forbidden = `"github.com/hanzoai/cloud/metering"`
 	fset := token.NewFileSet()
 	err := filepath.WalkDir("plane", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {

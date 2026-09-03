@@ -73,7 +73,7 @@ package cloud
 import (
 	"context"
 
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/zap-proto/zip"
 )
 

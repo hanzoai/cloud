@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 )

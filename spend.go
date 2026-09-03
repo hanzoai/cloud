@@ -43,7 +43,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/account"
-	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/manifest"
 )
 
