@@ -86,6 +86,7 @@ func newApp(t *testing.T, creds bool) *zip.App {
 		t.Setenv("S3_ADMIN_SECRET_KEY", "secrettest")
 		t.Setenv("S3_ADMIN_ENDPOINT", store(t))
 	}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	cfg := &cloud.Config{
 		Brand:     "hanzo",
 		Domain:    "api.hanzo.ai",

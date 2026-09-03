@@ -19,6 +19,7 @@ import (
 // constructed eagerly in BuildDeps because its store must exist before any
 // dependent subsystem mounts.
 func TestBuildDeps_EnabledLeavesNil(t *testing.T) {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	cfg := &cloud.Config{
 		Brand:   "hanzo",
 		Domain:  "api.hanzo.ai",
@@ -38,6 +39,7 @@ func TestBuildDeps_EnabledLeavesNil(t *testing.T) {
 // working KMS via direct Go dispatch with no RPC. Absent a master key it still
 // resolves (health-only, fail-closed) — the point is that deps.KMS is populated.
 func TestBuildDeps_KMSEnabledIsInProcess(t *testing.T) {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	cfg := &cloud.Config{
 		Brand:   "hanzo",
 		Domain:  "api.hanzo.ai",
@@ -64,6 +66,7 @@ func TestBuildDeps_KMSEnabledIsInProcess(t *testing.T) {
 // disabled subsystem with no RPC endpoint resolves to the disabled
 // fail-closed stub.
 func TestBuildDeps_DisabledNoEndpointReturnsDisabled(t *testing.T) {
+	t.Setenv("CLOUD_DATA_DIR", "/tmp")
 	cfg := &cloud.Config{
 		Brand:   "hanzo",
 		Domain:  "api.hanzo.ai",
@@ -101,6 +104,7 @@ func TestBuildDeps_DisabledNoEndpointReturnsDisabled(t *testing.T) {
 // one that is not reachable is honestly disabled. Neither state has room for an
 // endpoint string, so there is nothing left to set.
 func TestBuildDeps_AnAddressCannotUndisableASubsystem(t *testing.T) {
+	t.Setenv("CLOUD_DATA_DIR", "/tmp")
 	cfg := &cloud.Config{
 		Brand:   "hanzo",
 		Domain:  "api.hanzo.ai",

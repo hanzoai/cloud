@@ -51,6 +51,7 @@ func newCloudApp(t *testing.T) (*zip.App, string, cloud.Deps) {
 	// encryption-capable build). Setting both keeps the harness build-tag agnostic.
 	key := masterKeyB64(t)
 	t.Setenv("CLOUD_KMS_MASTER_KEY_REF", key)
+	t.Setenv("CLOUD_DATA_DIR", dir)
 	cfg := &cloud.Config{
 		Brand: "hanzo", Domain: "api.hanzo.ai", IAMIssuer: "https://hanzo.id",
 		DataDir: dir, Enable: []string{"kms"}, KMSMasterKeyRef: key,
