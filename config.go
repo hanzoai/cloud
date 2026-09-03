@@ -463,6 +463,34 @@ const DefaultDataDir = datadir.Default
 // the two must resolve the same directory or the lock guards nothing.
 func DataDir() string { return datadir.Resolve() }
 
+// Brand, Env and Domain are this deployment's own facts, resolved the same way
+// LoadConfig resolves them and reachable without being handed over.
+//
+// THEY ARE FACTS, NOT DEPENDENCIES. A subsystem cannot fail to connect to a brand
+// name — it reads the string and stamps it — which is what separates these from
+// the clients on Deps. As fields there, every mount took a struct of twenty things
+// to read one string, and a field can be empty where a resolver cannot. That is
+// the same reason the logger, the process id and the model names left Deps before
+// them; see the notes on the struct. Version is already one (version.go), and
+// DataDir above was the first.
+//
+// A caller holding a Config keeps reading cfg.Brand: it is the same value by
+// construction. These exist for the callers that have no Config in hand.
+func Brand() string { return environ.Or("CLOUD_BRAND", DefaultBrand) }
+
+// Env is the deployment environment (mainnet|testnet|devnet), empty when unset. It
+// is stamped for per-env attribution and never gates billing — every env bills
+// against its own commerce ledger.
+func Env() string { return environ.Or("CLOUD_ENV", "") }
+
+// Domain is the deployment's OWN public API host (api.hanzo.ai, api.lux.network),
+// for building absolute URLs back to itself.
+//
+// It is the HOST and never the apex; a sibling host (git.hanzo.ai) comes from
+// brand.Sibling and a trust root from brand.Apex. Reading one for the other is what
+// made every native build fail once, and those two are the one derivation of it.
+func Domain() string { return domainFor(environ.Or("CLOUD_DOMAIN", ""), Brand()) }
+
 // rootKeyRef resolves the data-plane master. BootMaster holds it in memory once
 // resolved, which covers the dev-key case where the environment carries nothing;
 // the raw variable is the fallback for a process that never Booted — a test
