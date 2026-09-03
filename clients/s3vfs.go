@@ -48,36 +48,26 @@ type s3vfs struct {
 // Compile-time proof s3vfs satisfies the client.
 var _ types.VFSClient = (*s3vfs)(nil)
 
-// NewS3VFS builds the S3-backed VFSClient from the shared admin config. The S3
-// client is offline-constructed (no network here); the bucket is created if absent
-// best-effort now AND lazily on the first op (so a boot-time S3 blip self-heals
-// rather than permanently disabling files). Returns an error only if the client
-// cannot be constructed (missing creds / invalid endpoint) — the caller then falls
-// back to DisabledVFS (fail closed).
+// NewS3VFS builds the S3-backed VFSClient from the shared admin config. NOTHING
+// HERE TOUCHES THE NETWORK: the client is assembled from credentials and an
+// endpoint, and the bucket is created by whichever operation first needs it.
+//
+// It used to say exactly that sentence and then spend five seconds proving it
+// false. The call was a bucket ensure whose error it DISCARDED on the next line,
+// because ensure is idempotent and Put, Get and Delete each run it themselves —
+// so the only thing the boot copy could contribute was the wait. Against a store
+// that was merely absent it cost every process five seconds of not listening, and
+// its own comment had already worked out why that was wrong for the unbounded
+// version without noticing the same argument retires the bounded one.
+//
+// Returns an error only if the client cannot be constructed (missing creds /
+// invalid endpoint) — the caller then falls back to DisabledVFS (fail closed).
 func NewS3VFS(admin s3admin.Admin) (types.VFSClient, error) {
 	cl, err := admin.Client()
 	if err != nil {
 		return nil, fmt.Errorf("s3vfs: build client: %w", err)
 	}
 	v := &s3vfs{client: cl, bucket: TeamBlobBucket, region: admin.Region()}
-	// Bounded, because "best-effort" has to be true of the WAIT as well as the
-	// result. This call is a pure optimisation: ensure is idempotent, every op
-	// retries it (Put/Get/Delete each call it), and the error is discarded right
-	// here precisely because nothing depends on it succeeding now.
-	//
-	// Unbounded it was not best-effort at all — it runs on the boot path, before
-	// the process listens, so an object store that accepts the TCP connection and
-	// then never answers holds the entire binary hostage. That is not theory: when
-	// the S3 gateway's authenticated path stopped responding, every cloud pod
-	// stalled here forever, outlived its liveness budget, and crashlooped — with
-	// no log line, since the next one only prints after this returns. A rollback
-	// did not help, because the hang is in neither version's changes.
-	//
-	// A deadline turns that outage into a degraded start: ensured stays 0, the
-	// first real op retries, and the binary reaches its listener.
-	ctx, cancel := context.WithTimeout(context.Background(), ensureBootTimeout)
-	defer cancel()
-	_ = v.ensure(ctx)
 	return v, nil
 }
 
