@@ -15,7 +15,17 @@ import (
 // and not the ~3040-package union the fused binary was. The light host loads it
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `s3 openapi`. Hand-owned — edit the spec below directly.
+//
+// It also carries the object store itself — see store.go. The store starts
+// FIRST because the routes are worth serving only once there is something
+// behind them, and its failure is this process's failure rather than a warning:
+// a plugin that answered while holding no store is the state that made a
+// deleted object store invisible.
 func main() {
+	if err := startStore(cloud.DataDir()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:       "s3",
 		Price:      cloud.Metered,
