@@ -57,6 +57,11 @@ func Listen(plugins []Plugin, enable []string) error {
 	BootMaster(DataDir())
 
 	cfg := LoadConfig()
+	for _, p := range plugins {
+		if p.Shared {
+			planeMode = 0o666
+		}
+	}
 	if enable != nil {
 		cfg.Enable = enable
 	}

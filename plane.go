@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -175,12 +176,18 @@ var planeApp struct {
 //
 //	zip.Post[plane.SecretIn, plane.Secret](cloud.Plane(), "/kms/get", read,
 //	    zip.WithOperationID(plane.KMSGet))
+//
+// planeMode is the mode the plane socket is bound with: 0600 unless the process
+// serves a [Plugin] that declared itself Shared, in which case Listen opens it
+// before any op is declared.
+var planeMode os.FileMode
+
 func Plane() *zip.App {
 	planeApp.Lock()
 	defer planeApp.Unlock()
 	if planeApp.app == nil {
 		bindRuntimeDir()
-		planeApp.app = zip.New(zip.Config{AppName: "plane"})
+		planeApp.app = zip.New(zip.Config{AppName: "plane", SocketMode: planeMode})
 	}
 	return planeApp.app
 }

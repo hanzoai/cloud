@@ -1363,6 +1363,12 @@ type Plugin struct {
 	// table of its own.
 	Price Price
 
+	// Shared opens this process's plane socket to every user on the host. The
+	// socket stops being the boundary and the app's ops attest each peer from
+	// what the kernel says about it instead; only an app whose every plane op
+	// does so may set it, and today that is kms.
+	Shared bool
+
 	// OwnsHealth marks a subsystem that serves its OWN GET /v1/<name>/health
 	// (a real, fail-closed probe). Serve's generic liveness loop skips these so
 	// its always-ok route never shadows the subsystem's real probe.
