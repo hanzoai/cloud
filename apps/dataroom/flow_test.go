@@ -19,7 +19,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// memVFS is an in-memory types.VFSClient standing in for the S3/SeaweedFS data
+// memVFS is an in-memory types.VFSClient standing in for the S3 data
 // plane. The leaf reaches storage ONLY through the deps.VFS client, so this drives
 // the exact production path (Put on upload, Get on download) without a live S3.
 type memVFS struct {

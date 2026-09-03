@@ -7,7 +7,7 @@ package org
 
 // condstore.go is the concrete atomic-CAS object store the fence needs:
 // hanzos3/go's native If-Match / If-None-Match conditional PUT against the same
-// SeaweedFS S3 gateway clients/s3 already speaks to. It satisfies
+// S3 gateway clients/s3 already speaks to. It satisfies
 // github.com/hanzoai/vfs/replica.ConditionalStore, the client FencedStore (per-org
 // DB ship) and CASFencer (per-org lease) compose over.
 //
@@ -35,7 +35,7 @@ import (
 	s3 "github.com/hanzos3/go"
 )
 
-// S3ConditionalStore is a replica.ConditionalStore over the SeaweedFS S3 gateway's
+// S3ConditionalStore is a replica.ConditionalStore over the S3 gateway's
 // native optimistic-locking extension (SetMatchETag / SetMatchETagExcept). The
 // server — not this process — evaluates the precondition atomically, which is the
 // property the fence's correctness depends on.

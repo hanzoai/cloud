@@ -11,7 +11,7 @@ import (
 	"github.com/hanzoai/namespace"
 )
 
-// Cipher seals one database's snapshot at rest, so the object in SeaweedFS is
+// Cipher seals one database's snapshot at rest, so the object in S3 is
 // ciphertext and a leaked file is useless without the KMS master key.
 //
 // The key is cek's, and only cek's: cek.DeriveKey(master, ns, subsystem) — the

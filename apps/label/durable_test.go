@@ -42,7 +42,7 @@ import (
 
 // memCAS is an in-process replica.ConditionalStore: one atomic (data, generation)
 // slot per key, a single mutex making PutIfVersion's compare-and-set indivisible —
-// the server-side CAS a real SeaweedFS S3 gateway provides. Two "pods" share ONE.
+// the server-side CAS a real S3 gateway provides. Two "pods" share ONE.
 type memCAS struct {
 	mu   sync.Mutex
 	objs map[string]memObj

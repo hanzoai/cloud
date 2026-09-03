@@ -6,17 +6,17 @@
 package cloud
 
 // durable_integration_test.go is the MANDATORY staging gate (Red H2): the entire
-// single-writer fence rests on the SeaweedFS S3 gateway evaluating If-None-Match /
+// single-writer fence rests on the S3 gateway evaluating If-None-Match /
 // If-Match preconditions ATOMICALLY, server-side. That property cannot be tested from
 // a box with no live gateway (the in-process fakes model it by construction), so this
 // test runs ONLY against the real deployed gateway and MUST pass before durability
-// fences real tenant data on a new SeaweedFS version.
+// fences real tenant data on a new gateway version.
 //
 // Run in staging:
 //
 //	CLOUD_DURABLE_IT=1 \
 //	S3_ADMIN_ENDPOINT=s3.hanzo.svc:9000 S3_ADMIN_ACCESS_KEY=… S3_ADMIN_SECRET_KEY=… \
-//	go test ./ -run TestSeaweedFSConditionalStoreAtomic_Staging -v
+//	go test ./ -run TestS3ConditionalStoreAtomic_Staging -v
 
 import (
 	"context"
@@ -33,18 +33,18 @@ import (
 	s3 "github.com/hanzos3/go"
 )
 
-// TestSeaweedFSConditionalStoreAtomic_Staging proves the two CAS preconditions the
+// TestS3ConditionalStoreAtomic_Staging proves the two CAS preconditions the
 // fence depends on, against the REAL gateway: (1) a create-only race (If-None-Match:*)
 // admits EXACTLY ONE writer; (2) a version-conditioned race (If-Match) admits EXACTLY
 // ONE writer per version. If either admits two, the fence is unsound on this gateway
 // and split-brain is possible — do NOT ship durability against it.
-func TestSeaweedFSConditionalStoreAtomic_Staging(t *testing.T) {
+func TestS3ConditionalStoreAtomic_Staging(t *testing.T) {
 	if os.Getenv("CLOUD_DURABLE_IT") != "1" {
-		t.Skip("staging-only: set CLOUD_DURABLE_IT=1 and S3_ADMIN_* to run against a live SeaweedFS gateway")
+		t.Skip("staging-only: set CLOUD_DURABLE_IT=1 and S3_ADMIN_* to run against a live S3 gateway")
 	}
 	admin := s3admin.New()
 	if !admin.Configured() {
-		t.Fatal("S3_ADMIN_ACCESS_KEY/SECRET_KEY not set — cannot reach the SeaweedFS gateway")
+		t.Fatal("S3_ADMIN_ACCESS_KEY/SECRET_KEY not set — cannot reach the S3 gateway")
 	}
 	client, err := admin.Client()
 	if err != nil {

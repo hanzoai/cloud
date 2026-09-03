@@ -818,7 +818,7 @@ func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 	// nil-then-Mount-fills convention other subsystems use, nothing fills deps.VFS
 	// after UseAll (Mount receives deps by value), so we ALWAYS hand back a
 	// concrete client.
-	// Real blob backend (.97): the shared SeaweedFS S3 gateway — the canonical,
+	// Real blob backend (.97): the shared S3 gateway — the canonical,
 	// key-based object store, reached with the SAME S3_ADMIN_* admin identity
 	// clients/s3 uses (s3admin, one construction). Present only when those creds
 	// are injected; a construction failure degrades to fail-closed rather than a
@@ -830,7 +830,7 @@ func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 			log.Error("deps.VFS → S3 construction failed; falling back to fail-closed", "err", err)
 			return clients.DisabledVFS()
 		}
-		log.Info("deps.VFS → SeaweedFS S3", "bucket", clients.TeamBlobBucket)
+		log.Info("deps.VFS → S3", "bucket", clients.TeamBlobBucket)
 		return v
 	}
 	// No VFS endpoint and no S3 admin creds → fail-closed stub (R-7): Put/Get/Delete
@@ -842,7 +842,7 @@ func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 // bucket, keys laid out orgs/<slug>[/…]/<subsystem>.db per HIP-0302 — the durable
 // twin of the on-disk DataDir layout.
 //
-// OPERATIONAL REQUIREMENTS the fence depends on (enforce in the SeaweedFS deployment,
+// OPERATIONAL REQUIREMENTS the fence depends on (enforce in the S3 deployment,
 // not in code):
 //
 //   - Object versioning + a no-expiry / no-lifecycle-deletion policy on this prefix.
@@ -891,7 +891,7 @@ func peered(cfg *Config) bool {
 
 // buildDurability constructs the deployment's HA-durability factory, or nil when the
 // deployment has no object store to be durable against (dev/single-node — every
-// OrgStore then stays local-only). It composes the SeaweedFS S3 If-Match
+// OrgStore then stays local-only). It composes the S3 If-Match
 // ConditionalStore (the SAME s3admin identity deps.VFS uses), the writer membership
 // over CLOUD_PEERS (the SAME set the shard router elects on, so the store-layer owner
 // and the routed owner agree), and the per-org envelope Cipher rooted at the KMS

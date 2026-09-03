@@ -183,7 +183,7 @@ func (p *meiliProvisioner) Drop(ctx context.Context, physical, _ string) error {
 	return nil
 }
 
-// ----- S3 / SeaweedFS (s3) ------------------------------------------------------
+// ----- S3 (s3) --------------------------------------------------------------
 // env: S3_ADMIN_ENDPOINT (default s3.hanzo.svc:9000),
 //      S3_ADMIN_ACCESS_KEY, S3_ADMIN_SECRET_KEY,
 //      S3_SECURE (false), S3_REGION (us-east-1)

@@ -26,7 +26,7 @@
 //	             /v1/dataroom/* zip routes
 //
 // STORAGE. Document BYTES never touch the bundle or local disk: the leaf stores
-// them through the cloud object-storage client (deps.VFS — the SeaweedFS/S3 data
+// them through the cloud object-storage client (deps.VFS — the S3 data
 // plane) keyed by an org-scoped opaque key (a Go storage host-fn over the s3/storage
 // subsystem), and the bundle persists only that key via __db. View-analytics events
 // (page-by-page tracking) are Base rows in the tenant DB.
@@ -75,7 +75,7 @@ const maxBody = 1 << 20 // 1 MiB
 const maxUpload = 64 << 20 // 64 MiB
 
 // blobStore is the object-storage client the leaf stores/reads document bytes on.
-// deps.VFS (the S3/SeaweedFS data plane) satisfies it — not local FS.
+// deps.VFS (the S3 data plane) satisfies it — not local FS.
 type blobStore interface {
 	Put(ctx context.Context, key string, payload []byte) error
 	Get(ctx context.Context, key string) ([]byte, error)

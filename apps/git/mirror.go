@@ -282,7 +282,7 @@ func ensureRepo(s *cloud.Service[state], ctx context.Context, store *Store, org,
 // well-formed http/https URL with a host; any embedded userinfo is STRIPPED
 // (credentials go via env only, never a ps-visible argv — LOW-7); and the host
 // is SSRF-guarded (mirrorGuardHost) so a tenant can't point the server's fetch
-// at an internal service (IMDS, SeaweedFS, cluster svcs). The git subprocess
+// at an internal service (IMDS, the S3 gateway, cluster svcs). The git subprocess
 // additionally runs under GIT_ALLOW_PROTOCOL=http:https + http.followRedirects=
 // false so a source can never smuggle a file:///ext:: protocol or bounce the
 // fetch to an internal host via a redirect.

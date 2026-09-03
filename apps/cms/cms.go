@@ -68,7 +68,7 @@ func author() framework.DocType {
 }
 
 // media is the DAM: an Attach-backed catalogue of uploaded assets (the Attach
-// holds the object URL under the org's S3/SeaweedFS prefix). Hash-named.
+// holds the object URL under the org's S3 prefix). Hash-named.
 func media() framework.DocType {
 	return framework.DocType{
 		Name: dtMedia.Name, Module: dtMedia.Module, TitleField: "title",

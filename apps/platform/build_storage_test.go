@@ -86,7 +86,7 @@ func TestTheCacheBackendFollowsWhatIsReachable(t *testing.T) {
 	for _, want := range []string{
 		"type=s3", "bucket=buildcache",
 		"endpoint_url=http://s3.hanzo.svc:9000",
-		// SeaweedFS addresses buckets by path, not virtual host.
+		// The S3 gateway addresses buckets by path, not virtual host.
 		"use_path_style=true",
 		// Keyed per repository inside the shared bucket.
 		"name=hanzoai-cloud",

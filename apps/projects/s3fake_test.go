@@ -2,14 +2,14 @@ package projects
 
 // fakeS3 is a minimal, in-memory S3 backend faithful enough for hanzos3/go to drive
 // the projects deploy write-path (ensureBucket → purgePrefix → PutObject) end to
-// end WITHOUT a live SeaweedFS/SeaweedFS. It implements exactly the operations
-// blob.uploadSite performs — HEAD bucket, PUT ?policy, GET ?list-type=2,
-// POST ?delete, and PUT object — and stores objects in a map so a REDEPLOY really
-// purges the old prefix and writes the new one. It ignores request signatures
-// (auth is out of scope for the write-path test); the security gates that DO
-// matter (org 403, hosting 402/503) run before S3 is ever dialed and are tested
-// separately. This mirrors the repo convention that live S3 round-trips are proven
-// with a controlled backend, not the production store.
+// end WITHOUT a live S3. It implements exactly the operations blob.uploadSite
+// performs — HEAD bucket, PUT ?policy, GET ?list-type=2, POST ?delete, and PUT
+// object — and stores objects in a map so a REDEPLOY really purges the old prefix
+// and writes the new one. It ignores request signatures (auth is out of scope for
+// the write-path test); the security gates that DO matter (org 403, hosting
+// 402/503) run before S3 is ever dialed and are tested separately. This mirrors
+// the repo convention that live S3 round-trips are proven with a controlled
+// backend, not the production store.
 
 import (
 	"crypto/md5"

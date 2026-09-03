@@ -23,7 +23,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// memVFS is an in-memory types.VFSClient standing in for the S3/SeaweedFS data
+// memVFS is an in-memory types.VFSClient standing in for the S3 data
 // plane. sign now routes PDF bytes through the object-storage client (__blob), so the
 // test drives that exact path (Put on create/seal, Get on view/download).
 type memVFS struct {

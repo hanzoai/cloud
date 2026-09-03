@@ -11,7 +11,7 @@ package s3
 // The preamble is tested directly against an operation stub (paid takes any typed
 // handler): the S3 backend is never dialed, so success and failure of the wrapped
 // operation are deterministic and the billing contract is isolated from a live
-// SeaweedFS. It admits only a validated principal (X-User-Id), so requests carry
+// S3. It admits only a validated principal (X-User-Id), so requests carry
 // it exactly as SanitizeIdentity would in prod.
 
 import (
