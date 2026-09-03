@@ -34,7 +34,7 @@ func TestActorRidesTheWireAsUser(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ai := AIHTTPAt(srv.URL, "sk-test", "m")
+	ai := AIHTTPAt(srv.URL, "sk-test", FixedModel("m"))
 	if _, err := ai.ChatCompletion(context.Background(),
 		&types.ChatRequest{Prompt: "hi", Actor: "acme/alice"}); err != nil {
 		t.Fatalf("ChatCompletion: %v", err)
@@ -78,7 +78,7 @@ func TestActorRidesTheStreamToo(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	sc, ok := AIHTTPAt(srv.URL, "sk-test", "m").(types.StreamCompleter)
+	sc, ok := AIHTTPAt(srv.URL, "sk-test", FixedModel("m")).(types.StreamCompleter)
 	if !ok {
 		t.Fatal("the http transport must implement StreamCompleter")
 	}

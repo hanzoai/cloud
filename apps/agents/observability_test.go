@@ -223,7 +223,7 @@ func TestOneRunIsObservableEndToEnd(t *testing.T) {
 	gw := toolGateway(t, []string{"post_search_query"})
 	defer gw.Close()
 
-	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", "gpt-4o-mini"))
+	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", clients.FixedModel("gpt-4o-mini")))
 	do(t, app, http.MethodPost, "/v1/agents", "acme", map[string]any{
 		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_search_query"}})
 	code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"})
@@ -339,7 +339,7 @@ func TestFailedToolIsReadableAsSuchOnItsRun(t *testing.T) {
 	gw := toolGateway(t, names)
 	defer gw.Close()
 
-	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", "gpt-4o-mini"))
+	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", clients.FixedModel("gpt-4o-mini")))
 	do(t, app, http.MethodPost, "/v1/agents", "acme", map[string]any{
 		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": names})
 	code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "go"})
@@ -518,7 +518,7 @@ func TestToolCallRecordsWhatItDidWithoutItsCredential(t *testing.T) {
 	gw := toolGatewayArgs(t, "post_exec_run", args)
 	defer gw.Close()
 
-	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", "gpt-4o-mini"))
+	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", clients.FixedModel("gpt-4o-mini")))
 	do(t, app, http.MethodPost, "/v1/agents", "acme", map[string]any{
 		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_exec_run"}})
 	if code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "go"}); code != http.StatusOK {
@@ -608,7 +608,7 @@ func TestEverySpanOfARunIsFiledUnderItsTenant(t *testing.T) {
 	gw := toolGateway(t, []string{"post_search_query"})
 	defer gw.Close()
 
-	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", "gpt-4o-mini"))
+	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", clients.FixedModel("gpt-4o-mini")))
 	do(t, app, http.MethodPost, "/v1/agents", "acme", map[string]any{
 		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_search_query"}})
 	if code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"}); code != http.StatusOK {
@@ -652,7 +652,7 @@ func TestOneOrgsRunNeverCarriesAnothersTenant(t *testing.T) {
 	gw := toolGateway(t, []string{"post_search_query"})
 	defer gw.Close()
 
-	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", "gpt-4o-mini"))
+	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", clients.FixedModel("gpt-4o-mini")))
 	for _, org := range []string{"acme", "globex"} {
 		do(t, app, http.MethodPost, "/v1/agents", org, map[string]any{
 			"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_search_query"}})
