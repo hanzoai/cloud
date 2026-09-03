@@ -687,7 +687,7 @@ interface admin {
 #   aimetricsOut.Data  admin.aiMetrics
 #   basesOut.Data  admin.baseInstance (list element)
 #   computeOut.Data  admin.computeLeaf (list element)
-#   flagsOut.Data  flags.BoardView
+#   flagsOut.Data  plane.FlagBoard
 #   meOut.Data  admin.adminMe
 #   o11yOut.Data  admin.o11yGlobal
 #   orgsOut.Data  admin.orgRow (list element)

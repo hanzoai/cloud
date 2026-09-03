@@ -504,6 +504,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	routes(app, svc)
 	exposeHold()
 	exposeValue()
+	exposeBoard()
 	log.Info("flags engine ready", "engine", "hanzo-flags", "ttlSeconds", int(c.ttl.Seconds()), "switches", len(Defs()))
 	return nil
 }

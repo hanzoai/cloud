@@ -33,6 +33,7 @@ import (
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
+	"github.com/hanzoai/cloud/plane"
 	flagsplane "github.com/hanzoai/cloud/plane/flags"
 )
 
@@ -193,7 +194,7 @@ func ListWaitlistServices(ctx context.Context) ([]ServiceView, error) {
 }
 
 // SetWaitlistMode flips one service's waitlist switch — the launch lever — and returns
-// the updated view. It is the ONE write path (through flags.SetPlatformSwitch, audited
+// the updated view. It is the ONE write path (through the flags app's own write, audited
 // in the flag activity log); the flip is hot (this pod applies immediately, peers
 // converge within the eval TTL). ErrServiceNotFound when the slug is unknown.
 func SetWaitlistMode(ctx context.Context, service string, mode bool, actor string) (ServiceView, error) {
@@ -210,7 +211,9 @@ func SetWaitlistMode(ctx context.Context, service string, mode bool, actor strin
 		return ServiceView{}, err
 	}
 	ensureWaitlistDef(service, row.DisplayName)
-	if err := flags.SetPlatformSwitch(waitlistKey(service), boolDef(mode), actor); err != nil {
+	if _, err := flagsplane.FlagsSet(ctx, &plane.FlagSetIn{
+		Key: waitlistKey(service), Definition: boolDef(mode), Actor: actor,
+	}); err != nil {
 		return ServiceView{}, err
 	}
 	return ServiceView{ServiceRow: row, WaitlistMode: flagsplane.Bool(ctx, waitlistKey(service), waitlistDefault)}, nil
@@ -244,7 +247,9 @@ func UpsertWaitlistService(ctx context.Context, in ServiceInput, actor string) (
 	}
 	ensureWaitlistDef(svc, row.DisplayName)
 	if isNew {
-		if err := flags.SetPlatformSwitch(waitlistKey(svc), boolDef(in.WaitlistMode), actor); err != nil {
+		if _, err := flagsplane.FlagsSet(ctx, &plane.FlagSetIn{
+			Key: waitlistKey(svc), Definition: boolDef(in.WaitlistMode), Actor: actor,
+		}); err != nil {
 			return ServiceView{}, err
 		}
 	}

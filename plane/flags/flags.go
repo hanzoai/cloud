@@ -30,8 +30,17 @@ const App = "flags"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.FlagsBoard,
 	plane.FlagsHold,
+	plane.FlagsSet,
 	plane.FlagsValue,
+}
+
+// FlagsBoard the operator switchboard for the caller's org.
+//
+// Calls plane.FlagsBoard on flags over the peer plane.
+func FlagsBoard(ctx context.Context, in *plane.Unit) (*plane.FlagBoard, error) {
+	return plane.Ask[plane.Unit, plane.FlagBoard](ctx, App, plane.FlagsBoard, in)
 }
 
 // FlagsHold whether the caller's org holds one flag.
@@ -39,6 +48,13 @@ var Ops = []string{
 // Calls plane.FlagsHold on flags over the peer plane.
 func FlagsHold(ctx context.Context, in *plane.FlagIn) (*plane.Flag, error) {
 	return plane.Ask[plane.FlagIn, plane.Flag](ctx, App, plane.FlagsHold, in)
+}
+
+// FlagsSet write one platform switch.
+//
+// Calls plane.FlagsSet on flags over the peer plane.
+func FlagsSet(ctx context.Context, in *plane.FlagSetIn) (*plane.Unit, error) {
+	return plane.Ask[plane.FlagSetIn, plane.Unit](ctx, App, plane.FlagsSet, in)
 }
 
 // FlagsValue what an operator has set one flag to.

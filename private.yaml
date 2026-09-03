@@ -1832,38 +1832,6 @@ components:
           format: int64
           type: integer
       type: object
-    BoardView:
-      properties:
-        auditUrl:
-          description: 'AuditURL is where the change log for those writes lives: /v1/flags/activity.'
-          type: string
-        configured:
-          description: |-
-            Configured is whether the definition stores opened. When false every switch
-            below is resolving from env or its registered default — the values are still
-            the ones in force, but nothing stored can be reaching them and a write will
-            fail. That is the fail-safe posture, not an outage.
-          type: boolean
-        engine:
-          description: |-
-            Engine names the evaluator serving these values: "hanzo-flags", running
-            in-process in this pod.
-          type: string
-        manageUrl:
-          description: |-
-            ManageURL is where the definitions behind these switches are read and
-            written: /v1/flags/defs.
-          type: string
-        switches:
-          description: |-
-            Switches is every registered switch with the value in force, in registration
-            order — the seeded platform set first, then whatever each subsystem added at
-            init. The registry is open, so this is the deployment's switchboard rather
-            than a fixed list.
-          items:
-            $ref: '#/components/schemas/SwitchView'
-          type: array
-      type: object
     BookRequest:
       properties:
         override:
@@ -5686,6 +5654,66 @@ components:
         task:
           type: string
         updatedTime:
+          type: string
+      type: object
+    FlagBoard:
+      properties:
+        auditUrl:
+          description: AuditURL is where the change log for those writes lives.
+          type: string
+        configured:
+          description: |-
+            Configured is whether the definition stores opened. False means every value
+            below is a default or an env fallback and a write will be refused.
+          type: boolean
+        engine:
+          description: Engine names the evaluator that answered.
+          type: string
+        manageUrl:
+          description: ManageURL is where the definitions behind these switches are
+            read and written.
+          type: string
+        switches:
+          description: Switches is every declared switch with the value in force.
+          items:
+            $ref: '#/components/schemas/FlagSwitch'
+          type: array
+      type: object
+    FlagSwitch:
+      properties:
+        category:
+          description: Category groups it on the board.
+          type: string
+        description:
+          description: Description says what turning it does.
+          type: string
+        env:
+          description: Env names the environment variable supplying a fallback, when
+            one does.
+          type: string
+        key:
+          description: Key is the flag's key.
+          type: string
+        label:
+          description: Label is the switch's name as an operator reads it.
+          type: string
+        readOnly:
+          description: |-
+            ReadOnly marks a switch the board shows but cannot write. NOT omitempty: the
+            board it replaces always wrote the field, and dropping a false would change
+            the shape a rendered switch has.
+          type: boolean
+        source:
+          description: 'Source is where that value came from: "flags", "env" or "default".'
+          type: string
+        type:
+          description: |-
+            Type is "bool", "int" or "string". The field is spelled as the admin board
+            already spells it on the wire, because this type replaces flags.SwitchView
+            in that response and a rename here would move a live API.
+          type: string
+        value:
+          description: Value is the value in force.
           type: string
       type: object
     Flow:
@@ -14348,59 +14376,6 @@ components:
         targetMode:
           type: string
         updatedTime:
-          type: string
-      type: object
-    SwitchView:
-      properties:
-        category:
-          description: |-
-            Category is the board's grouping: Launch, Signup, Subsystems, Gateway or
-            Network. Any subsystem may register a switch with a category of its own, so
-            treat it as a label to group by, not a fixed set.
-          type: string
-        description:
-          description: |-
-            Description is what flipping this switch does, written by whoever registered
-            it — including the preconditions for flipping it, where there are any.
-          type: string
-        env:
-          description: |-
-            Env is the environment variable that supplies the fallback. Present only on
-            the boot-time switches, where env IS the mechanism; a runtime switch carries
-            none on purpose, so that this surface is the one place its value comes from.
-          type: string
-        key:
-          description: |-
-            Key is the registry key, which is also the flag key the engine evaluates and
-            the path segment a write addresses: snake_case for the seeded platform set
-            (waitlist_open, public_signup), waitlist.<service> for a launch gate.
-          type: string
-        label:
-          description: Label is the switch's title on the board.
-          type: string
-        readOnly:
-          description: |-
-            ReadOnly marks a switch the process reads once at BOOT (subsystem activation,
-            the network ids). Writing it is not refused and the stored value is real, but
-            the running process keeps its boot value until it is restarted — so a flip
-            here is a request for a redeploy rather than a hot change.
-          type: boolean
-        source:
-          description: |-
-            Source is where Value came from, in the order they are tried: "flags" (a
-            stored definition — the only one a cockpit write produces), "env" (the Env
-            var below), or "default" (the registered literal). Anything but "flags"
-            means nothing has ever been written for this key.
-          type: string
-        type:
-          description: 'Type is how Value is to be read back: bool, int or string.'
-          type: string
-        value:
-          description: |-
-            Value is the value IN FORCE right now, always as a string whatever Type says
-            — "true"/"false" for a bool, decimal digits for an int. It is what the
-            running deployment is using, not what is stored: an unstored switch reports
-            its env or literal fallback here.
           type: string
       type: object
     Symbol:
@@ -28206,7 +28181,7 @@ components:
     flagsOut:
       properties:
         data:
-          $ref: '#/components/schemas/BoardView'
+          $ref: '#/components/schemas/FlagBoard'
           description: |-
             Data is the whole control-plane board — after the write, on a write, so a
             caller sees the effect of its own flip without a second read. Null when the
