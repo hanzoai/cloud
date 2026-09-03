@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/hanzoai/cloud/money"
 )
 
 const bankSourceKind = "bank_txn"
@@ -213,17 +215,7 @@ func descOf(bt BankTxn) string {
 func questionPrompt(bt BankTxn) string {
 	return fmt.Sprintf(
 		"Unmatched bank deposit of %s on %s (%s). It did not match a Square/commerce settlement. What is it — new revenue, an owner contribution, a loan/transfer, or a refund received?",
-		dollars(bt.AmountCents), bt.PostedAt, descOf(bt))
-}
-
-// dollars renders exact int64 cents as a $-string for human-facing prompts (display only —
-// the ledger always carries cents).
-func dollars(cents int64) string {
-	sign := ""
-	if cents < 0 {
-		sign, cents = "-", -cents
-	}
-	return fmt.Sprintf("%s$%d.%02d", sign, cents/100, cents%100)
+		money.Cents(bt.AmountCents), bt.PostedAt, descOf(bt))
 }
 
 // rawJSON is the connector's original BankTxn serialized for the bank_txn.raw audit column.

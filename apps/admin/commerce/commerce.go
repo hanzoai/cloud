@@ -39,7 +39,7 @@ import (
 	"github.com/hanzoai/commerce/models/subscription"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/admin/money"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"

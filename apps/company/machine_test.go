@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/cloud/money"
 )
 
 // verifiedFounder is a KYC-passed founder owning the whole company — the minimal
@@ -109,8 +111,8 @@ func TestPaymentGate(t *testing.T) {
 	}
 	// Names the CONFIGURED fee rather than a literal: the price lives in one
 	// place, and a test that repeats it is a second place it can drift from.
-	if !strings.Contains(err.Error(), dollars(feeCents())) {
-		t.Fatalf("payment gate: error should name the $%s fee, got %q", dollars(feeCents()), err)
+	if !strings.Contains(err.Error(), money.Cents(feeCents()).String()) {
+		t.Fatalf("payment gate: error should name the %s fee, got %q", money.Cents(feeCents()), err)
 	}
 	if f.Stage != StagePayment {
 		t.Fatalf("payment gate: blocked transition must not advance, got %s", f.Stage)

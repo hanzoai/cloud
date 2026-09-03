@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/hanzoai/cloud/apps/admin/money"
+	"github.com/hanzoai/cloud/money"
 )
 
 // CreditIssued reports the TOTAL promotional credit DigitalOcean has ever applied

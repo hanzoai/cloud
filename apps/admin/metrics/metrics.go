@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/admin/core"
-	"github.com/hanzoai/cloud/apps/admin/money"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/datastore"
 )
 

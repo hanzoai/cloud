@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
-	"github.com/hanzoai/cloud/apps/admin/money"
+	"github.com/hanzoai/cloud/money"
 )
 
 // TestLiveCollect runs the real fan-out against the real DigitalOcean account and the
