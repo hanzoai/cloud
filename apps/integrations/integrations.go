@@ -944,6 +944,11 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/integrations/slack/link", cloud.Handle(s, slackLink))
 	app.Get("/v1/integrations/slack/link/slack", cloud.Handle(s, slackLinkSlack))
 	app.Get("/v1/integrations/slack/link/callback", cloud.Handle(s, slackLinkCallback))
+	// Walk into every public channel in the workspace (slack_join.go). Typed and
+	// org-authed, unlike the webhooks above: it is the org acting on its own
+	// workspace, not Slack calling us. A literal, so it is matched before the
+	// /:provider wildcards.
+	zip.Post(zapp, "/v1/integrations/slack/join", o.slackJoin)
 	// GitHub App sync (github_app.go / github_webhook.go). The App POSTs push events
 	// here, at the address every other vendor's inbound endpoint already uses:
 	// /v1/integrations/<vendor>/<the vendor's own noun>, GitHub's being "webhook".

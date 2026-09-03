@@ -1300,6 +1300,30 @@
         "x-public": true
       }
     },
+    "/v1/integrations/slack/join": {
+      "post": {
+        "operationId": "post_integrations_slack_join",
+        "summary": "Joins every public channel in the caller org's workspace.",
+        "description": "Joins every public channel in the caller org's workspace.\n\nOrg admin, because it changes what the whole workspace sees: after it the agent\nis a member of every public room and answers in all of them.",
+        "tags": [
+          "integrations"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/slackJoinOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/integrations/slack/link": {
       "get": {
         "operationId": "get_integrations_slack_link",
@@ -2495,6 +2519,23 @@
         },
         "type": "object"
       },
+      "joinFailure": {
+        "properties": {
+          "channel": {
+            "description": "Channel is Slack's id for the room that refused.",
+            "type": "string"
+          },
+          "error": {
+            "description": "Error is Slack's own code, carried through unchanged.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is that room's human name, so the operator does not have to look the id up.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "linearBackfillIn": {
         "properties": {
           "state": {
@@ -2656,6 +2697,35 @@
           "refreshed": {
             "description": "Refreshed is always true — a failed rotation is an HTTP error.",
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "slackJoinOut": {
+        "properties": {
+          "already": {
+            "description": "Already counts the channels it was a member of before, kept apart from\nJoined because only one of the two is a change.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "failed": {
+            "description": "Failed is per-channel, so one refusal does not hide the rest of the walk.",
+            "items": {
+              "$ref": "#/components/schemas/joinFailure"
+            },
+            "type": "array"
+          },
+          "joined": {
+            "description": "Joined names the channels this run walked into — the change it made.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "listed": {
+            "description": "Listed is every public, unarchived channel the workspace has.",
+            "format": "int64",
+            "type": "integer"
           }
         },
         "type": "object"

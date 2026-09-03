@@ -1,11 +1,12 @@
 package integrations
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"net/url"
@@ -44,54 +45,53 @@ const (
 	slackBotTokenSecret  = "bot_token"
 )
 
-// slackDefaultScopes is the bot scope set requested when SLACK_BOT_SCOPES is
-// unset. Override the env to widen/narrow per deployment.
+// slack.manifest.json is the app declaration a workspace installs from, and the
+// ONE home for the bot scopes and the event subscriptions. It used to be kept at
+// api.slack.com with a copy of the scope list here and a comment asking the next
+// reader to keep the two equal — and the drift is silent and late: a scope the
+// manifest declares and the consent URL omits is simply never granted, so
+// `missing_scope` arrives at first use, long after the install looked fine.
+// Embedding it makes the consent URL a function of the manifest, so there is
+// nothing left to keep equal.
 //
-// NOTE — least privilege (deliberately NOT chat:write.public): git repo-lifecycle
-// notifications post only to channels the bot is a MEMBER of, so a repo owner
-// invites @hanzo to the channel they subscribe (one-time, the GitHub-Slack-app UX).
-// chat:write.public was considered and rejected: it rides the SAME shared bot token
-// as the @hanzo assistant (slack_events.go), so granting it would let that
-// assistant post to ANY public channel uninvited and would widen the blast radius
-// of any message-injection. The invite requirement keeps the token minimally
-// scoped; a deployment that wants zero-invite posting can add chat:write.public via
-// SLACK_BOT_SCOPES as an explicit, documented choice.
-// assistant:write is what makes @hanzo a NATIVE agent rather than a plain bot.
-// Slack's "Add Agents" picker lists only apps that declare the Agents & AI Apps
-// surface, and that declaration is three parts, all required: this scope, the
-// assistant_thread_* event subscriptions (slack_events.go), and the Agents & AI
-// Apps toggle in the app config at api.slack.com. Without all three the app still
-// answers @mentions and DMs perfectly well — it is simply never OFFERED as an
-// agent, which is why only Claude appeared in that list.
+// Adding a scope still means the workspace must RE-INSTALL the app: Slack does
+// not grant new scopes to a token it has already issued.
 //
-// Adding a scope means the workspace must RE-INSTALL the app: Slack does not
-// grant new scopes to an existing token.
-var slackDefaultScopes = []string{
-	"app_mentions:read", "chat:write",
-	"channels:history", "groups:history",
-	"im:history", "im:read", "im:write", "users:read",
-	// The three below are what the app MANIFEST declares, and this list is the
-	// other half of the same install. Slack grants exactly the scopes the consent
-	// URL asks for, so a scope declared in the manifest but omitted here is simply
-	// not granted to anyone who installs through this URL — and the failure is
-	// silent and late: `commands` missing means /hanzo returns dispatch_failed at
-	// first use, long after the install looked successful. Keep this set equal to
-	// the manifest's `oauth_config.scopes.bot`.
-	"channels:read", // resolve channel names for the agent's context
-	"commands",      // the /hanzo slash command
-	"team:read",     // resolve the workspace this install belongs to
-	// assistant:write is what makes @hanzo a NATIVE agent rather than a plain bot.
-	// Slack's "Add Agents" picker lists only apps that declare the Agents & AI Apps
-	// surface, and that declaration is three parts, all required: this scope, the
-	// assistant_thread_* event subscriptions (slack_events.go), and the Agents & AI
-	// Apps toggle in the app config at api.slack.com. Without all three the app
-	// still answers @mentions and DMs perfectly well -- it is simply never OFFERED
-	// as an agent.
-	//
-	// Adding a scope means the workspace must RE-INSTALL: Slack does not grant new
-	// scopes to an existing token.
-	"assistant:write",
-}
+//go:embed slack.manifest.json
+var slackManifestJSON []byte
+
+// slackManifest is that declaration, parsed once. A malformed embed yields empty
+// lists rather than a panic in init — the manifest test is what proves it parsed,
+// and an empty scope set fails the install loudly at Slack.
+var slackManifest = func() (m struct {
+	OAuth struct {
+		Scopes struct {
+			Bot []string `json:"bot"`
+		} `json:"scopes"`
+	} `json:"oauth_config"`
+	Settings struct {
+		Events struct {
+			Bot []string `json:"bot_events"`
+		} `json:"event_subscriptions"`
+	} `json:"settings"`
+}) {
+	_ = json.Unmarshal(slackManifestJSON, &m)
+	return
+}()
+
+// slackDefaultScopes is what the consent URL asks for: exactly what the manifest
+// declares. SLACK_BOT_SCOPES narrows or widens it per deployment.
+//
+// The set is what makes @hanzo a MEMBER rather than a notifier. channels/groups/
+// im/mpim history are the four surfaces it can be spoken to on; channels:join is
+// how it walks into the public ones itself; assistant:write is what puts it in
+// Slack's own "Add Agents" picker, which also needs the assistant_thread_* events
+// below and the Agents & AI Apps toggle in the app config.
+//
+// Deliberately NOT chat:write.public: posting into a channel it was never invited
+// to would let any message-injection reach the whole workspace. It joins, and a
+// join is visible to everyone in the room.
+var slackDefaultScopes = slackManifest.OAuth.Scopes.Bot
 
 // slackAuthorizeURL is Slack's OAuth consent endpoint (a var so a test may point
 // it at a stub, though the authorize step makes no server call — it only builds a
