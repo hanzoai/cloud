@@ -39,17 +39,18 @@
 // the name of the capability behind it (HIP-0139 §3, whose §3.2 exemptions are
 // a closed list firecrawl is not on).
 //
-// AUTH: two callers, two ONE-WAY-equivalent gates, never an open proxy —
-//   - SEARCH (/v1/websearch/search) admits EITHER a validated principal
-//     (principal.Validated — X-User-Id minted by the identity middleware from a
-//     verified JWT: the signed-in console user via the /cloud bearer proxy) OR the
-//     shared service key WEBSEARCH_API_KEY as X-API-Key (the hanzo.chat server,
-//     which reaches cloud service-to-service with no user principal). A caller with
-//     neither is refused.
-//   - SCRAPE (/v1/websearch/scrape) requires the shared key as a Bearer (the chat
-//     server path only; the console surfaces scrape read-only, does not drive it).
+// AUTH: one gate on both surfaces, never an open proxy — a validated principal
+// (principal.Validated — X-User-Id minted by the identity middleware from a
+// verified JWT). A caller without one is refused.
 //
-// An unset key 503s and any missing/mismatched key 401s on the key path; a request
+// SEARCH used to admit a second way, and SCRAPE used to require it instead: a
+// shared service key, WEBSEARCH_API_KEY, on X-API-Key or a Bearer, for the
+// hanzo.chat server reaching cloud with no user principal. Two gates had to agree
+// about who a caller was while only one of them had ever seen an identity, and
+// keeping our own credential meant distributing, rotating and eventually leaking
+// it. A service that needs these surfaces presents a service identity.
+//
+// A caller with no validated principal is 401; a request
 // with a validated principal never needs the key. So neither surface is ever an
 // open proxy, and the signed-in console user reaches search without the shared key.
 //
@@ -94,10 +95,8 @@ package websearch
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
-	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"strings"
 
@@ -110,10 +109,6 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// apiKey is the shared service key the chat server presents (firecrawl Bearer /
-// searxng X-API-Key). KMS-sourced, synced as WEBSEARCH_API_KEY.
-func apiKey() string { return environ.Or("WEBSEARCH_API_KEY", "") }
-
 // ── SearXNG-shaped search: native keyless meta-search, in-process ────────────
 // search.go's metaSearch runs the enabled keyless engines and returns the exact
 // SearXNG /search?format=json envelope, so the LibreChat searxng client decodes
@@ -123,42 +118,6 @@ func searchNative(c *zip.Ctx) error {
 	q := strings.TrimSpace(c.Query("q"))
 	lang := strings.TrimSpace(c.Query("language"))
 	return writeJSON(c, http.StatusOK, metaSearch(c.Context(), q, lang))
-}
-
-// searchGuard REQUIRES the shared service key, fail-closed exactly like the
-// scrape sibling — /v1/websearch/search must not be an open proxy to the
-// Hanzo-operated metasearch instance (a request-forgery + cost surface).
-//   - key unset          → 503 (surface not configured; never "open to all").
-//   - X-API-Key missing   → 401 (constant-time compare of "" vs want fails).
-//   - X-API-Key mismatch  → 401.
-//
-// The LibreChat searxng client sends the configured searxngApiKey as X-API-Key
-// (universe chat configmap wires searxngApiKey=${WEBSEARCH_API_KEY}), so the
-// real caller is unaffected; only anonymous callers are turned away.
-//
-// It WRAPS the leaf rather than sitting on the group, and that is the whole of
-// why /v1/websearch/search is not an open proxy while a signed-in console user
-// reaches it with no key: Mount branches per request on principal.Validated and
-// only the key arm passes through here. On the group it would refuse EVERY
-// signed-in caller on a deployment with no shared key, and it could not live on
-// the group this subsystem has anyway — /scrape hangs there too and gates a
-// different credential in a different header.
-//
-// A refusal WRITES its bytes rather than returning a zip error: the compat
-// contract is {"status":…,"error":…}, and a returned *zip.HTTPError renders as
-// RFC 9457 problem-details, which moves the sentence from `error` to `detail`.
-func searchGuard(next func(*zip.Ctx) error) func(*zip.Ctx) error {
-	return func(c *zip.Ctx) error {
-		want := apiKey()
-		if want == "" {
-			return writeErr(c, http.StatusServiceUnavailable, "web search not configured")
-		}
-		got := strings.TrimSpace(c.Header("X-API-Key"))
-		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-			return writeErr(c, http.StatusUnauthorized, "invalid api key")
-		}
-		return next(c)
-	}
 }
 
 // ── The native endpoint: POST /v1/websearch, a typed op ─────────────────────
@@ -278,16 +237,15 @@ const maxScrapeBody = 1 << 20
 // the same corpus /v1/crawl fills — one crawl, one archive, whichever endpoint
 // was used.
 func scrapeScoped(c *zip.Ctx, s crawl.Scope) error {
-	// Bearer auth (firecrawl always sends Authorization: Bearer <key>); fail
-	// closed if unconfigured. Both refusals write their bytes for searchGuard's
-	// reason: the shape is the compat contract's, not problem-details'.
-	want := apiKey()
-	if want == "" {
-		return writeErr(c, http.StatusServiceUnavailable, "web search not configured")
-	}
-	got := strings.TrimSpace(strings.TrimPrefix(c.Header("Authorization"), "Bearer "))
-	if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-		return writeErr(c, http.StatusUnauthorized, "invalid api key")
+	// A validated principal, like every other caller. firecrawl clients send
+	// Authorization: Bearer <key> and this used to compare that bearer against a
+	// shared key of our own; the bearer is an IAM credential now and the identity
+	// middleware is what reads it. The refusal writes its bytes rather than
+	// returning a zip error: the compat contract is {"status":…,"error":…}, and a
+	// returned *zip.HTTPError renders as RFC 9457 problem-details, which moves the
+	// sentence from `error` to `detail`.
+	if !principal.Validated(c) {
+		return writeErr(c, http.StatusUnauthorized, "scrape requires a validated principal")
 	}
 
 	// c.Body() hands back the whole body fasthttp already read, so the cap is
@@ -360,19 +318,17 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// them can hand a meter to. See meter.go.
 	bindMeter(cloud.NewMeter(deps, "websearch"))
 
-	// /v1/websearch/search admits a caller two ONE-WAY-equivalent ways, checked at
-	// the zip layer so the same request either reaches native meta-search or is
-	// refused — it is NEVER an open surface (F2):
-	//   1. a VALIDATED PRINCIPAL — principal.Validated(c) is true when the identity
-	//      middleware set X-User-Id from a verified JWT (the SAME gate the whole
-	//      /v1 data plane uses). This is the console user surface: the /cloud proxy
-	//      mints a short-lived user bearer, cloud validates it, and search runs
-	//      (no shared key needed, the caller is already authenticated + metered).
-	//   2. the shared X-API-Key — searchGuard, for the hanzo.chat server which reaches
-	//      cloud WITHOUT a user principal (service-to-service). 503 when the key is
-	//      unset, 401 on a missing/wrong key.
-	// A caller with NEITHER a validated principal NOR a valid key is refused (401/503),
-	// so the anonymous-forge / open-surface path stays closed.
+	// /v1/websearch/search admits a caller ONE way: a validated principal.
+	// principal.Validated(c) is true when the identity middleware set X-User-Id
+	// from a verified JWT — the SAME gate the whole /v1 data plane uses — so the
+	// caller is already authenticated and already has a payer.
+	//
+	// There was a second arm: a shared X-API-Key, for the hanzo.chat server
+	// reaching cloud without a user principal. A subsystem checking its own
+	// credential is a subsystem doing IAM's job, and the two arms had to agree
+	// about who a caller was while only one of them had ever seen an identity.
+	// A service that needs this surface presents a service identity like any
+	// other caller.
 	// The NATIVE endpoint, registered on the *zip.App rather than on the cloud.Router,
 	// and that is what makes the prose reach the document: zipdoc resolves a typed
 	// op's path STATICALLY, and a cloud.Router parameter is an interface it cannot
@@ -410,12 +366,11 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// rather than by handing a rebuilt request back its own context. The adaptor
 	// overwrote it with the transport's, which is why a search arriving here
 	// once reached metaSearch with no principal and no ledger.
-	guarded := searchGuard(searchNative)
 	g.All("/search", func(c *zip.Ctx) error {
-		if principal.Validated(c) {
-			return searchNative(c)
+		if !principal.Validated(c) {
+			return writeErr(c, http.StatusUnauthorized, "web search requires a validated principal")
 		}
-		return guarded(c)
+		return searchNative(c)
 	})
 
 	// Scope resolved at the zip layer where the verified principal lives; the

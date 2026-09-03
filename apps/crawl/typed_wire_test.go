@@ -26,7 +26,8 @@ func post(t *testing.T, app *zip.App, path, body string) (int, string) {
 	t.Helper()
 	rq := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	rq.Header.Set("Content-Type", "application/json")
-	rq.Header.Set("X-API-Key", "test-service-key")
+	rq.Header.Set("X-User-Id", "u-acme")
+	rq.Header.Set("X-Org-Id", "acme")
 	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("POST %s: %v", path, err)
@@ -56,7 +57,6 @@ func post(t *testing.T, app *zip.App, path, body string) (int, string) {
 // This test is the measurement that says so: the same three inputs, the same
 // three answers, byte for byte.
 func TestCrawlWireSurvivedTyping(t *testing.T) {
-	t.Setenv("WEBSEARCH_API_KEY", "test-service-key")
 	app := mount(t)
 
 	// (1) BODY-TOLERANT, with a DOMAIN refusal body. An unparseable body and an
@@ -91,7 +91,6 @@ func TestCrawlWireSurvivedTyping(t *testing.T) {
 // (scopeOf) for exactly that reason. Here it is measured from the HTTP side: no
 // principal and no key is refused, and the refusal is not a crawl.
 func TestCrawlIsClosedToAnAnonymousCaller(t *testing.T) {
-	t.Setenv("WEBSEARCH_API_KEY", "test-service-key")
 	app := mount(t)
 
 	rq := httptest.NewRequest(http.MethodPost, "/v1/crawl", strings.NewReader(`{"url":"https://example.com"}`))
@@ -115,7 +114,6 @@ func TestCrawlIsClosedToAnAnonymousCaller(t *testing.T) {
 // keep working (the router is non-strict) AND the document must name the one
 // without the slash.
 func TestCrawlIsServedAtOneAddressAndPublishedAtIt(t *testing.T) {
-	t.Setenv("WEBSEARCH_API_KEY", "test-service-key")
 	app := mount(t)
 
 	var paths []string
@@ -145,7 +143,6 @@ func TestCrawlIsServedAtOneAddressAndPublishedAtIt(t *testing.T) {
 // server, over JSON-RPC, exactly as the fleet's MCP server asks it, and reads
 // the answer.
 func TestCrawlProjectsAsATool(t *testing.T) {
-	t.Setenv("WEBSEARCH_API_KEY", "test-service-key")
 	app := mount(t)
 
 	rq := httptest.NewRequest(http.MethodPost, "/mcp",
@@ -189,7 +186,6 @@ func TestCrawlProjectsAsATool(t *testing.T) {
 // binds, so this now asserts the stronger fact — that the published operation
 // carries a request body, a response AND the prose only a typed op can have.
 func TestCrawlPublishesItsBodies(t *testing.T) {
-	t.Setenv("WEBSEARCH_API_KEY", "test-service-key")
 	doc, err := openapi.Spec(mount(t), openapi.Info{Title: "crawl", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
@@ -236,7 +232,6 @@ func keysOf[V any](m map[string]V) []string {
 // Presence is all a gate can check. A description restating the field's name is
 // worse than none, and only a reader catches that.
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
-	t.Setenv("WEBSEARCH_API_KEY", "test-service-key")
 	doc, err := openapi.Spec(mount(t), openapi.Info{Title: "crawl", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)

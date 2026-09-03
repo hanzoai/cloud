@@ -1,9 +1,7 @@
 package crawl
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -97,17 +95,6 @@ type crawlDocument struct {
 	Metadata json.RawMessage `json:"metadata,omitempty"`
 }
 
-// serviceKey is the shared key a service caller presents. It is deliberately the
-// SAME credential the web-search surface takes (WEBSEARCH_API_KEY), not a second
-// one: both surfaces exist for the same caller — the chat server, reaching cloud
-// service-to-service with no user principal — and a second key would be a second
-// thing to mint, mount and rotate, with nothing distinguishing when to use which.
-//
-// The name still says WEBSEARCH because that is the key that is minted and mounted
-// today; renaming a live credential is its own coordinated change, and doing it
-// inside this one would put a rename in the path of a fix.
-func serviceKey() string { return environ.Or("WEBSEARCH_API_KEY", "") }
-
 // Go drops comments at compile time, so cmd/zipdoc is the ONLY path from the
 // handler's prose to the published document, the SDKs and the MCP tool
 // description. Its output is committed; `make zipdoc-check` fails on drift.
@@ -178,10 +165,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		if !bounded(c) {
 			return c.JSON(http.StatusBadRequest, crawlResult{Error: missingURL})
 		}
-		if principal.Validated(c) {
-			return c.Continue()
+		if !principal.Validated(c) {
+			return c.JSON(http.StatusUnauthorized, crawlResult{Error: "crawling requires a validated principal"})
 		}
-		return admitKey(c)
+		return c.Continue()
 	}))
 
 	reg := cloud.ZipApp(app)
@@ -242,45 +229,6 @@ func bounded(c *zip.Ctx) bool {
 	return len(b) <= maxRequest && (len(b) == 0 || json.Valid(b))
 }
 
-// admitKey admits a caller holding the shared service key, presented as either
-// X-API-Key or a Bearer. Both are accepted because the two clients that reach this
-// surface already differ on that point and neither is wrong; requiring one would
-// break a working caller to no benefit.
-//
-// It writes crawl's OWN refusal body, which is what its callers parse, and it
-// records the admission on the CONTEXT rather than letting the request through —
-// so the handler makes the one decision and this only ever supplies a fact.
-func admitKey(c *zip.Ctx) error {
-	want := serviceKey()
-	if want == "" {
-		return c.JSON(http.StatusServiceUnavailable, crawlResult{Error: "crawl not configured"})
-	}
-	got := strings.TrimSpace(c.Header("X-API-Key"))
-	if got == "" {
-		got = strings.TrimSpace(strings.TrimPrefix(c.Header("Authorization"), "Bearer "))
-	}
-	// Constant-time: a byte-at-a-time comparison leaks the key's prefix to a
-	// caller willing to time enough requests.
-	if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-		return c.JSON(http.StatusUnauthorized, crawlResult{Error: "invalid api key"})
-	}
-	c.SetContext(admit(c.Context()))
-	return c.Continue()
-}
-
-// admittedKey names the context slot [admitKey] records the service key in.
-// Unexported zero-size type, so only this package can mint or read one.
-type admittedKey struct{}
-
-func admit(ctx context.Context) context.Context {
-	return context.WithValue(ctx, admittedKey{}, true)
-}
-
-func isAdmitted(ctx context.Context) bool {
-	ok, _ := ctx.Value(admittedKey{}).(bool)
-	return ok
-}
-
 // scopeOf is the ONE admission decision, and it never reads the body.
 //
 // A validated principal is admitted and scoped to its own org and project. A
@@ -306,10 +254,7 @@ func scopeOf(ctx context.Context) (Scope, error) {
 		org, _ := principal.OrgFrom(ctx)
 		return Scope{Org: org, Project: principal.ProjectFrom(ctx)}, nil
 	}
-	if isAdmitted(ctx) {
-		return Scope{}, nil
-	}
-	return Scope{}, zip.ErrUnauthorized("crawling requires a validated principal or the service key")
+	return Scope{}, zip.ErrUnauthorized("crawling requires a validated principal")
 }
 
 // fetch reads one URL and answers with the page as markdown.

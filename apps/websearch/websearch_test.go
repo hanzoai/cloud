@@ -69,14 +69,13 @@ func served(t *testing.T, app *zip.App, method, target, body string, hdr map[str
 // reach the native search handler + firecrawl-shaped scrape.
 func TestMountRoutesThroughRouter(t *testing.T) {
 	mockBing(t, bingFixture)
-	t.Setenv("WEBSEARCH_API_KEY", "k")
 	app := mounted(t)
 
 	// Search routes through to native meta-search. The client presents the shared
-	// key as X-API-Key (searchGuard requires it, like the scrape sibling). The
+	// a validated principal (the only way in, like the scrape sibling). The
 	// response is the SearXNG envelope built in-process from the mocked engine.
 	code, body := served(t, app, http.MethodGet, "/v1/websearch/search?q=x&format=json", "",
-		map[string]string{"X-API-Key": "k"})
+		map[string]string{"X-User-Id": "user-123"})
 	if code != http.StatusOK {
 		t.Fatalf("search route status %d, want 200", code)
 	}
@@ -95,7 +94,7 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 	// in TestScrapeReportsFetchFailure, and the fetch itself is covered in
 	// clients/crawl.
 	scode, sbody := served(t, app, http.MethodPost, "/v1/websearch/scrape", `{"url":"https://ex"}`,
-		map[string]string{"Authorization": "Bearer k", "Content-Type": "application/json"})
+		map[string]string{"X-User-Id": "user-123", "Content-Type": "application/json"})
 	if scode != http.StatusOK {
 		t.Fatalf("scrape route status %d body %s — the route must be reachable with a valid key", scode, sbody)
 	}
@@ -114,7 +113,6 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 // asserted because a reach for c.JSON would silently make it
 // `application/json; charset=utf-8`, a header two clients we do not own read.
 func TestCompatRepliesKeepTheirFramingAndType(t *testing.T) {
-	t.Setenv("WEBSEARCH_API_KEY", "k")
 	app := mounted(t)
 
 	for _, tc := range []struct{ name, method, target, body string }{
@@ -152,11 +150,10 @@ func TestCompatRepliesKeepTheirFramingAndType(t *testing.T) {
 // request. A URL the address guard refuses is used because it fails identically on
 // every machine and needs no network.
 func TestScrapeReportsFetchFailure(t *testing.T) {
-	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
 	app := mounted(t)
 
 	code, body := served(t, app, http.MethodPost, "/v1/websearch/scrape", `{"url":"http://127.0.0.1:1/"}`,
-		map[string]string{"Authorization": "Bearer svc-key"})
+		map[string]string{"X-User-Id": "user-123"})
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 even when the fetch fails", code)
 	}
@@ -178,9 +175,8 @@ func TestScrapeReportsFetchFailure(t *testing.T) {
 // io.LimitReader over the request stream to a bound on c.Body(); this is what
 // says the move did not change which bodies are accepted.
 func TestScrapeToleratesTheBodyItCannotRead(t *testing.T) {
-	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
 	app := mounted(t)
-	auth := map[string]string{"Authorization": "Bearer svc-key"}
+	auth := map[string]string{"X-User-Id": "user-123"}
 
 	// A url past the cap: the truncated slice cannot close its JSON value.
 	oversized := `{"url":"https://example.com/` + strings.Repeat("a", maxScrapeBody) + `"}`
@@ -205,9 +201,9 @@ func TestScrapeToleratesTheBodyItCannotRead(t *testing.T) {
 
 // A signed-in console user reaches search WITHOUT the shared key: the identity
 // middleware set X-User-Id (principal.Validated), so the zip-layer gate runs
-// native search even with WEBSEARCH_API_KEY unset. This is the console
-// user-bearer path the /cloud proxy drives.
-func TestSearchValidatedPrincipalBypassesKey(t *testing.T) {
+// native search. This is the console user-bearer path the /cloud proxy drives,
+// and since the shared key was deleted it is the only path there is.
+func TestSearchValidatedPrincipalIsTheWayIn(t *testing.T) {
 	var reached bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reached = true
@@ -217,14 +213,13 @@ func TestSearchValidatedPrincipalBypassesKey(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("WEBSEARCH_ENGINES", "bing")
 	t.Setenv("WEBSEARCH_BING_URL", srv.URL)
-	t.Setenv("WEBSEARCH_API_KEY", "") // unset: the key path would 503 — the principal must pass regardless
 	app := mounted(t)
 
 	// X-User-Id is set only by the identity middleware from a verified JWT.
 	code, body := served(t, app, http.MethodGet, "/v1/websearch/search?q=x&format=json", "",
 		map[string]string{"X-User-Id": "user-123"})
 	if code != http.StatusOK {
-		t.Fatalf("validated-principal search status %d %s, want 200 (must bypass the shared key)", code, body)
+		t.Fatalf("validated-principal search status %d %s, want 200", code, body)
 	}
 	if !reached {
 		t.Fatal("native search engine was not reached for a validated principal")
@@ -234,12 +229,11 @@ func TestSearchValidatedPrincipalBypassesKey(t *testing.T) {
 // F2 STILL HOLDS at the router: a caller with NO validated principal AND no key is
 // refused — the principal path did not reopen the open-surface hole. With the key
 // unset the key path fails closed (503); the anonymous caller never reaches search.
-func TestSearchNoPrincipalNoKeyRefused(t *testing.T) {
-	t.Setenv("WEBSEARCH_API_KEY", "")
+func TestSearchNoPrincipalRefused(t *testing.T) {
 	app := mounted(t)
 
-	if code, body := served(t, app, http.MethodGet, "/v1/websearch/search?q=x", "", nil); code != http.StatusServiceUnavailable {
-		t.Fatalf("anonymous no-key search status %d %s, want 503 (fail closed, no open surface)", code, body)
+	if code, body := served(t, app, http.MethodGet, "/v1/websearch/search?q=x", "", nil); code != http.StatusUnauthorized {
+		t.Fatalf("anonymous search status %d %s, want 401 (fail closed, no open surface)", code, body)
 	}
 }
 
@@ -289,40 +283,39 @@ func TestMetaSearchDegradesOnEngineFailure(t *testing.T) {
 	}
 }
 
-// The key gate on BOTH compat endpoints, driven through the live router: unset is
-// 503 whatever the caller presents, and a missing or wrong credential is 401.
+// The admission gate on BOTH compat endpoints, driven through the live router: a
+// caller with no validated principal is 401, whatever it presents.
 //
-// It is ONE table because the two endpoints answer one rule in two headers — search
-// reads X-API-Key, scrape a Bearer — and the ORDER is the part worth pinning:
-// 503-before-401, and both decided before any body is read, which is what a
+// It is ONE table because the two endpoints answer one rule, and what is worth
+// pinning is that the rule is decided BEFORE any body is read — a caller with no
+// identity never buys a parse, so a garbage body is still 401 rather than the
+// domain refusal the same body earns from an authorized caller. That is what a
 // typed op could not express (the decode runs before the handler is entered).
-func TestTheKeyGateIsTheWire(t *testing.T) {
+//
+// The shared-key arm this used to pin is gone: there is no unset-credential 503
+// any more, because there is no credential of ours to be unset. A bearer that
+// looks like a key is simply a bearer IAM did not validate.
+func TestAdmissionIsTheWire(t *testing.T) {
 	const url = `{"url":"https://ex.com"}`
 	for _, tc := range []struct {
-		name, key, method, target, body string
-		hdr                             map[string]string
-		want                            int
+		name, method, target, body string
+		hdr                        map[string]string
+		want                       int
 	}{
-		{"search wrong key", "right", http.MethodGet, "/v1/websearch/search?q=x", "",
-			map[string]string{"X-API-Key": "wrong"}, http.StatusUnauthorized},
-		// SECURITY (F2): a MISSING X-API-Key must be REJECTED — /v1/websearch/search
-		// is not an open surface. It fails closed exactly like the scrape sibling.
-		{"search missing key", "configured", http.MethodGet, "/v1/websearch/search?q=x", "",
+		{"search no principal", http.MethodGet, "/v1/websearch/search?q=x", "",
 			nil, http.StatusUnauthorized},
-		{"search unset key", "", http.MethodGet, "/v1/websearch/search?q=x", "",
-			map[string]string{"X-API-Key": "anything"}, http.StatusServiceUnavailable},
-		{"scrape wrong key", "right", http.MethodPost, "/v1/websearch/scrape", url,
-			map[string]string{"Authorization": "Bearer wrong"}, http.StatusUnauthorized},
-		{"scrape unset key", "", http.MethodPost, "/v1/websearch/scrape", url,
-			map[string]string{"Authorization": "Bearer anything"}, http.StatusServiceUnavailable},
-		// The credential is asked BEFORE the body, so a caller with no key never
-		// buys a parse — and a garbage body is still 401 rather than the domain
-		// refusal the same body earns from an authorized caller.
-		{"scrape unauthorized garbage body", "right", http.MethodPost, "/v1/websearch/scrape",
-			"<not json>", map[string]string{"Authorization": "Bearer wrong"}, http.StatusUnauthorized},
+		{"search bearer that is not an identity", http.MethodGet, "/v1/websearch/search?q=x", "",
+			map[string]string{"Authorization": "Bearer whatever"}, http.StatusUnauthorized},
+		{"search stale api key header", http.MethodGet, "/v1/websearch/search?q=x", "",
+			map[string]string{"X-API-Key": "anything"}, http.StatusUnauthorized},
+		{"scrape no principal", http.MethodPost, "/v1/websearch/scrape", url,
+			nil, http.StatusUnauthorized},
+		{"scrape bearer that is not an identity", http.MethodPost, "/v1/websearch/scrape", url,
+			map[string]string{"Authorization": "Bearer whatever"}, http.StatusUnauthorized},
+		{"scrape unauthorized garbage body", http.MethodPost, "/v1/websearch/scrape",
+			"<not json>", map[string]string{"Authorization": "Bearer whatever"}, http.StatusUnauthorized},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("WEBSEARCH_API_KEY", tc.key)
 			app := mounted(t)
 			code, body := served(t, app, tc.method, tc.target, tc.body, tc.hdr)
 			if code != tc.want {

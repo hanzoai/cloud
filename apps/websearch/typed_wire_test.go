@@ -64,7 +64,6 @@ var signedIn = map[string]string{"X-Org-Id": "acme", "X-User-Id": "u-acme"}
 // call. The native endpoint is that capability at an address the registry can hold.
 func TestWebSearchIsTheSameSearchAsTheCompatEndpoint(t *testing.T) {
 	mockBing(t, bingFixture)
-	t.Setenv("WEBSEARCH_API_KEY", "k")
 	app := mounted(t)
 
 	code, native := searched(t, app, `{"q":"example"}`, signedIn)
@@ -74,7 +73,8 @@ func TestWebSearchIsTheSameSearchAsTheCompatEndpoint(t *testing.T) {
 
 	// The compat endpoint, same query, same process.
 	rq := httptest.NewRequest(http.MethodGet, "/v1/websearch/search?q=example", nil)
-	rq.Header.Set("X-API-Key", "k")
+	rq.Header.Set("X-User-Id", "u-acme")
+	rq.Header.Set("X-Org-Id", "acme")
 	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("GET /v1/websearch/search: %v", err)
@@ -100,7 +100,6 @@ func TestWebSearchIsTheSameSearchAsTheCompatEndpoint(t *testing.T) {
 // middleware, so the decision is in the handler; here it is asked over HTTP.
 func TestWebSearchIsClosedToAnAnonymousCaller(t *testing.T) {
 	mockBing(t, bingFixture)
-	t.Setenv("WEBSEARCH_API_KEY", "k")
 	app := mounted(t)
 
 	if code, body := searched(t, app, `{"q":"example"}`, nil); code != http.StatusUnauthorized {
@@ -119,7 +118,6 @@ func TestWebSearchIsClosedToAnAnonymousCaller(t *testing.T) {
 // answers correctly says nothing about any of that. This asks the subsystem's OWN
 // MCP server over JSON-RPC, exactly as the fleet's MCP server asks it.
 func TestWebSearchProjectsAsATool(t *testing.T) {
-	t.Setenv("WEBSEARCH_API_KEY", "k")
 	app := mounted(t)
 
 	rq := httptest.NewRequest(http.MethodPost, "/mcp",

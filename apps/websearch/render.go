@@ -52,10 +52,10 @@ package websearch
 // warning: noise where outcome.go is trying to keep a signal.
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"strings"
