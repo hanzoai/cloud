@@ -2118,12 +2118,12 @@
    "doc": "Removes a repo's metadata and purges its storage. Answers 204 with\nno body. The metadata row is the source of truth for existence, so a storage\npurge that fails is logged and the delete still succeeds — and a second call\nis a 404, not a second delete."
   },
   {
-   "id": "delete_git_repos_by_name_mirrors_by_id",
-   "doc": "Removes one outbound mirror target; later pushes stop being\nforwarded to it. Answers 204 with no body. Nothing is done to the downstream\nremote itself — only this repo's intent to push there is dropped."
-  },
-  {
    "id": "delete_git_repos_by_name_subscriptions_by_id",
    "doc": "Removes one Slack subscription from a repo; the notifier stops\nposting that repo's events to that channel. Answers 204 with no body. An id\nthat is not this repo's subscription is not found."
+  },
+  {
+   "id": "delete_git_repos_by_name_targets_by_id",
+   "doc": "Removes one outbound mirror target; later pushes stop being\nforwarded to it. Answers 204 with no body. Nothing is done to the downstream\nremote itself — only this repo's intent to push there is dropped."
   },
   {
    "id": "get_git_keys",
@@ -2156,11 +2156,6 @@
    "read": true
   },
   {
-   "id": "get_git_repos_by_name_mirrors",
-   "doc": "Returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
-   "read": true
-  },
-  {
    "id": "get_git_repos_by_name_pulls",
    "doc": "Returns a repo's pull requests, newest number first — what is\nwaiting to be reviewed, and what has already landed. Narrow it with\n?state=open or ?state=merged; omit state for every proposal.",
    "read": true
@@ -2183,6 +2178,11 @@
   {
    "id": "get_git_repos_by_name_subscriptions",
    "doc": "Returns a repo's Slack subscriptions — which channels the\nlifecycle notifier posts this repo's push and deploy events to.",
+   "read": true
+  },
+  {
+   "id": "get_git_repos_by_name_targets",
+   "doc": "Returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
    "read": true
   },
   {
@@ -2216,10 +2216,6 @@
    "doc": "Imports an external git repository into the caller's repo, provisioning\nit on first use. Fetch is FORCED and covers every ref, so a first call clones\nthe source and a repeat call re-syncs it — the endpoint is idempotent by mirror\nsemantics. Mirrored bytes are metered exactly like a push, and a push.landed\nevent is emitted for the default branch so the code index picks the repo up."
   },
   {
-   "id": "post_git_repos_by_name_mirrors",
-   "doc": "Registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409."
-  },
-  {
    "id": "post_git_repos_by_name_pulls",
    "doc": "Proposes a branch for merging and returns it with its number. Answers\n201. Both branches must already exist — a proposal naming a branch nobody\npushed is a typo, not a plan — and base defaults to the repo's default branch.\n\nProposing the same head into the same base twice is a 409 while the first\nproposal is still open, so a retried agent run leaves ONE thing to review\nrather than a pile of identical ones. A repo outside the caller's scope is a\n404, exactly as reading it is."
   },
@@ -2234,6 +2230,10 @@
   {
    "id": "post_git_repos_by_name_subscriptions",
    "doc": "Binds a Slack channel to a repo, so the lifecycle notifier posts\nthat repo's push and deploy events there. Answers 201. The same channel twice\non one repo is a 409; a repo outside the caller's scope is a 404, exactly as\nreading it is."
+  },
+  {
+   "id": "post_git_repos_by_name_targets",
+   "doc": "Registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409."
   }
  ],
  "graph": [
@@ -3058,6 +3058,10 @@
   {
    "id": "post_integrations_linear_issues_backfill",
    "doc": "Seeds the native todo with the EXISTING Linear issues the\ncaller's key can see (default state=open); the webhook keeps them live\nthereafter. Synchronous and bounded, idempotent by ExtRef."
+  },
+  {
+   "id": "post_integrations_slack_join",
+   "doc": "Joins every public channel in the caller org's workspace.\n\nOrg admin, because it changes what the whole workspace sees: after it the agent\nis a member of every public room and answers in all of them."
   },
   {
    "id": "post_integrations_telegram_connect",

@@ -28929,6 +28929,19 @@ components:
             $ref: '#/components/schemas/gpuJob'
           type: array
       type: object
+    joinFailure:
+      properties:
+        channel:
+          description: Channel is Slack's id for the room that refused.
+          type: string
+        error:
+          description: Error is Slack's own code, carried through unchanged.
+          type: string
+        name:
+          description: Name is that room's human name, so the operator does not have
+            to look the id up.
+          type: string
+      type: object
     judgeSpec:
       properties:
         criteria:
@@ -52140,6 +52153,31 @@ components:
           description: Skill is the skill as stored, with its derived id and creation
             time.
       type: object
+    slackJoinOut:
+      properties:
+        already:
+          description: |-
+            Already counts the channels it was a member of before, kept apart from
+            Joined because only one of the two is a change.
+          format: int64
+          type: integer
+        failed:
+          description: Failed is per-channel, so one refusal does not hide the rest
+            of the walk.
+          items:
+            $ref: '#/components/schemas/joinFailure'
+          type: array
+        joined:
+          description: Joined names the channels this run walked into — the change
+            it made.
+          items:
+            type: string
+          type: array
+        listed:
+          description: Listed is every public, unarchived channel the workspace has.
+          format: int64
+          type: integer
+      type: object
     slotView:
       properties:
         blsPubkey:
@@ -55557,15 +55595,6 @@ components:
           description: Updated is when it was written, unix milliseconds.
           format: int64
           type: integer
-      type: object
-    zapProcReq:
-      properties:
-        description:
-          type: string
-        name:
-          type: string
-        project:
-          type: string
       type: object
   securitySchemes:
     bearer:
@@ -86329,118 +86358,6 @@ paths:
       x-app: git
       x-public: true
       x-tool: true
-  /v1/git/repos/{name}/mirrors:
-    get:
-      description: |-
-        Returns a repo's outbound mirror targets — the downstream remotes
-        the mirror reactor pushes to whenever a push lands here.
-      operationId: get_git_repos_by_name_mirrors
-      parameters:
-      - description: |-
-          Name is the repo's org-unique handle, from the :name path segment. A
-          trailing ".git" is stripped.
-        example: widgets
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                data:
-                - createdAt: "2026-07-01T10:00:00Z"
-                  host: github.com
-                  id: mir_2d90
-                  repo: widgets
-                  url: https://github.com/acme/widgets.git
-              schema:
-                $ref: '#/components/schemas/mirrorList'
-          description: ok
-      summary: Returns a repo's outbound mirror targets — the downstream remotes the
-        mirror reactor pushes to whenever a push lands here.
-      tags:
-      - git
-      x-app: git
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Registers a downstream remote the repo's advanced refs are pushed to
-        whenever a push lands here. Answers 201. The URL must be https to a host on the
-        mirror allowlist (github.com / gitlab.com): the same set the mirror credential
-        may be sent to, so a target can never capture the shared token or point the push
-        at an internal service. Any embedded userinfo is stripped — credentials ride
-        env-only at push time and never enter the stored URL. One mirror per host per
-        repo; a second is a 409.
-      operationId: post_git_repos_by_name_mirrors
-      parameters:
-      - description: |-
-          Name is the repo whose advanced refs are pushed downstream, from the :name
-          path segment.
-        example: widgets
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              name: widgets
-              url: https://github.com/acme/widgets.git
-            schema:
-              $ref: '#/components/schemas/mirrorTargetReq'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mirrorTargetView'
-          description: created
-      summary: Registers a downstream remote the repo's advanced refs are pushed to
-        whenever a push lands here.
-      tags:
-      - git
-      x-app: git
-      x-public: true
-      x-tool: true
-  /v1/git/repos/{name}/mirrors/{id}:
-    delete:
-      description: |-
-        Removes one outbound mirror target; later pushes stop being
-        forwarded to it. Answers 204 with no body. Nothing is done to the downstream
-        remote itself — only this repo's intent to push there is dropped.
-      operationId: delete_git_repos_by_name_mirrors_by_id
-      parameters:
-      - description: Name is the repo, from the :name path segment.
-        example: widgets
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      - description: ID is the row to remove, from the :id path segment.
-        example: mir_2d90
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Removes one outbound mirror target; later pushes stop being forwarded
-        to it.
-      tags:
-      - git
-      x-app: git
-      x-public: true
-      x-tool: true
   /v1/git/repos/{name}/pulls:
     get:
       description: |-
@@ -86854,6 +86771,118 @@ paths:
       x-app: git
       x-public: true
       x-tool: true
+  /v1/git/repos/{name}/targets:
+    get:
+      description: |-
+        Returns a repo's outbound mirror targets — the downstream remotes
+        the mirror reactor pushes to whenever a push lands here.
+      operationId: get_git_repos_by_name_targets
+      parameters:
+      - description: |-
+          Name is the repo's org-unique handle, from the :name path segment. A
+          trailing ".git" is stripped.
+        example: widgets
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                data:
+                - createdAt: "2026-07-01T10:00:00Z"
+                  host: github.com
+                  id: mir_2d90
+                  repo: widgets
+                  url: https://github.com/acme/widgets.git
+              schema:
+                $ref: '#/components/schemas/mirrorList'
+          description: ok
+      summary: Returns a repo's outbound mirror targets — the downstream remotes the
+        mirror reactor pushes to whenever a push lands here.
+      tags:
+      - git
+      x-app: git
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Registers a downstream remote the repo's advanced refs are pushed to
+        whenever a push lands here. Answers 201. The URL must be https to a host on the
+        mirror allowlist (github.com / gitlab.com): the same set the mirror credential
+        may be sent to, so a target can never capture the shared token or point the push
+        at an internal service. Any embedded userinfo is stripped — credentials ride
+        env-only at push time and never enter the stored URL. One mirror per host per
+        repo; a second is a 409.
+      operationId: post_git_repos_by_name_targets
+      parameters:
+      - description: |-
+          Name is the repo whose advanced refs are pushed downstream, from the :name
+          path segment.
+        example: widgets
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: widgets
+              url: https://github.com/acme/widgets.git
+            schema:
+              $ref: '#/components/schemas/mirrorTargetReq'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mirrorTargetView'
+          description: created
+      summary: Registers a downstream remote the repo's advanced refs are pushed to
+        whenever a push lands here.
+      tags:
+      - git
+      x-app: git
+      x-public: true
+      x-tool: true
+  /v1/git/repos/{name}/targets/{id}:
+    delete:
+      description: |-
+        Removes one outbound mirror target; later pushes stop being
+        forwarded to it. Answers 204 with no body. Nothing is done to the downstream
+        remote itself — only this repo's intent to push there is dropped.
+      operationId: delete_git_repos_by_name_targets_by_id
+      parameters:
+      - description: Name is the repo, from the :name path segment.
+        example: widgets
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: ID is the row to remove, from the :id path segment.
+        example: mir_2d90
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Removes one outbound mirror target; later pushes stop being forwarded
+        to it.
+      tags:
+      - git
+      x-app: git
+      x-public: true
+      x-tool: true
   /v1/git/repos/{name}/tree:
     get:
       description: |-
@@ -86945,81 +86974,6 @@ paths:
         410 rather than 404, because the address was real and its meaning moved, which is the distinction 410 carries. A 404 from this estate is ambiguous: Hanzo Git serves /v1, so /api/v1 404s too and reads as "the API is switched off". A retired endpoint says it is retired and names its replacement, so the answer carries its own fix.
       operationId: post_git_webhook
       summary: Retired — forge pushes build via platform.hanzo.ai
-      tags:
-      - git
-      x-app: git
-      x-public: true
-  /v1/git/zap/createRepo:
-    post:
-      description: |-
-        Creates a repository in the caller's org and project scope and answers with its record. `name` is required and `description` is optional; `project` narrows the scope within the org. A name already taken in that scope is a 409 envelope and an invalid name a 400.
-
-        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns, and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
-      operationId: post_git_zap_createrepo
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/zapProcReq'
-      summary: Create a repository over the ZAP transport
-      tags:
-      - git
-      x-app: git
-      x-public: true
-  /v1/git/zap/deleteRepo:
-    post:
-      description: |-
-        Deletes the repository named by `name` and answers with the deleted name. A repository outside the caller's org and project scope is a 404 envelope, so a delete can never reach another tenant's repository.
-
-        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns, and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
-      operationId: post_git_zap_deleterepo
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/zapProcReq'
-      summary: Delete a repository over the ZAP transport
-      tags:
-      - git
-      x-app: git
-      x-public: true
-  /v1/git/zap/getRepo:
-    post:
-      description: |-
-        Answers a single repository's record, named by `name`. A repository outside the caller's org and project scope is a 404 envelope, the same answer one that does not exist gets.
-
-        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns, and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
-      operationId: post_git_zap_getrepo
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/zapProcReq'
-      summary: Read one repository over the ZAP transport
-      tags:
-      - git
-      x-app: git
-      x-public: true
-  /v1/git/zap/listRepos:
-    post:
-      description: |-
-        Answers every repository in the caller's org and project scope. It reads NO body — the scope is entirely the caller's identity — so a request with an empty object is correct.
-
-        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns, and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
-      operationId: post_git_zap_listrepos
-      summary: List your repositories over the ZAP transport
-      tags:
-      - git
-      x-app: git
-      x-public: true
-  /v1/git/zap/usage:
-    post:
-      description: |-
-        Answers every repository in the caller's org with its size in bytes, plus the org's total — what git storage is actually being used, and by which repository. It reads NO body, and it is scoped to the caller's own org, so it is that org's footprint and never the fleet's.
-
-        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns, and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
-      operationId: post_git_zap_usage
-      summary: Report your org's git storage footprint over the ZAP transport
       tags:
       - git
       x-app: git
@@ -94722,6 +94676,27 @@ paths:
       - integrations
       x-app: integrations
       x-public: true
+  /v1/integrations/slack/join:
+    post:
+      description: |-
+        Joins every public channel in the caller org's workspace.
+
+        Org admin, because it changes what the whole workspace sees: after it the agent
+        is a member of every public room and answers in all of them.
+      operationId: post_integrations_slack_join
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/slackJoinOut'
+          description: ok
+      summary: Joins every public channel in the caller org's workspace.
+      tags:
+      - integrations
+      x-app: integrations
+      x-public: true
+      x-tool: true
   /v1/integrations/slack/link:
     get:
       description: |-
