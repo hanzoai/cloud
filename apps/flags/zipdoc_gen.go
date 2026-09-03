@@ -65,6 +65,18 @@ func init() {
 			"FlagIn.key": "the flag's key; for a capability's stage it is the capability's name",
 		},
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /flags/value", zip.Doc{
+		Description: "Resolves one flag for the CALLER'S OWN org.\n\nThe caller supplies its own Default, and that is what makes this op possible\nwithout a catalog: a Def is declared where its flag is used — in a loop over\ntiers, or per service registered at run time — so this app cannot be assumed to\nhold one for every key. What it holds is the operator's setting, which is the\nhalf the caller genuinely cannot know.\n\nParsing happens HERE, by the same [Client.resolve] that serves /v1/flags, so a\nstored value means one thing however it is asked for. A caller that parsed the\ntext itself would be a second parser, and the two would disagree the first time\nsomebody wrote \"yes\" instead of \"true\".",
+		Fields: map[string]string{
+			"FlagValue.n":         "N is Value as an integer, 0 when it is not one.",
+			"FlagValue.on":        "On is Value as a boolean, false when it is not one.",
+			"FlagValue.set":       "Set reports whether an OPERATOR set this flag. False means Value is the\ncaller's own default, which is a different fact from the value being falsy.",
+			"FlagValue.value":     "Value is the resolved value as text.",
+			"FlagValueIn.default": "Default is what the caller falls back to when no operator has set this flag.\nIt travels because the fallback belongs to the caller, not to the store.",
+			"FlagValueIn.key":     "Key is the flag's key.",
+			"FlagValueIn.kind":    "Kind is how to parse a stored value: \"bool\", \"int\" or \"string\".",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /v1/flags", zip.Doc{
 		Description: "Evaluate runs the caller's flag definitions for one identity and returns the\nflag verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
 		Fields: map[string]string{
