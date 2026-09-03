@@ -1466,7 +1466,7 @@ func UseAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
 			continue
 		}
 		if spec.Use == nil {
-			return fmt.Errorf("mount %s: no Mount — a subsystem that registers nothing is not composed, it is absent", spec.Name)
+			return fmt.Errorf("use %s: no Use — a subsystem that registers nothing is not composed, it is absent", spec.Name)
 		}
 		// The grant decides WHICH Router, never which signature. Global hands over
 		// the bare app (a *zip.App is a Router); everyone else gets a scope bound
