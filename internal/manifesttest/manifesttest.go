@@ -31,6 +31,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/datadir"
 	"github.com/hanzoai/cloud/manifest"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -63,8 +64,12 @@ func (c Case) Run(t *testing.T) {
 		t.Fatalf("%s: no manifest.Apps row — the fleet routes nothing to this app", c.Name)
 	}
 
+	// The data root is a deployment FACT, resolved from the environment rather than
+	// handed over, so a test states it the way a deployment does.
+	t.Setenv(datadir.EnvVar, t.TempDir())
+
 	app := zip.New(zip.Config{Logger: luxlog.New("manifest-gate"), DisableStartupMessage: true})
-	if err := c.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	if err := c.Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("%s: Use:  %v", c.Name, err)
 	}
 

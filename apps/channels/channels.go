@@ -32,10 +32,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("channels.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("channels.Use:  empty DataDir")
 	}
-	st, err := openStore(deps.DataDir)
+	st, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("channels.Use:  open store: %w", err)
 	}

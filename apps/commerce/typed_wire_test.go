@@ -57,7 +57,9 @@ func surfaceApp(t *testing.T) *zip.App {
 	// A FRESH data dir per call: t.TempDir answers a new one each time, and the
 	// embed opens its per-org SQLite stores under it, so two mounts sharing one
 	// would open the same files twice.
-	if err := Use(app, cloud.Deps{Brand: "hanzo", DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	if currentEmbedded() == nil {

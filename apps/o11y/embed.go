@@ -6,9 +6,9 @@
 package o11y
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
+	"github.com/hanzoai/cloud/internal/environ"
 	"log/slog"
 	"net/http"
 	"os"
@@ -78,7 +78,7 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 	// both under cloud's data root and create it eagerly so o11y.New's migrations
 	// don't fail on a missing parent. The standalone pod used an emptyDir at
 	// /var/lib/o11y — this is the in-process equivalent, owned by cloud.
-	dataDir := filepath.Join(cmp.Or(deps.DataDir, "/var/lib/cloud"), "o11y")
+	dataDir := filepath.Join(cmp.Or(cloud.DataDir(), "/var/lib/cloud"), "o11y")
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, err
 	}

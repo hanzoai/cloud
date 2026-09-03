@@ -53,7 +53,8 @@ func pinApp(t *testing.T) *zip.App {
 	// the real subsystem keeps the probe on the same trust plane as the co-resident
 	// registration.
 	compose(app)
-	if err := Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use: %v", err)
 	}
 	app.Get("/probe", PinBillingSubject(), echoQuery)

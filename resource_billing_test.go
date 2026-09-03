@@ -94,7 +94,8 @@ func meterFor(t *testing.T, baseURL, env string, failOpen bool) *Meter {
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	return NewMeter(Deps{Metering: m, Env: env}, "provisioning")
+	t.Setenv("CLOUD_ENV", env)
+	return NewMeter(Deps{Metering: m}, "provisioning")
 }
 
 // Funded org (balance>0), priced kind → Authorize allows, and the balance check
@@ -588,7 +589,7 @@ func TestMeterPeer_CarriesTheExactDebit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	rm := NewMeter(Deps{Metering: m, Env: "mainnet"}, "provisioning")
+	rm := NewMeter(Deps{Metering: m}, "provisioning")
 	if m.Enabled() {
 		t.Fatal("fixture broken: the client must hold no local ledger so the debit takes the peer path")
 	}
@@ -700,7 +701,7 @@ func TestRecord_OneActIsChargedOnceInEitherTopology(t *testing.T) {
 		if err != nil {
 			t.Fatalf("metering.New: %v", err)
 		}
-		rm := NewMeter(Deps{Metering: m, Env: "mainnet"}, "company")
+		rm := NewMeter(Deps{Metering: m}, "company")
 		if m.Enabled() {
 			t.Fatal("fixture broken: the client must hold no local ledger so the debit takes the peer path")
 		}
@@ -733,7 +734,7 @@ func TestRecord_OneActIsChargedOnceInEitherTopology(t *testing.T) {
 		if err != nil {
 			t.Fatalf("metering.New: %v", err)
 		}
-		rm := NewMeter(Deps{Metering: m, Env: "mainnet"}, "company")
+		rm := NewMeter(Deps{Metering: m}, "company")
 		if !m.Enabled() {
 			t.Fatal("fixture broken: the client must hold the local ledger so the debit takes the local path")
 		}
@@ -767,7 +768,7 @@ func TestRecord_TwoUnnamedActsAreTwoCharges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	rm := NewMeter(Deps{Metering: m, Env: "mainnet"}, "company")
+	rm := NewMeter(Deps{Metering: m}, "company")
 	if m.Enabled() {
 		t.Fatal("fixture broken: the client must hold no local ledger so the debit takes the peer path")
 	}

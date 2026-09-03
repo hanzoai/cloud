@@ -84,10 +84,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("pref.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "pref")
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("pref.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("pref.Use:  open prefs store: %w", err)
 	}
@@ -96,7 +96,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, s)
 
-	log.Info("prefs surface mounted", "prefix", "/v1/pref", "brand", deps.Brand)
+	log.Info("prefs surface mounted", "prefix", "/v1/pref", "brand", cloud.Brand())
 	return nil
 }
 

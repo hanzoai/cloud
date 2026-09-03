@@ -73,10 +73,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("security.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("security.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("security.Use:  open store: %w", err)
 	}
@@ -92,8 +92,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, s)
 
-	s.Log.Info("security mounted", "brand", deps.Brand, "rules", detect.RuleCount(),
-		"dir", deps.DataDir)
+	s.Log.Info("security mounted", "brand", cloud.Brand(), "rules", detect.RuleCount(),
+		"dir", cloud.DataDir())
 	return nil
 }
 

@@ -339,8 +339,9 @@ func TestDedicated_BillsProvisionAndFootprintToOrg(t *testing.T) {
 		t.Fatalf("metering.New: %v", err)
 	}
 	orch := newFakeOrch()
+	t.Setenv("CLOUD_ENV", "mainnet")
 	s := &cloud.Service[state]{
-		Base:  cloud.Base{Log: log, Bill: cloud.NewMeter(cloud.Deps{Metering: m, Env: "mainnet"}, "provisioning")},
+		Base:  cloud.Base{Log: log, Bill: cloud.NewMeter(cloud.Deps{Metering: m}, "provisioning")},
 		State: state{store: newTestStore(t), sec: newSecrets(nil, log), reg: newRegistry(cloud.Deps{}), orch: orch},
 	}
 

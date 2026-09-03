@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -106,15 +107,18 @@ func newStudioServer(t *testing.T, stub *studioStub) *httptest.Server {
 // Env). Framework gets its own real store. Cleanup unmounts both.
 func mountWith(t *testing.T, deps cloud.Deps) *zip.App {
 	t.Helper()
-	if deps.Domain == "" {
-		deps.Domain = "api.test"
+	// The host is a deployment fact and comes from the environment, so a caller
+	// needing a particular one states it the way a deployment does.
+	if os.Getenv("CLOUD_DOMAIN") == "" {
+		t.Setenv("CLOUD_DOMAIN", "api.test")
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	// The lane is enabled for every org here; the gate is tested in apps/framework.
 	planetest.Manager(t)
 	planetest.Entitled(t, func(_, product string) bool { return product == Module })
-	if err := framework.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := framework.Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("framework.Use:  %v", err)
 	}
 	if err := Use(app, deps); err != nil {
@@ -140,7 +144,8 @@ func TestGenerateCopyWritesDraftAndMeters(t *testing.T) {
 {"title":"Velvet Season","caption":"Velvet is not a summer fabric. That was the whole point.",
 "excerpt":"The winter capsule, in one line.","hashtags":["velvet","fw25","atelier"]}
 ` + "```"}
-	app := mountWith(t, cloud.Deps{AI: ai, Env: "testnet"})
+	t.Setenv("CLOUD_ENV", "testnet")
+	app := mountWith(t, cloud.Deps{AI: ai})
 	install(t, app, org)
 
 	code, b := req(t, app, http.MethodPost, "/v1/content/generate", org, map[string]any{
@@ -228,7 +233,8 @@ func TestGenerateAssetSubmitsGraphAndRecordsAsset(t *testing.T) {
 	srv := newStudioServer(t, stub)
 	t.Setenv("CONTENT_STUDIO_URL", srv.URL)
 
-	app := mountWith(t, cloud.Deps{Env: "testnet"})
+	t.Setenv("CLOUD_ENV", "testnet")
+	app := mountWith(t, cloud.Deps{})
 	install(t, app, org)
 
 	code, b := req(t, app, http.MethodPost, "/v1/content/generate", org, map[string]any{

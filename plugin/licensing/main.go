@@ -34,7 +34,7 @@ func main() {
 		// BOUNDARY, which is what lets licensing be built, tested and released
 		// without cloud in its graph at all.
 		Use: func(app cloud.Router, deps cloud.Deps) error {
-			sub, err := licensing.App(deps.Brand, deps.DataDir, entitlements{deps.Commerce})
+			sub, err := licensing.App(cloud.Brand(), cloud.DataDir(), entitlements{deps.Commerce})
 			if err != nil {
 				return err
 			}

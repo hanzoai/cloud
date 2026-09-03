@@ -46,7 +46,8 @@ var typedOps = []string{
 func newOpsApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.NewNoOpLogger()})
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -104,7 +105,8 @@ func TestSurfaceIsRegistered(t *testing.T) {
 // runnable in the suite and in a sandbox.
 func TestMountsWithoutACarrier(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.NewNoOpLogger()})
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("a deployment with no carrier credential must still serve: %v", err)
 	}
 	defer func() { _ = Shutdown() }()

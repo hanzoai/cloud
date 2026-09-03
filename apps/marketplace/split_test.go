@@ -92,7 +92,7 @@ func runChild(role string) int {
 	dir := os.Getenv("CLOUD_SPLIT_DIR")
 	app := zip.New(zip.Config{Logger: log})
 	app.Use(cloud.Bridge())
-	deps := cloud.Deps{DataDir: dir}
+	deps := cloud.Deps{}
 	extra := ""
 
 	switch role {
@@ -124,7 +124,7 @@ func runChild(role string) int {
 		// dependencies, which is stated at its definition — so this process serves
 		// the real finance_record / finance_credit handlers against the real ledger
 		// without also standing up a payments provider it will never be asked for.
-		_ = commerce.Use(app, cloud.Deps{DataDir: dir, Metering: meter})
+		_ = commerce.Use(app, cloud.Deps{Metering: meter})
 
 	case "marketplace":
 		if err := Use(app, deps); err != nil {
@@ -251,6 +251,7 @@ type fleet struct {
 // splitFleet starts the peers as real processes and mounts the tool plane HERE,
 // alone, with every client a co-resident composition would have bound left unbound.
 func splitFleet(t *testing.T) *fleet {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	t.Helper()
 	if testing.Short() {
 		t.Skip("spawns real child processes")
@@ -287,7 +288,7 @@ func splitFleet(t *testing.T) *fleet {
 	log := luxlog.New("tools")
 	f.app = zip.New(zip.Config{Logger: log})
 	f.app.Use(cloud.Bridge())
-	if err := tools.Use(f.app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	if err := tools.Use(f.app, cloud.Deps{}); err != nil {
 		t.Fatalf("tools.Use:  %v", err)
 	}
 	tools.Default().Register(&fakeProvider{tools: []tools.Tool{

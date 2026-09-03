@@ -70,10 +70,10 @@ func useWith(app cloud.Router, deps cloud.Deps, s3 cloud.VFSClient) error {
 		return fmt.Errorf("team.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "team")
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("team.Use:  empty DataDir")
 	}
-	root := filepath.Join(deps.DataDir, "team")
+	root := filepath.Join(cloud.DataDir(), "team")
 
 	accounts, err := openAccountStore(root)
 	if err != nil {
@@ -272,7 +272,7 @@ func useWith(app cloud.Router, deps cloud.Deps, s3 cloud.VFSClient) error {
 	exposeMember(accounts)
 
 	mounted = &cloud.Service[state]{Base: cloud.NewBase(deps, "team"), State: state{accounts: accounts, trans: trans}}
-	log.Info("team mounted", "brand", deps.Brand, "iam", cfg.iamEndpoint, "client", cfg.iamClientID, "degraded", degraded)
+	log.Info("team mounted", "brand", cloud.Brand(), "iam", cfg.iamEndpoint, "client", cfg.iamClientID, "degraded", degraded)
 	return nil
 }
 

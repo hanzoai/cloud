@@ -40,7 +40,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("lsp.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("lsp.Use:  empty DataDir")
 	}
 	s := &state{Base: cloud.NewBase(deps, "lsp"), daemon: newDaemon()}
@@ -53,7 +53,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// deployment that forgot it otherwise looks healthy until the first query
 	// answers 503.
 	s.Log.Info("lsp surface mounted (proxy)",
-		"brand", deps.Brand, "upstream", s.daemon.url, "keyed", s.daemon.key != "")
+		"brand", cloud.Brand(), "upstream", s.daemon.url, "keyed", s.daemon.key != "")
 	return nil
 }
 

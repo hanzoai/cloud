@@ -26,7 +26,8 @@ func mount(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{Domain: "api.test"}); err != nil {
+	t.Setenv("CLOUD_DOMAIN", "api.test")
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("search.Use:  %v", err)
 	}
 	return app

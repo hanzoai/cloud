@@ -52,7 +52,8 @@ func newBilledMLService(t *testing.T, commerceURL string) *cloud.Service[state] 
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	deps := cloud.Deps{Metering: m, Env: "mainnet"}
+	t.Setenv("CLOUD_ENV", "mainnet")
+	deps := cloud.Deps{Metering: m}
 	return &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "ml"),
 		State: state{

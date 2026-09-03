@@ -70,10 +70,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("validator.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("validator.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("validator.Use:  open store: %w", err)
 	}
@@ -100,7 +100,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		Group:     environ.Or("VALIDATORS_CR_GROUP", "node.lux.cloud"),
 		Namespace: environ.Or("VALIDATORS_NAMESPACE", "lux-validators"),
 		NodeImage: environ.Or("VALIDATORS_NODE_IMAGE", "ghcr.io/luxfi/node:v1.36.15"),
-		KMSHost:   environ.Or("VALIDATORS_KMS_HOST", "http://cloud."+deps.Brand+".svc.cluster.local:8000"),
+		KMSHost:   environ.Or("VALIDATORS_KMS_HOST", "http://cloud."+cloud.Brand()+".svc.cluster.local:8000"),
 		KMSCreds:  environ.Or("VALIDATORS_KMS_CREDS", "platform-kms-auth"),
 		StorageGi: environ.Int("VALIDATORS_STORAGE_GI", 200),
 	})
@@ -117,7 +117,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	mounted = s
 
 	routes(app, s)
-	b.Log.Info("validators mounted", "brand", deps.Brand, "network", network,
+	b.Log.Info("validators mounted", "brand", cloud.Brand(), "network", network,
 		"nftContract", nft.contract.Hex(), "clusterReady", prov.Available())
 	return nil
 }

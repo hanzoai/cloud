@@ -77,7 +77,9 @@ func wireWith(t *testing.T, dir string, c columnar) (*zip.App, *cloud.Service[*s
 	if dir == "" {
 		dir = t.TempDir()
 	}
-	s, err := build(cloud.Deps{DataDir: dir, Brand: "hanzo"})
+	t.Setenv("CLOUD_DATA_DIR", dir)
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	s, err := build(cloud.Deps{})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

@@ -27,6 +27,7 @@ var untypedByDesign = map[string]string{}
 // need: every assertion here is about the REQUEST tier — identity, binding,
 // status — and stops before any chain read.
 func mountApp(t *testing.T) *zip.App {
+	t.Setenv("CLOUD_BRAND", "lux")
 	t.Helper()
 	store, err := openStore(t.TempDir())
 	if err != nil {
@@ -38,7 +39,7 @@ func mountApp(t *testing.T) *zip.App {
 		t.Fatalf("newNFTReader: %v", err)
 	}
 	s := &cloud.Service[state]{
-		Base: cloud.NewBase(cloud.Deps{Brand: "lux"}, "validators"),
+		Base: cloud.NewBase(cloud.Deps{}, "validators"),
 		State: state{
 			store:   store,
 			nft:     nft,

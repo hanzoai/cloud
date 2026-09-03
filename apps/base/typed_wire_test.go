@@ -70,7 +70,8 @@ func TestEveryUntypedRouteNamesItsReason(t *testing.T) {
 	t.Setenv(embedEnv, "true")
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	app.Use(cloud.Bridge())
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("mount: %v", err)
 	}
 	doc, err := openapi.Spec(app, openapi.Info{Title: "base", Version: "v1"})

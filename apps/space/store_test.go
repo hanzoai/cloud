@@ -218,7 +218,8 @@ func mount(t *testing.T, st *store) *zip.App {
 	t.Setenv("S3_PUBLIC_ENDPOINT", srv.Listener.Addr().String())
 	t.Setenv("S3_PUBLIC_SECURE", "false")
 	t.Setenv(feeEnv, "0")
-	return mountWith(t, cloud.Deps{Env: "mainnet"})
+	t.Setenv("CLOUD_ENV", "mainnet")
+	return mountWith(t, cloud.Deps{})
 }
 
 // mountWith is mount without the store, for the unconfigured posture.

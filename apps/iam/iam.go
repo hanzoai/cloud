@@ -97,11 +97,11 @@ package iam
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"os"
 	"path/filepath"
 
@@ -461,7 +461,7 @@ func openStore(dir string) (orm.DB, *sql.DB, error) {
 // `initDataFile` env override so a deployment points BOTH the embedded and standalone
 // iam at one file (DRY, one source of seed truth).
 func paths(deps cloud.Deps) (dir, initDataPath string) {
-	dir = deps.DataDir
+	dir = cloud.DataDir()
 	if dir == "" {
 		dir = "."
 	}

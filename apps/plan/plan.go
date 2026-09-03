@@ -127,7 +127,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		"prefix", "/v1/plan",
 		"routes", 15,
 		"typed", 15,
-		"brand", deps.Brand,
+		"brand", cloud.Brand(),
 	)
 	return nil
 }

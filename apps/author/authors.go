@@ -59,10 +59,10 @@
 package author
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"maps"
 	"strings"
 	"time"
@@ -140,7 +140,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("author.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("author.Use:  empty DataDir")
 	}
 	// A typed op is a route PLUS a registry entry, and the registry lives on the App.
@@ -151,7 +151,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("author.Use:  router is not a zip app, so the typed ops have no registry")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("author.Use:  open store: %w", err)
 	}
@@ -168,7 +168,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, zapp, s)
 
-	b.Log.Info("authors mounted", "brand", deps.Brand, "badgeBase", s.State.badgeBase,
+	b.Log.Info("authors mounted", "brand", cloud.Brand(), "badgeBase", s.State.badgeBase,
 		"maintainerOrg", s.State.maintainerOrg)
 	return nil
 }
@@ -399,7 +399,7 @@ func maintainerOrgFor(deps cloud.Deps) string {
 	if v := environ.Or("AUTHOR_MAINTAINER_ORG", ""); v != "" {
 		return strings.ToLower(v)
 	}
-	switch strings.ToLower(strings.TrimSpace(deps.Brand)) {
+	switch strings.ToLower(strings.TrimSpace(cloud.Brand())) {
 	case "lux":
 		return "lux"
 	case "zoo":
@@ -816,7 +816,7 @@ func badgeBase(deps cloud.Deps) string {
 	if v := environ.Or("AUTHOR_BADGE_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
-	switch strings.ToLower(strings.TrimSpace(deps.Brand)) {
+	switch strings.ToLower(strings.TrimSpace(cloud.Brand())) {
 	case "lux":
 		return "https://lux.build"
 	case "zoo":

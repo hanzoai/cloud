@@ -56,11 +56,11 @@
 package exec
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"crypto/subtle"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"maps"
 	"mime"
 	"net/http"
@@ -532,7 +532,7 @@ func callCtx(ctx context.Context, org string) (context.Context, func()) {
 	return out, func() { stop(); cancel() }
 }
 
-// brandOrg is set at Mount from deps.Brand — WHOSE deployment this process is. It
+// brandOrg is set at Mount from cloud.Brand() — WHOSE deployment this process is. It
 // is not configuration and not a new env var: a value the process already carries,
 // read once where it is handed in, so a Lux deployment's untenanted sessions belong
 // to Lux and not to hanzo.
@@ -806,7 +806,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("exec.Use:  nil app")
 	}
-	if b := strings.TrimSpace(deps.Brand); b != "" {
+	if b := strings.TrimSpace(cloud.Brand()); b != "" {
 		brandOrg = b
 	}
 	// The meter that pays for a run. Bound here because this subsystem's handlers

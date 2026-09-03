@@ -26,8 +26,9 @@ import (
 
 // deps is what a composition root is handed for one replica: its own volume, its
 // own durability, and the fact that it is not alone.
-func deps(p *twopod.Pod) cloud.Deps {
-	return cloud.Deps{DataDir: p.Dir, Durable: p.Durable, Peers: true}
+func deps(t *testing.T, p *twopod.Pod) cloud.Deps {
+	t.Setenv("CLOUD_DATA_DIR", p.Dir)
+	return cloud.Deps{Durable: p.Durable, Peers: true}
 }
 
 // TestADepositSurvivesTheDeathOfThePodThatTookIt is the whole of C-2.
@@ -44,7 +45,7 @@ func TestADepositSurvivesTheDeathOfThePodThatTookIt(t *testing.T) {
 	ctx, org := context.Background(), "acme"
 
 	took := f.Owner(org)
-	fin := finance.New(cloud.CustomerBooks(deps(took)))
+	fin := finance.New(cloud.CustomerBooks(deps(t, took)))
 	paid := money.FromCents(2500)
 	if _, err := fin.Deposit(ctx, types.DepositInput{
 		Org: org, Subject: org, Amount: paid, Ref: "sq_payment_1",
@@ -55,7 +56,7 @@ func TestADepositSurvivesTheDeathOfThePodThatTookIt(t *testing.T) {
 	// The pod goes. Nothing of its disk survives.
 	f.Stop(took.ID)
 
-	next := finance.New(cloud.CustomerBooks(deps(f.Owner(org))))
+	next := finance.New(cloud.CustomerBooks(deps(t, f.Owner(org))))
 	bal, err := next.Balance(ctx, org, org, "usd", false)
 	if err != nil {
 		t.Fatalf("balance on the successor: %v", err)
@@ -82,14 +83,14 @@ func TestANonOwnerCannotAcknowledgeADeposit(t *testing.T) {
 	// The owner opens the books first, so the object exists and the lease is held —
 	// which is what makes the other replica a NON-owner rather than merely the first
 	// to arrive.
-	owner := finance.New(cloud.CustomerBooks(deps(f.Owner(org))))
+	owner := finance.New(cloud.CustomerBooks(deps(t, f.Owner(org))))
 	if _, err := owner.Deposit(ctx, types.DepositInput{
 		Org: org, Subject: org, Amount: money.FromCents(100), Ref: "sq_1",
 	}); err != nil {
 		t.Fatalf("deposit on the owner: %v", err)
 	}
 
-	other := finance.New(cloud.CustomerBooks(deps(f.Other(org))))
+	other := finance.New(cloud.CustomerBooks(deps(t, f.Other(org))))
 	_, err := other.Deposit(ctx, types.DepositInput{
 		Org: org, Subject: org, Amount: money.FromCents(9900), Ref: "sq_2",
 	})
@@ -122,7 +123,7 @@ func TestANonOwnerCannotAcknowledgeADeposit(t *testing.T) {
 func TestAUsageDebitIsNotReportedWhenItCannotBeShipped(t *testing.T) {
 	f := twopod.New(t, "pod-a")
 	ctx, org := context.Background(), "acme"
-	fin := finance.New(cloud.CustomerBooks(deps(f.Owner(org))))
+	fin := finance.New(cloud.CustomerBooks(deps(t, f.Owner(org))))
 
 	if _, err := fin.Deposit(ctx, types.DepositInput{
 		Org: org, Subject: org, Amount: money.FromCents(5000), Ref: "sq_1",
@@ -158,7 +159,7 @@ func TestADeposedOwnerCannotAcknowledgeADeposit(t *testing.T) {
 	ctx, org := context.Background(), "acme"
 
 	was := f.Owner(org)
-	held := finance.New(cloud.CustomerBooks(deps(was)))
+	held := finance.New(cloud.CustomerBooks(deps(t, was)))
 	if _, err := held.Deposit(ctx, types.DepositInput{
 		Org: org, Subject: org, Amount: money.FromCents(100), Ref: "sq_1",
 	}); err != nil {
@@ -169,7 +170,7 @@ func TestADeposedOwnerCannotAcknowledgeADeposit(t *testing.T) {
 	// is exactly what a pod mid-drain has — while the successor claims a strictly
 	// higher round by opening the org.
 	f.Stop(was.ID)
-	next := finance.New(cloud.CustomerBooks(deps(f.Owner(org))))
+	next := finance.New(cloud.CustomerBooks(deps(t, f.Owner(org))))
 	if _, err := next.Balance(ctx, org, org, "usd", false); err != nil {
 		t.Fatalf("the successor could not open the org: %v", err)
 	}

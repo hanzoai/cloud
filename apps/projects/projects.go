@@ -342,10 +342,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("projects.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("projects.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("projects.Use:  open store: %w", err)
 	}
@@ -427,7 +427,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	go audit(s, audited)
 
 	b.Log.Info("projects mounted", "bucket", s.State.blob.bucket, "s3", s.State.blob.configured(),
-		"ai", s.State.ai != nil, "apex", s.State.apex, "brand", deps.Brand)
+		"ai", s.State.ai != nil, "apex", s.State.apex, "brand", cloud.Brand())
 	return nil
 }
 

@@ -30,7 +30,8 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	// publish and whose fields are another package's to write.
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{Domain: "api.test"}); err != nil {
+	t.Setenv("CLOUD_DOMAIN", "api.test")
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("knowledge.Use:  %v", err)
 	}
 

@@ -373,7 +373,9 @@ func TestCloudflareTokenNeverLogged(t *testing.T) {
 	logs := &syncBuf{}
 	app := zip.New(zip.Config{Logger: luxlog.NewWriter(logs)})
 	compose(app)
-	deps := cloud.Deps{DataDir: t.TempDir(), Domain: "api.hanzo.ai", KMS: kc}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_DOMAIN", "api.hanzo.ai")
+	deps := cloud.Deps{KMS: kc}
 	if err := Use(app, deps); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}

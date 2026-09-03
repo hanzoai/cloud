@@ -21,7 +21,8 @@ func mountHelpOnly(t *testing.T) *zip.App {
 	t.Setenv("CLOUD_HELP_PUBLIC_ORG", "acme")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("mount help: %v", err)
 	}
 	return app
@@ -51,14 +52,15 @@ func mountHelpOnly(t *testing.T) *zip.App {
 func TestIntakeGateOrder(t *testing.T) {
 	huge := strings.Repeat("x", maxIntakeBytes+1)
 
-	t.Run("no help center wins over an oversized body", func(t *testing.T) {
-		app := mountPublic(t, "") // fail-closed: no public org
-		code, _ := anon(t, app, http.MethodPost, "/v1/help/tickets",
-			map[string]any{"subject": "hi", "email": "a@b.c", "description": huge}, nil)
-		if code != http.StatusNotFound {
-			t.Fatalf("oversized body with no help center: want 404, got %d", code)
-		}
-	})
+	// The "no public org" leg is GONE, and its absence is the finding rather than a
+	// gap in the test. publicOrg falls back to the brand, and the brand is resolved
+	// rather than handed over — cloud.Brand answers DefaultBrand when nothing is
+	// set — so a deployment cannot have no public org. It reached this test only
+	// because a hand-built Deps could carry an empty Brand where a deployment's
+	// never did: cfg.Brand has always been environ.Or("CLOUD_BRAND", DefaultBrand).
+	// So the 404 leg pinned a state production could not enter, and whether the
+	// public plane SHOULD require an explicit CLOUD_HELP_PUBLIC_ORG is a decision
+	// about exposure, not a test fixture.
 
 	t.Run("not configured wins over an oversized body", func(t *testing.T) {
 		app := mountPublic(t, "acme") // org named, Help model never installed

@@ -38,7 +38,8 @@ func mount(t *testing.T) *zip.App {
 	t.Helper()
 	t.Setenv("CODE_EXEC_API_KEY", "k")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	return app

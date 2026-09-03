@@ -63,7 +63,8 @@ func mountAppIn(t *testing.T, dir string, ai types.AIClient) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: dir, AI: ai}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", dir)
+	if err := Use(app, cloud.Deps{AI: ai}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	// Mount starts the scheduler goroutine when AI is non-nil and sets the global

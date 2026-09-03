@@ -131,7 +131,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s.State
 	routes(app, s)
-	s.Log.Info("label plane mounted", "brand", deps.Brand, "env", deps.Env)
+	s.Log.Info("label plane mounted", "brand", cloud.Brand(), "env", cloud.Env())
 	return nil
 }
 
@@ -143,10 +143,10 @@ func build(deps cloud.Deps) (*cloud.Service[*state], error) {
 	if luxlog.Default() == nil {
 		return nil, fmt.Errorf("label.Use:  nil luxlog.Default()")
 	}
-	if deps.DataDir == "" {
-		return nil, fmt.Errorf("label.Use:  empty deps.DataDir, so no record could be kept")
+	if cloud.DataDir() == "" {
+		return nil, fmt.Errorf("label.Use:  empty cloud.DataDir(), so no record could be kept")
 	}
-	if deps.Brand == "" {
+	if cloud.Brand() == "" {
 		// The brand is half the tenant key. A deployment that did not state one
 		// cannot mint a key and every request would refuse — better to say so at
 		// boot than once per request.
@@ -154,7 +154,7 @@ func build(deps cloud.Deps) (*cloud.Service[*state], error) {
 	}
 	b := cloud.NewBase(deps, "label")
 	return &cloud.Service[*state]{Base: b, State: &state{
-		brand:   deps.Brand,
+		brand:   cloud.Brand(),
 		stores:  cloud.NewOrgStore[*store](b, "label", openStore),
 		derived: warehouse,
 		log:     b.Log,

@@ -65,7 +65,7 @@ func meterAt(t *testing.T, l *moneyLedger) *Meter {
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	return NewMeter(Deps{Metering: m, Env: "mainnet"}, "test")
+	return NewMeter(Deps{Metering: m}, "test")
 }
 
 func spender(w string) Payer { return Payer{Wallet: account.PayerOf("", w)} }

@@ -1,10 +1,10 @@
 package link
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"net/http"
 	"time"
 
@@ -100,10 +100,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("link.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "link")
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("link.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("link.Use:  open store: %w", err)
 	}
@@ -142,7 +142,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(r, "/v1/link/:id", o.getLink)
 	zip.Delete(r, "/v1/link/:id", o.revokeLink)
 
-	log.Info("link mounted", "brand", deps.Brand)
+	log.Info("link mounted", "brand", cloud.Brand())
 	return nil
 }
 

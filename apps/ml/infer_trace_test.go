@@ -38,6 +38,7 @@ func record(t *testing.T) *tracetest.SpanRecorder {
 // servePredictor stands a data plane that answers every /infer with status, and an
 // InferenceService whose address points at it.
 func servePredictor(t *testing.T, status int) *cloud.Service[state] {
+	t.Setenv("CLOUD_ENV", "mainnet")
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +56,7 @@ func servePredictor(t *testing.T, status int) *cloud.Service[state] {
 		"status":     map[string]any{"address": map[string]any{"url": srv.URL}},
 	}}
 	return &cloud.Service[state]{
-		Base:  cloud.NewBase(cloud.Deps{Env: "mainnet"}, "ml"),
+		Base:  cloud.NewBase(cloud.Deps{}, "ml"),
 		State: state{hc: &http.Client{}, dyn: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), isvc)},
 	}
 }

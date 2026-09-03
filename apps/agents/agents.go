@@ -27,18 +27,18 @@
 // return) OR its org-unique name — resolved by Store.Resolve, so a created agent
 // is immediately gettable and runnable by whatever create/list handed back.
 //
-// The stores are per-org SQLite under deps.DataDir (Base/SQLite-only), opened
+// The stores are per-org SQLite under cloud.DataDir() (Base/SQLite-only), opened
 // through cloud.OrgStore like every other per-org subsystem. They hold
 // definitions and run I/O only — never a secret; tool credentials live in KMS by
 // reference.
 package agents
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/stamp"
 	mrand "math/rand/v2"
 	"net/http"
 	"regexp"
@@ -471,7 +471,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if err := mountConversation(app, deps); err != nil {
 		return err
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("agents.Use:  empty DataDir")
 	}
 	// The typed-op registry lives on the App: it is what makes each op a document
@@ -505,7 +505,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// Split a pre-existing fleet-wide agents database into per-org files BEFORE a
 	// route exists to read them, and fail the mount if it cannot be done: an empty
 	// registry served over live rows is the one outcome worse than not booting.
-	if err := fanOutLegacy(context.Background(), deps.DataDir, &s.State); err != nil {
+	if err := fanOutLegacy(context.Background(), cloud.DataDir(), &s.State); err != nil {
 		_ = s.State.stores.CloseAll()
 		return fmt.Errorf("agents.Use:  %w", err)
 	}
@@ -594,7 +594,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	mountProvenance(s)
 
 	log.Info("agents mounted", "ai", s.State.ai != nil,
-		"scheduler", s.State.sched != nil, "brand", deps.Brand)
+		"scheduler", s.State.sched != nil, "brand", cloud.Brand())
 	return nil
 }
 

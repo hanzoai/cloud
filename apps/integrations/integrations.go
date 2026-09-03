@@ -434,10 +434,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("integrations.Use:  router does not expose the typed-op registry")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("integrations.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("integrations.Use:  open store: %w", err)
 	}
@@ -530,7 +530,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		"kmsReady", kmsReady(s),
 		"domain", s.Domain,
 		"console", s.State.consoleURL,
-		"brand", deps.Brand,
+		"brand", cloud.Brand(),
 	)
 	return nil
 }

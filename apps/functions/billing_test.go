@@ -67,13 +67,14 @@ func (b *billServer) lastDebit() (string, []byte) { return b.peer.Org(), b.peer.
 // client, and a metering client pointed at commerceURL (default org "hanzo"; empty ⇒
 // !Enabled()).
 func newBilledService(t *testing.T, commerceURL string) *cloud.Service[state] {
+	t.Setenv("CLOUD_ENV", "mainnet")
 	t.Helper()
 	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-token", Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
 	return &cloud.Service[state]{
-		Base: cloud.NewBase(cloud.Deps{Metering: m, Env: "mainnet"}, "functions"),
+		Base: cloud.NewBase(cloud.Deps{Metering: m}, "functions"),
 		State: state{
 			stores: cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir()}, "functions", openStore),
 			exec:   newExecClient(),

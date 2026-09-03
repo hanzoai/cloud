@@ -100,7 +100,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "kms"), State: state{
 		kms:         kc,
 		iamTokenURL: tokenURL,
-		brand:       deps.Brand,
+		brand:       cloud.Brand(),
 		issuer:      strings.TrimRight(strings.TrimSpace(deps.IAMIssuer), "/"),
 	}}
 	o := ops{s: s}
@@ -188,8 +188,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		"prefix", prefix,
 		"ready", kc.Ready(),
 		"signing", kc.SigningConfigured(),
-		"brand", deps.Brand,
-		"env", deps.Env,
+		"brand", cloud.Brand(),
+		"env", cloud.Env(),
 	)
 	return nil
 }

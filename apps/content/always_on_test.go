@@ -20,13 +20,14 @@ import (
 // org that did NOT install marketing returns 201 (was 409 "install the marketing
 // module first"). This is the exact path the Guide's do-action drives.
 func TestGenerate_CompletesWithoutInstall_HTTP(t *testing.T) {
+	t.Setenv("CLOUD_ENV", "testnet")
 	const org = "freshco" // never runs POST /v1/framework/modules/marketing/install
 	ai := &recordingAI{reply: `A crisp one-line positioning statement.
 
 - Supporting point one
 - Supporting point two
 - Supporting point three`}
-	app := mountWith(t, cloud.Deps{AI: ai, Env: "testnet"})
+	app := mountWith(t, cloud.Deps{AI: ai})
 
 	code, b := req(t, app, http.MethodPost, "/v1/content/generate", org, map[string]any{
 		"doctype": DocTypeCampaign,
@@ -49,9 +50,10 @@ func TestGenerate_CompletesWithoutInstall_HTTP(t *testing.T) {
 // connector + the Guide agent both call it in-process) never returns
 // errModuleNotInstalled for a fresh org — the module is always-on.
 func TestGenerate_CompletesWithoutInstall_InProcess(t *testing.T) {
+	t.Setenv("CLOUD_ENV", "testnet")
 	const org = "acme"
 	ai := &recordingAI{reply: "Positioning: the sharpest one-liner.\n\n- a\n- b\n- c"}
-	_ = mountWith(t, cloud.Deps{AI: ai, Env: "testnet"})
+	_ = mountWith(t, cloud.Deps{AI: ai})
 
 	res, err := Generate(context.Background(), org, GenerateInput{
 		DocType: DocTypeCampaign.String(),
@@ -75,7 +77,8 @@ func TestGenerate_CompletesWithoutInstall_InProcess(t *testing.T) {
 // unaffected (a stored override wins over the fixture).
 func TestGenerate_InstallStillSucceeds(t *testing.T) {
 	const org = "acme"
-	app := mountWith(t, cloud.Deps{AI: &recordingAI{reply: "x"}, Env: "testnet"})
+	t.Setenv("CLOUD_ENV", "testnet")
+	app := mountWith(t, cloud.Deps{AI: &recordingAI{reply: "x"}})
 	code, b := req(t, app, http.MethodPost, "/v1/framework/modules/marketing/install", org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("install marketing want 200, got %d %s", code, b)

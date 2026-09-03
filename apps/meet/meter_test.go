@@ -31,7 +31,8 @@ func billedUse(t *testing.T, l *planetest.Ledger) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.IdentityMiddleware(&cloud.Config{IAMIssuer: iamtest.Issuer, JWKSURL: jwksURL}))
 	app.Use(cloud.Bridge())
-	if err := serve(app, cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, st); err != nil {
+	t.Setenv("CLOUD_ENV", "mainnet")
+	if err := serve(app, cloud.Deps{Metering: l.Client(t)}, st); err != nil {
 		t.Fatalf("serve: %v", err)
 	}
 	return app

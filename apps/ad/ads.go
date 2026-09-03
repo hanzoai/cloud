@@ -85,10 +85,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("ad.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("ad.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("ad.Use:  open store: %w", err)
 	}
@@ -98,7 +98,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, s)
 
-	b.Log.Info("ads mounted", "brand", deps.Brand)
+	b.Log.Info("ads mounted", "brand", cloud.Brand())
 	return nil
 }
 

@@ -339,16 +339,16 @@ func requestHost(ctx context.Context) string {
 // injected) degrades to the in-memory seed switches — WaitlistModeForHost then
 // fail-opens. Mounts AFTER flags so the engine's platform-switch plane is installed first.
 func Use(app cloud.Router, deps cloud.Deps) error {
-	if deps.DataDir == "" {
-		return fmt.Errorf("admission.Use:  empty deps.DataDir")
+	if cloud.DataDir() == "" {
+		return fmt.Errorf("admission.Use:  empty cloud.DataDir()")
 	}
 	b := cloud.NewBase(deps, "admission")
 	log := b.Log
 	mounted = &registryState{
 		store: cloud.NewOrgStore[*waitlistStore](b, "waitlist", openWaitlistStore),
-		brand: deps.Brand,
+		brand: cloud.Brand(),
 	}
-	n := seedRegistry(deps.Brand, log)
+	n := seedRegistry(cloud.Brand(), log)
 	// The guard's public runtime mode read (host→service→waitlist.<svc>), one namespace
 	// under /v1/flags. It is what the ingress guard asks, and it is exempt from the
 	// guard's own gating so a user on the waitlist can still resolve mode.

@@ -67,7 +67,9 @@ func pricingSpec(t *testing.T) (*zip.App, *openapi.Document) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{Brand: "hanzo", DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
@@ -169,7 +171,9 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 // cloud.Serve, and never in production, which is the worst shape a gap can take.
 func TestTheSubsystemCarriesItsOwnBridge(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")}) // deliberately NOT composed.
-	if err := Use(app, cloud.Deps{Brand: "hanzo", DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })

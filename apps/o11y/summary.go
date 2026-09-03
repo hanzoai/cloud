@@ -189,7 +189,7 @@ type StatusSummary struct {
 // middleware that could never run. Without a request the handler still answers,
 // branded for the deployment rather than for the caller's Host — see handleSummary.
 func mountSummary(a *zip.App, deps cloud.Deps) {
-	deploymentBrand = deps.Brand
+	deploymentBrand = cloud.Brand()
 	zip.Get(a, "/v1/o11y/summary", handleSummary)
 }
 

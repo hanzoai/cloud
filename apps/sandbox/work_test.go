@@ -58,7 +58,8 @@ func (h *held) tty(ctx context.Context, ns, pod string, argv []string, stdin io.
 // already running.
 func service(t *testing.T, str streamer) *Service {
 	t.Helper()
-	s, err := New(cloud.Deps{DataDir: t.TempDir()})
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	s, err := New(cloud.Deps{})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

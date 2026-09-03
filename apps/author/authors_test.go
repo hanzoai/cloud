@@ -909,7 +909,9 @@ func sweptAccrued(t *testing.T, body []byte) int {
 func TestUse(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

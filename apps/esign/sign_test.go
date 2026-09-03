@@ -98,7 +98,8 @@ func mountOn(t *testing.T, dataDir string, vfs *memVFS) *zip.App {
 	t.Helper()
 	_ = Shutdown(nil) // reset process-global state between tests
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := useWith(app, cloud.Deps{DataDir: dataDir}, vfs); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", dataDir)
+	if err := useWith(app, cloud.Deps{}, vfs); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(nil) })

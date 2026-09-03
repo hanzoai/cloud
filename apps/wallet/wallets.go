@@ -18,13 +18,13 @@ package wallet
 // those Kinds fail closed with ErrMPCNotConfigured.
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"strings"
 	"time"
@@ -68,10 +68,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("wallet.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "wallet")
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("wallet.Use:  empty DataDir")
 	}
-	st, err := openStore(deps.DataDir)
+	st, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("wallet.Use:  open store: %w", err)
 	}
@@ -96,7 +96,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	exposePayee()
 
 	_, mpcOK := custody[KindMPC]
-	log.Info("wallets live", "brand", deps.Brand, "defaultCustody", def, "mpcConfigured", mpcOK)
+	log.Info("wallets live", "brand", cloud.Brand(), "defaultCustody", def, "mpcConfigured", mpcOK)
 	return nil
 }
 

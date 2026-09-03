@@ -188,7 +188,8 @@ func TestACookieAloneCannotSearch(t *testing.T) {
 // than a defended one.
 func TestTheTokenTheControlAsksForIsAccepted(t *testing.T) {
 	app, bought := seamApp(t)
-	if err := account.Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	if err := account.Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use: %v", err)
 	}
 

@@ -60,7 +60,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("compliance.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("compliance.Use:  empty DataDir")
 	}
 	provider, err := idv.FromConfig(deps.Secret(), os.Getenv)
@@ -76,7 +76,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// names the unresolved ref rather than answering 503 "no instance running" for
 	// this whole surface — which, on a Lazy app, is a sentence about nothing.
 	webhook, webhookErr := idv.WebhookFromConfig(deps.Secret(), os.Getenv)
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("compliance.Use:  open store: %w", err)
 	}
@@ -86,7 +86,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s
 	routes(app, s)
-	s.Log.Info("compliance mounted", "brand", deps.Brand, "provider", provider.Name(), "webhook", webhook != nil, "audit", deps.Audit != nil)
+	s.Log.Info("compliance mounted", "brand", cloud.Brand(), "provider", provider.Name(), "webhook", webhook != nil, "audit", deps.Audit != nil)
 	return nil
 }
 

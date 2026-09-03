@@ -295,7 +295,8 @@ func TestTheUnprovableRegimeReapsAndClaimsNothing(t *testing.T) {
 	const org = "acme"
 	books := &ledger{}
 
-	b := cloud.NewBase(cloud.Deps{DataDir: t.TempDir(), Durable: nil, Peers: true}, "sandbox")
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	b := cloud.NewBase(cloud.Deps{Durable: nil, Peers: true}, "sandbox")
 	b.Log = luxlog.NewNoOpLogger()
 	stores := cloud.NewOrgStore(b, "sandbox", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })

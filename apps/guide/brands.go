@@ -51,7 +51,7 @@ func mustBrands() map[string]Blueprint {
 }
 
 // brandBlueprint returns the brand's embedded default blueprint, or (Blueprint{},
-// false) when the brand ships none. Case-insensitive, whitespace-trimmed (deps.Brand
+// false) when the brand ships none. Case-insensitive, whitespace-trimmed (cloud.Brand()
 // is operator config).
 func brandBlueprint(brand string) (Blueprint, bool) {
 	bp, ok := brandBlueprints()[strings.ToLower(strings.TrimSpace(brand))]

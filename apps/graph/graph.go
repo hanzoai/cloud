@@ -62,8 +62,8 @@ type scope struct {
 }
 
 func build(deps cloud.Deps) (*cloud.Service[*state], error) {
-	if deps.DataDir == "" {
-		return nil, fmt.Errorf("graph.Use:  empty deps.DataDir, so no assertion could be kept")
+	if cloud.DataDir() == "" {
+		return nil, fmt.Errorf("graph.Use:  empty cloud.DataDir(), so no assertion could be kept")
 	}
 	b := cloud.NewBase(deps, "graph")
 	return &cloud.Service[*state]{Base: b, State: &state{
@@ -82,7 +82,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s.State
 	routes(app, s)
-	s.Log.Info("graph plane mounted", "env", deps.Env)
+	s.Log.Info("graph plane mounted", "env", cloud.Env())
 	return nil
 }
 

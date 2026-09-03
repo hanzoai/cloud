@@ -36,11 +36,11 @@
 package provisioning
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"regexp"
 	"strconv"
 	"strings"
@@ -90,10 +90,10 @@ func publicEndpoint(kind string) (host string, port int) {
 	default:
 		host, port = "api.hanzo.ai", 443
 	}
-	if h := environ.Or("PUBLIC_" + strings.ToUpper(kind) + "_HOST", ""); h != "" {
+	if h := environ.Or("PUBLIC_"+strings.ToUpper(kind)+"_HOST", ""); h != "" {
 		host = h
 	}
-	if p := environ.Or("PUBLIC_" + strings.ToUpper(kind) + "_PORT", ""); p != "" {
+	if p := environ.Or("PUBLIC_"+strings.ToUpper(kind)+"_PORT", ""); p != "" {
 		if n, err := strconv.Atoi(p); err == nil {
 			port = n
 		}
@@ -224,7 +224,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("provisioning.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("provisioning.Use:  empty DataDir")
 	}
 	// The typed half needs the op REGISTRY, not just a router: a typed op is a
@@ -235,7 +235,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if z == nil {
 		return fmt.Errorf("provisioning.Use:  %T does not expose the typed-op registry", app)
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("provisioning.Use:  open store: %w", err)
 	}
@@ -259,8 +259,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		"dedicated", len(dedicatedEngines),
 		"cluster", s.State.orch != nil && s.State.orch.Ready() == nil,
 		"kms", s.State.sec.Enabled(),
-		"brand", deps.Brand,
-		"env", deps.Env,
+		"brand", cloud.Brand(),
+		"env", cloud.Env(),
 	)
 	return nil
 }

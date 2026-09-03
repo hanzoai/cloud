@@ -154,7 +154,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	log := luxlog.Default().New("subsystem", "pubsub")
 
 	dataDir := environ.Or("CLOUD_PUBSUB_STORE_DIR",
-		filepath.Join(cmp.Or(strings.TrimSpace(deps.DataDir), "/var/lib/cloud"), "pubsub"))
+		filepath.Join(cmp.Or(strings.TrimSpace(cloud.DataDir()), "/var/lib/cloud"), "pubsub"))
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return fmt.Errorf("pubsub.Use:  store dir %s: %w", dataDir, err)
 	}
@@ -204,7 +204,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	s, err := psembed.Open(psembed.Options{
 		Host:       host,
 		Port:       port,
-		ServerName: environ.Or("CLOUD_PUBSUB_SERVER_NAME", "cloud-pubsub-"+cmp.Or(strings.TrimSpace(deps.Brand), "hanzo")),
+		ServerName: environ.Or("CLOUD_PUBSUB_SERVER_NAME", "cloud-pubsub-"+cmp.Or(strings.TrimSpace(cloud.Brand()), "hanzo")),
 		StoreDir:   dataDir,
 		MaxPayload: maxPayload,
 	})

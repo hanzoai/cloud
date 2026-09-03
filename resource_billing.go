@@ -91,7 +91,7 @@ func NewMeter(deps Deps, provider string) *Meter {
 	return &Meter{
 		m:        deps.Metering,
 		provider: provider,
-		env:      deps.Env,
+		env:      Env(),
 		log:      luxlog.Default(),
 	}
 }

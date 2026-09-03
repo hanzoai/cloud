@@ -178,7 +178,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("template.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("template.Use:  empty DataDir")
 	}
 	// templates registers TYPED ops, which live on the *zip.App's registry — the
@@ -193,7 +193,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if _, err := catalog(); err != nil {
 		return fmt.Errorf("template.Use:  %w", err)
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("template.Use:  open store: %w", err)
 	}
@@ -202,7 +202,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, zapp, s)
 
-	s.Log.Info("templates gallery", "prefix", "/v1/template", "brand", deps.Brand)
+	s.Log.Info("templates gallery", "prefix", "/v1/template", "brand", cloud.Brand())
 	return nil
 }
 

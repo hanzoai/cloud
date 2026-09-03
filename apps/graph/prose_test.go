@@ -25,7 +25,8 @@ func mountGraph(t *testing.T) *zip.App {
 	// reason production cannot produce. It went unnoticed here because the only
 	// test that used this harness read the SPEC and made no request.
 	app.Use(cloud.Bridge())
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

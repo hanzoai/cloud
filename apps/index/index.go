@@ -99,10 +99,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("index.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("index.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("index.Use:  open store: %w", err)
 	}
@@ -125,7 +125,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// (rpc.go).
 	expose()
 
-	b.Log.Info("index mounted", "brand", deps.Brand)
+	b.Log.Info("index mounted", "brand", cloud.Brand())
 	return nil
 }
 

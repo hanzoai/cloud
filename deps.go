@@ -15,9 +15,9 @@ import (
 	"os"
 	"strings"
 
-	luxlog "github.com/luxfi/log"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/ha"
+	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/apps/gateway/edge"
 	"github.com/hanzoai/cloud/audit"
@@ -99,23 +99,17 @@ type Deps struct {
 	// meant every mount checked it for nil — a field can be nil, a package-level
 	// default cannot.
 
-	// Brand is the white-label brand identifier for this deployment.
-	// Values: exactly the ids in the brand registry (brand/brand.go) — "hanzo",
-	// "lux", "zoo", "pars", "bootnode". It is NOT open: brand.For folds an
-	// unregistered id to hanzo, silently, so an unlisted brand does not get its
-	// own issuer or domain — it gets Hanzo's. This said `"osage", ... or any
-	// customer brand`, which was wrong in both directions; brand.Registered is
-	// the fallible check for anything that must actually know.
-	Brand string
+	// Brand, Env, Domain and DataDir are not here. They are deployment FACTS: a
+	// subsystem cannot fail to connect to a brand name, it reads the string and
+	// stamps it, which is what separated them from the clients below. Carrying them
+	// meant every mount took a struct of twenty things to read one string, and a
+	// field can be empty where a resolver cannot. They are cloud.Brand(), cloud.Env(),
+	// cloud.Domain() and cloud.DataDir() in config.go — the same move the logger, the
+	// process id and the model names made before them.
 
 	// Version is the API contract/build version emitted as the X-Api-Version
 	// response header (see middleware.ProductionHeaders wiring in serve.go).
 	Version string
-
-	// Env is the deployment environment (mainnet|testnet|devnet). Subsystems
-	// that meter usage stamp it for per-env attribution; it never gates or
-	// bypasses billing (every env bills against its own commerce ledger).
-	Env string
 
 	// Self is not here. It was — THIS process's stable id, the StatefulSet ordinal
 	// or the OS hostname — with a doc comment describing how a subsystem would
@@ -125,28 +119,11 @@ type Deps struct {
 	// whose justification is written entirely in the future tense is a plan, not a
 	// dependency.
 
-	// Domain is the deployment's OWN public API host (api.hanzo.ai, api.lux.network)
-	// — the host this process answers on, used to build absolute URLs back to
-	// itself: an OAuth redirect_uri, an avatar URL, a git clone URL.
-	//
-	// It is the HOST and never the apex. Those are two facts, and reading one for
-	// the other is what made every native build fail: apps/platform took this
-	// value as the git apex it trusts, but a deployment's forge (git.hanzo.ai) is
-	// a SIBLING of its API (api.hanzo.ai), not a child, so the allowance could
-	// never match. Anything that needs the apex — a sibling host, a trust root,
-	// a self-domain floor — calls brand.Apex/brand.Sibling, which is the one
-	// derivation of it. Do not re-derive it from this field.
-	Domain string
-
 	// IAMIssuer is the canonical OIDC issuer (JWKS source) for this brand,
 	// resolved from Brand via the white-label registry unless pinned by the
 	// operator. Subsystems validate JWT `iss` + signatures against
 	// {IAMIssuer}/v1/iam/.well-known/jwks (HIP-0111). One issuer per deployment.
 	IAMIssuer string
-
-	// DataDir is the per-deployment data root. Per-org SQLite files
-	// land at {DataDir}/orgs/{orgSlug}/{service}.db per HIP-0302.
-	DataDir string
 
 	// MasterKey is the 32-byte at-rest KEK (decoded CLOUD_KMS_MASTER_KEY_REF), for
 	// subsystems that encrypt their own stores and would otherwise each need a key

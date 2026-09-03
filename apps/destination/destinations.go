@@ -89,7 +89,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("destination.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("destination.Use:  empty DataDir")
 	}
 	// destinations registers TYPED ops, which live on the *zip.App's registry — the
@@ -99,7 +99,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("destination.Use:  router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("destination.Use:  open store: %w", err)
 	}
@@ -122,7 +122,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	} else {
 		b.Log.Info("destinations fan-out disabled", "flag", publicFanoutEnv)
 	}
-	b.Log.Info("destinations mounted", "platforms", len(s.State.dests), "kmsReady", kmsReady(s), "brand", deps.Brand)
+	b.Log.Info("destinations mounted", "platforms", len(s.State.dests), "kmsReady", kmsReady(s), "brand", cloud.Brand())
 	return nil
 }
 

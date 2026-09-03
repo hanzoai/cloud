@@ -86,7 +86,7 @@ func installDurableIngest(ctx context.Context, deps Deps, app string) {
 	// cannot collide, which is what the internal plane does everywhere else — and
 	// it is why the collision above cannot recur: two processes cannot want the
 	// same free port when neither wants a port at all.
-	dataDir := filepath.Join(cmp.Or(deps.DataDir, "/data"), "tasks", cmp.Or(app, "cloud"))
+	dataDir := filepath.Join(cmp.Or(DataDir(), "/data"), "tasks", cmp.Or(app, "cloud"))
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		luxlog.Default().Warn("durable ingest: data dir unavailable; ingest runs inline", "err", err)
 		return

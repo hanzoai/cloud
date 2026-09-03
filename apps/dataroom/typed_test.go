@@ -35,7 +35,8 @@ func mountMCPApp(t *testing.T) (*zip.App, *memVFS) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
 	vfs := newMemVFS()
-	if err := useWith(app, cloud.Deps{DataDir: t.TempDir()}, vfs); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := useWith(app, cloud.Deps{}, vfs); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })

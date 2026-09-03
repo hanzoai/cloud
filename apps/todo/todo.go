@@ -161,7 +161,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("todo.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("todo.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "todo")

@@ -29,10 +29,10 @@
 package functions
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
 	"cmp"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"net/http"
 	"regexp"
 	"strings"
@@ -205,7 +205,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("functions.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("functions.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "functions")

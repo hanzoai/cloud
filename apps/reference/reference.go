@@ -179,7 +179,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("reference.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("reference.Use:  empty DataDir")
 	}
 	base := cloud.NewBase(deps, subsystem)
@@ -208,7 +208,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	routes(app, s)
 	s.State.work.done.Add(1)
 	go tend(s)
-	s.Log.Info("reference mounted", "sets", len(Catalog()), "brand", deps.Brand)
+	s.Log.Info("reference mounted", "sets", len(Catalog()), "brand", cloud.Brand())
 	return nil
 }
 

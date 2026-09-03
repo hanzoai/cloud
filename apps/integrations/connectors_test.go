@@ -156,7 +156,9 @@ func newLogApp(t *testing.T, kc *kms.Client) (*zip.App, *syncBuf) {
 	logs := &syncBuf{}
 	app := zip.New(zip.Config{Logger: luxlog.NewWriter(logs)})
 	compose(app)
-	deps := cloud.Deps{DataDir: t.TempDir(), Domain: "api.hanzo.ai"}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_DOMAIN", "api.hanzo.ai")
+	deps := cloud.Deps{}
 	if kc != nil {
 		deps.KMS = kc
 	}

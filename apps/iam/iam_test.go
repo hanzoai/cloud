@@ -46,7 +46,8 @@ func TestDegradedMountAnswers503(t *testing.T) {
 	}
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	if err := Use(app, cloud.Deps{DataDir: notADir}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", notADir)
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount must stay up with no store, cloud depends on it: %v", err)
 	}
 	if DB() != nil {
@@ -105,7 +106,8 @@ func TestAnEmptyStoreRefusesRatherThanServingAnEmptyKeyset(t *testing.T) {
 	t.Setenv("initDataFile", filepath.Join(dir, "absent.json"))
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	if err := Use(app, cloud.Deps{DataDir: dir}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", dir)
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount must stay up, cloud depends on it: %v", err)
 	}
 	if DB() != nil {
@@ -132,7 +134,8 @@ func TestAnEmptyStoreRefusesRatherThanServingAnEmptyKeyset(t *testing.T) {
 // place within that is namespace's, not this package's), and init_data.json resolves
 // the standalone-iam default unless `initDataFile` overrides.
 func TestPaths(t *testing.T) {
-	dir, initData := paths(cloud.Deps{DataDir: "/var/data"})
+	t.Setenv("CLOUD_DATA_DIR", "/var/data")
+	dir, initData := paths(cloud.Deps{})
 	if dir != "/var/data" {
 		t.Errorf("dir = %q, want /var/data", dir)
 	}
@@ -140,7 +143,8 @@ func TestPaths(t *testing.T) {
 		t.Errorf("initData = %q, want the CWD-relative default", initData)
 	}
 	t.Setenv("initDataFile", "/etc/iam/init_data.json")
-	if _, initData := paths(cloud.Deps{DataDir: "/var/data"}); initData != "/etc/iam/init_data.json" {
+	t.Setenv("CLOUD_DATA_DIR", "/var/data")
+	if _, initData := paths(cloud.Deps{}); initData != "/etc/iam/init_data.json" {
 		t.Errorf("initData override not honored, got %q", initData)
 	}
 }
@@ -157,7 +161,8 @@ func TestDBLifecycleAndStore(t *testing.T) {
 	}
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	deps := cloud.Deps{DataDir: dataDirWithStore(t)}
+	t.Setenv("CLOUD_DATA_DIR", dataDirWithStore(t))
+	deps := cloud.Deps{}
 	if err := Use(app, deps); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}

@@ -50,11 +50,11 @@
 package treasury
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"os"
 	"strconv"
@@ -135,10 +135,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("treasury.Use:  nil luxlog.Default()")
 	}
 	log = log.New("subsystem", "treasury")
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("treasury.Use:  empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
+	if err := os.MkdirAll(cloud.DataDir(), 0o755); err != nil {
 		return fmt.Errorf("treasury.Use:  data dir: %w", err)
 	}
 	// ON THE DURABLE PLANE, like every other store the fleet keeps. The reserve is
@@ -222,7 +222,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// the treasury: binding it is idempotent, so it is a PUT on the thing it sets.
 	zip.Put(zapp, "/v1/admin/treasury/anchor/signer", o.adminSetAnchorSigner) // SuperAdmin: the reserve MPC wallet that signs anchors
 
-	log.Info("treasury mounted", "brand", deps.Brand, "ledgerOfRecord", record.Name(), "anchor", s.State.anchor.configured())
+	log.Info("treasury mounted", "brand", cloud.Brand(), "ledgerOfRecord", record.Name(), "anchor", s.State.anchor.configured())
 	return nil
 }
 

@@ -46,7 +46,9 @@ func newAppUnderFlatten(t *testing.T, kc *kms.Client) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	installV1Flatten(app) // the commerce filter is OUTERMOST: it mounts before us
 	compose(app)
-	deps := cloud.Deps{DataDir: t.TempDir(), Domain: "api.hanzo.ai"}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_DOMAIN", "api.hanzo.ai")
+	deps := cloud.Deps{}
 	if kc != nil {
 		deps.KMS = kc
 	}

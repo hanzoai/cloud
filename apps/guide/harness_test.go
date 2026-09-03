@@ -20,7 +20,8 @@ func newApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	deps := cloud.Deps{DataDir: t.TempDir()}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	deps := cloud.Deps{}
 	if err := Use(app, deps); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}

@@ -74,7 +74,9 @@ func mountSites(t *testing.T, ai *fakeAI, commerceURL string) *zip.App {
 	if ai != nil {
 		aic = ai
 	}
-	deps := cloud.Deps{DataDir: t.TempDir(), AI: aic, Metering: m, Env: "mainnet"}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_ENV", "mainnet")
+	deps := cloud.Deps{AI: aic, Metering: m}
 	if err := Use(app, deps); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}

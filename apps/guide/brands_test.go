@@ -51,7 +51,9 @@ func TestMountUsesBrandDefault(t *testing.T) {
 	mountBrand := func(brand string) overviewView {
 		app := zip.New(zip.Config{Logger: luxlog.New("test")})
 		compose(app)
-		deps := cloud.Deps{DataDir: t.TempDir(), Brand: brand}
+		t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+		t.Setenv("CLOUD_BRAND", brand)
+		deps := cloud.Deps{}
 		if err := Use(app, deps); err != nil {
 			t.Fatalf("Use(brand=%q): %v", brand, err)
 		}

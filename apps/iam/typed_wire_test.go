@@ -122,7 +122,8 @@ var ceremony = map[string]bool{
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("iamtest"), DisableStartupMessage: true})
-	if err := Use(app, cloud.Deps{DataDir: dataDirWithStore(t)}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", dataDirWithStore(t))
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	return app
@@ -325,7 +326,8 @@ func TestDegradedLeavesNoIdentityAddressToTheSPA(t *testing.T) {
 	}
 
 	app := zip.New(zip.Config{Logger: luxlog.New("iamtest"), DisableStartupMessage: true})
-	if err := Use(app, cloud.Deps{DataDir: notADir}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", notADir)
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount must stay up with no store: %v", err)
 	}
 

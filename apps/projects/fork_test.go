@@ -28,7 +28,8 @@ func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	return app
@@ -358,7 +359,8 @@ func TestForkTemplateRecordsLineage(t *testing.T) {
 // template is not merely filtered out of the fork, it is unreachable from it.
 func TestForkPrivateTemplateIsOwnerOnly(t *testing.T) {
 	app := mountApp(t)
-	if err := template.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := template.Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("template.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = template.Shutdown(t.Context()) })

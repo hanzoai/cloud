@@ -15,7 +15,7 @@
 //     browser claim); the owning org is the deployment brand.
 //
 //   - SSRF SAFETY. The probe target is ALWAYS `<app>.<brand-domain>` where the brand
-//     is the deployment's OWN brand (deps.Brand, fixed at deploy) and app ∈
+//     is the deployment's OWN brand (cloud.Brand(), fixed at deploy) and app ∈
 //     {cms,erp,help}. There is NO client-controlled host in the target at all — a
 //     forged Host header can never steer this into probing an arbitrary origin
 //     (strictly tighter than route.ts, which clamped a client Host).
@@ -131,7 +131,7 @@ func (o ops) embedStatus(ctx context.Context, in *embedStatusReq) (*embedStatusR
 	embedURL := origin + landing
 
 	// SERVER-SIDE entitlement gate: a brand-owned app frames only for a member of the
-	// owning brand org (cr.owner == deps.Brand) or a SuperAdmin. A non-entitled
+	// owning brand org (cr.owner == cloud.Brand()) or a SuperAdmin. A non-entitled
 	// caller NEVER receives the embed URL and we don't even probe — the module shows
 	// the provision panel. This is the authoritative gate (the client check only
 	// avoids a flash).

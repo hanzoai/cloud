@@ -171,18 +171,18 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("dataset.Use:  nil app")
 	}
-	if err := tenant.Vouches(deps.Brand); err != nil {
+	if err := tenant.Vouches(cloud.Brand()); err != nil {
 		// The brand is half the tenant key, and the half that must be a brand the
 		// registry carries — the rollup that WRITES this plane's source refuses any
 		// other, so a key minted under one would read a tenant nobody can write.
 		// A deployment that cannot mint a key would 403 every request; better said
 		// once at boot than once per caller.
-		return fmt.Errorf("dataset.Use:  %q cannot mint a tenant key: %w", deps.Brand, err)
+		return fmt.Errorf("dataset.Use:  %q cannot mint a tenant key: %w", cloud.Brand(), err)
 	}
 	base := cloud.NewBase(deps, "dataset")
 	p := &plane{
 		store: warehouse{},
-		brand: deps.Brand,
+		brand: cloud.Brand(),
 		bill:  base.Bill,
 		log:   base.Log,
 		busy:  map[string]scan{},
@@ -202,7 +202,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if err := mount(p, app); err != nil {
 		return err
 	}
-	base.Log.Info("dataset plane mounted", "brand", deps.Brand, "env", deps.Env)
+	base.Log.Info("dataset plane mounted", "brand", cloud.Brand(), "env", cloud.Env())
 	return nil
 }
 

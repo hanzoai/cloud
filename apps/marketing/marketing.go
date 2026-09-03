@@ -127,7 +127,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("marketing.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("marketing.Use:  empty DataDir")
 	}
 	// marketing registers TYPED ops, which live on the *zip.App's registry — the
@@ -137,7 +137,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("marketing.Use:  router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("marketing.Use:  open store: %w", err)
 	}
@@ -156,7 +156,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// engine simply means scheduled sends stay pending until one appears).
 	go startDrip(context.Background(), b.Log)
 
-	b.Log.Info("marketing mounted", "brand", deps.Brand)
+	b.Log.Info("marketing mounted", "brand", cloud.Brand())
 	return nil
 }
 

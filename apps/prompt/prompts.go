@@ -15,14 +15,14 @@
 //	GET    /v1/prompt/:name      prompt detail + version history    -> PromptDetail
 //	DELETE /v1/prompt/:name      delete a prompt (+ its versions)
 //
-// The store is SQLite in deps.DataDir (Base/SQLite-only mandate); it holds only
+// The store is SQLite in cloud.DataDir() (Base/SQLite-only mandate); it holds only
 // template text + taxonomy, never a secret.
 package prompt
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"net/http"
 	"regexp"
 	"strings"
@@ -170,10 +170,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("prompt.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("prompt.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("prompt.Use:  open store: %w", err)
 	}

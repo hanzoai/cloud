@@ -95,7 +95,8 @@ func mount(t *testing.T, m *model) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	deps := cloud.Deps{DataDir: t.TempDir()}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	deps := cloud.Deps{}
 	if m != nil {
 		deps.AI = m
 	}

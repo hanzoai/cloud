@@ -200,7 +200,8 @@ func harness(t *testing.T) (*zip.App, *fakeFlow) {
 
 	app := zip.New(zip.Config{Logger: luxlog.New("flowtest"), DisableStartupMessage: true})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	return app, f
@@ -457,7 +458,8 @@ func TestStatusIsAnHonestLens(t *testing.T) {
 	down := zip.New(zip.Config{Logger: luxlog.New("flowtest"), DisableStartupMessage: true})
 	compose(down)
 	t.Setenv("FLOW_UPSTREAM", "http://127.0.0.1:1") // nothing listens
-	if err := Use(down, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(down, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	status, body = do(t, down, http.MethodGet, "/v1/flow/status", "u1", "acme", "")

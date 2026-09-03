@@ -40,6 +40,8 @@ func (c *carrierSpy) Send(ctx context.Context, r SMSRequest) (SMS, error) {
 // telAt builds the surface with a LIVE carrier billed against l, and returns the
 // spy so a test can ask whether the carrier was reached at all.
 func telAt(t *testing.T, l *planetest.Ledger) (*cloud.Service[state], *carrierSpy) {
+	t.Setenv("CLOUD_ENV", "mainnet")
+	t.Setenv("CLOUD_ENV", "mainnet")
 	t.Helper()
 	store, err := openStore(t.TempDir())
 	if err != nil {
@@ -48,10 +50,10 @@ func telAt(t *testing.T, l *planetest.Ledger) (*cloud.Service[state], *carrierSp
 	t.Cleanup(func() { _ = store.Close() })
 	spy := &carrierSpy{Carrier: newStub()}
 	s := &cloud.Service[state]{
-		Base:  cloud.NewBase(cloud.Deps{Metering: nil, Env: "mainnet"}, "tel"),
+		Base:  cloud.NewBase(cloud.Deps{Metering: nil}, "tel"),
 		State: state{store: store, carrier: spy, live: true},
 	}
-	s.Bill = cloud.NewMeter(cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, "tel")
+	s.Bill = cloud.NewMeter(cloud.Deps{Metering: l.Client(t)}, "tel")
 	return s, spy
 }
 

@@ -272,7 +272,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	app.Post("/v1/visor/compute/bots/:id/:action", cloud.Handle(s, botAction))
 
 	s.Log.Info("visor compute surface mounted", "target", s.State.cl.target,
-		"serviceAuth", serviceClientID() != "", "brand", deps.Brand)
+		"serviceAuth", serviceClientID() != "", "brand", cloud.Brand())
 	return nil
 }
 

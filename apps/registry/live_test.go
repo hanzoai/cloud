@@ -39,7 +39,8 @@ func liveApp(t *testing.T) *zip.App {
 	t.Setenv("REGISTRY_CLIENT_SECRET", os.Getenv("REGISTRY_E2E_SECRET"))
 	app := zip.New(zip.Config{Logger: luxlog.New("registrylive"), DisableStartupMessage: true})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	return app

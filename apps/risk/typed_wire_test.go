@@ -108,7 +108,9 @@ func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("risktest"), DisableStartupMessage: true})
 	compose(app)
-	deps := cloud.Deps{Brand: brandA, DataDir: t.TempDir()}
+	t.Setenv("CLOUD_BRAND", brandA)
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	deps := cloud.Deps{}
 	if err := Use(app, deps); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}

@@ -322,7 +322,8 @@ func mount(t *testing.T, brand string) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	deps := cloud.Deps{Brand: brand}
+	t.Setenv("CLOUD_BRAND", brand)
+	deps := cloud.Deps{}
 	if err := Use(app, deps); err != nil {
 		t.Fatalf("Use: %v", err)
 	}
@@ -808,7 +809,8 @@ func TestAccountClaimsNothingUnderIAM(t *testing.T) {
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use: %v", err)
 	}
 	for _, r := range app.Fiber().GetRoutes(true) {

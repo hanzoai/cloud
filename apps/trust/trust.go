@@ -80,7 +80,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("trust.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("trust.Use:  empty DataDir")
 	}
 	zapp := cloud.ZipApp(app)
@@ -103,8 +103,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		Name:    "trust",
 		Bundle:  bundle,
 		Schema:  htrust.Schema,
-		DataDir: deps.DataDir,
-		OnOpen:  seed(home, deps.Brand),
+		DataDir: cloud.DataDir(),
+		OnOpen:  seed(home, cloud.Brand()),
 		Bind: func(ctx context.Context, tenant string) map[string]any {
 			return map[string]any{
 				"__own":   func() bool { return tenant == home },
@@ -125,7 +125,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		"version", htrust.Version,
 		"home", home,
 		"trail", deps.Audit != nil,
-		"brand", deps.Brand,
+		"brand", cloud.Brand(),
 	)
 	return nil
 }
@@ -135,7 +135,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 // api.lux.cloud — so a white-label deployment never publishes another brand's
 // controls under its own name.
 func homeOrg(deps cloud.Deps) string {
-	if b := strings.TrimSpace(deps.Brand); b != "" {
+	if b := strings.TrimSpace(cloud.Brand()); b != "" {
 		return strings.ToLower(b)
 	}
 	return "hanzo"

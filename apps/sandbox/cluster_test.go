@@ -64,7 +64,8 @@ func apiserver(t *testing.T, classes ...string) *httptest.Server {
 // records where the sandbox ran.
 func TestLeaseOnAnAttachedClusterResolvesTheRegistry(t *testing.T) {
 	away(t)
-	s, err := New(cloud.Deps{DataDir: t.TempDir()})
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	s, err := New(cloud.Deps{})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -109,7 +110,8 @@ func TestLeaseOnAnAttachedClusterResolvesTheRegistry(t *testing.T) {
 // with nothing built and nothing recorded behind it.
 func TestLeaseOnAnUnknownClusterIs404(t *testing.T) {
 	away(t)
-	s, err := New(cloud.Deps{DataDir: t.TempDir()})
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	s, err := New(cloud.Deps{})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -147,7 +149,8 @@ func errorsAs(err error, out **zip.HTTPError) bool {
 // refuses by name instead of writing a pod that waits Pending forever.
 func TestLeaseRefusesAClusterWithoutTheFloor(t *testing.T) {
 	away(t)
-	s, err := New(cloud.Deps{DataDir: t.TempDir()})
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	s, err := New(cloud.Deps{})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

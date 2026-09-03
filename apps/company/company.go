@@ -1,10 +1,10 @@
 package company
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"slices"
 	"strconv"
@@ -115,7 +115,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("company.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("company.Use:  empty DataDir")
 	}
 	// A typed op is a route PLUS a registry entry, and the registry lives on the
@@ -126,7 +126,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("company.Use:  router is not a zip app, so the typed ops have no registry")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("company.Use:  open store: %w", err)
 	}
@@ -150,7 +150,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}}
 	mounted = s
 	routes(app, zapp, s)
-	b.Log.Info("company mounted", "brand", deps.Brand, "feeCents", feeCents())
+	b.Log.Info("company mounted", "brand", cloud.Brand(), "feeCents", feeCents())
 	return nil
 }
 

@@ -55,6 +55,7 @@ func (b *billServer) lastDebit() (string, []byte) { return b.peer.Org(), b.peer.
 // newBilledService builds a provisioning Service with a mock provisioner and a real
 // metering client pointed at commerceURL (default org "hanzo").
 func newBilledService(t *testing.T, commerceURL string, kinds ...string) (*cloud.Service[state], *mockProv) {
+	t.Setenv("CLOUD_ENV", "mainnet")
 	t.Helper()
 	t.Setenv("CLOUD_KMS_NODES", "")
 	t.Setenv("CLOUD_KMS_PASSPHRASE", "")
@@ -69,7 +70,7 @@ func newBilledService(t *testing.T, commerceURL string, kinds ...string) (*cloud
 		t.Fatalf("metering.New: %v", err)
 	}
 	s := &cloud.Service[state]{
-		Base: cloud.Base{Log: log, Bill: cloud.NewMeter(cloud.Deps{Metering: m, Env: "mainnet"}, "provisioning")},
+		Base: cloud.Base{Log: log, Bill: cloud.NewMeter(cloud.Deps{Metering: m}, "provisioning")},
 		State: state{
 			store: newTestStore(t),
 			sec:   newSecrets(nil, log),

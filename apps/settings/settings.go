@@ -33,10 +33,10 @@
 package settings
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"net/http"
 	"regexp"
 	"slices"
@@ -83,10 +83,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("settings.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "settings")
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("settings.Use:  empty DataDir")
 	}
-	store, err := openSettingsStore(deps.DataDir)
+	store, err := openSettingsStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("settings.Use:  open settings store: %w", err)
 	}
@@ -96,7 +96,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	routes(app, s)
 	exposeFleet(s)
 
-	log.Info("settings surface mounted", "prefix", "/v1/settings", "brand", deps.Brand, "kms", deps.KMS != nil)
+	log.Info("settings surface mounted", "prefix", "/v1/settings", "brand", cloud.Brand(), "kms", deps.KMS != nil)
 	return nil
 }
 

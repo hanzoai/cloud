@@ -64,9 +64,11 @@ func benchBatchOf(tb testing.TB, size, iter int, at time.Time) []observation {
 // measurement is taken on a model that actually consults its threshold and
 // therefore actually runs the attribution.
 func warmForBench(tb testing.TB) (*plane, tenant) {
+	tb.Setenv("CLOUD_BRAND", brandA)
+	tb.Setenv("CLOUD_DATA_DIR", tb.TempDir())
 	tb.Helper()
 	probe.reset(true)
-	p, err := newPlane(cloud.NewBase(cloud.Deps{Brand: brandA, DataDir: tb.TempDir()}, "risk"))
+	p, err := newPlane(cloud.NewBase(cloud.Deps{}, "risk"))
 	if err != nil {
 		tb.Fatalf("newPlane: %v", err)
 	}

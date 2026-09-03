@@ -49,13 +49,13 @@
 package eval
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"net/http"
 	"regexp"
 	"slices"
@@ -162,10 +162,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("eval.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "eval")
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("eval.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("eval.Use:  open metastore: %w", err)
 	}
@@ -188,7 +188,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, s)
 
-	log.Info("evals surface mounted (native)", "brand", deps.Brand, "telemetry", tel != nil)
+	log.Info("evals surface mounted (native)", "brand", cloud.Brand(), "telemetry", tel != nil)
 	return nil
 }
 
