@@ -19,6 +19,16 @@
       "languages": [
         "en"
       ]
+    },
+    {
+      "owner": "admin",
+      "name": "admin",
+      "displayName": "Admin",
+      "passwordType": "argon2id",
+      "defaultApplication": "admin-console",
+      "languages": [
+        "en"
+      ]
     }
   ],
   "certs": [
@@ -129,6 +139,28 @@
         "http://127.0.0.1:3091/auth/callback",
         "http://127.0.0.1:1420/auth/callback",
         "hanzo://oauth/hanzo"
+      ],
+      "expireInHours": 24
+    },
+    {
+      "owner": "admin",
+      "name": "admin-console",
+      "displayName": "Admin Console",
+      "organization": "admin",
+      "cert": "cert-signing",
+      "isShared": true,
+      "enablePassword": true,
+      "enableSignUp": false,
+      "enableSigninSession": true,
+      "clientId": "admin-console",
+      "clientSecret": "${E2E_CLIENT_SECRET}",
+      "grantTypes": [
+        "password",
+        "refresh_token",
+        "authorization_code"
+      ],
+      "redirectUris": [
+        "${E2E_REDIRECT_URI}"
       ],
       "expireInHours": 24
     }

@@ -354,6 +354,10 @@ seed_user() {
 }
 say "seeding identity"
 seed_user "$ORG"       z      z@hanzo.ai      true
+# The PLATFORM admin: SuperAdmin is membership of the reserved admin org, and a
+# local stack without one cannot enable a lane, read the fleet, or exercise any
+# Super-scoped surface — the same doctrine production runs under.
+seed_user admin        z      z@hanzo.ai      true
 seed_user "$ORG"       ada    ada@hanzo.ai
 seed_user "$ORG"       optout optout@hanzo.ai
 seed_user "$OTHER_ORG" eve    eve@acme.com
