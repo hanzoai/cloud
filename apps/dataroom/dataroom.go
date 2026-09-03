@@ -96,8 +96,22 @@ type state struct {
 // mounted is the active service so Shutdown can release the per-tenant stores.
 var mounted *cloud.Service[state]
 
-// Mount wires the /v1/dataroom/* surface onto app per HIP-0106.
+// Use mounts the data room, resolving the object store the deployment gives it.
+//
+// The store used to arrive as a field on Deps, resolved once for the whole fleet
+// whether or not a given subsystem stored a byte. It is built here instead,
+// because building it is free and because a subsystem that is handed another
+// subsystem's handle is a subsystem that cannot be read on its own.
+//
+// The store is the ONLY thing separating this from useWith, which is what the
+// tests drive: the resolution is the deployment's, the behaviour is the app's,
+// and neither has to pretend to be the other.
 func Use(app cloud.Router, deps cloud.Deps) error {
+	return useWith(app, deps, cloud.S3(luxlog.Default()))
+}
+
+// Mount wires the /v1/dataroom/* surface onto app per HIP-0106.
+func useWith(app cloud.Router, deps cloud.Deps, s3 cloud.VFSClient) error {
 	if app == nil {
 		return fmt.Errorf("dataroom.Use:  nil app")
 	}
@@ -152,13 +166,13 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		log.Error("dataroom link index failed — serving health-only (cloud stays up)", "err", err)
 		return nil
 	}
-	if deps.VFS == nil {
-		log.Error("deps.VFS is nil — document byte storage unavailable; serving health-only")
+	if s3 == nil {
+		log.Error("no object store — document byte storage unavailable; serving health-only")
 		return nil
 	}
 
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "dataroom"), State: state{
-		host: host, index: index, blob: deps.VFS, domain: "https://" + deps.Domain,
+		host: host, index: index, blob: s3, domain: "https://" + deps.Domain,
 	}}
 	mounted = s
 	routes(app, s)

@@ -307,7 +307,7 @@ func TestTheFrequencyCapHoldsOnEverySeam(t *testing.T) {
 func TestAWriteOffTheHTTPPathIsRefused(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
-	s, err := newService(cloud.Deps{Brand: "hanzo"})
+	s, err := newService(cloud.Deps{Brand: "hanzo"}, newMemVFS())
 	if err != nil {
 		t.Fatal(err)
 	}

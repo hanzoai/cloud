@@ -146,7 +146,7 @@ func TestVaryIsAddedToWhatIsAlreadyThere(t *testing.T) {
 		c.Fiber().Vary("Origin")
 		return c.Continue()
 	}))
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+	if err := useWith(app, cloud.Deps{DataDir: t.TempDir()}, newMemVFS()); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 

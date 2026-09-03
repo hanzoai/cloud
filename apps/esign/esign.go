@@ -64,10 +64,24 @@ type state struct {
 // mounted is the active service so shutdown can release the per-tenant stores.
 var mounted *cloud.Service[state]
 
+// Use mounts e-signature, resolving the object store the deployment gives it.
+//
+// The store used to arrive as a field on Deps, resolved once for the whole fleet
+// whether or not a given subsystem stored a byte. It is built here instead,
+// because building it is free and because a subsystem that is handed another
+// subsystem's handle is a subsystem that cannot be read on its own.
+//
+// The store is the ONLY thing separating this from useWith, which is what the
+// tests drive: the resolution is the deployment's, the behaviour is the app's,
+// and neither has to pretend to be the other.
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return useWith(app, deps, cloud.S3(luxlog.Default()))
+}
+
 // Mount wires the /v1/esign/* surface onto app per HIP-0106. Constructs the value
 // directly (cloud.NewBase) — this subsystem keeps a package global for the Shutdown
 // hook and opens a per-tenant goja host + PKI signer from deps.DataDir.
-func Use(app cloud.Router, deps cloud.Deps) error {
+func useWith(app cloud.Router, deps cloud.Deps, s3 cloud.VFSClient) error {
 	if app == nil {
 		return fmt.Errorf("esign.Use:  nil app")
 	}
@@ -89,7 +103,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// registered on the second. Health therefore cannot be registered on its own
 	// group ahead of the rest — it is declared with them, and declare serves it
 	// ALONE when the document plane could not be opened.
-	s, err := open(deps)
+	s, err := open(deps, s3)
 	if err != nil {
 		return err
 	}
@@ -109,15 +123,15 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 // serving anything else would mean doing the wrong thing rather than nothing:
 //
 //   - no object storage. esign persists PDF BYTES on the object-storage client
-//     (deps.VFS), never inline in the per-tenant SQLite — a 32 MiB base64 PDF in a
+//     handed in, never inline in the per-tenant SQLite — a 32 MiB base64 PDF in a
 //     TEXT column would bloat the tenant DB and be re-copied on every read. Without
 //     it the only alternative is writing PDFs into the tenant DB.
 //   - no token index. It is what resolves a signing token to its tenant, and
 //     resolving is what has to happen before any per-tenant store is touched.
 //     Without it the only alternative is trusting the caller's own org segment.
-func open(deps cloud.Deps) (*cloud.Service[state], error) {
-	if deps.VFS == nil {
-		luxlog.Default().Error("deps.VFS is nil — PDF byte storage unavailable; serving /v1/esign/health only")
+func open(deps cloud.Deps, s3 cloud.VFSClient) (*cloud.Service[state], error) {
+	if s3 == nil {
+		luxlog.Default().Error("no object store — PDF byte storage unavailable; serving /v1/esign/health only")
 		return nil, nil
 	}
 	sg, err := newSigner(deps.DataDir, deps.Env)
@@ -133,7 +147,7 @@ func open(deps cloud.Deps) (*cloud.Service[state], error) {
 		Bundle:  bundle,
 		Schema:  schema,
 		DataDir: deps.DataDir,
-		Blob:    deps.VFS, // PDF bytes go to object storage via __blob, not SQLite
+		Blob:    s3, // PDF bytes go to object storage via __blob, not SQLite
 		HostFns: map[string]any{"__pdf": sg.pdfHostObject()},
 	})
 	if err != nil {

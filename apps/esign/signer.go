@@ -1,7 +1,6 @@
 package esign
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"crypto"
 	"crypto/rand"
@@ -12,6 +11,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"

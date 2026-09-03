@@ -101,7 +101,7 @@ func TestCollabRPCShapesAreExact(t *testing.T) {
 func TestCollabRPCBridgedUnderABareApp(t *testing.T) {
 	planetest.ServeIdentity(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS(), KMS: teamKMS(t, testSecret)}); err != nil {
+	if err := useWith(app, cloud.Deps{DataDir: t.TempDir(), KMS: teamKMS(t, testSecret)}, newMemVFS()); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -154,7 +154,7 @@ func TestClearCookieIsExact(t *testing.T) {
 func TestClearCookieDegraded(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS(), KMS: teamKMS(t, "")}); err != nil {
+	if err := useWith(app, cloud.Deps{DataDir: t.TempDir(), KMS: teamKMS(t, "")}, newMemVFS()); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

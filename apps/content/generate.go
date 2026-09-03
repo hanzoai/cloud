@@ -87,7 +87,7 @@ const defaultCopyModel = "zen5"
 func newGenerator(deps cloud.Deps, b cloud.Base) Generator {
 	return &aiStudioGenerator{
 		ai:     deps.AI,
-		vfs:    deps.VFS,
+		vfs:    cloud.S3(luxlog.Default()),
 		bill:   b.Bill,
 		studio: newStudioClient(studioURLFromEnv()),
 		model:  environ.Or("CONTENT_COPY_MODEL", ""),

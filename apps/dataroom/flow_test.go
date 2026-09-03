@@ -56,9 +56,9 @@ func mountFlowApp(t *testing.T) (*zip.App, *memVFS) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	vfs := newMemVFS()
-	deps := cloud.Deps{DataDir: t.TempDir(), VFS: vfs}
-	if err := Use(app, deps); err != nil {
-		t.Fatalf("Use:  %v", err)
+	deps := cloud.Deps{DataDir: t.TempDir()}
+	if err := useWith(app, deps, vfs); err != nil {
+		t.Fatalf("useWith: %v", err)
 	}
 	return app, vfs
 }

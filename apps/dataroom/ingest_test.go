@@ -15,7 +15,7 @@ import (
 func TestIngestInProc(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	vfs := newMemVFS()
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: vfs}); err != nil {
+	if err := useWith(app, cloud.Deps{DataDir: t.TempDir()}, vfs); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(nil) })

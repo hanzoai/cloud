@@ -56,7 +56,6 @@ var depsFieldRationale = map[string]string{
 	"AI":       "chat-completions client (a WRITE endpoint), authenticated by the binary's M2M identity",
 	"Embed":    "embeddings client (READ-ONLY), split from AI so a publishable pk- key can never reach the completions path",
 	"O11y":     "telemetry client",
-	"VFS":      "object-store client",
 	"Metering": "the commerce billing client the request-edge gate meters against",
 	"Audit":    "the append-only audit Recorder, constructed once so the query endpoint reads the store the middleware writes",
 

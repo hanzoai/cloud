@@ -208,7 +208,6 @@ type Deps struct {
 	// bug). Falls back to the AI (M2M) resolution when no static embed key is set.
 	Embed AIClient
 	O11y  O11yClient
-	VFS   VFSClient
 
 	// Metering is the canonical commerce billing client used by the
 	// request-edge BillingGate. It speaks net/http to commerce's billing API

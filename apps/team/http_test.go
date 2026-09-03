@@ -83,7 +83,7 @@ func mountTeamVFS(t *testing.T, vfs types.VFSClient) *zip.App {
 	planetest.ServeIdentity(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: vfs, KMS: teamKMS(t, testSecret)}); err != nil {
+	if err := useWith(app, cloud.Deps{DataDir: t.TempDir(), KMS: teamKMS(t, testSecret)}, vfs); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -399,7 +399,7 @@ func TestBotsReadRouteTenantGate(t *testing.T) {
 func TestDegradedWithoutSecret(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS(), KMS: teamKMS(t, "")}); err != nil {
+	if err := useWith(app, cloud.Deps{DataDir: t.TempDir(), KMS: teamKMS(t, "")}, newMemVFS()); err != nil {
 		t.Fatalf("Mount must SUCCEED in degraded mode (health-only), got: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -419,7 +419,7 @@ func TestDegradedWithoutSecret(t *testing.T) {
 	_ = Shutdown()
 	app2 := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app2)
-	if err := Use(app2, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS(), KMS: teamKMS(t, "secret")}); err != nil {
+	if err := useWith(app2, cloud.Deps{DataDir: t.TempDir(), KMS: teamKMS(t, "secret")}, newMemVFS()); err != nil {
 		t.Fatalf("Mount (default secret) must succeed degraded: %v", err)
 	}
 	if code, _ := call(t, app2, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusServiceUnavailable {
@@ -434,7 +434,7 @@ func TestInsecureHatchRemoved(t *testing.T) {
 	t.Setenv("TEAM_DEV_INSECURE", "1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS(), KMS: teamKMS(t, "")}); err != nil {
+	if err := useWith(app, cloud.Deps{DataDir: t.TempDir(), KMS: teamKMS(t, "")}, newMemVFS()); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

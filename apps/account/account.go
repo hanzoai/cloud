@@ -79,6 +79,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
+
+	luxlog "github.com/luxfi/log"
 )
 
 // prefix is THE path this capability answers under. HIP-0139 §3: every route a
@@ -124,20 +126,34 @@ const keysWriteRatePerMin = 30
 // newService builds the subsystem value. The CSRF key is the process-wide
 // singleton (csrf.go), so a token minted here verifies wherever it is echoed — and
 // `own` is the boot question about that key this app, as the MINTER, must answer.
-func newService(deps cloud.Deps) (*cloud.Service[state], error) {
+func newService(deps cloud.Deps, s3 cloud.VFSClient) (*cloud.Service[state], error) {
 	b := cloud.NewBase(deps, "account")
-	st := state{iam: newIAMClient(), vfs: deps.VFS}
+	st := state{iam: newIAMClient(), vfs: s3}
 	st.writesRL = newRateLimiter(keysWriteRatePerMin)
 	return &cloud.Service[state]{Base: b, State: st}, nil
 }
 
-// Use wires account's self-service routes (order 48) — the ones that must
-// win over the IAM /v1/iam/* wildcard (50) and the commerce embed (100).
+// Use mounts account, resolving the object store the deployment gives it.
+//
+// The store used to arrive as a field on Deps, resolved once for the whole fleet
+// whether or not a given subsystem stored a byte. It is built here instead,
+// because building it is free and because a subsystem that is handed another
+// subsystem's handle is a subsystem that cannot be read on its own.
+//
+// The store is the ONLY thing separating this from useWith, which is what the
+// tests drive: the resolution is the deployment's, the behaviour is the app's,
+// and neither has to pretend to be the other.
 func Use(app cloud.Router, deps cloud.Deps) error {
+	return useWith(app, deps, cloud.S3(luxlog.Default()))
+}
+
+// useWith wires account's self-service routes (order 48) — the ones that must
+// win over the IAM /v1/iam/* wildcard (50) and the commerce embed (100).
+func useWith(app cloud.Router, deps cloud.Deps, s3 cloud.VFSClient) error {
 	if app == nil {
 		return fmt.Errorf("account.Use: nil app")
 	}
-	s, err := newService(deps)
+	s, err := newService(deps, s3)
 	if err != nil {
 		return err
 	}
