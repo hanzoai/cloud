@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	iamplane "github.com/hanzoai/cloud/plane/iam"
+	iampeer "github.com/hanzoai/cloud/plane/iam"
 	"github.com/zap-proto/zip"
 )
 
@@ -161,7 +161,7 @@ func (a *Approvals) put(user string, approved bool) {
 func planeApproval(ctx context.Context) (string, bool) {
 	ctx, cancel := context.WithTimeout(ctx, approvalTimeout)
 	defer cancel()
-	out, err := iamplane.IAMApproval(ctx)
+	out, err := iampeer.IAMApproval(ctx)
 	if err != nil || out == nil {
 		return "", false
 	}

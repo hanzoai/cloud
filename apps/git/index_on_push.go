@@ -7,7 +7,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
-	codeplane "github.com/hanzoai/cloud/plane/code"
+	codepeer "github.com/hanzoai/cloud/plane/code"
 	"github.com/hanzoai/tasks/pkg/sdk/temporal"
 	"github.com/hanzoai/tasks/pkg/sdk/workflow"
 )
@@ -166,7 +166,7 @@ func readAndIndex(ctx context.Context, s *cloud.Service[state], in indexInput) e
 	ctx, cancel := context.WithTimeout(ctx, indexCallTimeout)
 	defer cancel()
 	// billingOrg = org: the repo owner's org pays for indexing its own code.
-	_, err = codeplane.CodeIndex(ctx, &plane.IndexIn{
+	_, err = codepeer.CodeIndex(ctx, &plane.IndexIn{
 		Org: in.Org, BillingOrg: in.Org, Project: in.Project, Repo: in.Repo, Files: out,
 	})
 	return err

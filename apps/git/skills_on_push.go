@@ -7,7 +7,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
-	toolsplane "github.com/hanzoai/cloud/plane/tools"
+	toolspeer "github.com/hanzoai/cloud/plane/tools"
 )
 
 // skills_on_push.go — a push to a repository's default branch replaces the
@@ -48,7 +48,7 @@ func skillsOnPush(s *cloud.Service[state], ctx context.Context, ev cloud.Lifecyc
 	}
 	ctx, cancel := context.WithTimeout(cloud.For(ctx, ev.Org), skillsCallTimeout)
 	defer cancel()
-	out, err := toolsplane.ToolsSkills(ctx, &plane.SkillsIn{Source: skillSource(ev.Project, ev.Repo), Files: files})
+	out, err := toolspeer.ToolsSkills(ctx, &plane.SkillsIn{Source: skillSource(ev.Project, ev.Repo), Files: files})
 	if err != nil {
 		s.Log.Warn("skills: replace failed", "org", ev.Org, "repo", ev.Repo, "err", err)
 		return

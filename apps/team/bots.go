@@ -18,7 +18,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/plane"
-	agentsplane "github.com/hanzoai/cloud/plane/agents"
+	agentspeer "github.com/hanzoai/cloud/plane/agents"
 )
 
 // botsBridge holds the transactor + account stores the bots routes read/write.
@@ -181,7 +181,7 @@ func (b *botsBridge) syncOrg(ctx context.Context, org string) (int, error) {
 func agentsBotLister(_ context.Context, org string) ([]Bot, error) {
 	ctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), rosterTimeout)
 	defer cancel()
-	roster, err := agentsplane.AgentsRoster(ctx, &plane.RosterIn{})
+	roster, err := agentspeer.AgentsRoster(ctx, &plane.RosterIn{})
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +223,7 @@ func botActive(status string) bool {
 func agentReplyRunner(_ context.Context, org, userSub, agentID, input string) (string, error) {
 	ctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), agentReplyTimeout)
 	defer cancel()
-	run, err := agentsplane.AgentsRunOnBehalf(ctx, &plane.RunOnBehalfIn{
+	run, err := agentspeer.AgentsRunOnBehalf(ctx, &plane.RunOnBehalfIn{
 		Org: org, Subject: userSub, Ref: agentID, Input: input,
 	})
 	if err != nil {
