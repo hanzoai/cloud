@@ -407,12 +407,22 @@ func orgOf(r *http.Request) string { return strings.TrimSpace(r.Header.Get("X-Or
 var runtimeHandler http.Handler
 
 // mountRuntime installs the runtime handler the order-70 wildcard delegates to.
-// ONE way, two backings: prefer the in-process runtime (embed.go) that serves
-// /v1/o11y/* from THIS binary against the datastore datastore, so the standalone
-// o11y Deployment can retire; fall back to reverse-proxying that Deployment when the
-// embed is disabled (no DSN) or fails to init — fail-soft, zero downtime. Ordering is
-// not strictly required (the handler is resolved per-request); it runs inside the one
-// order-69 mount, before Listen, so the handler is in place before the first request.
+//
+// TWO BACKINGS, AND THEY ARE NOT THE SAME THING. With a datastore DSN this binary
+// IS o11y: it builds the runtime in-process (embed.go) and, because it holds the
+// store connection, also carries the three things only a runtime can — metrics
+// ingest, this process's own metrics push, and the Sentry error sink /v1/event
+// relays into. Without one it RELAYS to the standalone o11y Deployment, which
+// answers queries and carries none of those three.
+//
+// So the fallback is not a slower embed; it is a smaller surface, and choosing it
+// is a deployment's decision rather than an accident. It also absorbs a datastore
+// that is late at boot, which is why the embed failing logs and degrades instead of
+// failing the mount of an Eager app.
+//
+// Ordering is not strictly required (the handler is resolved per-request); it runs
+// inside the one order-69 mount, before Listen, so the handler is in place before
+// the first request.
 func mountRuntime(deps cloud.Deps) error {
 	log := luxlog.Default().New("subsystem", "o11y-runtime")
 
