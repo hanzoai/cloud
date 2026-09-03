@@ -90,7 +90,6 @@ func TestFirstPartyApexReachesThePublishedSet(t *testing.T) {
 		SelfDomains:     nil, // names the first-party apex NOWHERE but FirstPartyApex
 		FirstPartyApex:  "hanzo.ai",
 		FirstPartyOrg:   "hanzo",
-		FirstPartySites: []string{"cd"},
 	}, luxlog.New("test"))
 
 	for _, h := range []string{"hanzo.ai", "api.hanzo.ai", "login.hanzo.ai"} {
@@ -159,15 +158,13 @@ func TestConfigFromEnvOverrides(t *testing.T) {
 	prodEnv(t)
 	t.Setenv("CLOUD_SITES_APEX", "lux.page")
 	t.Setenv("CLOUD_SITES_FIRSTPARTY_APEX", "lux.network")
-	t.Setenv("CLOUD_SITES_FIRSTPARTY", "docs")
 	t.Setenv("CLOUD_SITES_FIRSTPARTY_ORG", "lux")
 
 	cfg := ConfigFromEnv("api.lux.network")
 	if want := []string{"lux.page", "lux.network"}; !reflect.DeepEqual(cfg.SelfDomains, want) {
 		t.Errorf("SelfDomains = %v, want %v", cfg.SelfDomains, want)
 	}
-	if cfg.Apex != "lux.page" || cfg.FirstPartyOrg != "lux" ||
-		!reflect.DeepEqual(cfg.FirstPartySites, []string{"docs"}) {
+	if cfg.Apex != "lux.page" || cfg.FirstPartyOrg != "lux" || cfg.FirstPartyApex != "lux.network" {
 		t.Errorf("overrides lost: %+v", cfg)
 	}
 }

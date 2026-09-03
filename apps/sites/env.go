@@ -53,7 +53,6 @@ func ConfigFromEnv(domain string) Config {
 		// not be expressible as a replacement.
 		SelfDomains:     append(selfFloor(apex, domain), list("CLOUD_SITES_SELF_DOMAINS")...),
 		FirstPartyApex:  environ.Or("CLOUD_SITES_FIRSTPARTY_APEX", "hanzo.ai"),
-		FirstPartySites: list("CLOUD_SITES_FIRSTPARTY", "cd", "flow", "gallery"),
 		FirstPartyOrg:   environ.Or("CLOUD_SITES_FIRSTPARTY_ORG", "hanzo"),
 	}
 }

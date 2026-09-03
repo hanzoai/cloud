@@ -56,7 +56,20 @@ var baseReserved = func() map[string]bool {
 		"secure", "security", "account", "accounts", "verify", "verification", "token",
 		"pay", "payment", "payments", "billing", "checkout", "wallet", "bank", "id",
 		// Hanzo platform surfaces + brand terms
-		"iam", "kms", "cloud", "hanzo", "hanzoai", "lux", "luxfi", "zoo", "zooai",
+		"iam", "kms",
+		// The artifact and delivery plane. These were protected only by the
+		// first-party ALLOWLIST, so removing that list without naming them here
+		// would let a site published in our own org answer on oci.hanzo.ai or
+		// git.hanzo.ai — the hosts a registry client and every CI push resolve.
+		"oci", "pkg", "registry", "npm", "ci", "cd", "s3", "git", "forge", "runner",
+		// Product hosts. A denylist takes on the obligation an allowlist did not:
+		// a NEW internal host is shadowable until its label is named here. These
+		// are the ones that exist today — chat.hanzo.ai and models.hanzo.ai were
+		// caught by TestSiteSlugFirstParty, which is exactly what that test is
+		// for. Adding a host to the estate means adding its label in the same
+		// change.
+		"chat", "models", "search", "engine", "node", "rpc", "mcp", "agent",
+		"agents", "bot", "dev", "staging", "preview", "vpn", "ssh", "cloud", "hanzo", "hanzoai", "lux", "luxfi", "zoo", "zooai",
 		"official", "support", "help", "team", "docs", "blog", "store", "cowork",
 	}
 	m := make(map[string]bool, len(labels))
