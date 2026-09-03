@@ -1,6 +1,7 @@
 package affiliate
 
 import (
+	"context"
 	"strconv"
 	"testing"
 
@@ -43,7 +44,7 @@ func TestAffiliateMarginBps_IsARegisteredAdminSwitch(t *testing.T) {
 // zero-on-missing would silently switch off every affiliate commission instead of
 // failing loudly. flags.resolve falls back to Def.Default, which is why this holds.
 func TestAffiliateMarginBps_UnsetIsTheDefaultNotZero(t *testing.T) {
-	if got := affiliateMarginBps(); got != defaultMarginBps {
+	if got := affiliateMarginBps(context.Background()); got != defaultMarginBps {
 		t.Fatalf("affiliateMarginBps() = %d, want %d — a missing value must not zero the share base", got, defaultMarginBps)
 	}
 }
@@ -74,12 +75,12 @@ func TestAffiliateMarginBps_ClampsOutOfRange(t *testing.T) {
 // changing it in admin does nothing until the next deploy, which is the failure
 // this replaced.
 func TestMargin_IsNotSnapshotAtBoot(t *testing.T) {
-	base := marginOf(10000, affiliateMarginBps())
+	base := marginOf(10000, affiliateMarginBps(context.Background()))
 	if base != 10000*defaultMarginBps/bpsDenom {
 		t.Fatalf("margin base = %d, want %d", base, 10000*defaultMarginBps/bpsDenom)
 	}
 	// Same call again must re-read rather than serve a cached snapshot.
-	if again := marginOf(10000, affiliateMarginBps()); again != base {
+	if again := marginOf(10000, affiliateMarginBps(context.Background())); again != base {
 		t.Fatalf("margin base not stable across reads: %d then %d", base, again)
 	}
 }

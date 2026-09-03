@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +32,8 @@ import (
 	"github.com/hanzoai/cloud/apps/flags"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
+
+	flagsplane "github.com/hanzoai/cloud/plane/flags"
 )
 
 // registryState is admission's process-wide launch state: the platform-tenant
@@ -93,6 +96,12 @@ func waitlistKey(svc string) string { return "waitlist." + strings.ToLower(strin
 // waitlistDef is the platform switch for one service's mode. Default "true" = the
 // launch posture (gated until an admin opens it), so a deployment with no stored flag
 // behaves exactly as the old admission seed (waitlistMode ON).
+// waitlistDefault is a service's mode when no operator has set one: GATED. A
+// service registered and not yet opened admits approved users only, which is the
+// safe direction and is the value every read fell back to while the answer could
+// not cross a process boundary.
+const waitlistDefault = true
+
 func waitlistDef(svc, display string) flags.Def {
 	if strings.TrimSpace(display) == "" {
 		display = svc
@@ -103,7 +112,7 @@ func waitlistDef(svc, display string) flags.Def {
 		Label:    "Waitlist · " + display,
 		Desc:     "Waitlist mode for " + display + ": ON gates the service to APPROVED users; OFF opens it.",
 		Type:     flags.TypeBool,
-		Default:  "true",
+		Default:  strconv.FormatBool(waitlistDefault),
 	}
 }
 
@@ -158,7 +167,11 @@ func WaitlistModeForHost(ctx context.Context, host string) (mode bool, service s
 	if err != nil || !known {
 		return false, "", false
 	}
-	return flags.Bool(waitlistKey(svc)), svc, true
+	// ASKED OF THE APP THAT OWNS THE STORE. flags.Bool read this process's own
+	// registry, which only the flags plugin fills, so it always answered the
+	// definition's Default — gated, which is the safe direction, and which an
+	// operator could therefore never turn OFF.
+	return flagsplane.Bool(ctx, waitlistKey(svc), waitlistDefault), svc, true
 }
 
 // ListWaitlistServices returns the admin board: every registered service with its LIVE
@@ -174,7 +187,7 @@ func ListWaitlistServices(ctx context.Context) ([]ServiceView, error) {
 	}
 	out := make([]ServiceView, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, ServiceView{ServiceRow: r, WaitlistMode: flags.Bool(waitlistKey(r.Service))})
+		out = append(out, ServiceView{ServiceRow: r, WaitlistMode: flagsplane.Bool(ctx, waitlistKey(r.Service), waitlistDefault)})
 	}
 	return out, nil
 }
@@ -200,7 +213,7 @@ func SetWaitlistMode(ctx context.Context, service string, mode bool, actor strin
 	if err := flags.SetPlatformSwitch(waitlistKey(service), boolDef(mode), actor); err != nil {
 		return ServiceView{}, err
 	}
-	return ServiceView{ServiceRow: row, WaitlistMode: flags.Bool(waitlistKey(service))}, nil
+	return ServiceView{ServiceRow: row, WaitlistMode: flagsplane.Bool(ctx, waitlistKey(service), waitlistDefault)}, nil
 }
 
 // UpsertWaitlistService onboards or edits a hosted service so a new host is governed
@@ -235,7 +248,7 @@ func UpsertWaitlistService(ctx context.Context, in ServiceInput, actor string) (
 			return ServiceView{}, err
 		}
 	}
-	return ServiceView{ServiceRow: row, WaitlistMode: flags.Bool(waitlistKey(svc))}, nil
+	return ServiceView{ServiceRow: row, WaitlistMode: flagsplane.Bool(ctx, waitlistKey(svc), waitlistDefault)}, nil
 }
 
 // seedRegistry seeds the registry and registers a waitlist.<svc> switch per known

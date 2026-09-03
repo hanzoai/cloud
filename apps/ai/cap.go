@@ -24,6 +24,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/plane"
+
+	flagsplane "github.com/hanzoai/cloud/plane/flags"
 )
 
 // cap.go is the gate's TRAILING-WINDOW spend ceiling: the burst limit that resets
@@ -68,6 +70,11 @@ const capFallback = "ai_rolling_cap_cents_default"
 //
 // These are the DEFAULTS the switch registry carries; the flag store is
 // authoritative the moment an admin edits one.
+// defaultWindowHours is the trailing window this ceiling sums over when no
+// operator has set one. It is named because it is now stated twice — in the
+// definition the board renders, and as the fallback the read carries.
+const defaultWindowHours = 3
+
 var capSeed = map[string]int{
 	"free": 75, "developer": 75, "starter": 250,
 	"pro": 250, "plus": 1200, "max": 2500, "enterprise": 0,
@@ -77,7 +84,7 @@ func capOf(tier string) string { return "ai_rolling_cap_cents_" + strings.ToLowe
 
 func init() {
 	flags.Register(flags.Def{
-		Key: capWindow, Category: "Gateway", Type: flags.TypeInt, Default: "3",
+		Key: capWindow, Category: "Gateway", Type: flags.TypeInt, Default: strconv.Itoa(defaultWindowHours),
 		Label: "AI rolling-cap window (hours)",
 		Desc:  "Trailing window the per-plan AI-spend ceiling sums over; it resets continuously. 0 disables the ceiling globally.",
 	})
@@ -104,7 +111,11 @@ func init() {
 // The three quiet no-caps (window off, no ceiling for this plan, no fallback) return
 // false with no error, which is the same admission for a different reason.
 func overCap(ctx context.Context, subject, namespace string) (bool, error) {
-	window := flags.Int(capWindow)
+	// ASKED OF THE APP THAT OWNS THE STORE. flags.Int read this process's own
+	// registry, which only the flags plugin ever fills, so the ceiling ran on the
+	// compiled 3 whatever an operator had set — the same shape as the rolling cap
+	// that never reached a completion.
+	window := flagsplane.Int(ctx, capWindow, defaultWindowHours)
 	if window <= 0 {
 		return false, nil
 	}
@@ -134,10 +145,10 @@ func capFor(ctx context.Context, subject, namespace string) (int, error) {
 		}
 		tier = name
 	}
-	if cents := flags.Int(capOf(tier)); cents > 0 {
+	if cents := flagsplane.Int(ctx, capOf(tier), capSeed[tier]); cents > 0 {
 		return cents, nil
 	}
-	return flags.Int(capFallback), nil
+	return flagsplane.Int(ctx, capFallback, 0), nil
 }
 
 // spentSince asks the process that owns the ledger for the org's consumption since

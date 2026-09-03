@@ -174,7 +174,7 @@ func (o ops) earnings(ctx context.Context, _ *cloud.Unit) (*affiliateEarnings, e
 	}
 	return &affiliateEarnings{
 		IsAffiliate:   true,
-		MarginBps:     opt(affiliateMarginBps()),
+		MarginBps:     opt(affiliateMarginBps(ctx)),
 		AccruedCents:  opt(a.AccruedCents),
 		PendingCents:  opt(a.PendingCents()),
 		PaidCents:     opt(a.PaidCents),
@@ -655,7 +655,7 @@ func (o ops) adminSetRate(ctx context.Context, in *rateSet) (*affiliateOut, erro
 	// The cap moves with the L2/L3 switches, so it is resolved per request and quoted
 	// in the refusal — a hardcoded 9300 would start lying the moment an owner edits the
 	// upline schedule, and the caller would have no way to learn the real bound.
-	if cap := maxL1RateBps(); in.RateBps < 0 || in.RateBps > cap {
+	if cap := maxL1RateBps(ctx); in.RateBps < 0 || in.RateBps > cap {
 		return nil, zip.ErrBadRequest(fmt.Sprintf(
 			"rateBps must be between 0 and %d (leaving headroom for the L2+L3 upline so a share can never exceed the margin)", cap))
 	}

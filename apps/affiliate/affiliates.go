@@ -69,6 +69,8 @@ import (
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
+
+	flagsplane "github.com/hanzoai/cloud/plane/flags"
 )
 
 // The affiliate economy — ONE place. Amounts are USD minor units (cents); a credits
@@ -144,8 +146,8 @@ func init() {
 // either exceeding bpsDenom already breaks the sum.
 //
 // Read LIVE, per accrual, exactly like affiliateMarginBps — never captured at boot.
-func uplineRates() (l2, l3 int64) {
-	return clampUplineRates(int64(flags.Int(l2RateKey)), int64(flags.Int(l3RateKey)))
+func uplineRates(ctx context.Context) (l2, l3 int64) {
+	return clampUplineRates(int64(flagsplane.Int(ctx, l2RateKey, int(defaultL2RateBps))), int64(flagsplane.Int(ctx, l3RateKey, int(defaultL3RateBps))))
 }
 
 // clampUplineRates bounds a configured L2/L3 pair, falling back to the policy defaults
@@ -168,16 +170,16 @@ func clampUplineRates(l2, l3 int64) (int64, int64) {
 // A function, not a constant, now that L2/L3 move: the cap has to be derived from the
 // rates in force at the moment the rate is set, or lowering L2 would silently leave
 // the old, tighter cap in place. uplineRates' clamp is what keeps this non-negative.
-func maxL1RateBps() int64 {
-	l2, l3 := uplineRates()
+func maxL1RateBps(ctx context.Context) int64 {
+	l2, l3 := uplineRates(ctx)
 	return bpsDenom - l2 - l3
 }
 
 // levelRateBps is the commission rate for a source org's spend at upline `level`
 // (1-indexed) accruing to affiliate `a`: L1 uses the affiliate's own negotiated rate,
 // L2/L3 the platform switches. A level outside [1,maxDepth] earns nothing.
-func levelRateBps(level int, a Affiliate) int64 {
-	l2, l3 := uplineRates()
+func levelRateBps(ctx context.Context, level int, a Affiliate) int64 {
+	l2, l3 := uplineRates(ctx)
 	switch level {
 	case 1:
 		return a.RateBps
@@ -217,7 +219,9 @@ func init() {
 // could not be changed at all without a redeploy: editing the env changed nothing
 // until the pod restarted, and there was no admin control. Margin tracks real costs
 // and moves, so a boot-time constant was the wrong shape for it.
-func affiliateMarginBps() int64 { return clampMarginBps(int64(flags.Int(marginBpsKey))) }
+func affiliateMarginBps(ctx context.Context) int64 {
+	return clampMarginBps(int64(flagsplane.Int(ctx, marginBpsKey, int(defaultMarginBps))))
+}
 
 // clampMarginBps bounds a configured margin to [0,10000], falling back to the
 // policy default outside it. Pure, so the bound is testable without the engine.
@@ -287,7 +291,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}}
 	mounted = s
 	routes(app, s)
-	s.Log.Info("affiliates mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "marginBps", affiliateMarginBps())
+	s.Log.Info("affiliates mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "marginBps", affiliateMarginBps(context.Background()))
 	return nil
 }
 
@@ -429,7 +433,7 @@ func (o ops) standing(ctx context.Context, _ *cloud.Unit) (*affiliateStanding, e
 		RequestedCode: opt(a.RequestedCode),
 		Link:          opt(affiliateLink(o.s, a.Code)),
 		RateBps:       opt(a.RateBps),
-		MarginBps:     opt(affiliateMarginBps()),
+		MarginBps:     opt(affiliateMarginBps(ctx)),
 		Handle:        opt(a.Handle),
 		ReferredCount: opt(referred),
 		AccruedCents:  opt(a.AccruedCents),
@@ -536,7 +540,7 @@ func (o ops) self(ctx context.Context, _ *cloud.Unit) (*affiliateSelf, error) {
 		return &affiliateSelf{
 			IsAffiliate:    false,
 			DefaultRateBps: defaultRateBps,
-			Schedule:       uplineSchedule(defaultRateBps),
+			Schedule:       uplineSchedule(ctx, defaultRateBps),
 		}, nil
 	}
 	if err != nil {
@@ -555,7 +559,7 @@ func (o ops) self(ctx context.Context, _ *cloud.Unit) (*affiliateSelf, error) {
 	}
 	levels := make([]levelView, 0, maxDepth)
 	for lvl := 1; lvl <= maxDepth; lvl++ {
-		levels = append(levels, levelView{Level: lvl, RateBps: levelRateBps(lvl, a), DownlineCount: perLevel[lvl-1]})
+		levels = append(levels, levelView{Level: lvl, RateBps: levelRateBps(ctx, lvl, a), DownlineCount: perLevel[lvl-1]})
 	}
 	payouts, err := o.s.State.store.ListPayouts(ctx, a.ID, payoutLimit)
 	if err != nil {
@@ -569,7 +573,7 @@ func (o ops) self(ctx context.Context, _ *cloud.Unit) (*affiliateSelf, error) {
 		Code:          opt(a.Code),
 		Link:          opt(affiliateLink(o.s, a.Code)),
 		RateBps:       opt(a.RateBps),
-		MarginBps:     opt(affiliateMarginBps()),
+		MarginBps:     opt(affiliateMarginBps(ctx)),
 		Handle:        opt(a.Handle),
 		Levels:        levels,
 		DownlineTotal: opt(len(downline)),
@@ -584,8 +588,8 @@ func (o ops) self(ctx context.Context, _ *cloud.Unit) (*affiliateSelf, error) {
 // so the console can show "what you'd earn": L1 at the given direct rate, L2/L3 at the
 // platform switches — resolved here, so the quote reflects the schedule actually in
 // force rather than the one compiled in.
-func uplineSchedule(directRateBps int64) []levelView {
-	l2, l3 := uplineRates()
+func uplineSchedule(ctx context.Context, directRateBps int64) []levelView {
+	l2, l3 := uplineRates(ctx)
 	return []levelView{
 		{Level: 1, RateBps: directRateBps},
 		{Level: 2, RateBps: l2},
@@ -1329,7 +1333,7 @@ func accrueSource(s *cloud.Service[state], ctx context.Context, sourceOrg string
 	// The share base is Hanzo's MARGIN on this spend, computed ONCE (level-independent).
 	// Every level's share is a rate of this margin, so their sum ≤ margin (share never
 	// touches the customer's bill). No margin → nothing to share (fail-closed).
-	margin := marginOf(spend, affiliateMarginBps())
+	margin := marginOf(spend, affiliateMarginBps(ctx))
 	if margin <= 0 {
 		return 0, nil
 	}
@@ -1350,7 +1354,7 @@ func accrueSource(s *cloud.Service[state], ctx context.Context, sourceOrg string
 		if aff.Status != StatusApproved {
 			continue // only an approved affiliate accrues
 		}
-		commission := margin * levelRateBps(level, aff) / bpsDenom
+		commission := margin * levelRateBps(ctx, level, aff) / bpsDenom
 		if commission <= 0 {
 			continue
 		}

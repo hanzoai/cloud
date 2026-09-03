@@ -1,6 +1,7 @@
 package affiliate
 
 import (
+	"context"
 	"strconv"
 	"testing"
 
@@ -51,7 +52,7 @@ func TestUplineRates_AreRegisteredAdminSwitches(t *testing.T) {
 // margin: 0 is a legitimate rate ("this level accrues nothing"), so zero-on-missing
 // would silently switch off the whole upline instead of failing loudly.
 func TestUplineRates_UnsetAreTheDefaults(t *testing.T) {
-	l2, l3 := uplineRates()
+	l2, l3 := uplineRates(context.Background())
 	if l2 != defaultL2RateBps || l3 != defaultL3RateBps {
 		t.Fatalf("uplineRates() = (%d,%d), want (%d,%d) — a missing value must not zero an upline level", l2, l3, defaultL2RateBps, defaultL3RateBps)
 	}
@@ -101,7 +102,7 @@ func TestMaxL1Rate_KeepsTheWholeScheduleInsideTheMargin(t *testing.T) {
 	}
 	// With nothing set, the live cap is the historical 9300 — this change must not
 	// move the default schedule, only make it editable.
-	if got := maxL1RateBps(); got != bpsDenom-defaultL2RateBps-defaultL3RateBps {
+	if got := maxL1RateBps(context.Background()); got != bpsDenom-defaultL2RateBps-defaultL3RateBps {
 		t.Fatalf("maxL1RateBps() = %d, want %d (the unchanged default cap)", got, bpsDenom-defaultL2RateBps-defaultL3RateBps)
 	}
 }
@@ -110,19 +111,19 @@ func TestMaxL1Rate_KeepsTheWholeScheduleInsideTheMargin(t *testing.T) {
 // affiliate's OWN negotiated rate at L1 rather than any platform value.
 func TestLevelRateBps_ReadsLiveAndHonoursTheNegotiatedL1(t *testing.T) {
 	a := Affiliate{RateBps: 3333}
-	if got := levelRateBps(1, a); got != 3333 {
+	if got := levelRateBps(context.Background(), 1, a); got != 3333 {
 		t.Fatalf("L1 = %d, want the affiliate's own 3333", got)
 	}
-	if got := levelRateBps(2, a); got != defaultL2RateBps {
+	if got := levelRateBps(context.Background(), 2, a); got != defaultL2RateBps {
 		t.Fatalf("L2 = %d, want %d", got, defaultL2RateBps)
 	}
-	if got := levelRateBps(3, a); got != defaultL3RateBps {
+	if got := levelRateBps(context.Background(), 3, a); got != defaultL3RateBps {
 		t.Fatalf("L3 = %d, want %d", got, defaultL3RateBps)
 	}
 	// Beyond the depth cap nothing accrues — the chain terminates rather than
 	// falling through to some default rate.
 	for _, lvl := range []int{0, maxDepth + 1, 99} {
-		if got := levelRateBps(lvl, a); got != 0 {
+		if got := levelRateBps(context.Background(), lvl, a); got != 0 {
 			t.Fatalf("level %d = %d, want 0", lvl, got)
 		}
 	}

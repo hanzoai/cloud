@@ -582,6 +582,8 @@ const (
 	// the product — so there is nothing finer to name and no argument that could
 	// name it.
 	FlagsHold = "flags_hold"
+	// FlagsValue resolves one flag's value for the caller's org.
+	FlagsValue = "flags_value"
 
 	// EntitlementHolds answers whether the caller's org has turned on one product.
 	// A framework module asks it on every document op (apps/framework/elective.go).
@@ -1067,6 +1069,45 @@ type Send struct {
 // caller's org, which is why there is no field for one — see [FlagsHold].
 type FlagIn struct {
 	Key string `json:"key"` // the flag's key; for a capability's stage it is the capability's name
+}
+
+// FlagValueIn asks what an operator has set one flag to.
+//
+// It carries the caller's OWN default and type, and that is the whole reason this
+// op can exist without a catalog. A flag's definition is declared where the flag is
+// used — sometimes in a loop over tiers, sometimes per service registered at run
+// time — so the app that owns the flag plane cannot be assumed to hold every Def.
+// What it does hold is what an OPERATOR set, which is the only thing the caller
+// cannot know for itself.
+//
+// Before this op the caller asked its own process, whose flag registry is a package
+// global that only the flags plugin ever fills. Every other binary read its own
+// compiled default and reported it as the operator's setting.
+type FlagValueIn struct {
+	// Key is the flag's key.
+	Key string `json:"key"`
+	// Kind is how to parse a stored value: "bool", "int" or "string".
+	Kind string `json:"kind"`
+	// Default is what the caller falls back to when no operator has set this flag.
+	// It travels because the fallback belongs to the caller, not to the store.
+	Default string `json:"default"`
+}
+
+// FlagValue is the resolved value, already parsed by the app that owns the format.
+//
+// All three fields are always written, and a caller reads the one matching the Kind
+// it asked for — so a single op serves every type without the caller re-parsing a
+// string the flags engine has already parsed once.
+type FlagValue struct {
+	// Value is the resolved value as text.
+	Value string `json:"value"`
+	// N is Value as an integer, 0 when it is not one.
+	N int `json:"n"`
+	// On is Value as a boolean, false when it is not one.
+	On bool `json:"on"`
+	// Set reports whether an OPERATOR set this flag. False means Value is the
+	// caller's own default, which is a different fact from the value being falsy.
+	Set bool `json:"set"`
 }
 
 // Flag is the verdict: whether the caller's org holds it.
