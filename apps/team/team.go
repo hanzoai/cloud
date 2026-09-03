@@ -1,10 +1,10 @@
 package team
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -41,6 +41,20 @@ type state struct {
 // mounted is the active service so Shutdown can release resources. Idempotent.
 var mounted *cloud.Service[state]
 
+// Use mounts team, resolving the object store the deployment gives it.
+//
+// The store used to arrive as a field on Deps, resolved once for the whole fleet
+// whether or not a given subsystem stored a byte. It is built here instead,
+// because building it is free and because a subsystem that is handed another
+// subsystem's handle is a subsystem that cannot be read on its own.
+//
+// The store is the ONLY thing separating this from useWith, which is what the
+// tests drive: the resolution is the deployment's, the behaviour is the app's,
+// and neither has to pretend to be the other.
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return useWith(app, deps, cloud.S3(luxlog.Default()))
+}
+
 // Mount wires the /v1/team/* surface onto app per HIP-0106. It opens the two
 // SQLite stores under {DataDir}/team, wires the account API, the transactor
 // WebSocket and the bots read routes, and publishes the transactor singleton so
@@ -51,7 +65,7 @@ var mounted *cloud.Service[state]
 // UseAll, HIP-0106) — the SAME contract apps/todo, apps/crm and
 // clients/agents rely on. Mount does NOT re-register it (a second identical route
 // is dead — Fiber matches the first-registered — and violates one-way).
-func Use(app cloud.Router, deps cloud.Deps) error {
+func useWith(app cloud.Router, deps cloud.Deps, s3 cloud.VFSClient) error {
 	if app == nil {
 		return fmt.Errorf("team.Use:  nil app")
 	}
@@ -236,7 +250,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// Files plane: the space blob store the Team front's UPLOAD_URL/FILES_URL
 	// hit, backed by cloud's canonical VFS client (deps.VFS) and org-scoped by the
 	// verified session token — the SAME isolation invariant as the docs store.
-	files := &filesService{vfs: deps.VFS, ident: ident, degraded: degraded}
+	files := &filesService{vfs: s3, ident: ident, degraded: degraded}
 	files.register(app, guard)
 
 	// Billing plane: the go:embed'd usage/wallet page (/billing/ui/*) + the
@@ -249,7 +263,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// RPC (collab.go, POST .../rpc/:documentId) and the live hocuspocus Y.js
 	// WebSocket (collabws.go, GET on the prefix itself) — one service, one
 	// tenancy gate, one VFS client.
-	collab := &collabService{vfs: deps.VFS, accounts: accounts, ident: ident, hub: newCollabHub(deps.VFS), degraded: degraded}
+	collab := &collabService{vfs: s3, accounts: accounts, ident: ident, hub: newCollabHub(s3), degraded: degraded}
 	collab.register(app, guard)
 
 	// The membership read a PEER process needs: meet decides a room join and does

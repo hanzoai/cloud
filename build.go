@@ -139,8 +139,6 @@ func BuildDeps(cfg *Config) Deps {
 	deps.AI = meteredAIClient(pickCompletionsClient(cfg, logger), deps)
 	deps.Embed = meteredAIClient(pickEmbedClient(cfg, logger), deps)
 	installFinance(cfg, deps, logger)
-	deps.O11y = pick(cfg, logger, "o11y", "O11y", clients.DisabledO11y)
-	deps.VFS = pickVFSClient(cfg, logger)
 
 	// Payments and Vault never co-resident. Disabled stub when no
 	// endpoint, otherwise RPC.
@@ -816,31 +814,31 @@ func aiM2MTokenURL(cfg *Config) string {
 	return ""
 }
 
-func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
-	// deps.VFS must NEVER be nil (R-7): files.go and any other VFS consumer call
-	// s.vfs.Put/Get/Delete unconditionally, so a nil here is a per-request 500
-	// (dishonest degradation) instead of a fail-closed 502. Unlike the
-	// nil-then-Mount-fills convention other subsystems use, nothing fills deps.VFS
-	// after UseAll (Mount receives deps by value), so we ALWAYS hand back a
-	// concrete client.
-	// Real blob backend (.97): the shared S3 gateway — the canonical,
-	// key-based object store, reached with the SAME S3_ADMIN_* admin identity
-	// clients/s3 uses (s3admin, one construction). Present only when those creds
-	// are injected; a construction failure degrades to fail-closed rather than a
-	// nil deref. Team blobs (avatars/attachments) round-trip through this to the
-	// team-blobs bucket, org-scoped by the caller-built key prefix.
-	if admin := s3admin.New(); admin.Configured() {
-		v, err := clients.NewS3VFS(admin)
-		if err != nil {
-			log.Error("deps.VFS → S3 construction failed; falling back to fail-closed", "err", err)
-			return clients.DisabledVFS()
-		}
-		log.Info("deps.VFS → S3", "bucket", clients.TeamBlobBucket)
-		return v
+// S3 is the object store, built where it is needed.
+//
+// It used to be a field on Deps, resolved once at boot and copied into every
+// subsystem whether or not that subsystem stores a byte. Six do; the rest carried
+// it. Worse, resolving it centrally meant resolving it EARLY — the constructor
+// dialled, so every process in the fleet waited on an object store to find out
+// whether the six would ever want one.
+//
+// Constructing it is now free (clients.NewS3VFS touches no network), so the app
+// that needs a store builds a store and nothing is threaded through anything.
+//
+// NEVER NIL. Callers write s3.Put and s3.Get unconditionally, so an absent store
+// answers with the fail-closed stub — Put and Get return an error and the caller
+// answers 502, rather than a nil dereference that answers 500 and blames itself.
+func S3(log luxlog.Logger) VFSClient {
+	admin := s3admin.New()
+	if !admin.Configured() {
+		return clients.DisabledVFS()
 	}
-	// No VFS endpoint and no S3 admin creds → fail-closed stub (R-7): Put/Get/Delete
-	// return a non-nil error → files answer 502, never a nil-deref 500.
-	return clients.DisabledVFS()
+	v, err := clients.NewS3VFS(admin)
+	if err != nil {
+		log.Error("object store construction failed; storage is fail-closed", "err", err)
+		return clients.DisabledVFS()
+	}
+	return v
 }
 
 // durableBucket holds every org's HA-SQLite snapshot (and its writer lease). One
