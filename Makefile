@@ -322,6 +322,21 @@ TEST_ENV = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)
 # that claims the codec and links the other one.
 TAGS := $(if $(filter 1,$(CGO_ENABLED)),libsqlite3 sqlite_fts5 sqlite_math_functions,sqlite_fts5 sqlite_math_functions)
 
+# WHICH C LIBRARY the codec tag resolves to, and it is not the obvious one.
+# hanzoai/csqlite declares `#cgo linux LDFLAGS: -lsqlite3`, so a cgo build with no
+# override links PLAIN libsqlite3 — which has no codec. The backend then probes its
+# library, finds it does not encrypt, and falls back to the pure-Go envelope, and
+# the envelope refuses a hot -wal sidecar the C codec left. The binary dies at boot
+# naming the sidecar, so the symptom points at the data and the cause is the link.
+#
+# The release image resolves it by symlinking libsqlcipher over -lsqlite3; here the
+# two coexist, so the flags name the one we mean. Same three settings the Dockerfile
+# exports, and they ride with cgo for the same reason the tag does.
+ifeq ($(CGO_ENABLED),1)
+export CGO_CFLAGS  := -DSQLITE_HAS_CODEC -DSQLITE_USE_URI=1 -I/usr/include/sqlcipher
+export CGO_LDFLAGS := -lsqlcipher
+endif
+
 # TEST_TAGS is that set minus libsqlite3, because the suite must run without a C
 # toolchain: sqlite_fts5 needs no cgo, and without it any store whose migration
 # declares an FTS5 table fails to open, so a subsystem built on full-text search
