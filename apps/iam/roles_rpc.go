@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
@@ -53,6 +54,18 @@ func roles(ctx context.Context, _ *cloud.Unit) (*plane.Roles, error) {
 	if m, err := iamstore.GetMembership(ctx, db, who.User, who.Org); err == nil && m != nil {
 		switch m.Role {
 		case "owner", "admin":
+			out = append(out, "System Manager")
+		}
+	}
+	// An operator-seeded admin holds the grant on the USER row (`isAdmin`), not
+	// on a membership — provisioning writes no membership rows, and its own
+	// contract says org authority is that bit in the home org. Without this
+	// read, a fresh org's seeded administrator could not install a module or
+	// define a DocType anywhere: an org that exists but cannot be administered.
+	if !slices.Contains(out, "System Manager") {
+		name := strings.TrimPrefix(who.User, who.Org+"/")
+		if rows, err := orm.TypedQuery[iamschema.User](db).Filter("Owner=", who.Org).Filter("Name=", name).Limit(1).GetAll(ctx); err == nil &&
+			len(rows) == 1 && rows[0].IsAdmin && !rows[0].IsDeleted && !rows[0].IsForbidden {
 			out = append(out, "System Manager")
 		}
 	}
