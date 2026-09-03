@@ -1,5 +1,5 @@
-// gen-mcp-catalog projects fleet/catalog.json onto the surface an MCP client
-// needs to offer the fleet without asking for it, and writes that projection to
+// gen-mcp-catalog projects surface/catalog.json onto the surface an MCP client
+// needs to offer the surface without asking for it, and writes that projection to
 // every runtime that carries one.
 //
 // The grouped projection is one tool per subsystem carrying its operation names
@@ -26,7 +26,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/surface"
 )
 
 // entry is one subsystem as a client offers it.
@@ -52,29 +52,29 @@ func main() {
 		root = a
 	}
 
-	surface, ops, err := project(filepath.Join(root, "fleet", "catalog.json"))
+	projected, ops, err := project(filepath.Join(root, "surface", "catalog.json"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	body, err := json.MarshalIndent(surface, "", " ")
+	body, err := json.MarshalIndent(projected, "", " ")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "encode:", err)
 		os.Exit(1)
 	}
 	body = append(body, '\n')
 
-	mine := filepath.Join(root, "fleet", "mcp.json")
+	mine := filepath.Join(root, "surface", "mcp.json")
 
-	// A projection smaller than the one it replaces is refused, because a fleet
-	// answering partially and a fleet that lost capabilities look identical from
+	// A projection smaller than the one it replaces is refused, because a surface
+	// answering partially and a surface that lost capabilities look identical from
 	// here — and the quiet direction of that mistake is a client that stops
 	// offering operations the API still serves.
 	if was := count(mine); was > ops && !shrink {
 		fmt.Fprintf(os.Stderr,
 			"refusing to shrink the catalog: %d operations -> %d.\n"+
-				"Re-run when the fleet is whole, or pass --shrink if operations were withdrawn.\n",
+				"Re-run when the surface is whole, or pass --shrink if operations were withdrawn.\n",
 			was, ops)
 		os.Exit(1)
 	}
@@ -86,7 +86,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	fmt.Printf("%d subsystems, %d operations, %d bytes\n", len(surface), ops, len(body))
+	fmt.Printf("%d subsystems, %d operations, %d bytes\n", len(projected), ops, len(body))
 	for _, t := range targets {
 		fmt.Println("  " + t)
 	}
@@ -105,16 +105,16 @@ func project(path string) (map[string]entry, int, error) {
 		return nil, 0, fmt.Errorf("parse catalog: %w", err)
 	}
 
-	surface := map[string]entry{}
+	projected := map[string]entry{}
 	ops := 0
 	for name, list := range catalog {
 		// The endpoint withholds an operation whose name discloses a bearer secret,
-		// or that mutates identity or authority. A client offering what the fleet
+		// or that mutates identity or authority. A client offering what the surface
 		// refuses would hold the policy on one transport and not the other, so the
 		// SAME predicate decides here — never a second copy of the words.
 		ids := make([]string, 0, len(list))
 		for _, op := range list {
-			if fleet.Withheld(op.ID) {
+			if surface.Withheld(op.ID) {
 				continue
 			}
 			ids = append(ids, op.ID)
@@ -126,10 +126,10 @@ func project(path string) (map[string]entry, int, error) {
 			continue
 		}
 		sort.Strings(ids)
-		surface[name] = entry{Ops: ids}
+		projected[name] = entry{Ops: ids}
 		ops += len(ids)
 	}
-	return surface, ops, nil
+	return projected, ops, nil
 }
 
 // siblings answers the carrier paths whose directory exists beside this checkout.

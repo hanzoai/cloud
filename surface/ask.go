@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-// Package fleet is how the light host answers a question about a subsystem: it
+// Package surface is how the light host answers a question about a subsystem: it
 // ASKS the subsystem.
 //
 // The host links no subsystem (cmd/cloud), so it cannot read a registry it does
@@ -42,7 +42,7 @@
 // could not reach is indistinguishable from one whose app serves nothing, and
 // those are the same defect the stale file was: the caller cannot tell. Every
 // caller here reports its failures by name — see [MCP] for the wire shape.
-package fleet
+package surface
 
 import (
 	"context"
@@ -101,7 +101,7 @@ type Answer struct {
 // plugin, applied to every app, which is what makes the one-open-plugin rule
 // unnecessary.
 //
-// Order is the order given — the manifest's mount order, which is the fleet's
+// Order is the order given — the manifest's mount order, which is the surface's
 // routing order — so a caller that resolves a collision by taking the first
 // resolves it the way the router would.
 func Ask(ctx context.Context, at At, apps []string, req *fasthttp.Request) []Answer {
@@ -129,7 +129,7 @@ func ask(ctx context.Context, at At, name string, req *fasthttp.Request) Answer 
 	// fact about the process — something in this program bound that app's socket —
 	// so a co-resident subsystem costs no dial, no frame and no copy of the
 	// caller's request. It is the move plane.Ask already makes with zip.Here, and
-	// this hop was the one place in the fleet that did not make it: every
+	// this hop was the one place in the surface that did not make it: every
 	// tools/list marshalled a fasthttp request into ZAP frames and sent it down a
 	// unix socket to a handler in this very process.
 	//

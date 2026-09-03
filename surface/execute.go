@@ -1,6 +1,6 @@
-package fleet
+package surface
 
-// execute.go runs a parsed request against the fleet: one hop per root field, in
+// execute.go runs a parsed request against the surface: one hop per root field, in
 // parallel, each to the app that owns the operation.
 
 import (
@@ -20,7 +20,7 @@ import (
 //
 // A root field is a HOP: it starts a lazy child if one is not running and holds a
 // connection while that child answers. So the width of a query is fan-out into
-// the fleet, and an unbounded one lets a single caller ask this host to dial every
+// the surface, and an unbounded one lets a single caller ask this host to dial every
 // app it composes, several times over, in parallel. Depth costs no hop — nesting
 // only narrows an answer already in hand — but it is still a caller-supplied
 // recursion, and expansion copies what a fragment spreads.
@@ -72,7 +72,7 @@ func (g *Graph) Run(req Request, from *fasthttp.Request) Response {
 	}
 	if len(roots) > rootMax {
 		return Response{Errors: []Failure{{Message: fmt.Sprintf(
-			"%d root fields is %d over the %d a request may ask for; each one is a hop into the fleet",
+			"%d root fields is %d over the %d a request may ask for; each one is a hop into the surface",
 			len(roots), len(roots)-rootMax, rootMax)}}}
 	}
 

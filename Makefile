@@ -83,7 +83,7 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # them in parallel and build exactly the one you ask for.
 APP_BINS := $(addprefix bin/,$(APPS))
 
-# ONE DOOR. mk/fleet.mk defines describe, documents and check, and
+# ONE ENTRY. mk/fleet.mk defines describe, documents and check, and
 # without this include they were reachable only as `make -f mk/fleet.mk <target>` —
 # a path nobody would guess and nothing in `make help` mentioned. Its own header
 # always said it was meant to be included here; it just never was, so the drift

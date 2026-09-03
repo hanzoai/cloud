@@ -1,13 +1,13 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package fleet
+package surface
 
 import (
 	"strings"
 	"unicode"
 )
 
-// What the fleet's MCP server is WILLING to say a tool is, and in what ORDER.
+// What the surface's MCP server is WILLING to say a tool is, and in what ORDER.
 //
 // [MCP.gather] asks every subsystem what it serves and returns the union. That
 // is the right answer to "what exists" and the wrong answer to "what may an
@@ -52,7 +52,7 @@ import (
 // Refused is the _meta key under which tools/list reports what it withheld.
 //
 // It exists for the same reason [Unavailable] does, and it is the same defect
-// if it is missing: a silently shortened list cannot be told apart from a fleet
+// if it is missing: a silently shortened list cannot be told apart from a surface
 // that serves nothing. The MCP server already refuses to shorten quietly for an
 // outage; refusing to shorten quietly for a POLICY is the same obligation. The
 // count and the rule travel with the answer, so an operator who wonders where
@@ -65,7 +65,7 @@ const Refused = "hanzo.ai/refused"
 const TheRule = "a tool is not projected when its name discloses a bearer secret at any verb, " +
 	"or when a mutating verb acts on an identity or authority object"
 
-// refuse reports whether the fleet's MCP server will project a tool at all.
+// refuse reports whether the surface's MCP server will project a tool at all.
 //
 // The rule, in two clauses over the name's words:
 //
@@ -182,11 +182,11 @@ func mutates(w []string) bool {
 //     `post_v1_agents_targets_id_key` and `delete_v1_keys` do not.
 //
 // Note what is NOT here. `grant` is a mutating VERB but not an authority noun,
-// because in this fleet a grant is nearly always money — adminGrantCredit,
+// because in this surface a grant is nearly always money — adminGrantCredit,
 // post_v1_research_grants. Nothing identity-shaped needs it: GrantRole and
 // grantPermission are already refused on their objects, so the noun only ever
 // bought false positives. `owner` was here, and it was wrong: zip renders a path
-// param as `by_<name>`, so every `/v1/ai/{owner}/{name}` route in the fleet —
+// param as `by_<name>`, so every `/v1/ai/{owner}/{name}` route in the surface —
 // 45 of them, the whole ai CRUD surface — reads as an authority mutation on a
 // word that is really a namespace. `admin` is absent for a different reason:
 // it names an AUDIENCE, not an identity object, and sweeping it in would make

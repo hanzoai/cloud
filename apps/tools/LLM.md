@@ -90,8 +90,8 @@ one more `Provider` implementation over `cloud.Ask`, and no new policy.
 **A skill is listed and never called**, deliberately: both skill providers set
 `Dispatchable: false` (`apps/skills/toolprovider.go:43`, `skillstore.go:206`) and
 `Dispatch` returns `ErrNotDispatchable`, because a skill is activated and attached
-to an agent rather than invoked. `door.Tools` keeps only what is
-`Activated && Dispatchable` (`door.go:77`), so a client reading the plane through
+to an agent rather than invoked. `offer.Tools` keeps only what is
+`Activated && Dispatchable` (`offer.go:77`), so a client reading the plane through
 that filter shows a customer an EMPTY Skills list for skills the store holds. A
 Skills surface reads `GET /v1/tools/skills`, which answers for that source alone;
 measured, it returns the authored skill with `"dispatchable":false` while the
@@ -161,9 +161,9 @@ implementations (mostly test fakes across twelve packages). That is a change to 
 fleet-wide client and it belongs to whoever owns that client — not smuggled in behind
 a catalog feature.
 
-## The endpoint — `door.go`, and the host does not ask it
+## The endpoint — `offer.go`, and the host does not ask it
 
-`Door()` returns a `zip.Source` whose `Tools` is the registry's activated,
+`Offer()` returns a `zip.Source` whose `Tools` is the registry's activated,
 dispatchable set for the caller and whose `Call` IS `callTool`, so it adds no
 policy of its own. It is composed into THIS app's binary and nowhere else:
 `plugin/tools/main.go` states it, `build.go:1384` refuses a second one (a binary
@@ -171,7 +171,7 @@ has one per-caller source), and `app.go:49` hands it to zip as
 `MCPConfig.Source`. It answers at this process's own `/mcp`.
 
 **It is not reachable from `POST /v1/mcp`.** The host serves that address itself
-with zip's own MCP disabled (`cmd/cloud/main.go:123`), and `Door.gather`
+with zip's own MCP disabled (`cmd/cloud/main.go:123`), and `MCP.gather`
 (`fleet/mcp.go:404`) builds the list from the RELEASE — "EVERY app is read from
 what it PUBLISHED, and none is asked", for the cost `gather` records at its own
 declaration. A tool that exists because of WHO is asking cannot be in a build
@@ -385,7 +385,7 @@ The shape it should take when those land, so it stays one way to do everything:
       → platform.applyService(org, project, bridge image, env from the package)
       → the endpoint it returns is written as an MCPServer row with
         listing=<id> and source=catalog, exactly as an enable does
-      → the endpoint composes it like any other remote, with no new code in door.go
+      → the endpoint composes it like any other remote, with no new code in offer.go
 
 That last line is the test of the design: running a package must produce the SAME
 registration record an enablement does, or the plane has grown a second kind of

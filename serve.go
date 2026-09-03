@@ -411,7 +411,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// THIS PROCESS'S OPS, which in a plugin child means that child's own — the same
 	// scope its own OpenAPI document above describes, and the reason both are
 	// mounted here rather than in the host. The FLEET's schema at this address is
-	// the host's answer (cmd/cloud, fleet.UseGraph): a child cannot see past
+	// the host's answer (cmd/cloud, surface.UseGraph): a child cannot see past
 	// itself, and for a long time nobody claimed the address, so the app holding
 	// the /v1 remainder answered the fleet's callers with a schema of its own
 	// registry — one field, honestly rendered, about the wrong thing.

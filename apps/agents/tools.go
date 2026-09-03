@@ -29,19 +29,19 @@ package agents
 // what agents itself registered — the agentToolProvider at agents.go:399 — and
 // its activation store is nil, which makes ActivationStore.IsActivated report
 // false for everything (apps/tools/activation.go:83) and Registry.Dispatch
-// refuse every name. In the split fleet this process's own registry is not an
+// refuse every name. In the split surface this process's own registry is not an
 // answer; it is a fact about this process.
 //
 // The thing that CAN answer already exists, and it was already deployed: the
-// fleet's composed agent MCP server (fleet/mcp.go), which asks every app what it
+// surface's composed agent MCP server (surface/mcp.go), which asks every app what it
 // serves right now, merges the union, and forwards a call to the app that listed
 // the name. It is what api.hanzo.ai/v1/mcp is. So there is one tool surface in
-// this fleet and an agent reads THAT one — fleet.go is the client, over the
+// this surface and an agent reads THAT one — surface.go is the client, over the
 // host's own socket, and it is the plane a real deployment uses.
 //
 // registryTools stays as what this process's own registry says, which is the
-// whole answer exactly where this process is the whole fleet: a single-app
-// binary, a dev box, a test. fleetTools falls back to it there and nowhere else,
+// whole answer exactly where this process is the whole surface: a single-app
+// binary, a dev box, a test. surfaceTools falls back to it there and nowhere else,
 // on the one signal that means it — nothing listening on the router's socket.
 //
 // The degradation that remains is an OUTAGE, and it is visible: every run's step
@@ -145,7 +145,7 @@ func callableTools(a Agent) []string {
 // per-DEPLOYMENT, not per-run — and it is deliberately narrow: names, prose,
 // schemas, and one call that takes raw JSON in and returns text out. Nothing in
 // it is a map, which is what let the same shape cross a process boundary
-// unchanged (fleet.go) rather than being redesigned at the client.
+// unchanged (surface.go) rather than being redesigned at the client.
 type toolPlane interface {
 	// catalog resolves the tool NAMES an agent declares into definitions the
 	// model can be offered. A name that resolves to nothing is simply absent —
@@ -156,12 +156,12 @@ type toolPlane interface {
 	call(ctx context.Context, org, actor, name, args string) (string, error)
 }
 
-// runTools is the tool plane a run uses: the fleet's own agent MCP server, which
-// answers with this process's registry wherever this process IS the fleet
-// (fleet.go). A package var so a test can substitute a deterministic one; there
+// runTools is the tool plane a run uses: the surface's own agent MCP server, which
+// answers with this process's registry wherever this process IS the surface
+// (surface.go). A package var so a test can substitute a deterministic one; there
 // is no exported setter, because which plane answers is a property of the
 // deployment and not something a caller may choose.
-var runTools toolPlane = fleetTools{}
+var runTools toolPlane = surfaceTools{}
 
 // registryTools is the tool plane read IN THIS PROCESS: tools.Default(), the same
 // registry POST /v1/tools/call dispatches through, with the same activation gate,
@@ -219,8 +219,8 @@ func (registryTools) call(ctx context.Context, org, actor, name, args string) (s
 // toolSubsystem names the app that answers for a tool, read out of the tool's OWN
 // name rather than looked up anywhere.
 //
-// The fleet MCP server groups one tool per subsystem and carries the operation
-// names in its `op` enum (fleet/grouped.go), and those names are spelled
+// The surface MCP server groups one tool per subsystem and carries the operation
+// names in its `op` enum (surface/grouped.go), and those names are spelled
 // <method>_<subsystem>_<rest> — so the owner is a fact the name already states.
 //
 // THE METHOD IS WHAT SAYS THE NAME IS IN THAT SHAPE. Reading the second word
@@ -287,7 +287,7 @@ func actorSub(org, actor string) string {
 // credential — a clone URL with a token in the userinfo is the ordinary shape
 // (apps/coding builds exactly that) — and a trace that records one is worse than
 // no trace at all, because the token outlives the sandbox that used it and sits
-// in a store built to be queried. audit.RedactText is the fleet's ONE redactor;
+// in a store built to be queried. audit.RedactText is the surface's ONE redactor;
 // this adds no second policy, it just applies it at the moment of recording.
 //
 // The order matters: redact FIRST, then cut. Cutting first can split a credential

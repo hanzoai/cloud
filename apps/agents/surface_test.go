@@ -3,9 +3,9 @@ package agents
 // endpoint_test.go — the tool plane, over the wire it actually uses.
 //
 // Nothing is stubbed at the client under test. Every test here brings up real
-// subsystem apps on real ZAP sockets, composes the REAL fleet.MCP over them,
+// subsystem apps on real ZAP sockets, composes the REAL surface.MCP over them,
 // publishes it on the router's socket exactly as cmd/cloud/wake.go does, and
-// then drives fleetTools — so what is asserted is what a deployed agent gets.
+// then drives surfaceTools — so what is asserted is what a deployed agent gets.
 //
 // A fake MCP server would have proved nothing: the two properties worth
 // having are that the agent inherits the MCP server's CURATION and that the
@@ -22,7 +22,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/surface"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
@@ -45,25 +45,25 @@ type echoOut struct {
 // The MCP server used to ask a running subsystem what it had; it lists from the
 // build-time catalog and asks nothing, because one question about names was
 // costing a process per subsystem. These children are built here rather than by
-// the fleet's generator, so nothing embeds their operations and the harness has
-// to state them — which is exactly the case fleet.MCP.Catalog documents.
+// the surface's generator, so nothing embeds their operations and the harness has
+// to state them — which is exactly the case surface.MCP.Catalog documents.
 //
 // Written by subsystem, read by fleetEndpoint. Both run on the test's own goroutine
 // and the calls to subsystem are ARGUMENTS to fleetEndpoint, so they are complete
 // before the map is read; these tests do not run in parallel.
-var declared = map[string][]fleet.Op{}
+var declared = map[string][]surface.Op{}
 
 // subsystem starts one app serving the named ops on its own socket, the shape
 // cloud.Serve gives every plugin binary. Each op echoes its input AND the org it
 // was reached as, so a test can prove the run's tenant travelled the whole way.
 func subsystem(t *testing.T, name string, ops ...string) string {
 	t.Helper()
-	pub := make([]fleet.Op, 0, len(ops))
+	pub := make([]surface.Op, 0, len(ops))
 	for _, id := range ops {
 		// The same sentence WithSummary puts on the live op, so what the MCP
 		// server lists and what the child would have answered cannot drift
 		// apart here.
-		pub = append(pub, fleet.Op{ID: id, Doc: "what " + name + " does at " + id})
+		pub = append(pub, surface.Op{ID: id, Doc: "what " + name + " does at " + id})
 	}
 	declared[name] = pub
 	t.Cleanup(func() { delete(declared, name) })
@@ -107,11 +107,11 @@ func fleetEndpoint(t *testing.T, at map[string]string, inside map[string]string)
 		}
 		return sock, manifest.FrameworkMCPPath, nil
 	}
-	d := fleet.Use(host, manifest.MCPPath, apps, edge)
-	// nil would mean the catalog THIS binary embeds, which is the real fleet's —
+	d := surface.Use(host, manifest.MCPPath, apps, edge)
+	// nil would mean the catalog THIS binary embeds, which is the real surface's —
 	// it does not carry these children, so the MCP server would list nothing for
 	// them and every assertion below would read as "the agent was offered 0".
-	d.Catalog = func(app string) []fleet.Op { return declared[app] }
+	d.Catalog = func(app string) []surface.Op { return declared[app] }
 
 	endpoint := zip.New(zip.Config{AppName: "plane", DisableStartupMessage: true})
 	d.Serve(endpoint, manifest.MCPPath, func(app string) (addr, path string, err error) {
@@ -127,7 +127,7 @@ func fleetEndpoint(t *testing.T, at map[string]string, inside map[string]string)
 }
 
 // noFleetEndpoint points the run directory at an empty one: nothing is listening, so
-// this process is the whole fleet.
+// this process is the whole surface.
 func noFleetEndpoint(t *testing.T) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", shortDir(t))
@@ -169,10 +169,10 @@ func TestAgentResolvesItsToolsFromTheFleetEndpoint(t *testing.T) {
 		"beta":  subsystem(t, "beta", "beta_echo"),
 	}, nil)
 
-	endpoint := fleetTools{}
+	endpoint := surfaceTools{}
 	defs := endpoint.catalog(context.Background(), "acme", "acme/u-1", []string{"alpha_echo", "beta_echo"})
 	if len(defs) != 2 {
-		t.Fatalf("the agent declared two tools the fleet serves and was offered %d: %+v", len(defs), defs)
+		t.Fatalf("the agent declared two tools the surface serves and was offered %d: %+v", len(defs), defs)
 	}
 	got := map[string]bool{}
 	for _, d := range defs {
@@ -189,12 +189,12 @@ func TestAgentResolvesItsToolsFromTheFleetEndpoint(t *testing.T) {
 	}
 }
 
-// A declared name NOTHING in the fleet serves is absent, never offered. Offering
+// A declared name NOTHING in the surface serves is absent, never offered. Offering
 // a tool that would be refused at dispatch teaches the model a lie.
 func TestUnservedNamesAreNotOffered(t *testing.T) {
 	fleetEndpoint(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")}, nil)
 
-	endpoint := fleetTools{}
+	endpoint := surfaceTools{}
 	defs := endpoint.catalog(context.Background(), "acme", "acme/u-1",
 		[]string{"alpha_echo", "slack_post_message"})
 	if len(defs) != 1 || defs[0].Name != "alpha_echo" {
@@ -204,7 +204,7 @@ func TestUnservedNamesAreNotOffered(t *testing.T) {
 
 // TestTheAgentInheritsTheEndpointsDenylist is the security bar, as a test.
 //
-// The curation rule lives in fleet/surface.go and is applied inside gather,
+// The curation rule lives in surface/surface.go and is applied inside gather,
 // where the routing table is written. An agent reaching the MCP server through
 // any other path would have seen a surface external MCP clients cannot — so this
 // asserts BOTH halves: the credential-minting op is not offered, and naming it
@@ -213,7 +213,7 @@ func TestTheAgentInheritsTheEndpointsDenylist(t *testing.T) {
 	fleetEndpoint(t, map[string]string{
 		"iam": subsystem(t, "iam", "CreateServiceAccountKey", "GetRole"),
 	}, nil)
-	endpoint := fleetTools{}
+	endpoint := surfaceTools{}
 	ctx := context.Background()
 
 	defs := endpoint.catalog(ctx, "acme", "acme/u-1", []string{"CreateServiceAccountKey", "GetRole"})
@@ -230,7 +230,7 @@ func TestTheAgentInheritsTheEndpointsDenylist(t *testing.T) {
 func TestADispatchCarriesTheRunsOrg(t *testing.T) {
 	fleetEndpoint(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")}, nil)
 
-	endpoint := fleetTools{}
+	endpoint := surfaceTools{}
 	out, err := endpoint.call(context.Background(), "acme", "acme/u-1", "alpha_echo", `{"say":"pong"}`)
 	if err != nil {
 		t.Fatalf("call: %v", err)
@@ -260,7 +260,7 @@ func guarded(t *testing.T, name, op string) (edge, plane string) {
 	// Publishing is a separate act from serving, and this child owes it for the
 	// same reason subsystem's do: the MCP server lists from the catalog and
 	// never asks.
-	declared[name] = []fleet.Op{{ID: op, Doc: "what " + name + " does at " + op}}
+	declared[name] = []surface.Op{{ID: op, Doc: "what " + name + " does at " + op}}
 	t.Cleanup(func() { delete(declared, name) })
 
 	app := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
@@ -285,18 +285,18 @@ func guarded(t *testing.T, name, op string) (edge, plane string) {
 }
 
 // TestATenantedToolAnswersTheRun is the @hanzo Slack failure, as a test: a run
-// with a principal the fleet resolved server-side calls a tool that scopes by
+// with a principal the surface resolved server-side calls a tool that scopes by
 // tenant, and gets an answer instead of a refusal.
 //
 // It is the same call TestADispatchCarriesTheRunsOrg makes, against a subsystem
 // that has the boundary production has. Point the MCP server's internal reach
-// at the EDGE address instead and it fails exactly the way the deployed fleet
+// at the EDGE address instead and it fails exactly the way the deployed surface
 // did.
 func TestATenantedToolAnswersTheRun(t *testing.T) {
 	edge, plane := guarded(t, "alpha", "alpha_tenant")
 	fleetEndpoint(t, map[string]string{"alpha": edge}, map[string]string{"alpha": plane})
 
-	out, err := fleetTools{}.call(context.Background(), "acme", "acme/u-1", "alpha_tenant", `{"say":"pong"}`)
+	out, err := surfaceTools{}.call(context.Background(), "acme", "acme/u-1", "alpha_tenant", `{"say":"pong"}`)
 	if err != nil {
 		t.Fatalf("a tool that scopes by tenant refused the run it belongs to: %v", err)
 	}
@@ -310,7 +310,7 @@ func TestATenantedToolAnswersTheRun(t *testing.T) {
 func TestAnUnroutableToolIsAnErrorNotAnEmptyResult(t *testing.T) {
 	fleetEndpoint(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")}, nil)
 
-	endpoint := fleetTools{}
+	endpoint := surfaceTools{}
 	out, err := endpoint.call(context.Background(), "acme", "acme/u-1", "nobody_serves_this", `{}`)
 	if err == nil {
 		t.Fatalf("an unroutable tool answered %q with no error", out)
@@ -326,18 +326,18 @@ func TestAnUnroutableToolIsAnErrorNotAnEmptyResult(t *testing.T) {
 func TestMalformedArgumentsNeverReachTheEndpoint(t *testing.T) {
 	fleetEndpoint(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")}, nil)
 
-	endpoint := fleetTools{}
+	endpoint := surfaceTools{}
 	if _, err := endpoint.call(context.Background(), "acme", "acme/u-1", "alpha_echo", `["not","an","object"]`); err == nil {
 		t.Fatal("a JSON array was accepted as a tool's arguments")
 	}
 }
 
-// With no router on this host, this process IS the fleet: fleetTools falls back
+// With no router on this host, this process IS the surface: surfaceTools falls back
 // to the in-process registry rather than reporting an outage — and a run in a
 // single-app binary keeps working instead of crashing.
 func TestNoFleetEndpointFallsBackToThisProcesssRegistry(t *testing.T) {
 	noFleetEndpoint(t)
-	endpoint := fleetTools{}
+	endpoint := surfaceTools{}
 	ctx := context.Background()
 
 	if defs := endpoint.catalog(ctx, "acme", "acme/u-1", []string{"alpha_echo"}); len(defs) != 0 {

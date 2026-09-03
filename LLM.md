@@ -1512,7 +1512,7 @@ one before it.
     earlier. It rides as `x-public`, an extension rather than a tag, because the
     tag axis already means PRODUCT and `compat` had to be filtered back out of it.
   - **The MCP endpoint offers the public contract and nothing beside it**:
-    plugin/gen-fleet-catalog keeps an operation only when it is `x-tool` (typed,
+    plugin/gen-surface-catalog keeps an operation only when it is `x-tool` (typed,
     so a child can dispatch it) AND `x-public`, so `/v1/admin/*` is neither an SDK
     method nor a tool a model is shown.
   - **The ratchet, split correctly.** `openapi/floor.json` keeps guarding the
@@ -1577,7 +1577,7 @@ can now reach.
   are. Nothing left that document; a staged capability is reached by flag, not
   hidden.
 - **The agent endpoint followed, and it had to be MOVED to.**
-  `plugin/gen-fleet-catalog` filters `x-tool AND x-public` — but it read
+  `plugin/gen-surface-catalog` filters `x-tool AND x-public` — but it read
   `x-public` off the SUBSETS, where the stage is not yet known, so 355 beta
   operations stayed in the endpoint while the same operations were absent from every
   generated SDK. It now reads the audience off `openapi.yaml`, which IS the
@@ -1586,9 +1586,9 @@ can now reach.
   42 subsystem tools and 355 operations left the catalog; no ga app moved.
   `fleet/catalog_test.go` asks the same question of the same file. With no beta
   row left, what the audience withholds from the endpoint is the two alpha rows:
-  `fleet/catalog.json` names `admission` and `research` as keys carrying EMPTY
+  `surface/catalog.json` names `admission` and `research` as keys carrying EMPTY
   operation lists, and `group` builds no tool from a name with nothing under it
-  (`jq -r 'to_entries|map(select(.value|length==0)|.key)' fleet/catalog.json`).
+  (`jq -r 'to_entries|map(select(.value|length==0)|.key)' surface/catalog.json`).
 - **The 404 is `cloud.Stage` (stage.go), installed by `Listen`.** One middleware
   per non-ga app — two of them today — over `manifest.PrefixesFor(name)`, asking
   flags across the internal plane (`plane.FlagsHold`, `apps/flags/hold_rpc.go`)
@@ -2319,8 +2319,8 @@ subsets published NOTHING before it.** esign was 0 of 13 and social 0 of 13 — 
 operations carrying prose and not one SHAPE, so every generated SDK offered "upload
 a PDF for signature" and "publish this post" with nowhere to put the PDF or the
 post. Both were `beta` then, which is why this was the cheap moment: the public
-contract and `fleet/catalog.json` exclude a staged capability (HIP-0139 §8, and
-`plugin/gen-fleet-catalog`'s own header explains why it reads the audience from
+contract and `surface/catalog.json` exclude a staged capability (HIP-0139 §8, and
+`plugin/gen-surface-catalog`'s own header explains why it reads the audience from
 the public contract rather than from the subset), so nothing regenerated and no client
 moved — the ids and shapes were fixed BEFORE ga exposed them, which it since has:
 both rows are ga, `openapi.yaml` publishes esign at 12 paths / 13 operations and
@@ -4068,7 +4068,7 @@ migration silently strips request shapes from every generated CLI and SDK.
 - **The agent-skills catalogue is a projection of this repo's own specs, and the
   Python that used to build it from ANOTHER repo is deleted.**
   `plugin/gen-skills` reads `plugin/<app>/openapi.json` — the same input
-  `gen-fleet-catalog` reads and the weave holds against `openapi.yaml` — so the
+  `gen-surface-catalog` reads and the weave holds against `openapi.yaml` — so the
   chain has one link per step and no hand-written copy anywhere in it:
 
       Go doc comment -> zipdoc -> the app's own binary -> openapi.json -> catalogue
@@ -4401,7 +4401,7 @@ semantic is identical — fail closed once armed, allow before.
   (`zip/mcp.go`: `mcpTools` → `Registry`), so the mark restates where the writer is
   standing rather than judging anything — an untyped route arriving through `From`
   and a declared one through `Register` both leave it false.
-  `plugin/gen-fleet-catalog` carries only marked operations, so the catalog holds
+  `plugin/gen-surface-catalog` carries only marked operations, so the catalog holds
   what a child ANSWERS TO, which is what `Op`'s doc comment always claimed.
   The gate is `openapi/tool_test.go`, and the case that earns it is the THIRD one:
   a route with an `openapi.Register`ed body AND `openapi.Describe`d prose is
@@ -4417,9 +4417,9 @@ semantic is identical — fail closed once armed, allow before.
   size it shrank TO — 1445 is above that 1048 and below both 1554 and the
   original 2499: **1445 operations over 123 keys, 13 of them empty**
   (`admin admission amqp authz dns kafka metrics plugins research s3 skills tasks
-  zen` — `jq 'length' fleet/catalog.json`,
-  `jq '[.[]|length]|add' fleet/catalog.json`,
-  `jq -r 'to_entries|map(select(.value|length==0)|.key)|join(" ")' fleet/catalog.json`),
+  zen` — `jq 'length' surface/catalog.json`,
+  `jq '[.[]|length]|add' surface/catalog.json`,
+  `jq -r 'to_entries|map(select(.value|length==0)|.key)|join(" ")' surface/catalog.json`),
   because esign, index, kms and social type and publish now, and `storage` is the
   row `s3` took the name back from. Measured, and it agrees with what the live
   endpoint was answering `unknown tool` for. The withdrawal is far larger than the
@@ -6774,7 +6774,7 @@ interchangeable and are not:
 | | `forge/main` | `inc/main` |
 |---|---|---|
 | `fleet/surface.go` (`refuse()`) | **absent** | present |
-| `apps/agents/fleet.go` | **absent** | present |
+| `apps/agents/surface.go` | **absent** | present |
 | relative position | 187 ahead of inc HEAD | 16 ahead of forge/main |
 
 Production runs `ghcr.io/hanzoai/cloud:sha-8465354e6bf3`, and its live behavior —
@@ -7235,7 +7235,7 @@ that decides which rung the ladder stops at. A run that returns a diff without
 one is `unattributed`, and `unattributed` stops at notify.
 
 **Where the loop's agent gets its tools — settled against what exists.**
-`apps/agents/fleet.go` already routes a run's tool calls through `fleet.MCP` over
+`apps/agents/surface.go` already routes a run's tool calls through `fleet.MCP` over
 the host socket, deliberately so that "an agent CANNOT see a surface an external
 client cannot; there is no second surface to see." Building a second aggregation
 on the tool plane was considered there and rejected for the reason this document

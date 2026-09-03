@@ -90,7 +90,7 @@ func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error)
 // UseMCP publishes app's AGENT MCP SERVER on the internal plane, at
 // [manifest.MCPPath].
 //
-// It is the same move [fleet.MCP.Serve] makes one level up, for the same
+// It is the same move [surface.MCP.Serve] makes one level up, for the same
 // reason: the MCP server a subsystem serves on the edge is reachable only
 // through the identity boundary, and the fleet's own callers are not on the
 // edge.

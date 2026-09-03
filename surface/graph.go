@@ -1,9 +1,9 @@
-package fleet
+package surface
 
-// graph.go mounts the fleet's GraphQL address.
+// graph.go mounts the surface's GraphQL address.
 //
 // It is the HOST's, for the reason /v1/openapi.json is: the answer is about the
-// whole fleet, and no plugin can see past itself. Left unclaimed the address falls
+// whole surface, and no plugin can see past itself. Left unclaimed the address falls
 // through to whichever app holds the /v1 remainder, which then answers with a
 // schema of its OWN registry — one field, honestly rendered, about the wrong
 // thing.
@@ -17,7 +17,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// UseGraph serves the fleet schema at path: GET renders it, POST runs a request
+// UseGraph serves the surface schema at path: GET renders it, POST runs a request
 // against it.
 //
 // The schema and the dispatch are built from ONE composed document, once, so the
@@ -42,7 +42,7 @@ func UseGraph(app *zip.App, path string, subsets func() ([]openapi.Part, error),
 	app.Get(path, func(c *zip.Ctx) error {
 		d, err := build()
 		if err != nil {
-			return zip.ErrInternal("the fleet document would not compose: " + err.Error())
+			return zip.ErrInternal("the surface document would not compose: " + err.Error())
 		}
 		c.SetHeader("Content-Type", "text/plain; charset=utf-8")
 		return c.Bytes(http.StatusOK, []byte(d.sdl))
@@ -51,7 +51,7 @@ func UseGraph(app *zip.App, path string, subsets func() ([]openapi.Part, error),
 	app.Post(path, func(c *zip.Ctx) error {
 		d, err := build()
 		if err != nil {
-			return zip.ErrInternal("the fleet document would not compose: " + err.Error())
+			return zip.ErrInternal("the surface document would not compose: " + err.Error())
 		}
 		var req Request
 		if err := jsonenc.Unmarshal(c.Fiber().Body(), &req); err != nil {

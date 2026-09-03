@@ -20,7 +20,7 @@ const (
 
 	// Metadata is where the host publishes RFC 9728 metadata for the MCP server:
 	// which authorization server mints the bearer a tools/call needs. The MCP
-	// server's WWW-Authenticate challenge names it (fleet/mcp.go) and the host
+	// server's WWW-Authenticate challenge names it (surface/mcp.go) and the host
 	// serves it (cmd/cloud/oauth.go) — one name, two readers, so the challenge
 	// can never point at an address the host does not answer.
 	Metadata = "/.well-known/oauth-protected-resource"

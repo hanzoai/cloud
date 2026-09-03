@@ -1,4 +1,4 @@
-// Command gen-fleet-catalog writes what each subsystem serves, so the fleet's
+// Command gen-surface-catalog writes what each subsystem serves, so the surface's
 // agent MCP server can answer tools/list without a process per subsystem.
 //
 // THE SOURCE IS EACH APP'S OWN SPEC, plugin/<app>/openapi.json, which that app's
@@ -16,13 +16,13 @@
 //
 // THE AUDIENCE COMES FROM openapi.yaml AND NOT FROM THE SUBSET, and the two are
 // not the same answer. A subset's x-public is what the app's own binary could
-// derive about itself, and one term of that rule is a fleet fact the app cannot
+// derive about itself, and one term of that rule is a surface fact the app cannot
 // see: its STAGE (HIP-0139 §8, stamped by the compose). Read off the subsets, a
 // beta capability's 355 operations stayed in the MCP server — offered to every model
 // while the same operations were absent from every generated SDK, which is
 // exactly the split the paragraph below says does not exist. openapi.yaml IS the
 // public contract — the compose writes the customer projection there and everything
-// the fleet serves to private.yaml — so reading it is not a second copy of the
+// the surface serves to private.yaml — so reading it is not a second copy of the
 // rule; it is the only copy, asked where it has been fully applied.
 package main
 
@@ -52,13 +52,13 @@ func main() {
 	}
 	specs, err := filepath.Glob(filepath.Join(root, "plugin", "*", "openapi.json"))
 	if err != nil || len(specs) == 0 {
-		fmt.Fprintf(os.Stderr, "gen-fleet-catalog: no specs at %s/plugin/*/openapi.json (%v)\n", root, err)
+		fmt.Fprintf(os.Stderr, "gen-surface-catalog: no specs at %s/plugin/*/openapi.json (%v)\n", root, err)
 		os.Exit(1)
 	}
 
 	published, err := contract(root)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "gen-fleet-catalog: %v\n", err)
+		fmt.Fprintf(os.Stderr, "gen-surface-catalog: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -67,7 +67,7 @@ func main() {
 		app := filepath.Base(filepath.Dir(path))
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "gen-fleet-catalog: read %s: %v\n", path, err)
+			fmt.Fprintf(os.Stderr, "gen-surface-catalog: read %s: %v\n", path, err)
 			os.Exit(1)
 		}
 		var doc struct {
@@ -81,7 +81,7 @@ func main() {
 			} `json:"paths"`
 		}
 		if err := json.Unmarshal(raw, &doc); err != nil {
-			fmt.Fprintf(os.Stderr, "gen-fleet-catalog: parse %s: %v\n", path, err)
+			fmt.Fprintf(os.Stderr, "gen-surface-catalog: parse %s: %v\n", path, err)
 			os.Exit(1)
 		}
 		seen := map[string]bool{}
@@ -123,10 +123,10 @@ func main() {
 		// no tools" and "was never generated" the same absence, and the MCP server's fallback
 		// for absence used to be to ASK the subsystem — so a missing entry cost a
 		// cold start and was invisible. With no asking left, the same absence would
-		// silently publish less than the fleet routes.
+		// silently publish less than the surface routes.
 		//
 		// Present-and-empty says the app was read and had nothing; absent now means
-		// missing, which fleet's coverage gate can refuse.
+		// missing, which surface's coverage gate can refuse.
 		sort.Slice(ops, func(i, j int) bool { return ops[i].ID < ops[j].ID })
 		if ops == nil {
 			ops = []op{}
@@ -136,13 +136,13 @@ func main() {
 
 	body, err := json.MarshalIndent(out, "", " ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "gen-fleet-catalog: encode: %v\n", err)
+		fmt.Fprintf(os.Stderr, "gen-surface-catalog: encode: %v\n", err)
 		os.Exit(1)
 	}
 	body = append(body, '\n')
-	dst := filepath.Join(root, "fleet", "catalog.json")
+	dst := filepath.Join(root, "surface", "catalog.json")
 	if err := os.WriteFile(dst, body, 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "gen-fleet-catalog: write %s: %v\n", dst, err)
+		fmt.Fprintf(os.Stderr, "gen-surface-catalog: write %s: %v\n", dst, err)
 		os.Exit(1)
 	}
 	n := 0
@@ -154,7 +154,7 @@ func main() {
 
 // contract is every operationId in the published contract, read off openapi.yaml.
 //
-// An id is a fleet-wide key — openapi.uniqueOperationIDs refuses a document where
+// An id is a surface-wide key — openapi.uniqueOperationIDs refuses a document where
 // two addresses share one — so membership is all this needs and the address does
 // not have to be matched a second time. `make -f mk/fleet.mk documents` writes
 // openapi.yaml immediately before running this, from the same subsets, so the two
@@ -162,7 +162,7 @@ func main() {
 //
 // A missing or empty openapi.yaml is a REFUSAL. Treating it as "nothing is public"
 // would silently write a catalog with no tools in it, and the MCP server would answer
-// tools/list with an empty fleet — 200 OK, and wrong in the way nobody files.
+// tools/list with an empty surface — 200 OK, and wrong in the way nobody files.
 func contract(root string) (map[string]bool, error) {
 	path := filepath.Join(root, "openapi.yaml")
 	raw, err := os.ReadFile(path)
@@ -187,7 +187,7 @@ func contract(root string) (map[string]bool, error) {
 		}
 	}
 	if len(ids) == 0 {
-		return nil, fmt.Errorf("%s names no operation — the MCP server would publish an empty fleet", path)
+		return nil, fmt.Errorf("%s names no operation — the MCP server would publish an empty surface", path)
 	}
 	return ids, nil
 }

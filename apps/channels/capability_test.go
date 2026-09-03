@@ -176,7 +176,7 @@ func TestEveryTransportFlattensWhatItCannotRender(t *testing.T) {
 
 // TestEveryTransportSendsAsTheOrg pins the tenant onto the wire. The org is what
 // buys the credential — integrations resolves the per-org token from it and
-// refuses an empty one — so a endpoint that drops it leaves the custody check
+// refuses an empty one — so an endpoint that drops it leaves the custody check
 // nothing to check. Four of the five dropped it, which no test could see because
 // only slack's spy recorded the field.
 func TestEveryTransportSendsAsTheOrg(t *testing.T) {

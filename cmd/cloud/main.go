@@ -45,7 +45,7 @@ import (
 
 	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/cloud/clientip"
-	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/surface"
 	"github.com/hanzoai/cloud/internal/datadir"
 	"github.com/hanzoai/cloud/internal/edge"
 	"github.com/hanzoai/cloud/internal/environ"
@@ -151,8 +151,8 @@ func run(addr, zapAddr string) error {
 	// zip's MCP server answers out of an app's own typed-op registry plus the
 	// build-time catalogues a host hands it. This host has neither: it registers
 	// no op, and the catalogues are deleted. What it has is CHILDREN, and the
-	// honest content of the fleet's MCP server is what they serve RIGHT NOW — so
-	// the host asks them (fleet.Use, below, after the mount loops have built the
+	// honest content of the surface's MCP server is what they serve RIGHT NOW — so
+	// the host asks them (surface.Use, below, after the mount loops have built the
 	// plugin table).
 	//
 	// The host is still the only process that can own it: a plugin's MCPTools() is
@@ -167,7 +167,7 @@ func run(addr, zapAddr string) error {
 
 	// A lazy child that has served once stays resident forever unless something
 	// stops it, so the pod's process count follows the CATALOG rather than the
-	// traffic — and this fleet's catalog is a hundred subsystems under one
+	// traffic — and this surface's catalog is a hundred subsystems under one
 	// memory cap. The sweep gives that back: an app nobody has called for
 	// manifest.Idle() is stopped, and the next request through its prefix starts
 	// it again by the path that already exists.
@@ -242,8 +242,8 @@ func run(addr, zapAddr string) error {
 	// composed is what THIS deployment put together, in manifest order — the app
 	// set spec() describes. Taken here rather than from the loops below because
 	// they consume `on` as they go (delete, so a leftover name is a typo), and
-	// because the broker-first split would put the fleet's document in an order
-	// that is not the fleet's.
+	// because the broker-first split would put the surface's document in an order
+	// that is not the surface's.
 	//
 	// Coresident apps included: an app that mounts as middleware on a sibling's
 	// router still SERVES its routes, so it belongs in the document even though
@@ -264,7 +264,7 @@ func run(addr, zapAddr string) error {
 	// its scoped credentials from it, so an app that starts before it has nothing
 	// to ask — and the broker is itself an app, so left in manifest order it comes
 	// up whenever its turn arrives. It is also lazy by default, which means it does
-	// not come up at all until a request reaches /v1/kms: the fleet then waits on a
+	// not come up at all until a request reaches /v1/kms: the surface then waits on a
 	// process nothing has asked for. Starting it here makes the dependency explicit
 	// instead of a property of list order.
 	//
@@ -291,7 +291,7 @@ func run(addr, zapAddr string) error {
 	// THE CANONICAL SPELLING, before anything reads the path.
 	//
 	// A capability has one name, and English gives its name two spellings. The
-	// fleet publishes one of them and accepts both: the plural of a singular
+	// surface publishes one of them and accepts both: the plural of a singular
 	// capability, and the singular of a plural one, are rewritten HERE to the name
 	// manifest.Apps carries (manifest.Normalize, HIP-0139 §2.2).
 	//
@@ -329,7 +329,7 @@ func run(addr, zapAddr string) error {
 	}
 
 	// Liveness belongs to the HOST, not to any app: it must answer while every
-	// plugin is still cold, or a lazy fleet fails its readiness probe before the
+	// plugin is still cold, or a lazy surface fails its readiness probe before the
 	// first real request ever arrives and gets restarted forever. Registered after
 	// the mount loops so it closes over the finished absence set — nothing is
 	// listening until app.Listen either way, so registration order costs no
@@ -341,9 +341,9 @@ func run(addr, zapAddr string) error {
 	// (oauth.go). Host-served for the reason /healthz is.
 	protectedResource(app, brand.Issuer(os.Getenv("CLOUD_IAM_ISSUER"), environ.Or("CLOUD_BRAND", brand.Default)))
 
-	// The fleet's own description, at /v1/openapi.json. Same reasoning as
+	// The surface's own description, at /v1/openapi.json. Same reasoning as
 	// /healthz, and the same layer: it is the HOST's, because it is about the
-	// whole fleet and no plugin can see past itself.
+	// whole surface and no plugin can see past itself.
 	spec(app, composed)
 
 	// The same description as a QUERY LANGUAGE, at /v1/graphql. The host's for the
@@ -361,19 +361,19 @@ func run(addr, zapAddr string) error {
 	// host can start and its ops are already in the sibling's registry — asking
 	// for it by name would report a permanent outage for an app that is serving.
 	//
-	// The MCP server is KEPT, because the fleet's own subsystems need it as much
+	// The MCP server is KEPT, because the surface's own subsystems need it as much
 	// as an external client does — an agent run inside `agents` has to resolve
 	// its tool names against the same aggregated surface. serveWake publishes
 	// this same object on the host's internal socket, so there is one gather, one
 	// routing table and one curation rule for both directions.
-	mcp := fleet.Use(app, manifest.MCPPath, routed(composed), locate(app))
+	mcp := surface.Use(app, manifest.MCPPath, routed(composed), locate(app))
 
 	// LISTING WHAT THE FLEET SERVES MUST NOT START THE FLEET. Discovery asks a
 	// subsystem, and asking a lazy one starts it — so one tools/list started every
 	// subsystem this host composes, and the pod's resident cost became the size of
 	// the catalog rather than of the work. The MCP server asks the ones that are
 	// already running and reads the rest from what they published
-	// (fleet/catalog.go); this is the half only the host can answer, because the
+	// (surface/catalog.go); this is the half only the host can answer, because the
 	// plugin table is its.
 
 	// The bare /mcp needs no route here. webui's terminal handler answers it from
@@ -389,7 +389,7 @@ func run(addr, zapAddr string) error {
 	// the host's catch-all rather than a plugin. Registered LAST — after every app
 	// prefix — so a real /v1 route always wins and only unmatched paths fall
 	// through to the white-labelled shell. webui is a light leaf (stdlib + the
-	// brand registry), so owning "/" costs the host a handler, not the fleet's
+	// brand registry), so owning "/" costs the host a handler, not the surface's
 	// package graph.
 	// The published-site edge goes BEFORE the console: <slug>.hanzo.app must serve
 	// the customer's site, and webui owns "/" for every path no app prefix claims,
@@ -540,14 +540,14 @@ func run(addr, zapAddr string) error {
 // the console shell instead of a redirect.
 //
 // Absence is LOUD in three places, because a silently missing subsystem is the
-// failure mode this fleet keeps getting bitten by: an error log here, the reason
+// failure mode this surface keeps getting bitten by: an error log here, the reason
 // on the host's health route, and Running=false in zip's own plugin table.
 func mount(app *zip.App, a manifest.App, eager bool, absent map[string]string) error {
 	// A co-resident app routes no prefix of its own: it is middleware on another
 	// app's router and decides per request whether to serve or Next. There is
 	// nothing for the host to claim or spawn, so there is nothing to mount. This
 	// is not new behaviour — zen's row named ai's own "/v1", so ai matched first
-	// and zen's child never saw a request. The difference is that the fleet now
+	// and zen's child never saw a request. The difference is that the surface now
 	// says so instead of relying on registration order to mean it.
 	if a.Coresident {
 		return nil
@@ -559,7 +559,7 @@ func mount(app *zip.App, a manifest.App, eager bool, absent map[string]string) e
 	// answer tools/list without running anything. That artifact was a second
 	// source for a fact the child already knows, and it was wrong: o11y's held 12
 	// tools while the o11y binary at the same commit served 365. The MCP server
-	// asks the child now (fleet.Use), so there is nothing to hand over here.
+	// asks the child now (surface.Use), so there is nothing to hand over here.
 	p.Start = startTimeout()
 
 	// zip v1.23 removed (*App).Add: Use is the ONE composition verb, and zip.Load
@@ -626,7 +626,7 @@ func routed(composed []string) []string {
 // remotely mounted app is never started, so Start has nothing to report about it
 // and would name it unavailable forever.
 
-func locate(app *zip.App) fleet.At {
+func locate(app *zip.App) surface.At {
 	remote := map[string]string{}
 	for _, a := range manifest.Apps {
 		if addr := a.Plugin().Addr; addr != "" {
@@ -642,7 +642,7 @@ func locate(app *zip.App) fleet.At {
 	}
 }
 
-// inside is how an endpoint reached from INSIDE the fleet reaches one app: the
+// inside is how an endpoint reached from INSIDE the surface reaches one app: the
 // app's own plane socket, where its agent MCP server answers with no edge in
 // front of it (cloud.UseMCP). Same start, different address.
 //
@@ -651,7 +651,7 @@ func locate(app *zip.App) fleet.At {
 // caller's identity survives into every app this host RUNS, and into a remote one
 // only as far as that app's own boundary lets it — which is the honest answer,
 // and the same one it has always given.
-func inside(app *zip.App) fleet.At {
+func inside(app *zip.App) surface.At {
 	edge := locate(app)
 	remote := map[string]bool{}
 	for _, a := range manifest.Apps {
@@ -699,7 +699,7 @@ var draining atomic.Bool
 // is what makes it cheap: a rollout whose new image cannot start `ai` never gets
 // a Ready pod, so the Deployment stalls and the OLD pods keep serving. The bad
 // config stops at the first replica instead of reaching all of them. When it is
-// already fleet-wide the endpoints empty and the product is down — but it was
+// already surface-wide the endpoints empty and the product is down — but it was
 // ALREADY down, silently, and now `kubectl get pods` says so.
 //
 // A non-vital absence stays READY and is still reported. Taking a pod out of
@@ -793,7 +793,7 @@ func unfit(absent map[string]string) map[string]string {
 	return out
 }
 
-// spec is the fleet's published document, and the HOST is the only process that
+// spec is the surface's published document, and the HOST is the only process that
 // can answer for it.
 //
 // WITHOUT this registration the path is not unclaimed — it is claimed by the
@@ -803,7 +803,7 @@ func unfit(absent map[string]string) map[string]string {
 // router's entire AI surface is one greedy All("/v1/*") (apps/ai/ai.go), so
 // api.hanzo.ai/v1/openapi.json served a 3.7 KB document of EIGHT paths — the
 // child's own health, iam edge, zap, console catch-all and wildcard — while the
-// fleet serves 1039. Every SDK generator, every spec-derived CLI and every third
+// surface serves 1039. Every SDK generator, every spec-derived CLI and every third
 // party reading the published spec read that instead. 200 OK the whole time.
 //
 // What it answers with is the CUSTOMER contract (openapi.UseFleet): the
@@ -816,7 +816,7 @@ func unfit(absent map[string]string) map[string]string {
 //     projected when they were BUILT (plugin.Spec — bytes in this binary), so
 //     answering it starts nothing. A host that had to mount 113 subsystems to
 //     describe them would have given back exactly what laziness buys.
-//   - It is not a second source of truth. openapi.Fleet and openapi.Publish are
+//   - It is not a second source of truth. openapi.Surface and openapi.Publish are
 //     the same composition and projection that WRITE openapi.yaml, over the same
 //     committed files, so the served bytes and the committed artifact are one
 //     document by construction — and
@@ -838,12 +838,12 @@ func spec(app *zip.App, composed []string) {
 	openapi.UseFleet(app, subsets(composed))
 }
 
-// index is the fleet's HYPERMEDIA layer: GET /v1 lists what this deployment
+// index is the surface's HYPERMEDIA layer: GET /v1 lists what this deployment
 // answers, GET /v1/<capability> lists one capability's operations, and every /v1
 // answer carries the RFC 8288 links back to both plus the document.
 //
 // The host's, for the reason [spec] is the host's: the answer is about the whole
-// fleet and no plugin can see past itself. It reads the SAME subsets the document
+// surface and no plugin can see past itself. It reads the SAME subsets the document
 // is composed from, so the two endpoints describe one API by construction.
 //
 // It is composed BEFORE the mount loops — see the call site — because the
@@ -855,25 +855,25 @@ func index(app *zip.App, composed []string) {
 	openapi.UseIndex(app, subsets(composed))
 }
 
-// graphql is the fleet's QUERY LANGUAGE, at /v1/graphql: GET renders the schema
+// graphql is the surface's QUERY LANGUAGE, at /v1/graphql: GET renders the schema
 // this deployment publishes, POST runs a request against it, one hop per root
 // field to the app that owns the operation.
 //
 // It reads the SAME subsets the document and the index do, so all three describe
 // one API by construction — and it dispatches through locate, the resolver the
 // agent MCP server already uses, so a field reaches its app the way every other
-// fleet question does.
+// surface question does.
 //
 // /v1/graphql, never /v1/graph: the second is the knowledge graph's own address,
 // assertions and neighbours, and the two mean different things by the word.
 func graphql(app *zip.App, composed []string) {
-	fleet.UseGraph(app, openapi.GraphPath, subsets(composed), locate(app))
+	surface.UseGraph(app, openapi.GraphPath, subsets(composed), locate(app))
 }
 
 // subsets is what this deployment publishes: each app's own document, read from
 // the bytes its binary projected when it was built.
 //
-// Stated once because two endpoints read it — the fleet document and the
+// Stated once because two endpoints read it — the surface document and the
 // index — and they are mounted at different points in run(), so the reading
 // would otherwise be written twice and be free to disagree about which apps this
 // deployment runs.
@@ -890,7 +890,7 @@ func subsets(composed []string) func() ([]openapi.Part, error) {
 // It reads the failure set rather than deriving absence from zip's Running flag,
 // which is the trap here: almost every app is lazy and cold, so Running=false is
 // the NORMAL state for ~110 of 112 and deriving absence from it would report the
-// whole fleet as broken.
+// whole surface as broken.
 func stillAbsent(app *zip.App, absent map[string]string) map[string]string {
 	out := map[string]string{}
 	up := map[string]bool{}

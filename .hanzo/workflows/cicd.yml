@@ -283,7 +283,7 @@ jobs:
           # OUT and a store that holds no such name both arrive as an empty string
           # — and the refusal below then reports an outage as a provisioning fault.
           # Measured: five consecutive releases refused for "no client id" while
-          # review/IAM_CLIENT_ID was present and correct the whole time and the door
+          # review/IAM_CLIENT_ID was present and correct the whole time and the store
           # was briefly slow. It sends the reader to IAM, to the store's contents and
           # to this file's history, none of which is where the fault is. Keep the
           # code and let the refusal say which of the three happened.
@@ -304,7 +304,7 @@ jobs:
             if [ "$code" = 200 ]; then
               echo "::error::review: the store answered and holds no value at review/IAM_CLIENT_ID (env ${KMS_SECRET_ENV}, org from the KMS credential), so ${REVIEW_CLIENT} has no identity. Seal it, or point KMS_CLIENT_ID at the org that carries it."
             else
-              echo "::error::review: the store did not answer for review/IAM_CLIENT_ID — last status ${code} at ${KMS_ENDPOINT}, asked six times over seventy-five seconds. This is the DOOR, not the credential: the row may be perfectly present. Re-run at this sha once it answers."
+              echo "::error::review: the store did not answer for review/IAM_CLIENT_ID — last status ${code} at ${KMS_ENDPOINT}, asked six times over seventy-five seconds. This is the STORE, not the credential: the row may be perfectly present. Re-run at this sha once it answers."
             fi
             exit 1
           fi
@@ -1354,9 +1354,9 @@ jobs:
             '{repo:$repo, sha:$sha, tag:$tag, bucket:"plugins",
               binaries:[{name:"plugins", run:"make -f mk/fleet.mk dist", out:"dist/*"}]}')
 
-          # A 429 IS A QUEUE, NOT A REFUSAL. The build door caps concurrent builds
+          # A 429 IS A QUEUE, NOT A REFUSAL. The build endpoint caps concurrent builds
           # PER ORG, and a release burst puts one plugin build per train against that
-          # cap, so the door answers exactly what it should:
+          # cap, so the endpoint answers exactly what it should:
           #   {"detail":"launch build: platform: too many concurrent builds for this
           #    org","status":429,"title":"Too Many Requests"}
           # Failing there reports a capacity MOMENT as a broken release — the same
@@ -1372,7 +1372,7 @@ jobs:
             resp=$(cat /tmp/enq.json 2>/dev/null || true)
             [ "$code" = 429 ] || break
             [ "$(date +%s)" -lt "$ENQ_DEADLINE" ] || break
-            echo "the build door is at its per-org concurrency cap; waiting for a slot"
+            echo "the build endpoint is at its per-org concurrency cap; waiting for a slot"
             sleep 30
           done
           # The reply is READ before it is trusted to be JSON, the same way the KMS

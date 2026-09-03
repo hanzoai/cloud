@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package fleet
+package surface
 
 import (
 	"encoding/json"
@@ -23,7 +23,7 @@ import (
 // operations are unreachable however well they are ordered. Ordering a list
 // nobody can read is a preference applied to a broken surface.
 //
-// The surface is what is wrong. MCP's unit is a TOOL, and this fleet's unit is
+// The surface is what is wrong. MCP's unit is a TOOL, and this surface's unit is
 // an OPERATION, and there are two orders of magnitude between them. So the
 // server projects one tool per SUBSYSTEM and carries the operation in an
 // argument:
@@ -50,7 +50,7 @@ import (
 //     same owner lookup and the same hop on both.
 //   - NO DESCRIPTOR REMEMBERED. Describe re-asks its owner, always. Names and
 //     prose come from the catalog for a subsystem that is not running (see
-//     fleet/catalog.go) and SCHEMAS never do — a descriptor kept between requests
+//     surface/catalog.go) and SCHEMAS never do — a descriptor kept between requests
 //     would be plugin/<app>/mcp.json again, and the way that one went stale is
 //     the way this one cannot: the gate runs over catalog entries and live ones
 //     alike, in the same loop, so an operation the rule has since refused is in
@@ -75,11 +75,11 @@ import (
 // Describe is the server's own tool: the input schema of ONE operation, by name.
 //
 // It is the fetch half of the surface — the enums say what exists, this says
-// what an operation takes — and it is exported because the fleet's own agent
-// runs are clients of this server like any other (apps/agents/fleet.go).
+// what an operation takes — and it is exported because the surface's own agent
+// runs are clients of this server like any other (apps/agents/surface.go).
 //
 // It shares a namespace with the app names, so no subsystem may be called
-// `describe` — asserted against the manifest in fleet/grouped_test.go, which is
+// `describe` — asserted against the manifest in surface/grouped_test.go, which is
 // where a fact about the app list can be checked before it ships rather than
 // discovered as a shadowed tool at runtime.
 const Describe = "describe"
@@ -101,7 +101,7 @@ const Describe = "describe"
 // depends on cannot be in the tail.
 //
 // Never nil, and never empty: `"tools": null` is a client-visible difference
-// from an empty fleet, and [Describe] is offered even by a fleet that is
+// from an empty surface, and [Describe] is offered even by a surface that is
 // serving nothing, because "one way to ask" does not depend on how much there
 // is to ask about.
 func group(all []named) []map[string]any {
@@ -135,7 +135,7 @@ func group(all []named) []map[string]any {
 // subsystemTool is one app's whole operation set as a single MCP tool.
 //
 // The enum carries PUBLISHED names — `deploy_project`, not
-// `post_v1_projects_by_slug_deploy` (fleet/verbs.go) — and beside the product
+// `post_v1_projects_by_slug_deploy` (surface/verbs.go) — and beside the product
 // ones it carries a line of their own documentation, which is the half that
 // removes a round trip. A name says what an operation is called and a model can
 // still be wrong about what it does; `create_project_fork — Creates a project
@@ -143,8 +143,8 @@ func group(all []named) []map[string]any {
 //
 // PROSE IS RATIONED, and [productStems] is the ration, because it is already the
 // answer to "which of these does an agent actually reach for". Measured over the
-// fleet's own ~2,230 offered operations — fleet/verbs_internal_test.go prints
-// these to the byte, and reprints them as the fleet grows:
+// surface's own ~2,230 offered operations — surface/verbs_internal_test.go prints
+// these to the byte, and reprints them as the surface grows:
 //
 //	routes, as they shipped           63 KB
 //	verb phrases                      50 KB   a phrase is SHORTER than a route
@@ -331,7 +331,7 @@ func (d *MCP) describe(c *zip.Ctx, req message, args json.RawMessage, at At) err
 		}
 		// THE FETCH IS WHERE A SUBSYSTEM STARTS. The catalog holds names and prose
 		// and no schema, so an operation read from it is described by asking its
-		// owner — one subsystem, the one the caller picked, rather than the fleet
+		// owner — one subsystem, the one the caller picked, rather than the surface
 		// that a listing used to wake. An owner that cannot be reached answers with
 		// what was published, which is more than nothing and honest about its
 		// shape.

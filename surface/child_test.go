@@ -1,18 +1,18 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package fleet_test
+package surface_test
 
 // A subsystem with NO typed op is still ASKED, so it must still ANSWER.
 //
 // The rest of this package's tests build children out of typed ops, which is the
-// half of the fleet that was never broken. Thirty of the fleet's 117 subsystems
+// half of the surface that was never broken. Thirty of the surface's 117 subsystems
 // have no typed op at all — their routes are raw handlers, or they belong to
 // another module — and for those zip returned before registering an MCP route
 // (zip@v1.25.1 mcp.go:99: no registry, no plugin catalogue, no per-caller Source
 // ⇒ no route). Nothing claimed POST /mcp in those processes, the ask fell through
 // to the console's terminal handler, and it answered the signpost that is right
 // only on the public endpoint: 308 → /v1/mcp, which inside a child is a 404. The
-// MCP server read the non-2xx as an outage (fleet/fleet.go, ask) and reported
+// MCP server read the non-2xx as an outage (surface/surface.go, ask) and reported
 // thirty healthy subsystems as unreachable:
 //
 //	"exec answered 308 for /mcp"
@@ -26,10 +26,10 @@ package fleet_test
 // twenty-nine are.
 //
 // It asserts the ANSWER, never a status: the child's own reply must be a JSON-RPC
-// result carrying a tools array, and the fleet's MCP server must name no outage
+// result carrying a tools array, and the surface's MCP server must name no outage
 // for it. An empty array is a real answer — "asked, serves nothing" is a
 // different fact from "could not be asked", and telling those apart is what
-// package fleet is for.
+// package surface is for.
 
 import (
 	"encoding/json"
@@ -42,7 +42,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/exec"
-	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/surface"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/webui"
 )
@@ -79,7 +79,7 @@ func darkChild(t *testing.T, name string, mount cloud.UseFunc) *child {
 func TestASubsystemWithNoTypedOpStillAnswersTheEndpoint(t *testing.T) {
 	kid := darkChild(t, "exec", exec.Use)
 
-	// END ONE — the child's own MCP server, at the address the fleet asks. The claim is
+	// END ONE — the child's own MCP server, at the address the surface asks. The claim is
 	// about the BYTES: a JSON-RPC result with a tools array. A 308 has neither, and
 	// so did every one of the thirty.
 	req, err := http.NewRequest(http.MethodPost, manifest.FrameworkMCPPath, strings.NewReader(toolsListBody))
@@ -130,19 +130,19 @@ func TestASubsystemWithNoTypedOpStillAnswersTheEndpoint(t *testing.T) {
 }
 
 // outages reads the MCP server's own outage list off the result's _meta.
-func outages(t *testing.T, res map[string]any) []fleet.Outage {
+func outages(t *testing.T, res map[string]any) []surface.Outage {
 	t.Helper()
 	meta, _ := res["_meta"].(map[string]any)
 	if meta == nil {
 		return nil
 	}
-	raw, err := json.Marshal(meta[fleet.Unavailable])
+	raw, err := json.Marshal(meta[surface.Unavailable])
 	if err != nil {
 		t.Fatal(err)
 	}
-	var out []fleet.Outage
+	var out []surface.Outage
 	if err := json.Unmarshal(raw, &out); err != nil {
-		t.Fatalf("%s is not a list of outages: %v — %s", fleet.Unavailable, err, raw)
+		t.Fatalf("%s is not a list of outages: %v — %s", surface.Unavailable, err, raw)
 	}
 	return out
 }

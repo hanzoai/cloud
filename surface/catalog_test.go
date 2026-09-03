@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package fleet
+package surface
 
 import (
 	"encoding/json"
@@ -19,12 +19,12 @@ import (
 // The catalog is generated from plugin/<app>/openapi.json, and those are
 // regenerated from each app's own router by `make -f mk/fleet.mk check`. This is
 // the link between the two: regenerate the specs without regenerating the
-// catalog and the MCP server would publish an operation set the fleet no longer
+// catalog and the MCP server would publish an operation set the surface no longer
 // serves — the exact way the hand-kept catalogue this replaced went stale.
 //
 // The AUDIENCE is read off openapi.yaml and not off the subset, for the reason
-// gen-fleet-catalog states: a subset's x-public is what an app could derive about
-// itself, and the stage (HIP-0139 §8) is a fleet fact it cannot see. Asking the
+// gen-surface-catalog states: a subset's x-public is what an app could derive about
+// itself, and the stage (HIP-0139 §8) is a surface fact it cannot see. Asking the
 // subset here would demand of the catalog every beta operation the contract
 // leaves out.
 func TestCatalogIsTheSpecs(t *testing.T) {
@@ -43,7 +43,7 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 		var doc struct {
 			Paths map[string]map[string]struct {
 				OperationID string `json:"operationId"`
-				// x-tool, the same mark gen-fleet-catalog reads. Both sides of
+				// x-tool, the same mark gen-surface-catalog reads. Both sides of
 				// this comparison must apply it or the link is between two
 				// different questions: a document carries every ROUTE and the
 				// catalog carries what a child ANSWERS TO, so an unfiltered
@@ -80,7 +80,7 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 	for app, ids := range want {
 		got := Published(app)
 		if got == nil {
-			t.Errorf("%s publishes %d operations and the catalog carries none — run `go run ./plugin/gen-fleet-catalog .`", app, len(ids))
+			t.Errorf("%s publishes %d operations and the catalog carries none — run `go run ./plugin/gen-surface-catalog .`", app, len(ids))
 			continue
 		}
 		have := make([]string, len(got))
@@ -103,7 +103,7 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 }
 
 // contract is every operationId in the published contract, read off openapi.yaml
-// — the same set gen-fleet-catalog reads, from the same file, because the two
+// — the same set gen-surface-catalog reads, from the same file, because the two
 // must be asking one question. It is small enough to state twice and the second
 // statement is what makes this a check rather than a restatement of the
 // generator's own bookkeeping.
@@ -137,7 +137,7 @@ func contract(t *testing.T) map[string]bool {
 }
 
 // TestListingStartsNothing is the property the catalog exists for: asking what
-// the fleet serves must not run the fleet.
+// the surface offers must not start what serves it.
 //
 // It is structural now rather than a decision to inspect. gather reads Published
 // for every app and there is no asked set, so there is nothing to reach [Ask],
@@ -168,7 +168,7 @@ func TestListingStartsNothing(t *testing.T) {
 		// untested exactly when it had stopped holding. The generator drops an
 		// operation that is not marked dispatchable, so "no app carries one" means
 		// the mark stopped being written, not that there is nothing to check.
-		t.Fatal("no app carries a published operation: the fleet's MCP server would list " +
+		t.Fatal("no app carries a published operation: the surface's MCP server would list " +
 			"nothing. Regenerate with `make -f mk/fleet.mk documents`, and if the " +
 			"catalog is still empty the x-tool mark is not reaching the documents")
 	}
@@ -209,7 +209,7 @@ func TestListingStartsNothing(t *testing.T) {
 // TestEverySubsystemThePublicEndpointListsIsInTheCatalog is the gate that replaces
 // the runtime fallback. The MCP server reads the catalog and asks nothing, so an
 // app the generator skipped publishes NOTHING — it would offer fewer tools than
-// the fleet routes, silently, and no request would fail to say so.
+// the surface routes, silently, and no request would fail to say so.
 //
 // present-and-empty is a legitimate answer (an app that serves no typed op);
 // ABSENT is not, and it is what this refuses. The remedy is one command, so it is

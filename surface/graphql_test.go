@@ -1,4 +1,4 @@
-package fleet_test
+package surface_test
 
 import (
 	"encoding/json"
@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/graph"
-	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/surface"
 	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/valyala/fasthttp"
@@ -37,7 +37,7 @@ type stub struct {
 	reply string
 }
 
-// echo stands a child on its own socket, speaking the transport the fleet dials.
+// echo stands a child on its own socket, speaking the transport the surface dials.
 // It is a bare zip app rather than a composed one because what these tests prove
 // is what the ENDPOINT sent — a composed child answers its own identity gate first and
 // would report nothing about the request.
@@ -90,7 +90,7 @@ func fromTree(app string) []byte {
 }
 
 // endpointTo builds the endpoint over one app's real document, pointed at an address.
-func endpointTo(t *testing.T, app, addr string) *fleet.Graph {
+func endpointTo(t *testing.T, app, addr string) *surface.Graph {
 	t.Helper()
 	subsets, err := openapi.Subsets([]string{app}, fromTree, func(string) string { return "" })
 	if err != nil {
@@ -100,7 +100,7 @@ func endpointTo(t *testing.T, app, addr string) *fleet.Graph {
 	if err != nil {
 		t.Fatalf("compose: %v", err)
 	}
-	return fleet.NewGraph(d, func(string) (string, string, error) { return addr, "/", nil })
+	return surface.NewGraph(d, func(string) (string, string, error) { return addr, "/", nil })
 }
 
 // caller is the request whose headers ride to the child — the identity the host
@@ -113,11 +113,11 @@ func caller() *fasthttp.Request {
 	return r
 }
 
-func run(t *testing.T, g *fleet.Graph, q string, vars map[string]any) fleet.Response {
+func run(t *testing.T, g *surface.Graph, q string, vars map[string]any) surface.Response {
 	t.Helper()
 	from := caller()
 	defer fasthttp.ReleaseRequest(from)
-	return g.Run(fleet.Request{Query: q, Variables: vars}, from)
+	return g.Run(surface.Request{Query: q, Variables: vars}, from)
 }
 
 // ── what the endpoint sends ──────────────────────────────────────────────────
@@ -432,7 +432,7 @@ func TestAQueryWiderThanTheCeilingIsRefused(t *testing.T) {
 
 	res := run(t, g, b.String(), nil)
 	if len(res.Errors) == 0 {
-		t.Fatal("200 root fields must be refused; each one is a hop into the fleet")
+		t.Fatal("200 root fields must be refused; each one is a hop into the surface")
 	}
 	if res.Data != nil {
 		t.Error("a refused request runs nothing, so there is no data to be right about")
@@ -508,6 +508,6 @@ func TestAnIntrospectionQueryIsToldWhereTheSchemaIs(t *testing.T) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if len(c.calls) != 0 {
-		t.Errorf("an introspection query reached the fleet %d times", len(c.calls))
+		t.Errorf("an introspection query reached the surface %d times", len(c.calls))
 	}
 }
