@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -92,7 +93,7 @@ func slackBridgeReady(s *cloud.Service[state]) {
 // sandbox when the model picks that tool.
 func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	slackBridgeReady(s)
-	secret := slackSigningSecret(s)
+	secret := slackSigningSecret()
 	if secret == "" {
 		return zip.Errorf(http.StatusServiceUnavailable, "slack events not configured")
 	}
@@ -203,7 +204,7 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 // asynchronously via the command's response_url on the channel.
 func slackCommands(s *cloud.Service[state], c *zip.Ctx) error {
 	slackBridgeReady(s)
-	secret := slackSigningSecret(s)
+	secret := slackSigningSecret()
 	if secret == "" {
 		return zip.Errorf(http.StatusServiceUnavailable, "slack events not configured")
 	}
@@ -624,18 +625,14 @@ func slackPostResponseURL(ctx context.Context, responseURL, responseType, text s
 
 // ── config ─────────────────────────────────────────────────────────────────
 
-// slackSigningSecret resolves the Slack signing secret from KMS by the ref in
-// SLACK_SIGNING_SECRET_REF.
+// slackSigningSecret reads SLACK_SIGNING_SECRET, the plain env its siblings
+// SLACK_CLIENT_ID / SLACK_CLIENT_SECRET arrive on, synced from KMS by the one
+// cloud-slack-kms-sync KMSSecret — one family of secrets, one delivery.
 //
-// The env used to carry the secret itself, projected into a k8s Secret and
-// mounted here — which puts a decrypted value in etcd, in a volume and in this
-// process's environment, readable by anything that can read the pod. Now the
-// env carries only the reference and the value is fetched when it is needed.
-//
-// Unset or unresolvable yields "", which both callers already answer with a 503:
-// Slack verification fails closed rather than accepting an unverified body.
-func slackSigningSecret(s *cloud.Service[state]) string {
-	return string(s.SecretFromEnv(context.Background(), "SLACK_SIGNING_SECRET_REF"))
+// Empty yields "", which both callers answer with a 503: Slack verification
+// fails closed rather than accepting an unverified body.
+func slackSigningSecret() string {
+	return environ.Or(slackSigningEnv, "")
 }
 
 // Which agent answers is not a variable here at all: a slash command asks channels

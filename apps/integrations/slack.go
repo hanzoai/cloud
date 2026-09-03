@@ -41,6 +41,7 @@ func init() {
 const (
 	slackClientIDEnv     = "SLACK_CLIENT_ID"
 	slackClientSecretEnv = "SLACK_CLIENT_SECRET"
+	slackSigningEnv      = "SLACK_SIGNING_SECRET"
 	slackScopesEnv       = "SLACK_BOT_SCOPES"
 	slackBotTokenSecret  = "bot_token"
 )
