@@ -171,10 +171,15 @@ func unwrapResult(s string) []byte {
 	return []byte(s)
 }
 
-// TestZAPControlPlaneRoundTrip is the ZAP proof: createRepo + listRepos over the
-// shared /zap WebSocket plane hit the SAME core funcs the REST handlers call, and
-// a ZAP-created repo is then visible over the REST list — one implementation,
-// two transports.
+// TestZAPControlPlaneRoundTrip is the ZAP proof: create + list over the shared
+// /zap WebSocket plane hit the SAME core funcs the REST handlers call, and a
+// ZAP-created repo is then visible over the REST list — one implementation, two
+// transports.
+//
+// It names the TYPED addresses, which is the whole surface now. The five
+// hand-written procedures that answered `POST git/zap/*` existed because the
+// bridge could only read the envelope they wrote; it reads a typed op's own Out
+// now, so a second address family for one operation buys nothing.
 func TestZAPControlPlaneRoundTrip(t *testing.T) {
 	base, stop := mountZapApp(t)
 	defer stop()
@@ -192,7 +197,7 @@ func TestZAPControlPlaneRoundTrip(t *testing.T) {
 	defer c.CloseNow()
 
 	// 1) createRepo over ZAP.
-	rep := zapCall(t, c, ctx, "POST git/zap/createRepo", map[string]any{"name": "zap"}, 1)
+	rep := zapCall(t, c, ctx, "POST git/repos", map[string]any{"name": "zap"}, 1)
 	if !rep.ok || rep.status != http.StatusOK {
 		t.Fatalf("createRepo: ok=%v status=%d err=%s", rep.ok, rep.status, rep.errorJSON)
 	}
@@ -211,15 +216,18 @@ func TestZAPControlPlaneRoundTrip(t *testing.T) {
 	}
 
 	// 2) listRepos over ZAP — sees the ZAP-created repo.
-	rep = zapCall(t, c, ctx, "POST git/zap/listRepos", map[string]any{}, 2)
+	rep = zapCall(t, c, ctx, "GET git/repos", map[string]any{}, 2)
 	if !rep.ok {
 		t.Fatalf("listRepos !ok: %s", rep.errorJSON)
 	}
-	var listed []repoView
+	// The typed op's own Out, carried whole: a collection is {"data":[…]} here
+	// exactly as it is over REST, because the bridge no longer unwraps one shape
+	// on the way past.
+	var listed repoList
 	if err := json.Unmarshal(unwrapResult(rep.result), &listed); err != nil {
 		t.Fatalf("decode listRepos: %v (%s)", err, rep.result)
 	}
-	if len(listed) != 1 || listed[0].Name != "zap" {
+	if len(listed.Data) != 1 || listed.Data[0].Name != "zap" {
 		t.Fatalf("listRepos over ZAP = %+v", listed)
 	}
 
