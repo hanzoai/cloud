@@ -32,13 +32,12 @@
 // prose, which is everything a relay CAN state about itself. typed_wire_test.go
 // runs the fact rather than trusting it.
 //
-// WHICH PLANE IS CONFIGURATION, NOT CODE. The plane sits behind Provider
-// (provider.go): the head validates the caller, scopes the path, reads the
-// operation off the address, and hands over a Call. HANZO_DNS_PROVIDER names the
-// adapter and defaults to Hanzo's own plane (hanzo.go, which reads
-// HANZO_DNS_URL). A second plane — Cloudflare, Route 53, anything an org already
-// runs — is a NEW FILE carrying a type, its four methods and a register() in its
-// init(): no edit here, none to the registry, none to the routes.
+// WHERE THE PLANE IS is configuration; that it is Hanzo's is code. The head
+// validates the caller, scopes the path, and hands the plane a Call (call.go);
+// hanzo.go issues it at HANZO_DNS_URL. There is one send rather than an operation
+// per address because the plane's API IS this contract — an address the routes
+// name and one they do not travel identically, so telling them apart would only
+// choose between identical calls.
 //
 // ISOLATION -- BEARER RELAY, NO STANDING CRED. The DNS plane is OIDC-gated and
 // keys every zone per-org: it re-validates the caller's OWN bearer and derives
@@ -181,20 +180,16 @@ var bind = map[string]func(zip.Router, string, ...zip.Handler) zip.Router{
 	http.MethodDelete: zip.Router.Delete,
 }
 
-// edge is the head: a validated caller, a scoped path, and the one provider this
-// deployment answers from. It holds no endpoint and no credential — those are the
-// provider's, and only the provider's.
-type edge struct{ p Provider }
+// edge is the head: a validated caller, a scoped path, and the plane this surface
+// answers from. It holds no endpoint and no credential — those are the plane's, and
+// only the plane's.
+type edge struct{ p *hanzoPlane }
 
 // Mount registers the DNS control plane's addresses under /v1/dns, every one
 // answered by the same relay. Registered as a subsystem in apps.Wire(); on by
 // default.
 func Use(app cloud.Router, deps cloud.Deps) error {
-	p, err := selected()
-	if err != nil {
-		return err
-	}
-	e := &edge{p: p}
+	e := &edge{p: newHanzoPlane()}
 	g := app.Group(prefix)
 	for _, r := range routes {
 		reg, ok := bind[r.method]
@@ -204,7 +199,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		reg(g, strings.TrimPrefix(r.path, prefix), e.forward)
 	}
 	if luxlog.Default() != nil {
-		luxlog.Default().Info("dns relay mounted", "provider", p.ID(), "addresses", len(routes))
+		luxlog.Default().Info("dns relay mounted", "addresses", len(routes))
 	}
 	return nil
 }
@@ -272,20 +267,20 @@ func (e *edge) forward(c *zip.Ctx) error {
 			"the DNS plane requires a session bearer; an API key cannot be relayed to it"))
 	}
 
-	// The address is read ONCE, here, into the operation it names plus the zone and
-	// record it names it on — so an adapter reads values and never a request.
-	call := classify(c.Method(), p)
-	call.Org, call.Bearer = org, bearer
-	call.Query = string(uri.QueryString())
-	call.Body = c.Body()
-	call.ContentType = c.Header("Content-Type")
-
-	a, err := answer(c.Context(), e.p, call)
+	// The plane reads VALUES and never a request: the head has already decided the
+	// caller is real and the path is in bounds, and what remains is the call itself.
+	a, err := e.p.send(c.Context(), Call{
+		Org:         org,
+		Bearer:      bearer,
+		Method:      c.Method(),
+		Path:        p,
+		Query:       string(uri.QueryString()),
+		Body:        c.Body(),
+		ContentType: c.Header("Content-Type"),
+	})
 	switch {
 	case errors.Is(err, ErrUnconfigured):
 		return c.JSON(http.StatusServiceUnavailable, fail("unconfigured", "dns control plane is not configured"))
-	case errors.Is(err, errNoAddress):
-		return c.JSON(http.StatusNotFound, fail("not_found", "the configured dns plane has no such address"))
 	case err != nil:
 		// The provider's own error stays with the provider: a caller learns that the
 		// plane did not answer, never why, and never an upstream URL.
