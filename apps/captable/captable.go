@@ -40,7 +40,7 @@ import (
 
 	hcaptable "github.com/hanzoai/captable"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"

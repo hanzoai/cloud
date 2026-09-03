@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 	cloudmoney "github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/decimal"
 	hmoney "github.com/hanzoai/money"

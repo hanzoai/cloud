@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // hostileOrg is a slug that WOULD break out of the query if it were ever

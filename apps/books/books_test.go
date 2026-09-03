@@ -2,7 +2,7 @@ package books
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/finance"
 	"testing"
 
 	"github.com/hanzoai/cloud"

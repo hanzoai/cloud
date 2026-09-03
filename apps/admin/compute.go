@@ -37,7 +37,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/admin/core"
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // computeTable is the operator-owned compute-usage warehouse table (named to match

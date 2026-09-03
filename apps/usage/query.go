@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/finance"
 )
 
 // llmTable is the ONE per-org LLM usage ledger (the same warehouse table analytics

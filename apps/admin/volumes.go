@@ -43,7 +43,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // doBlockUsdPerGiB is DO block storage's list price ($0.10/GiB/mo) — the fleet cost

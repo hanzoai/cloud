@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/samples"
+	"github.com/hanzoai/cloud/samples"
 )
 
 // cliHostSpecJSON is exactly what `hanzo link` writes as the fleet presence

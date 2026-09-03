@@ -23,7 +23,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // feeEnv is the operator knob: VALIDATORS_FEE_CENTS_NODE, or VALIDATORS_FEE_CENTS

@@ -37,7 +37,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 const (

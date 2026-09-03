@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/admin/core"
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // defaultLimit caps the fleet invoice list when the caller sends none.

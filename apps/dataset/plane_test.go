@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/tenant"
+	"github.com/hanzoai/cloud/tenant"
 )
 
 // exercise runs every statement the plane can produce, once, and returns them.

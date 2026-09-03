@@ -60,7 +60,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/magic"
 	"github.com/hanzoai/cloud/openapi"

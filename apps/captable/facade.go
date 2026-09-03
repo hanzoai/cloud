@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 )
 
 // facade.go is the in-process cap-table client: it lets a sibling subsystem (Hanzo

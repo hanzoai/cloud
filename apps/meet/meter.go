@@ -24,7 +24,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // feeEnv is the operator knob for what one seat costs: MEET_FEE_CENTS_SEAT, or

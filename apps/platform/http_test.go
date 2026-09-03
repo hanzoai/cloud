@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/k8s"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"

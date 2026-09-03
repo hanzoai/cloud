@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/samples"
+	"github.com/hanzoai/cloud/samples"
 	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )

@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // rollupTable is the ONE derived per-day usage rollup the leaderboard + activity

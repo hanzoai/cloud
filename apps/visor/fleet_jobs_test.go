@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/samples"
+	"github.com/hanzoai/cloud/samples"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
 )
 

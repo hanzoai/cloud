@@ -3,7 +3,7 @@ package provisioning
 import (
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/s3admin"
+	"github.com/hanzoai/cloud/s3admin"
 )
 
 // The lifted copy must answer identically, or two orgs can fold onto one bucket.

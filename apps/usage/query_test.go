@@ -1,7 +1,7 @@
 package usage
 
 import (
-	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/finance"
 
 	"testing"
 	"time"

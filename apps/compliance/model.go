@@ -29,7 +29,7 @@
 //     PII (name/email) is sealed on disk.
 package compliance
 
-import "github.com/hanzoai/cloud/apps/idv"
+import "github.com/hanzoai/cloud/idv"
 
 // Disclaimer is attached to every status-bearing response. It is the boundary
 // invariant made visible on the wire: statuses are provider-reported, never a

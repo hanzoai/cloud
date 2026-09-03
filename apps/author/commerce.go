@@ -3,7 +3,7 @@ package author
 import (
 	"context"
 
-	"github.com/hanzoai/cloud/apps/payout"
+	"github.com/hanzoai/cloud/payout"
 )
 
 // commerce is the ONE thing the royalty loop asks of the money plane, and it is a

@@ -37,7 +37,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // BillingEventsTable is the collector-owned warehouse table the commerce

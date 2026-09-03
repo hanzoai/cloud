@@ -11,8 +11,8 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/apps/commerce/transport"
-	"github.com/hanzoai/cloud/apps/finance"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/finance"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/commerce/datastore"
 	"github.com/hanzoai/commerce/db"
 	commercemid "github.com/hanzoai/commerce/middleware"

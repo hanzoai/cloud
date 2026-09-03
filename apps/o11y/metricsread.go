@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // metricsread.go serves GET /v1/o11y/metrics — REAL per-org RED (rate / errors /

@@ -50,7 +50,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/k8s"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"

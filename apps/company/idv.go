@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/idv"
+	"github.com/hanzoai/cloud/idv"
 )
 
 // idv.go wires the formation's founder-KYC client to the SHARED identity-verification

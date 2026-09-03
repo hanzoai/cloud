@@ -46,7 +46,7 @@ import (
 	"path/filepath"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 	signbundle "github.com/hanzoai/sign"
 	luxlog "github.com/luxfi/log"
 )

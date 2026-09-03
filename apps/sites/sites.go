@@ -40,7 +40,7 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
-	"github.com/hanzoai/cloud/apps/s3admin"
+	"github.com/hanzoai/cloud/s3admin"
 )
 
 // slugRE is the subdomain-label grammar. It is byte-identical to projects's

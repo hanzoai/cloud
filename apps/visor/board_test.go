@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/samples"
+	"github.com/hanzoai/cloud/samples"
 )
 
 // board_test.go proves the /v1/visor/fleet contract: it is tenant-gated, it unions the

@@ -19,7 +19,7 @@ package provisioning
 import (
 	"context"
 	"encoding/base64"
-	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/k8s"
 	"os"
 	"testing"
 

@@ -3,7 +3,7 @@ package referral
 import (
 	"context"
 
-	"github.com/hanzoai/cloud/apps/payout"
+	"github.com/hanzoai/cloud/payout"
 )
 
 // commerce is the ONE thing the referral loop asks of the money plane, and it is a

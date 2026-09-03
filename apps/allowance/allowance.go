@@ -71,7 +71,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/apps/tenant"
+	"github.com/hanzoai/cloud/tenant"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )

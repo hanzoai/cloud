@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/samples"
+	"github.com/hanzoai/cloud/samples"
 	"github.com/hanzoai/cloud/plane"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
 	"github.com/zap-proto/zip"

@@ -28,7 +28,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/tenant"
+	"github.com/hanzoai/cloud/tenant"
 )
 
 // errWarehouseDown stands in for the derived copy being unreachable.

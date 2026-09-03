@@ -27,7 +27,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // feeEnv is the operator knob: CLOUD_WALLETS_FEE_CENTS_KEYGEN / _SIGN / _PROPOSE

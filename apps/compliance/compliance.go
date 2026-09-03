@@ -12,7 +12,7 @@ import (
 	"github.com/hanzoai/cloud/internal/mint"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/idv"
+	"github.com/hanzoai/cloud/idv"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/openapi"

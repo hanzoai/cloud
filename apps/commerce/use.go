@@ -32,7 +32,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
-	financeclient "github.com/hanzoai/cloud/apps/finance"
+	financeclient "github.com/hanzoai/cloud/finance"
 	commercemod "github.com/hanzoai/commerce"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	catalogapi "github.com/hanzoai/commerce/api/catalog"

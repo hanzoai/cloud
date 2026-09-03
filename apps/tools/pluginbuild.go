@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/hanzoai/cloud/apps/connectorruntime"
+	"github.com/hanzoai/cloud/connectorruntime"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"

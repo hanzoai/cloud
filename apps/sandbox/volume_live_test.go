@@ -37,7 +37,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/k8s"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 

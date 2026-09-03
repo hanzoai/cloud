@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/finance"
 )
 
 // noHopCommerce is a commerce stand-in that answers NOTHING and records whether it

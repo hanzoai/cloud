@@ -8,7 +8,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
-	financeclient "github.com/hanzoai/cloud/apps/finance"
+	financeclient "github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )

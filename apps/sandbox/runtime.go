@@ -43,8 +43,8 @@ import (
 
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/fleet"
-	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/k8s"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/iam"
 	"github.com/zap-proto/zip"

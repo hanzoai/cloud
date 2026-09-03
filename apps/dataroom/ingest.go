@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 )
 
 // ingest.go is the in-process ingestion client: it lets a sibling subsystem (Hanzo

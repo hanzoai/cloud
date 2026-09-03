@@ -17,7 +17,7 @@ import (
 	baseapp "github.com/hanzoai/base"
 	"github.com/hanzoai/base/apis"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )

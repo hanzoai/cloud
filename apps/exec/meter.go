@@ -25,7 +25,7 @@ import (
 	"sync/atomic"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // feeEnv is the operator knob for what one run costs: CODE_EXEC_FEE_CENTS_RUN, or
