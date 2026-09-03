@@ -18,8 +18,8 @@ package exec
 // apps/git/typed_wire_test.go, which is the one form of this gate.
 
 import (
-	"github.com/hanzoai/cloud"
 	"encoding/json"
+	"github.com/hanzoai/cloud"
 	"net/http"
 	"sort"
 	"strings"
@@ -27,6 +27,8 @@ import (
 
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
+
+	"github.com/hanzoai/cloud/apps/principal"
 )
 
 // untypedByDesign is the CLOSED list. Every entry is a fact about the WIRE — what a
@@ -246,9 +248,9 @@ func TestTheStubIsShutToACallerWithNoCredential(t *testing.T) {
 		t.Errorf("status = %d, want 403 — an unadmitted caller must be refused for that reason, not "+
 			"told 501 about a protocol it was never admitted to ask about", he.Status)
 	}
-	// And an admitted one reaches the refusal the address is for.
-	if _, err := programmatic(admit(t.Context()), &cloud.Unit{}); err == nil {
-		t.Fatal("an admitted caller got no refusal at all")
+	// And one naming the acting org reaches the refusal the address is for.
+	if _, err := programmatic(principal.WithActing(t.Context(), "hanzo"), &cloud.Unit{}); err == nil {
+		t.Fatal("an authenticated caller got no refusal at all")
 	} else if asHTTPError(err, &he); he.Status != http.StatusNotImplemented {
 		t.Errorf("admitted status = %d, want 501", he.Status)
 	}

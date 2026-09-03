@@ -44,23 +44,22 @@
 //
 // # Auth
 //
-// The gateway bypasses these paths — the credential is an opaque service key on
-// X-API-Key, not a JWT — so this subsystem enforces that key itself against
-// CODE_EXEC_API_KEY, in constant time, failing CLOSED when none is configured.
+// IAM, and nothing else. A caller reaches this surface with a validated principal
+// and the sandboxes are that principal's org's; a caller without one is refused.
 //
-// The chat server ALSO forwards the end user's validated IAM bearer when it can
-// resolve one (crud.js codeAuthHeaders), which is what lets a session be scoped to
-// a real tenant. When it is there, the sandboxes are that org's. When it is not,
-// they belong to the deployment's own brand org — one tenant for one deployment,
-// which is what a shared service key with no tenant in it actually means.
+// It used to also accept an opaque service key on X-API-Key, enforced here against
+// CODE_EXEC_API_KEY, and a request bearing it acted for the deployment's own brand
+// org. That was this subsystem authenticating callers on its own — a second way in,
+// with its own credential to distribute, rotate and leak, deciding tenancy for a
+// caller IAM had never seen. The chat server forwards the end user's IAM bearer
+// (crud.js codeAuthHeaders); that is now the only door, so a caller it cannot
+// resolve an identity for is one that cannot run code.
 package exec
 
 import (
 	"cmp"
 	"context"
-	"crypto/subtle"
 	"fmt"
-	"github.com/hanzoai/cloud/internal/environ"
 	"maps"
 	"mime"
 	"net/http"
@@ -296,9 +295,8 @@ type uploadedFile struct {
 // The tenant is the caller's, never the body's, at every entry point. A typed op is
 // also an MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no
 // route and therefore no middleware, so nothing there could have checked a
-// credential. tenantOf refuses a context carrying neither a validated principal nor
-// exec's own admission marker, so those entry points fail closed without a second
-// gate to keep in step.
+// credential. tenantOf refuses a context carrying no validated principal, so those
+// entry points fail closed without a second gate to keep in step.
 func run(ctx context.Context, in *CodeRun) (*CodeResult, error) {
 	org, err := tenantOf(ctx)
 	if err != nil {
@@ -452,64 +450,26 @@ func write(ctx context.Context, id, p string, data []byte) (*plane.Wrote, error)
 		&plane.WriteIn{ID: id, Path: p, Data: data})
 }
 
-// admitted is the fact THIS subsystem's credential check produced, carried on the
-// context rather than re-derived downstream.
+// tenantOf is exec's admission: the org a validated principal resolved to, and
+// nothing else.
 //
-// It exists because the check and its consequence had drifted apart. The credential
-// was verified in middleware keyed on a lowercase path list, and the TENANT was
-// decided separately in callCtx — so a request that never passed the check could
-// still reach a handler, and a handler had no way to ask whether it had. Two ways
-// in that the list did not cover:
+// principal.Acting is the fleet's rule — from outside, the org the validated
+// principal resolved to, because the identity boundary restores an unvalidated
+// caller's own org header for the data path and a tenant read from that is a
+// tenant the caller chose; from inside, the caller an entry point stated, which
+// nothing outside can write.
 //
-//   - PATH CASE. fiber routes case-insensitively (cloud.RoutePath exists for
-//     exactly this), so `POST /V1/EXEC` matched the route and missed the list.
-//     With no key at all it ran code; with CODE_EXEC_API_KEY unset it ran code
-//     where the documented behaviour is a 503.
-//   - THE OTHER ENTRY POINTS. A typed op is also an MCP tool and an op-plane op, and
-//     neither is a `/v1/...` request. MCP's tools/call invokes the op DIRECTLY
-//     (zip typed.go:474, registeredOp.direct) — no route, so no route middleware,
-//     so no list could ever have covered it.
-//
-// Both are the same defect: authorization inferred from the SPELLING of a request
-// instead of being a property of the request. So the middleware now parks this
-// marker, and every path into this subsystem reads it. An entry point that does not
-// run exec's middleware does not carry the marker and is refused — by construction,
-// not by remembering to add it to a list.
-type admittedKey struct{}
-
-func admit(ctx context.Context) context.Context {
-	return context.WithValue(ctx, admittedKey{}, true)
-}
-
-func isAdmitted(ctx context.Context) bool {
-	ok, _ := ctx.Value(admittedKey{}).(bool)
-	return ok
-}
-
-// tenantOf is exec's ONE admission, and it is the fleet's rule PLUS one thing,
-// never a second copy of it.
-//
-// principal.Acting is the rule: from outside, the org a validated principal
-// resolved to and nothing else, because the identity boundary restores an
-// unvalidated caller's own org header for the data path and a tenant read from
-// that is a tenant the caller chose; from inside, the caller an entry point stated,
-// which nothing outside can write. What exec adds is the UNTENANTED case, and it
-// adds it after — a shared service key carries no tenant, so a request bearing it
-// acts for the deployment itself.
-//
-// The brand org is reachable ONLY through the admission marker, which is what
-// keeps it from being a way in: a request that never presented the key acts for
-// nobody and is refused. Composed this way the addition is visible AS an
-// addition; restating the base rule alongside it is how a package ends up with
-// its own tenancy and drifts from everyone else's.
+// It used to be that rule PLUS an untenanted case: a shared service key carried
+// no tenant, so a request bearing it acted for the deployment itself. That key
+// was this subsystem authenticating callers on its own, which is IAM's job and
+// nobody else's. With it gone there is no caller without a tenant, so there is
+// no second case to add — the rule is the whole rule.
 func tenantOf(ctx context.Context) (string, error) {
-	if org, err := principal.Acting(ctx); err == nil {
-		return org, nil
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return "", zip.ErrForbidden("code execution requires a validated principal")
 	}
-	if isAdmitted(ctx) {
-		return brandOrg, nil
-	}
-	return "", zip.ErrForbidden("code execution requires a validated principal or the service key")
+	return org, nil
 }
 
 // callCtx is the context every sandbox call is made on.
@@ -531,12 +491,6 @@ func callCtx(ctx context.Context, org string) (context.Context, func()) {
 	stop := context.AfterFunc(ctx, cancel)
 	return out, func() { stop(); cancel() }
 }
-
-// brandOrg is set at Mount from cloud.Brand() — WHOSE deployment this process is. It
-// is not configuration and not a new env var: a value the process already carries,
-// read once where it is handed in, so a Lux deployment's untenanted sessions belong
-// to Lux and not to hanzo.
-var brandOrg = "hanzo"
 
 func storageSession(fs []CodeFile) string {
 	for _, f := range fs {
@@ -778,36 +732,10 @@ func readFull(r interface{ Read([]byte) (int, error) }, b []byte) (int, error) {
 	return n, nil
 }
 
-// ---- auth ------------------------------------------------------------------
-
-// apiKey is the shared service key the chat server presents on X-API-Key. It is
-// KMS-sourced and synced into the pod env as CODE_EXEC_API_KEY.
-func apiKey() string { return environ.Or("CODE_EXEC_API_KEY", "") }
-
-// checkKey enforces the shared service key in constant time. Unset ⇒ 503 (fail
-// closed, never open); wrong ⇒ 401.
-//
-// It answers an error instead of wrapping a handler, because a wrapper is a thing a
-// route can be registered around and this must be a thing a route cannot avoid.
-func checkKey(c *zip.Ctx) error {
-	want := apiKey()
-	if want == "" {
-		return zip.Errorf(http.StatusServiceUnavailable, "code execution not configured")
-	}
-	got := strings.TrimSpace(c.Header("X-API-Key"))
-	if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-		return zip.Errorf(http.StatusUnauthorized, "invalid api key")
-	}
-	return nil
-}
-
 // Mount registers the code-interpreter surface.
 func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("exec.Use:  nil app")
-	}
-	if b := strings.TrimSpace(cloud.Brand()); b != "" {
-		brandOrg = b
 	}
 	// The meter that pays for a run. Bound here because this subsystem's handlers
 	// are free functions with no service value to hang it off. See meter.go.
@@ -822,7 +750,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// runs Serve, so exec's own suite proved the org path with the org absent, and
 	// meter_test.go had to add a Bridge by hand to resolve a payer at all.
 	//
-	// It also retires a copy. exec's credential middleware below called
+	// It also retired a copy: exec's own credential middleware used to call
 	// principal.WithOrg itself — Bridge's org half, restated — while parking none of
 	// Bridge's other facts. Two partial implementations of one fact on one request
 	// is the drift; there is one now, and what the middleware below adds is visibly
@@ -843,16 +771,6 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// op reads it back because zip rebuilds from c.Context(). The VALIDATED org is
 	// Bridge's, above — one owner for one fact. Nothing downstream re-reads a header
 	// or a path to decide either.
-	app.Use(zip.H(func(c *zip.Ctx) error {
-		if !owned(cloud.RoutePath(c.Path())) {
-			return c.Continue()
-		}
-		if err := checkKey(c); err != nil {
-			return err
-		}
-		c.SetContext(admit(c.Context()))
-		return c.Continue()
-	}))
 
 	// Registered on the *zip.App rather than on the cloud.Router, and that is what
 	// makes the prose reach the document. zipdoc resolves a typed op's path
@@ -880,22 +798,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(reg, Path+"/files/:sid", listFiles)
 
 	luxlog.Default().New("subsystem", "exec").Info("code interpreter mounted over sandboxes",
-		"peer", peer, "brandOrg", brandOrg, "langs", len(langs))
+		"peer", peer, "langs", len(langs))
 	return nil
-}
-
-// owned answers whether a path is this subsystem's, and it is now the ONE
-// address plus its subtree.
-//
-// It used to be a list of four roots that mirrored the router, and a list that
-// mirrors the router eventually diverges from it. The fold removed the list
-// rather than the drift risk: every route is under Path, so there is nothing to
-// keep in step and no spelling to miss. What is left is the prefix relation
-// itself, which the router computes the same way.
-//
-// p must already be cloud.RoutePath-normalized.
-func owned(p string) bool {
-	return p == Path || strings.HasPrefix(p, Path+"/")
 }
 
 // Prose for the two untyped routes, declared beside the wire facts that keep them

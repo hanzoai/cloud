@@ -36,7 +36,6 @@ func servePeer(t *testing.T) *planetest.Sandboxes { return planetest.ServeSandbo
 
 func mount(t *testing.T) *zip.App {
 	t.Helper()
-	t.Setenv("CODE_EXEC_API_KEY", "k")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	t.Setenv("CLOUD_BRAND", "hanzo")
 	if err := Use(app, cloud.Deps{}); err != nil {
@@ -48,7 +47,10 @@ func mount(t *testing.T) *zip.App {
 func call(t *testing.T, app *zip.App, method, path, ctype string, body io.Reader) *http.Response {
 	t.Helper()
 	rq := httptest.NewRequest(method, "http://api.hanzo.ai"+path, body)
-	rq.Header.Set("X-API-Key", "k")
+	// A validated principal — the user claim is what makes the org trusted. There
+	// is no service key to present any more; IAM is the only way in.
+	rq.Header.Set("X-User-Id", "u_alice")
+	rq.Header.Set("X-Org-Id", "hanzo")
 	if ctype != "" {
 		rq.Header.Set("Content-Type", ctype)
 	}
@@ -311,44 +313,48 @@ func TestFilesAnswersABareArrayKeyedByTheDownloadIdentifier(t *testing.T) {
 
 // ---- auth ------------------------------------------------------------------
 
-// TestUnsetKeyFailsClosed: a deployment with no credential configured is 503 on
-// every path, never open.
-func TestUnsetKeyFailsClosed(t *testing.T) {
+// TestNoPrincipalIsRefusedOnEveryPath: with no service key left, a caller who
+// presents no validated principal has nothing else to present, on any path.
+func TestNoPrincipalIsRefusedOnEveryPath(t *testing.T) {
 	servePeer(t)
 	app := mount(t)
-	t.Setenv("CODE_EXEC_API_KEY", "")
 	for _, p := range []string{Path, Path + "/upload", Path + "/download/s/f", Path + "/files/s"} {
-		resp := call(t, app, http.MethodGet, p, "", nil)
-		if resp.StatusCode != http.StatusServiceUnavailable {
-			t.Errorf("%s with no key = %d, want 503", p, resp.StatusCode)
+		rq := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai"+p, nil)
+		resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second})
+		if err != nil {
+			t.Fatalf("%s: %v", p, err)
 		}
+		if resp.StatusCode == http.StatusOK {
+			t.Errorf("%s with no principal = 200, want a refusal", p)
+		}
+		_ = resp.Body.Close()
 	}
 }
 
-// TestWrongKeyIsRejectedOnEveryPath, including the TYPED op — which is the reason
-// the credential check is middleware and not a handler wrapper: a typed
-// registration takes no handler chain, so a per-route wrap could not have covered
-// POST /v1/exec at all.
-func TestWrongKeyIsRejectedOnEveryPath(t *testing.T) {
+// TestAnOrgHeaderAloneIsNotAPrincipal, including the TYPED op. An org header with
+// no user claim is a tenant the caller chose for itself; principal.OrgOf is what
+// makes the difference, and every path reads the same answer because tenancy is a
+// property of the request rather than of the route.
+func TestAnOrgHeaderAloneIsNotAPrincipal(t *testing.T) {
 	p := servePeer(t)
 	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "ran", "", 0, nil }
 	app := mount(t)
 	for _, path := range []string{Path, Path + "/upload", Path + "/download/s/f", Path + "/files/s"} {
 		rq := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai"+path,
 			strings.NewReader(`{"lang":"py","code":"x=1"}`))
-		rq.Header.Set("X-API-Key", "wrong")
+		rq.Header.Set("X-Org-Id", "acme")
 		rq.Header.Set("Content-Type", "application/json")
 		resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second})
 		if err != nil {
 			t.Fatalf("%s: %v", path, err)
 		}
-		if resp.StatusCode != http.StatusUnauthorized {
-			t.Errorf("%s with a wrong key = %d, want 401", path, resp.StatusCode)
+		if resp.StatusCode == http.StatusOK {
+			t.Errorf("%s with a bare org header = 200, want a refusal", path)
 		}
 		_ = resp.Body.Close()
 	}
-	if len(p.Lines()) != 0 {
-		t.Errorf("a rejected request still ran %v in a sandbox", p.Lines())
+	if n := p.Ran(); n != 0 {
+		t.Fatalf("%d program(s) ran for a caller that never presented a principal", n)
 	}
 }
 

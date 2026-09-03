@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/zap-proto/zip"
+
+	"github.com/hanzoai/cloud/apps/principal"
 )
 
 // raw fires a request with full control of headers — no key, a wrong key, a forged
@@ -64,91 +66,42 @@ func TestForgedOrgHeaderCannotChooseTheTenant(t *testing.T) {
 
 	body, _ := json.Marshal(CodeRun{Lang: "py", Code: "print(1)"})
 	resp := raw(t, app, http.MethodPost, "/v1/exec", string(body), map[string]string{
-		"X-API-Key":    "k",
 		"Content-Type": "application/json",
 		"X-Org-Id":     "victim-corp",
 		// No X-User-Id: there is no validated principal, which is exactly the
 		// request shape SanitizeIdentity restores the client's own org onto.
 	})
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d body=%s, want 200 (the service key is valid)", resp.StatusCode, b)
+	if resp.StatusCode == http.StatusOK {
+		t.Fatal("a bare org header ran code — a header chose the tenant")
 	}
-	for _, org := range billed {
-		if org == "victim-corp" {
-			t.Fatalf("the sandbox was leased for %q — a header chose the tenant, so the run "+
-				"executed in another org's store and its artifacts are readable from it", org)
-		}
-	}
-	if len(billed) == 0 || billed[0] != "hanzo" {
-		t.Fatalf("leased for %v, want the deployment's own brand org — an untenanted service "+
-			"key acts for the deployment and for nobody else", billed)
+	if len(billed) != 0 {
+		t.Fatalf("leased for %v — nothing should be leased for a caller with no principal", billed)
 	}
 }
 
 // TestPathCaseCannotSkipTheCredential is the unauthenticated-execution break.
 //
 // fiber routes case-insensitively (cloud.RoutePath exists in this repo for exactly
-// that), so /V1/EXEC matched the route and then missed a lowercase prefix list. The
-// consequences were not subtle: no key at all ran code, a wrong key read another
-// session's bytes, and with CODE_EXEC_API_KEY UNSET — the documented fail-closed
-// 503 — it still ran code.
+// that), so /V1/EXEC matched the route and then missed a lowercase prefix list of
+// paths the credential middleware covered. No key at all ran code.
+//
+// The list is gone along with the key it guarded. Admission is now a property of
+// the request — a validated principal or nothing — so there is no spelling of the
+// path that reaches a different answer, and no list left to fall out of step.
 func TestPathCaseCannotSkipTheCredential(t *testing.T) {
 	p := servePeer(t)
 	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "pwned", "", 0, nil }
 	app := mount(t)
 
-	// Every spelling the router accepts, and every credential state that must be
-	// refused on it.
-	for _, path := range []string{"/v1/exec", "/V1/EXEC", "/V1/Exec", "/v1/EXEC/"} {
-		for _, tc := range []struct {
-			why  string
-			hdr  map[string]string
-			want int
-		}{
-			{"no key at all", map[string]string{"Content-Type": "application/json"}, http.StatusUnauthorized},
-			{"a wrong key", map[string]string{"X-API-Key": "nope", "Content-Type": "application/json"}, http.StatusUnauthorized},
-		} {
-			resp := raw(t, app, http.MethodPost, path, `{"lang":"py","code":"print(1)"}`, tc.hdr)
-			if resp.StatusCode != tc.want {
-				b, _ := io.ReadAll(resp.Body)
-				t.Errorf("POST %s with %s = %d, want %d (body %s)", path, tc.why, resp.StatusCode, tc.want, b)
-			}
-		}
-	}
-	if n := p.Ran(); n != 0 {
-		t.Fatalf("%d program(s) executed for requests that presented no valid credential", n)
-	}
-
-	// The file surface, case-flipped: this is how the artifacts came out.
-	for _, path := range []string{"/V1/EXEC/FILES/m_0000a", "/V1/EXEC/DOWNLOAD/m_0000a/secret.csv"} {
-		resp := raw(t, app, http.MethodGet, path, "", map[string]string{"X-API-Key": "wrong"})
-		if resp.StatusCode != http.StatusUnauthorized {
-			b, _ := io.ReadAll(resp.Body)
-			t.Errorf("GET %s with a wrong key = %d, want 401 (body %s)", path, resp.StatusCode, b)
-		}
-	}
-}
-
-// TestUnsetKeyFailsClosedOnEverySpelling. An unconfigured deployment answers 503 on
-// /v1/exec and answered 200 on /V1/EXEC — the documented fail-closed behaviour was
-// true of one spelling of the same route.
-func TestUnsetKeyFailsClosedOnEverySpelling(t *testing.T) {
-	p := servePeer(t)
-	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "pwned", "", 0, nil }
-	app := mount(t)
-	t.Setenv("CODE_EXEC_API_KEY", "")
-
 	for _, path := range []string{"/v1/exec", "/V1/EXEC"} {
 		resp := raw(t, app, http.MethodPost, path, `{"lang":"py","code":"print(1)"}`,
-			map[string]string{"Content-Type": "application/json", "X-API-Key": "anything"})
-		if resp.StatusCode != http.StatusServiceUnavailable {
-			b, _ := io.ReadAll(resp.Body)
-			t.Errorf("POST %s with no key configured = %d, want 503 (body %s)", path, resp.StatusCode, b)
+			map[string]string{"Content-Type": "application/json"})
+		if resp.StatusCode == http.StatusOK {
+			t.Errorf("POST %s with no principal = 200", path)
 		}
 	}
 	if n := p.Ran(); n != 0 {
-		t.Fatalf("%d program(s) executed on a deployment with no credential configured", n)
+		t.Fatalf("%d program(s) executed for a caller with no principal", n)
 	}
 }
 
@@ -160,9 +113,8 @@ func TestUnsetKeyFailsClosedOnEverySpelling(t *testing.T) {
 // key executed code.
 //
 // This calls the handler the way those entry points do: straight, with a bare
-// context. It carries no validated principal and no admission marker, so it is
-// refused — which is the property, rather than a third gate that has to be kept
-// in step with the other two.
+// context. It carries no validated principal, so it is refused — which is the
+// property, rather than a second gate that has to be kept in step.
 func TestTheOtherEndpointsFailClosed(t *testing.T) {
 	p := servePeer(t)
 	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "pwned", "", 0, nil }
@@ -176,9 +128,11 @@ func TestTheOtherEndpointsFailClosed(t *testing.T) {
 		t.Fatalf("%d program(s) executed through an entry point with no credential check", n)
 	}
 
-	// And it is not refusing everything: a context the middleware admitted works.
-	if _, err := run(admit(t.Context()), &CodeRun{Lang: "py", Code: "print(1)"}); err != nil {
-		t.Fatalf("an admitted context was refused: %v — the gate is now a wall around nothing", err)
+	// And it is not refusing everything: a context naming the acting org works.
+	// That is the ONLY way in now — an entry point states the caller, or there is
+	// no caller.
+	if _, err := run(principal.WithActing(t.Context(), "hanzo"), &CodeRun{Lang: "py", Code: "print(1)"}); err != nil {
+		t.Fatalf("a context with an acting org was refused: %v — the gate is now a wall around nothing", err)
 	}
 }
 
@@ -195,7 +149,6 @@ func TestAValidatedPrincipalOwnsItsOwnSandboxes(t *testing.T) {
 
 	body, _ := json.Marshal(CodeRun{Lang: "py", Code: "print(1)"})
 	resp := raw(t, app, http.MethodPost, "/v1/exec", string(body), map[string]string{
-		"X-API-Key":    "k",
 		"Content-Type": "application/json",
 		// A VALIDATED principal: the user claim is what makes the org trusted
 		// (principal.OrgOf — an empty user means the org that rode along is not).

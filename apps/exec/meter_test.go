@@ -22,7 +22,6 @@ import (
 // billed mounts the real surface with its meter pointed at l.
 func billed(t *testing.T, l *planetest.Ledger) *zip.App {
 	t.Helper()
-	t.Setenv("CODE_EXEC_API_KEY", "k")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	// No cloud.Bridge() here: Mount installs it on the subsystem's own router, ahead
 	// of its leaves. It used to be installed by hand right at this line, which is the
@@ -49,7 +48,6 @@ func runAs(t *testing.T, app *zip.App, org string) *http.Response {
 	t.Helper()
 	rq := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai"+Path,
 		strings.NewReader(`{"lang":"py","code":"print(1)"}`))
-	rq.Header.Set("X-API-Key", "k")
 	rq.Header.Set("Content-Type", "application/json")
 	if org != "" {
 		rq.Header.Set("X-Org-Id", org)
@@ -108,20 +106,22 @@ func TestUnfundedOrgNeverGetsAPod(t *testing.T) {
 	}
 }
 
-// The shared service key carries no tenant, so there is no wallet to charge. The
-// run still happens — this is the chat server's endpoint — and bills nobody.
-func TestServiceKeyRunBillsNobody(t *testing.T) {
+// There used to be a caller with no tenant: the shared service key carried none, so
+// its runs executed and billed nobody. That is gone with the key — every caller now
+// resolves to an org, so there is no longer a way to run code that no wallet pays
+// for. A caller with no principal does not reach the sandbox at all.
+func TestNoPrincipalRunsNothingAndBillsNobody(t *testing.T) {
 	sb := servePeer(t)
 	l := planetest.Money(t, 0) // a balance that must never be consulted
 	app := billed(t, l)
 
-	if resp := runAs(t, app, ""); resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200 — the service endpoint must keep working", resp.StatusCode)
+	if resp := runAs(t, app, ""); resp.StatusCode == http.StatusOK {
+		t.Fatalf("status = 200 for a caller with no principal, want a refusal")
 	}
-	if sb.Ran() != 1 {
-		t.Fatalf("programs run = %d, want 1", sb.Ran())
+	if sb.Ran() != 0 {
+		t.Fatalf("programs run = %d with no principal, want 0", sb.Ran())
 	}
 	if n := l.Count(); n != 0 {
-		t.Fatalf("debits = %d with no principal to bill, want 0", n)
+		t.Fatalf("debits = %d for a refused run, want 0", n)
 	}
 }
