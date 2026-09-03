@@ -10,7 +10,7 @@
 // *s3.Client from the SAME S3_ADMIN_* variables (provisioner.go newS3), which is
 // the second site this package exists to retire.
 //
-// The backend is the SeaweedFS S3 gateway (s3.hanzo.svc:9000), which speaks the
+// The backend is the S3 gateway (s3.hanzo.svc:9000), which speaks the
 // S3 API, so hanzos3/go is the client. The gateway is reached over the internal
 // admin endpoint for control operations; a SEPARATE public-host client
 // (PublicClient) is used only to MINT presigned URLs that a browser can follow,

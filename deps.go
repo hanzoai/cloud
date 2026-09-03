@@ -155,7 +155,7 @@ type Deps struct {
 	MasterKey []byte
 
 	// Durable is the per-deployment HA-durability factory every OrgStore routes
-	// through: the shared ha election + vfs FencedStore over the SeaweedFS S3
+	// through: the shared ha election + vfs FencedStore over the S3
 	// gateway + per-org envelope Cipher. nil ⇒ local-only (no object store creds,
 	// dev/single-node), and every OrgStore is exactly the pre-durability cache.
 	Durable *org.Durability

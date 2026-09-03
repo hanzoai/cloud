@@ -1,7 +1,7 @@
 package clients
 
 // s3vfs is the REAL in-process VFSClient (deps.VFS) backing the team files plane
-// on the shared SeaweedFS S3 gateway — the canonical, key-based, already-running
+// on the shared S3 gateway — the canonical, key-based, already-running
 // object store. CTO decision (.97): back deps.VFS on S3, NOT the content-addressed
 // hanzoai/vfs (its single-block PutBlock->BlockID API does not fit the key-based
 // VFSClient client; an adapter+crypto is needless complexity for small avatars).
@@ -36,7 +36,7 @@ import (
 // exactly like clients/s3's per-org physical naming — not a bucket-per-tenant.
 const TeamBlobBucket = "team-blobs"
 
-// s3vfs implements types.VFSClient over a S3 client bound to the SeaweedFS S3
+// s3vfs implements types.VFSClient over a S3 client bound to the S3
 // admin endpoint.
 type s3vfs struct {
 	client  *s3.Client

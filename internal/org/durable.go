@@ -76,7 +76,7 @@ type Durability struct {
 // eviction, and a store that never ships never opens one.
 type opener func(ns namespace.Namespace, subsystem, path string) (*sql.DB, error)
 
-// NewDurability builds the factory over an atomic-CAS object store (the SeaweedFS S3
+// NewDurability builds the factory over an atomic-CAS object store (the S3
 // If-Match ConditionalStore), the live membership view (election input), and an
 // optional per-org envelope Cipher (nil ⇒ the durable object is stored in the clear;
 // pure-Go dev only). The SAME cond backs both the lease and the data ships, so they

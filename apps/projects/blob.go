@@ -349,9 +349,9 @@ func purgePrefix(ctx context.Context, cli *s3.Client, bucket, prefix string) err
 // bucket is not enumerable.
 //
 // The Principal MUST be the scalar string "*" and the Resource a scalar string
-// (not {"AWS":["*"]} / arrays): SeaweedFS's S3 policy engine rejects the array
+// (not {"AWS":["*"]} / arrays): the S3 gateway's policy engine rejects the array
 // forms with "Policy has invalid resource". This scalar form is equally valid
-// on AWS S3 and SeaweedFS, so it is the one canonical policy for every backend.
+// on AWS S3 and our gateway, so it is the one canonical policy for every backend.
 func publicReadPolicy(bucket string) string {
 	return `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::` + bucket + `/*"}]}`
 }

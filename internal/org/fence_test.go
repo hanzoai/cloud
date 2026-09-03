@@ -19,7 +19,7 @@ import (
 
 // fakeCondStore is an in-process replica.ConditionalStore: one atomic
 // (data, generation) slot per key, a single mutex making PutIfVersion's
-// compare-and-set indivisible — the server-side CAS a real S3/SeaweedFS gateway
+// compare-and-set indivisible — the server-side CAS a real S3 gateway
 // provides. Shared by the fencer and the handoff tests as the ONE object store two
 // pods talk to. failAll models a pod partitioned from the store.
 type fakeCondStore struct {

@@ -2,7 +2,7 @@
 // signed URLs for upload and download.
 //
 // It serves an org's buckets and objects at /v1/s3 — list, create, delete, and
-// presigned upload/download URLs — over the shared SeaweedFS S3 gateway.
+// presigned upload/download URLs — over the shared S3 gateway.
 //
 // It is the DATA plane over that store — the companion to apps/provisioning,
 // which is the CONTROL plane (allocate/list/drop the s3 RESOURCE at /v1/s3 and
@@ -42,7 +42,7 @@
 //
 // RESIDUAL RISKS THIS SUBSYSTEM RIDES (documented after adversarial review; not
 // fixable inside the subsystem, escalated to the platform):
-//   - Single S3 identity: the SeaweedFS gateway uses ONE admin identity
+//   - Single S3 identity: the S3 gateway uses ONE admin identity
 //     (universe infra/k8s/storage/s3.yaml) for the whole binary. So the S3 LAYER
 //     enforces no tenant boundary — isolation is 100% this subsystem's
 //     org-prefixed naming + admit. The correct hardening is per-request

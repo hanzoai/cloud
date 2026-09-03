@@ -20,7 +20,7 @@
 //
 //	vector    -> Qdrant      vector.hanzo.svc:6333    PUT /collections/{name}
 //	search    -> Meilisearch search.hanzo.svc:7700    POST /indexes
-//	s3        -> S3/SeaweedFS     s3.hanzo.svc:9000        MakeBucket
+//	s3        -> S3          s3.hanzo.svc:9000        MakeBucket
 //
 // Tenancy: every request is scoped to the gateway-minted org (X-Org-Id /
 // c.Org()). Empty org is rejected 403 unless the caller is an admin. The

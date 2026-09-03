@@ -3,7 +3,7 @@ package s3_test
 // Integration tests for the /v1/s3 file-manager subsystem, driven through the
 // REAL orchestrator path (BuildDeps → the init()-registered App → the
 // zip/Fiber stack), exactly like apps/kms/kms_test.go. Requests run in-process
-// via app.Fiber().Test — no listener, no live SeaweedFS.
+// via app.Fiber().Test — no listener, no live S3.
 //
 // SanitizeIdentity does not run in this harness (it is wired in serve.go, not
 // UseAll), so a test simulates a validated principal by setting the identity

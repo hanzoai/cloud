@@ -8,7 +8,7 @@ package research
 // durable_record_test.go is the H1 regression proof: the in-process Record() client
 // (experiments A/B evidence) must ship its write fenced before returning, exactly
 // like the HTTP ingest path, so a takeover keeps it and a non-owner fails closed.
-// It runs a durable research OrgStore over an in-process CAS (no live SeaweedFS) and
+// It runs a durable research OrgStore over an in-process CAS (no live S3) and
 // opens through cek, so it also exercises the cross-pod restore: the successor's
 // file is keyed from the SAME process master and the SAME namespace, so it opens
 // with nothing carried beside it.
@@ -41,7 +41,7 @@ func shipSeal() org.DurabilityOption {
 
 // memCAS is an in-process replica.ConditionalStore: one atomic (data, generation)
 // slot per key, a single mutex making PutIfVersion's compare-and-set indivisible —
-// the server-side CAS a real SeaweedFS S3 gateway provides. Two "pods" share ONE.
+// the server-side CAS a real S3 gateway provides. Two "pods" share ONE.
 type memCAS struct {
 	mu   sync.Mutex
 	objs map[string]memObj

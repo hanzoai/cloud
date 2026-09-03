@@ -42,7 +42,7 @@ The last two are not switches, so they are worth stating plainly.
 
 **Files.** `apps/projects` keeps a site's bytes in object storage and reads them
 back through the same client in both directions; there is no from-disk mode to
-fall back to. `apps/s3` is the DATA plane over a SeaweedFS gateway, not the
+fall back to. `apps/s3` is the DATA plane over an S3 gateway, not the
 gateway — cloud embeds no store. `hanzoai/s3` IS that gateway, so the loop closes
 without anything outside the estate:
 
@@ -64,7 +64,7 @@ S3_ADMIN_ENDPOINT=127.0.0.1:29000 S3_ADMIN_ACCESS_KEY=local \
 S3_ADMIN_SECRET_KEY=local S3_SECURE=false S3_PUBLIC_SECURE=false make up
 ```
 
-The identity file is not optional. Without it seaweedfs serves anonymous reads
+The identity file is not optional. Without it `s3` serves anonymous reads
 and refuses every SIGNED request, which is what cloud sends — the deploy fails
 with "Signed request requires setting up Hanzo S3 authentication" while a plain
 `curl` of the endpoint looks perfectly healthy. Its own ports also collide by

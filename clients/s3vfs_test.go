@@ -17,7 +17,7 @@ import (
 // (S3 NoSuchKey) must become types.ErrBlobNotFound (so files.go answers 404 /
 // idempotent-204), nil stays nil, and EVERY other S3 error (NoSuchBucket, auth,
 // throttle, connection-refused) passes through unchanged (so files.go fails CLOSED
-// 502). This is table-tested directly — no live SeaweedFS required.
+// 502). This is table-tested directly — no live S3 required.
 func TestMapS3Err(t *testing.T) {
 	cases := []struct {
 		name       string

@@ -84,7 +84,7 @@ renderer. No product reimplements billing; no second balance gate exists.
 | flow | hanzoai/flow | run / step | Middleware | needs wrap |
 | kms | hanzoai/kms | secret op | (likely free/infra) | n/a — platform dep |
 | iam | hanzoai/iam | seat (per active user) | sweeper, not per-req | needs seat sweeper |
-| s3 (SeaweedFS) | hanzoai/s3 | GB-month + request | sweeper + proxy | needs storage sweeper |
+| s3 | hanzoai/s3 | GB-month + request | sweeper + proxy | needs storage sweeper |
 
 Units fall into three metering shapes:
 - **per-request** (vector, search, functions, sign, analytics, bot, flow): the

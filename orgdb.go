@@ -172,7 +172,7 @@ var ErrStoreClosed = errors.New("cloud: org store is closed")
 
 // durableOpTimeout bounds every object-store round-trip a durable OrgStore makes
 // (hydrate on open, ship on Sync, final ship on close). It exists so a slow or hung
-// SeaweedFS degrades to a bounded latency (open read-only / ship not-acked) rather
+// object store degrades to a bounded latency (open read-only / ship not-acked) rather
 // than blocking a caller — or the store-wide lock — indefinitely.
 const durableOpTimeout = 30 * time.Second
 
@@ -478,7 +478,7 @@ func (c *OrgStore[T]) forNS(ns namespace.Namespace) (T, error) {
 		return st, nil
 	}
 	// Durable: run the open (object-store hydrate + cek) with c.mu RELEASED so a
-	// slow/hung SeaweedFS never stalls another org's open or a cache hit (M1). A
+	// slow/hung object store never stalls another org's open or a cache hit (M1). A
 	// concurrent open of the SAME namespace waits on the in-flight record rather
 	// than double-opening.
 	if inf, ok := c.inflight[ns]; ok {
