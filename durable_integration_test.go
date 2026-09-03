@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/s3admin"
+	"github.com/hanzoai/cloud/s3admin"
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/vfs/replica"
 	s3 "github.com/hanzos3/go"
