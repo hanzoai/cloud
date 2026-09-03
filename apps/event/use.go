@@ -124,6 +124,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 // records the informative mount line and brings up the event sink.
 func build(b cloud.Base) (state, error) {
 	b.Log.Info("analytics surface", "warehouse", "hanzo", "brand", b.Brand)
+	teamKey = string(b.SecretFromEnv(context.Background(), teamSecretRef))
 	startSink(b.Log)
 	// The event endpoint for a peer in another process, published beside the HTTP
 	// endpoints and reaching the same write core — see event_rpc.go.

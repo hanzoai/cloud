@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/zap-proto/zip"
 )
@@ -329,8 +330,7 @@ func teamToken(t *testing.T, org, secret string, extra map[string]any, exp int64
 // TestTeamTenantResolvesSignedOrg: a well-formed, unexpired, correctly-signed team
 // session token resolves to the org in its SIGNED extra.org claim.
 func TestTeamTenantResolvesSignedOrg(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "a-real-team-secret")
-	app := mountApp(t)
+	app := keyed(t, "a-real-team-secret")
 	tok := teamToken(t, "acme", "a-real-team-secret", nil, time.Now().Add(time.Hour).Unix())
 
 	// The batch must be something ONLY full capability can store. error+navigation is
@@ -396,8 +396,7 @@ func TestTeamTenantRefusals(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			t.Setenv("SERVER_SECRET", c.env)
-			app := mountApp(t)
+			app := keyed(t, c.env)
 			bearer := c.bearer(t)
 			// A team token that does not resolve is REFUSED, not downgraded. This
 			// assertion used to accept "503 or 200", which did not merely miss the
@@ -456,8 +455,7 @@ func resolvedTeamOrg(t *testing.T, app *zip.App, bearer string) (string, bool) {
 // harness. A wrong or missing route would 404/405; a decode regression that
 // silently dropped the batch would answer 200 dropped=2.
 func TestTeamEndpointIsRegistered(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "a-real-team-secret")
-	app := mountApp(t)
+	app := keyed(t, "a-real-team-secret")
 	tok := teamToken(t, "acme", "a-real-team-secret", nil, time.Now().Add(time.Hour).Unix())
 
 	if code, res := postBody(t, app, "/v1/event", teamWire, tok); code != http.StatusServiceUnavailable {
@@ -475,8 +473,7 @@ func TestTeamEndpointIsRegistered(t *testing.T) {
 // of the tab, POST an `order_completed` with a revenue figure, and it landed as an
 // unprojected row in the host org — plus a fanOut to that org's GA4/Meta CAPI.
 func TestGuestWritesProjectedIntoItsOwnOrg(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "a-real-team-secret")
-	app := mountApp(t)
+	app := keyed(t, "a-real-team-secret")
 	hour := time.Now().Add(time.Hour).Unix()
 	guest := teamToken(t, "acme", "a-real-team-secret", map[string]any{"role": token.RoleGuest}, hour)
 	member := teamToken(t, "acme", "a-real-team-secret", nil, hour)
@@ -515,7 +512,7 @@ func TestGuestWritesProjectedIntoItsOwnOrg(t *testing.T) {
 // TestUnprovenRoleIsNotPrivileged: fail-closed on the claim's absence. A token that
 // never proved a space role gets the projection, not the benefit of the doubt.
 func TestUnprovenRoleIsNotPrivileged(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "a-real-team-secret")
+	withKey(t, "a-real-team-secret")
 	hour := time.Now().Add(time.Hour).Unix()
 	for _, role := range []string{"", "observer", "GUEST", "Member", "owner ,admin"} {
 		tok := teamToken(t, "acme", "a-real-team-secret", map[string]any{"role": role}, hour)
@@ -550,7 +547,7 @@ func TestUnprovenRoleIsNotPrivileged(t *testing.T) {
 // extra.readonly were the old guards' inputs and NOTHING mints them; asserting they are
 // inert stops someone "restoring" the guards and believing they protect anything.
 func TestInertClaimsGrantAndReduceNothing(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "a-real-team-secret")
+	withKey(t, "a-real-team-secret")
 	hour := time.Now().Add(time.Hour).Unix()
 	// On a member they do not REDUCE.
 	tok := teamToken(t, "acme", "a-real-team-secret",
@@ -571,7 +568,7 @@ func TestInertClaimsGrantAndReduceNothing(t *testing.T) {
 // attributed to the deliberate API credential — but nothing tested it, so swapping the
 // order was a free mutation.
 func TestTrustOrderPrefersTheApiCredential(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "a-real-team-secret")
+	withKey(t, "a-real-team-secret")
 	// Stand in for IAM's key client: this key belongs to org "keyorg".
 	prev := resolveKeyOrg
 	resolveKeyOrg = func(_ context.Context, key string) (string, bool) {
@@ -641,8 +638,7 @@ func runTenant(t *testing.T, headers map[string]string, fn func(*zip.Ctx) (admis
 // "presented nothing": 401, telling the caller to get a key. A 403 would assert its
 // key is broken, on evidence we do not have.
 func TestUnidentifiableBearerIsNotPresented(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "a-real-team-secret")
-	app := mountApp(t)
+	app := keyed(t, "a-real-team-secret")
 	// A well-formed JWT with no `account` claim (an IAM-shaped bearer).
 	foreign := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
 		"eyJzdWIiOiJ1c2VyLTEiLCJpc3MiOiJodHRwczovL2hhbnpvLmlkIn0.c2ln"
@@ -682,10 +678,9 @@ func teamPresented2(t *testing.T, bearer string) bool {
 // warehouse produces either way. With the fake warehouse the tenant column is
 // directly observable.
 func TestGuestRowsLandInItsOwnOrg(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	roomyRate(t)
 	w := fakeWarehouse(t)
-	app := mountApp(t)
+	app := keyed(t, "a-real-team-secret")
 	guest := teamToken(t, "acme", "a-real-team-secret",
 		map[string]any{"role": token.RoleGuest}, time.Now().Add(time.Hour).Unix())
 
@@ -719,10 +714,9 @@ func TestGuestRowsLandInItsOwnOrg(t *testing.T) {
 // on a real org a guest could attribute pageviews and errors to a named colleague. The
 // fix is not to strip it but to stop taking it from the caller.
 func TestReducedLaneAttributesToTheSignedAccount(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	roomyRate(t)
 	w := fakeWarehouse(t)
-	app := mountApp(t)
+	app := keyed(t, "a-real-team-secret")
 	guest := teamToken(t, "acme", "a-real-team-secret",
 		map[string]any{"role": token.RoleGuest}, time.Now().Add(time.Hour).Unix())
 
@@ -762,10 +756,9 @@ func TestReducedLaneAttributesToTheSignedAccount(t *testing.T) {
 // warehouse not at all. There is no anonymous tenant to file it under, so the
 // identity question the projection used to answer for it does not arise.
 func TestAnonymousWritesNothing(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	roomyRate(t)
 	w := fakeWarehouse(t)
-	app := mountApp(t)
+	app := keyed(t, "a-real-team-secret")
 	body := `[{"event":"navigation","properties":{"path":"/pricing"},"timestamp":1750000000000,"distinct_id":"visitor-7"}]`
 	code, res := postBody(t, app, "/v1/event", body, "")
 	if code != http.StatusUnauthorized {
@@ -774,4 +767,42 @@ func TestAnonymousWritesNothing(t *testing.T) {
 	if got := w.tenants(t); len(got) != 0 {
 		t.Fatalf("anonymous wrote tenants %v, want none", got)
 	}
+}
+
+// fakeKMS answers the refs it was given and nothing else.
+type fakeKMS struct{ m map[string][]byte }
+
+func (f fakeKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
+	v, ok := f.m[ref]
+	if !ok {
+		return nil, fmt.Errorf("secret not found: %s", ref)
+	}
+	return v, nil
+}
+func (fakeKMS) PutSecret(context.Context, string, []byte) error      { return nil }
+func (fakeKMS) DeleteSecret(context.Context, string) error           { return nil }
+func (fakeKMS) Sign(context.Context, string, []byte) ([]byte, error) { return nil, nil }
+
+// keyed mounts the app with the team signing key behind SERVER_SECRET_REF, the
+// way the fleet resolves it: the ref in the environment, the value in KMS. An
+// empty key mounts with nothing behind the ref, which is the unset case.
+func keyed(t *testing.T, key string) *zip.App {
+	t.Helper()
+	const ref = "orgs/acme/team/SERVER_SECRET@prod"
+	t.Setenv(teamSecretRef, ref)
+	prev := teamKey
+	t.Cleanup(func() { teamKey = prev })
+	kms := fakeKMS{m: map[string][]byte{}}
+	if key != "" {
+		kms.m[ref] = []byte(key)
+	}
+	return mount(t, cloud.Deps{KMS: kms})
+}
+
+// withKey sets the resolved key directly, for a test that never mounts.
+func withKey(t *testing.T, key string) {
+	t.Helper()
+	prev := teamKey
+	teamKey = key
+	t.Cleanup(func() { teamKey = prev })
 }

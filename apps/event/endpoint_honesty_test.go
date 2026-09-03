@@ -185,8 +185,7 @@ func TestFullCapabilityUnroutableBodyIs400(t *testing.T) {
 // it was invited into for one channel. 401 "key required" would be a false instruction;
 // 403 is the true one, and the code says which.
 func TestGuestRefusalIsCapabilityNotCredential(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "a-real-team-secret")
-	app := mountApp(t)
+	app := keyed(t, "a-real-team-secret")
 	guest := teamToken(t, "acme", "a-real-team-secret",
 		map[string]any{"role": token.RoleGuest}, time.Now().Add(time.Hour).Unix())
 	code, body := postAnon(t, app, "/v1/event",
