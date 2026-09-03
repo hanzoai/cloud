@@ -33,7 +33,7 @@ func TestProfitShareMarginInvariant(t *testing.T) {
 	attributeOK(t, app, "orgD", codeC) // D referred by C
 
 	// Push the DIRECT (L1) rate to the cap so L1+L2+L3 = 9300+500+200 = 100% of margin.
-	if st, body := req(t, app, http.MethodPost, "/v1/admin/affiliate/"+idC+"/rate", "admin", true, map[string]any{"rateBps": maxL1RateBps()}); st != http.StatusOK {
+	if st, body := req(t, app, http.MethodPost, "/v1/admin/affiliate/"+idC+"/rate", "admin", true, map[string]any{"rateBps": maxL1RateBps(ctx)}); st != http.StatusOK {
 		t.Fatalf("set L1 rate to cap want 200, got %d (%s)", st, body)
 	}
 
@@ -118,7 +118,7 @@ func TestSetRateGateAndCap(t *testing.T) {
 		t.Fatalf("non-admin set-rate want 403, got %d", st)
 	}
 	// Over the cap → 400 (would let the schedule exceed the margin).
-	if st, _ := req(t, app, http.MethodPost, "/v1/admin/affiliate/"+idA+"/rate", "admin", true, map[string]any{"rateBps": maxL1RateBps() + 1}); st != http.StatusBadRequest {
+	if st, _ := req(t, app, http.MethodPost, "/v1/admin/affiliate/"+idA+"/rate", "admin", true, map[string]any{"rateBps": maxL1RateBps(ctx) + 1}); st != http.StatusBadRequest {
 		t.Fatalf("over-cap set-rate want 400, got %d", st)
 	}
 	// Negative → 400.
@@ -130,20 +130,20 @@ func TestSetRateGateAndCap(t *testing.T) {
 		t.Fatalf("missing set-rate want 404, got %d", st)
 	}
 	// Valid at the cap → 200, the rate is persisted.
-	if st, body := req(t, app, http.MethodPost, "/v1/admin/affiliate/"+idA+"/rate", "admin", true, map[string]any{"rateBps": maxL1RateBps()}); st != http.StatusOK {
+	if st, body := req(t, app, http.MethodPost, "/v1/admin/affiliate/"+idA+"/rate", "admin", true, map[string]any{"rateBps": maxL1RateBps(ctx)}); st != http.StatusOK {
 		t.Fatalf("cap set-rate want 200, got %d (%s)", st, body)
 	}
 	a, _ := s.State.store.GetByID(ctx, idA)
-	if a.RateBps != maxL1RateBps() {
-		t.Fatalf("rate = %d, want %d", a.RateBps, maxL1RateBps())
+	if a.RateBps != maxL1RateBps(ctx) {
+		t.Fatalf("rate = %d, want %d", a.RateBps, maxL1RateBps(ctx))
 	}
 	// The new rate flows into accrual.
 	attributeOK(t, app, "orgB", codeA)
 	fc.setSpend("orgB", 10000)
 	req(t, app, http.MethodPost, "/v1/admin/affiliate/sweep", "admin", true, nil)
 	a2, _ := s.State.store.GetByID(ctx, idA)
-	if a2.AccruedCents != share(10000, maxL1RateBps()) {
-		t.Fatalf("accrued at cap rate = %d, want %d", a2.AccruedCents, share(10000, maxL1RateBps()))
+	if a2.AccruedCents != share(10000, maxL1RateBps(ctx)) {
+		t.Fatalf("accrued at cap rate = %d, want %d", a2.AccruedCents, share(10000, maxL1RateBps(ctx)))
 	}
 }
 
@@ -498,7 +498,7 @@ func TestAccrualConvergesAtMaxRate(t *testing.T) {
 	attributeOK(t, app, "orgB", codeA) // B←A
 	attributeOK(t, app, "orgD", codeC) // D←C (D is a plain spender: upline C,B,A)
 	// Push L1 to the cap so the whole schedule equals exactly 100% of the margin.
-	if st, _ := req(t, app, http.MethodPost, "/v1/admin/affiliate/"+idC+"/rate", "admin", true, map[string]any{"rateBps": maxL1RateBps()}); st != http.StatusOK {
+	if st, _ := req(t, app, http.MethodPost, "/v1/admin/affiliate/"+idC+"/rate", "admin", true, map[string]any{"rateBps": maxL1RateBps(ctx)}); st != http.StatusOK {
 		t.Fatalf("set L1 rate to cap failed")
 	}
 

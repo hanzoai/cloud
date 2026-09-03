@@ -503,6 +503,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	svc := &cloud.Service[state]{Base: b, State: state{client: c}}
 	routes(app, svc)
 	exposeHold()
+	exposeValue()
 	log.Info("flags engine ready", "engine", "hanzo-flags", "ttlSeconds", int(c.ttl.Seconds()), "switches", len(Defs()))
 	return nil
 }

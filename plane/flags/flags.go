@@ -31,6 +31,7 @@ const App = "flags"
 // plane_registry_test.go.
 var Ops = []string{
 	plane.FlagsHold,
+	plane.FlagsValue,
 }
 
 // FlagsHold whether the caller's org holds one flag.
@@ -38,4 +39,11 @@ var Ops = []string{
 // Calls plane.FlagsHold on flags over the peer plane.
 func FlagsHold(ctx context.Context, in *plane.FlagIn) (*plane.Flag, error) {
 	return plane.Ask[plane.FlagIn, plane.Flag](ctx, App, plane.FlagsHold, in)
+}
+
+// FlagsValue what an operator has set one flag to.
+//
+// Calls plane.FlagsValue on flags over the peer plane.
+func FlagsValue(ctx context.Context, in *plane.FlagValueIn) (*plane.FlagValue, error) {
+	return plane.Ask[plane.FlagValueIn, plane.FlagValue](ctx, App, plane.FlagsValue, in)
 }

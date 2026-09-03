@@ -14,7 +14,6 @@
 package iam
 
 import (
-	"github.com/hanzoai/cloud"
 	"context"
 
 	"github.com/hanzoai/cloud/plane"
@@ -66,7 +65,7 @@ func IAMFederated(ctx context.Context, in *plane.FederatedIn) (*plane.Federated,
 // IAMGrant record that a user may act in a scope of the caller's org.
 //
 // Calls plane.IAMGrant on iam over the peer plane.
-func IAMGrant(ctx context.Context, in *plane.GrantIn) (*cloud.Unit, error) {
+func IAMGrant(ctx context.Context, in *plane.GrantIn) (*struct{}, error) {
 	return plane.Ask[plane.GrantIn, struct{}](ctx, App, plane.IAMGrant, in)
 }
 

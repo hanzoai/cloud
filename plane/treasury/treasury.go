@@ -16,6 +16,7 @@ package treasury
 import (
 	"context"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -36,6 +37,6 @@ var Ops = []string{
 // TreasuryReserve reserve fund balance.
 //
 // Calls plane.TreasuryReserve on treasury over the peer plane.
-func TreasuryReserve(ctx context.Context) (*plane.Reserved, error) {
-	return plane.Ask[struct{}, plane.Reserved](ctx, App, plane.TreasuryReserve, &struct{}{})
+func TreasuryReserve(ctx context.Context, in *cloud.Unit) (*plane.Reserved, error) {
+	return plane.Ask[cloud.Unit, plane.Reserved](ctx, App, plane.TreasuryReserve, in)
 }

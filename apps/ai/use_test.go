@@ -41,7 +41,7 @@ func TestMoneyCrossesTheProcessBoundaryOverThePlaneNotHTTP(t *testing.T) {
 		}
 	}
 
-	meter, err := os.ReadFile("../metering/metering.go")
+	meter, err := os.ReadFile("../../metering/metering.go")
 	if err != nil {
 		t.Fatalf("read metering.go: %v", err)
 	}

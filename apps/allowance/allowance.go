@@ -71,9 +71,11 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/tenant"
 	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/tenant"
 	"github.com/zap-proto/zip"
+
+	flagsplane "github.com/hanzoai/cloud/plane/flags"
 )
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
@@ -401,14 +403,14 @@ func (s *service) limits(ctx context.Context, subject, org string) (tier string,
 	// The public lane has no plan to look up and no lookup that could fail, so it
 	// never asks. The org is minted by the identity boundary and never by a client.
 	if org == tenant.Public {
-		return tenant.Public, int64(flags.Int(rateKey(tenant.Public))), s.floor()
+		return tenant.Public, int64(flagsplane.Int(ctx, rateKey(tenant.Public), rateFor(tenant.Public))), s.floor(ctx)
 	}
 	if s.tier == nil {
-		return "", int64(flags.Int(rateKey(""))), s.floor()
+		return "", int64(flagsplane.Int(ctx, rateKey(""), rateFor(""))), s.floor(ctx)
 	}
 	name, err := s.tier(ctx, subject, org)
 	if err != nil || name == "" {
-		return "", int64(flags.Int(rateKey(""))), s.floor()
+		return "", int64(flagsplane.Int(ctx, rateKey(""), rateFor(""))), s.floor(ctx)
 	}
 	// A tier this app has never had an opinion about is not an opinion. seed is that
 	// list, and a name outside it means commerce's taxonomy has grown past ours —
@@ -416,15 +418,17 @@ func (s *service) limits(ctx context.Context, subject, org string) (tier string,
 	// strict one. It is also loud: the operator sees the cap and registers the
 	// switch, rather than discovering a new tier was free all along.
 	if _, decided := seed[name]; !decided {
-		return name, int64(flags.Int(rateKey(name))), s.floor()
+		return name, int64(flagsplane.Int(ctx, rateKey(name), rateFor(name))), s.floor(ctx)
 	}
 	// 0 in either is an admin's explicit unbounded for that window.
-	return name, int64(flags.Int(rateKey(name))), int64(flags.Int(limitKey(name)))
+	return name, int64(flagsplane.Int(ctx, rateKey(name), rateFor(name))), int64(flagsplane.Int(ctx, limitKey(name), seed[name]))
 }
 
 // floor is the ceiling for a caller nobody could name: the switch, read through the
 // one rule that keeps it a ceiling.
-func (s *service) floor() int64 { return ceiling(flags.Int(publicKey)) }
+func (s *service) floor(ctx context.Context) int64 {
+	return ceiling(flagsplane.Int(ctx, publicKey, strangers))
+}
 
 // ceiling turns a switch setting into a limit for an unnamed caller. It is TOTAL and
 // never answers zero: an operator may tune the number in either direction, and a
