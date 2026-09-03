@@ -30,16 +30,16 @@ import (
 // which process the request reached. The domain argument is empty because the
 // router has already published its --domain flag as CLOUD_DOMAIN (main.go,
 // forward) before anything reads it.
-// projectsApp is the app that owns the project store — the one this router asks
+// projectApp is the app that owns the project store — the one this router asks
 // to resolve a site, and therefore the one that must be running before either the
 // site edge or the console can read a release. Named ONCE: a process name spelled
 // at each call site is a chance to wake the wrong one, and the console's start
 // (main.go) and this resolver's dial have to mean the same process or neither
 // works.
-const projectsApp = "projects"
+const projectApp = "project"
 
 func mountSites(app *zip.App) {
-	// The project store belongs to `projects`, in another process, so resolution
+	// The project store belongs to `project`, in another process, so resolution
 	// is a plane call.
 	sites.SetFallbackResolver(planeResolver{})
 
@@ -63,15 +63,15 @@ func (planeResolver) ResolveOrg(ctx context.Context, org, slug string) (sites.Si
 }
 
 func ask(ctx context.Context, op string, in *sites.PlaneSiteIn) (sites.Site, bool, error) {
-	c, err := zip.DialApp(projectsApp)
+	c, err := zip.DialApp(projectApp)
 	if err != nil {
-		return sites.Site{}, false, fmt.Errorf("sites: dial %s: %w", projectsApp, err)
+		return sites.Site{}, false, fmt.Errorf("sites: dial %s: %w", projectApp, err)
 	}
 	defer func() { _ = c.Close() }()
 
 	out, err := zip.Call[sites.PlaneSiteIn, sites.PlaneSite](ctx, c, op, in)
 	if err != nil {
-		return sites.Site{}, false, fmt.Errorf("sites: %s %s: %w", projectsApp, op, err)
+		return sites.Site{}, false, fmt.Errorf("sites: %s %s: %w", projectApp, op, err)
 	}
 	s, ok := sites.SiteOf(out)
 	return s, ok, nil

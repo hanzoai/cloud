@@ -400,7 +400,7 @@ func run(addr, zapAddr string) error {
 
 	// The console's BYTES are a published site release now, not an embed, so the
 	// app that owns the release pointer has to be running before the host can
-	// read one. `projects` is lazy — its trigger is a request reaching /v1/project,
+	// read one. `project` is lazy — its trigger is a request reaching /v1/project,
 	// and none has arrived — and the resolver the edge just installed dials its
 	// socket directly rather than waking it. Without this, the host's first act
 	// after mounting is to ask a process that does not exist. Start is idempotent
@@ -423,8 +423,8 @@ func run(addr, zapAddr string) error {
 	//     it takes to die rather than in the timeout. An unknown app name fails
 	//     immediately ("no plugin named"). A boot that blocks forever on a socket
 	//     is worse than one that refuses with a reason; this one refuses.
-	if _, err := app.Start(projectsApp); err != nil {
-		return fmt.Errorf("console: %s owns the console release and would not start: %w", projectsApp, err)
+	if _, err := app.Start(projectApp); err != nil {
+		return fmt.Errorf("console: %s owns the console release and would not start: %w", projectApp, err)
 	}
 
 	// REQUIRED here, unlike in a per-app child (cloud.Listen explains why a child
