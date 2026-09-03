@@ -264,6 +264,13 @@ const (
 	// out" to a caller whose CR was never touched.
 	PlatformRelease = "platform_release"
 
+	// PlatformBuild builds one image from a repository at a commit — the native
+	// pipeline's per-image ask, from git to the builder over the plane. It
+	// replaced an HTTP call from this process to its own /v1/platform/runner
+	// carrying a shared PLATFORM_BUILD_CALLBACK_TOKEN: a hop across the edge to
+	// reach a builder this binary already carries, proven by a secret.
+	PlatformBuild = "platform_build"
+
 	PlatformFleet   = "platform_fleet"
 	TreasuryReserve = "treasury_reserve"
 
@@ -2482,6 +2489,33 @@ type PushIn struct {
 type Built struct {
 	Repo   string `json:"repo"`
 	Builds int    `json:"builds"`
+}
+
+// BuildIn is one image to build from a repository at a commit — what a native
+// pipeline (`.hanzo/workflows/*.yml` images) asks platform for, one call per
+// image. No Org: the tenant is the caller's, stated through cloud.For by the
+// git app that saw the push land, because an ask that could name an org could
+// build into another tenant's registry.
+type BuildIn struct {
+	Repo         string            `json:"repo"`
+	SHA          string            `json:"sha"`
+	Image        string            `json:"image"`
+	Branch       string            `json:"branch,omitempty"`
+	Ref          string            `json:"ref,omitempty"`
+	Dockerfile   string            `json:"dockerfile,omitempty"`
+	Context      string            `json:"context,omitempty"`
+	DockerTarget string            `json:"dockerTarget,omitempty"`
+	OS           string            `json:"os,omitempty"`
+	Arch         string            `json:"arch,omitempty"`
+	Args         map[string]string `json:"args,omitempty"`
+}
+
+// Queued is a build platform accepted.
+type Queued struct {
+	BuildJobID string `json:"buildJobId"`
+	Status     string `json:"status"`
+	RunnerPool string `json:"runnerPool"`
+	Image      string `json:"image,omitempty"`
 }
 
 // ReleaseIn is a proven, clean-semver image ready to roll onto its Service CR.

@@ -14,8 +14,6 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-const testBuildTok = "s3cr3t-build-callback-token"
-
 // runnerApp mounts the platform routes over a ready fake cluster so a valid
 // /v1/platform/runner request reaches launchDirectBuild and returns 202.
 func runnerApp(t *testing.T) *zip.App {
@@ -69,13 +67,12 @@ func postRunnerWith(t *testing.T, app *zip.App, hdrs map[string]string, auth str
 }
 
 // postRunner POSTs /v1/platform/runner with an optional Bearer token.
-func postRunner(t *testing.T, app *zip.App, token string, body any) (int, []byte) {
+// postRunner builds as the platform itself — a SuperAdmin at home in the admin
+// org — which is the identity the fabric's own release lane holds. It stands
+// where a shared build token used to.
+func postRunner(t *testing.T, app *zip.App, body any) (int, []byte) {
 	t.Helper()
-	var auth string
-	if token != "" {
-		auth = "Bearer " + token
-	}
-	return postRunnerWith(t, app, nil, auth, body)
+	return postRunnerWith(t, app, identity("platform", "hanzo", false, true), "", body)
 }
 
 // postRunnerAs POSTs /v1/platform/runner as a VALIDATED IAM principal: it sets the
@@ -119,17 +116,14 @@ func appIdentity(app, org string) map[string]string {
 	return map[string]string{"X-User-Id": org + "/" + app, "X-Org-Id": org, "X-User-IsApp": "true"}
 }
 
-// No shared token configured AND no validated principal ⇒ fail closed (403).
-// (The endpoint is no longer 503-"unavailable" when the shared token is unset,
-// because the IAM path is a valid credential; an unauthenticated caller is simply
-// refused, never served, and an empty secret can never match an empty bearer.)
-func TestRunnerBuild_NoTokenConfigured(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
+// No validated principal ⇒ fail closed (403). There is no shared token to present
+// instead: an unauthenticated caller is simply refused, never served.
+func TestRunnerBuild_NoIdentity(t *testing.T) {
 	app := runnerApp(t)
-	code, _ := postRunner(t, app, "anything", map[string]any{
+	code, _ := postRunnerWith(t, app, nil, "", map[string]any{
 		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/app:v1"})
 	if code != http.StatusForbidden {
-		t.Fatalf("no token configured, no identity: want 403, got %d", code)
+		t.Fatalf("no identity: want 403, got %d", code)
 	}
 }
 
@@ -138,7 +132,6 @@ func TestRunnerBuild_NoTokenConfigured(t *testing.T) {
 // This is the `hanzo build` path. The image namespace (hanzoai) matches the
 // caller's org (hanzo), so H1's registry-org binding admits it.
 func TestRunnerBuild_IAMAdminLaunches(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, body := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, false, map[string]any{
 		"repo": "https://github.com/hanzoai/app", "sha": "00971263b1c4e5f60718293a4b5c6d7e8f90a1b2",
@@ -160,7 +153,6 @@ func TestRunnerBuild_IAMAdminLaunches(t *testing.T) {
 // even though the image is an owned registry and the caller is a valid org-admin.
 // Identity does not widen the registry boundary beyond the caller's own org.
 func TestRunnerBuild_IAMCrossOrgImageRejected(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, _ := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, false, map[string]any{
 		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b1c4e5f60718293a4b5c6d7e8f90a1b2",
@@ -174,7 +166,6 @@ func TestRunnerBuild_IAMCrossOrgImageRejected(t *testing.T) {
 // Proves the binding is per-org, not a hanzo-only allow: every registry brand's
 // admin can push its own namespace, and only its own.
 func TestRunnerBuild_IAMSameOrgLuxLaunches(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, body := postRunnerAs(t, app, "lx-uuid", "lux", true, false, map[string]any{
 		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b1c4e5f60718293a4b5c6d7e8f90a1b2",
@@ -189,7 +180,6 @@ func TestRunnerBuild_IAMSameOrgLuxLaunches(t *testing.T) {
 // production SuperAdmin is disabled via unset CLOUD_ADMIN_ORG; this proves the
 // intended cross-org exception is wired for when it is enabled.)
 func TestRunnerBuild_SuperAdminCrossOrgLaunches(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, body := postRunnerAs(t, app, "root-uuid", "hanzo", true, true, map[string]any{
 		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b1c4e5f60718293a4b5c6d7e8f90a1b2",
@@ -202,7 +192,6 @@ func TestRunnerBuild_SuperAdminCrossOrgLaunches(t *testing.T) {
 // An org whose brand owns NO registry namespace (e.g. adnexus) is refused on the
 // IAM path for ANY owned registry ⇒ 403 — nobody pushes to a brand they do not own.
 func TestRunnerBuild_IAMOrglessRegistryRejected(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, _ := postRunnerAs(t, app, "ad-uuid", "adnexus", true, false, map[string]any{
 		"repo": "https://github.com/hanzoai/app", "image": "ghcr.io/hanzoai/app-web:v1"})
@@ -213,10 +202,9 @@ func TestRunnerBuild_IAMOrglessRegistryRejected(t *testing.T) {
 
 // M1 — an `image` carrying a comma injects a BuildKit `--output` exporter attribute
 // (name=…,registry.insecure=true). It must be rejected as a malformed ref ⇒ 400,
-// BEFORE any registry decision reads it. Uses the machine token so the check is not
+// BEFORE any registry decision reads it. Builds as the platform so the check is not
 // masked by an earlier identity/registry 403.
 func TestRunnerBuild_ImageInjectionRejected(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 	app := runnerApp(t)
 	for _, bad := range []string{
 		"ghcr.io/hanzoai/x,registry.insecure=true",
@@ -224,7 +212,7 @@ func TestRunnerBuild_ImageInjectionRejected(t *testing.T) {
 		"ghcr.io/hanzoai/x\",push=true",
 		"ghcr.io/hanzoai/x:tag\nname=evil",
 	} {
-		code, _ := postRunner(t, app, testBuildTok, map[string]any{
+		code, _ := postRunner(t, app, map[string]any{
 			"repo": "https://github.com/hanzoai/cloud", "image": bad})
 		if code != http.StatusBadRequest {
 			t.Fatalf("injected image %q: want 400, got %d", bad, code)
@@ -235,7 +223,6 @@ func TestRunnerBuild_ImageInjectionRejected(t *testing.T) {
 // A validated IAM principal who is NOT an admin (plain member) ⇒ 403. A login is
 // necessary but not sufficient; the build is privileged and requires the admin bit.
 func TestRunnerBuild_IAMNonAdminRejected(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, _ := postRunnerAs(t, app, "member-uuid", "hanzo", false, false, map[string]any{
 		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/app:v1"})
@@ -248,7 +235,6 @@ func TestRunnerBuild_IAMNonAdminRejected(t *testing.T) {
 // bearer-less forge) ⇒ 403. principal.Validated gates on X-User-Id, which only the
 // identity boundary sets from a verified credential.
 func TestRunnerBuild_IAMForgedNoUserRejected(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, _ := postRunnerAs(t, app, "", "hanzo", true, true, map[string]any{
 		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/app:v1"})
@@ -260,7 +246,6 @@ func TestRunnerBuild_IAMForgedNoUserRejected(t *testing.T) {
 // The owned-registry allowlist still bounds the IAM path: an admin cannot push to
 // a foreign registry ⇒ 403 (identity does not widen the image boundary).
 func TestRunnerBuild_IAMAdminDisallowedImage(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, _ := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, false, map[string]any{
 		"repo": "https://github.com/hanzoai/cloud", "image": "docker.io/evil/x:latest"})
@@ -279,7 +264,6 @@ func TestRunnerBuild_IAMAdminDisallowedImage(t *testing.T) {
 // means every later reader has to remember to check it. Deleting the field leaves
 // nothing to check and nothing to forget.
 func TestRunnerBuild_StatedOrgNamesNothing(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app, store := runnerAppStore(t)
 	code, body := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, false, map[string]any{
 		"repo": "https://github.com/hanzoai/app", "image": "ghcr.io/hanzoai/app-web:v1",
@@ -310,7 +294,6 @@ func TestRunnerBuild_StatedOrgNamesNothing(t *testing.T) {
 // non-interactive credential can answer, and the only thing left that reached this
 // endpoint was the fabric's shared token, which names no org at all.
 func TestRunnerBuild_AppIdentityBuildsItsOwnOrg(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app, store := runnerAppStore(t)
 	code, body := postRunnerWith(t, app, appIdentity("hanzo-kms", "hanzo"), "", map[string]any{
 		"repo": "https://github.com/hanzoai/app", "sha": "00971263b1c4e5f60718293a4b5c6d7e8f90a1b2",
@@ -333,7 +316,6 @@ func TestRunnerBuild_AppIdentityBuildsItsOwnOrg(t *testing.T) {
 // wrong reason (an app identity used to be refused at the endpoint as "not an admin",
 // before any registry decision was reached).
 func TestRunnerBuild_AppIdentityCannotCrossBrands(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, body := postRunnerWith(t, app, appIdentity("hanzo-kms", "hanzo"), "", map[string]any{
 		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b1c4e5f60718293a4b5c6d7e8f90a1b2",
@@ -350,7 +332,6 @@ func TestRunnerBuild_AppIdentityCannotCrossBrands(t *testing.T) {
 // as the image lane confines it to that org's registry namespace — one rule, two
 // outputs.
 func TestRunnerBuild_AppIdentityArtifactConfined(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	recipe := func(repo string) map[string]any {
 		return map[string]any{"repo": repo, "sha": "00971263b1c4e5f60718293a4b5c6d7e8f90a1b2",
@@ -367,68 +348,28 @@ func TestRunnerBuild_AppIdentityArtifactConfined(t *testing.T) {
 	}
 }
 
-// AN AMBIENT SHARED SECRET DOES NOT PROMOTE AN ORG IDENTITY.
-//
-// A caller that names an organization is attributed to that organization and
-// confined to it, whether or not the fabric's token also rode along. Reading the
-// token FIRST meant the org the caller proved was discarded in favour of a secret
-// that proves no org — so a request with both got fabric-wide latitude across every
-// brand's registry, and nothing recorded whose build it was.
-//
-// The two arrive together through cloud's own boundary because they are read from
-// different places: the identity comes from whichever credential callerToken
-// resolves (X-Authorization, a cookie), while the build token is compared against
-// the raw Authorization value — which stripBearer accepts with or without the
-// scheme, so `Authorization: <token>` is not a bearer for the first reader and is
-// the token for the second.
-func TestRunnerBuild_AmbientTokenDoesNotPromoteOrgIdentity(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
-	app := runnerApp(t)
-	code, body := postRunnerWith(t, app, identity("e7d7-uuid", "hanzo", true, false), testBuildTok,
-		map[string]any{"repo": "https://github.com/luxfi/wallet", "image": "ghcr.io/luxfi/wallet-web:v1"})
-	if code != http.StatusForbidden {
-		t.Fatalf("hanzo identity + ambient fabric token → ghcr.io/luxfi: want 403, got %d (%s)", code, body)
-	}
-	if !bytes.Contains(body, []byte("must match your organization")) {
-		t.Fatalf("refused, but not by the org binding: %s", body)
-	}
-}
-
-// THE FABRIC TOKEN KEEPS THE LATITUDE IT EXISTS FOR. It names no organization, so
-// there is no org to confine it to, and it stays bounded by the owned-registry
+// THE PLATFORM KEEPS THE LATITUDE ITS RELEASE LANE NEEDS. A SuperAdmin is not
+// confined to one org's registry namespace and stays bounded by the owned-registry
 // allowlist alone — which is how cloud's own release publishes across brands.
-// Pinned so that narrowing the token path is a test failure and not a surprise.
-func TestRunnerBuild_FabricTokenSpansOwnedRegistries(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
+// Pinned so that narrowing it is a test failure and not a surprise.
+func TestRunnerBuild_SuperAdminSpansOwnedRegistries(t *testing.T) {
 	app := runnerApp(t)
 	// One image per owned namespace, and NONE of them the cloud image: cloud is
 	// versioned by its own release lane and refused at this endpoint regardless of
 	// who asks, so naming it here would test the exclusion rather than the span.
 	for _, image := range []string{"ghcr.io/hanzoai/app:v1", "ghcr.io/luxfi/node:v1", "ghcr.io/zooai/app:v1"} {
-		code, body := postRunner(t, app, testBuildTok, map[string]any{
+		code, body := postRunner(t, app, map[string]any{
 			"repo": "https://github.com/hanzoai/cloud", "image": image})
 		if code != http.StatusAccepted {
-			t.Fatalf("fabric token → %s: want 202, got %d (%s)", image, code, body)
+			t.Fatalf("platform → %s: want 202, got %d (%s)", image, code, body)
 		}
-	}
-}
-
-// wrong token ⇒ 403.
-func TestRunnerBuild_BadToken(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
-	app := runnerApp(t)
-	code, _ := postRunner(t, app, "wrong", map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/app:v1"})
-	if code != http.StatusForbidden {
-		t.Fatalf("bad token: want 403, got %d", code)
 	}
 }
 
 // repo/image required ⇒ 400.
 func TestRunnerBuild_MissingFields(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 	app := runnerApp(t)
-	code, _ := postRunner(t, app, testBuildTok, map[string]any{"repo": "https://github.com/hanzoai/cloud"})
+	code, _ := postRunner(t, app, map[string]any{"repo": "https://github.com/hanzoai/cloud"})
 	if code != http.StatusBadRequest {
 		t.Fatalf("missing image: want 400, got %d", code)
 	}
@@ -436,9 +377,8 @@ func TestRunnerBuild_MissingFields(t *testing.T) {
 
 // image outside the owned registries ⇒ 403 (a leaked token can't push anywhere).
 func TestRunnerBuild_DisallowedImage(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 	app := runnerApp(t)
-	code, _ := postRunner(t, app, testBuildTok, map[string]any{
+	code, _ := postRunner(t, app, map[string]any{
 		"repo": "https://github.com/hanzoai/cloud", "image": "docker.io/evil/x:latest"})
 	if code != http.StatusForbidden {
 		t.Fatalf("disallowed image: want 403, got %d", code)
@@ -447,9 +387,8 @@ func TestRunnerBuild_DisallowedImage(t *testing.T) {
 
 // valid token + repo + owned image ⇒ 202 with a build job id.
 func TestRunnerBuild_Launches(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 	app := runnerApp(t)
-	code, body := postRunner(t, app, testBuildTok, map[string]any{
+	code, body := postRunner(t, app, map[string]any{
 		"repo": "https://github.com/hanzoai/cloud", "sha": "main", "image": "ghcr.io/hanzoai/app:v1.2.3"})
 	if code != http.StatusAccepted {
 		t.Fatalf("launch: want 202, got %d (%s)", code, body)
@@ -460,26 +399,6 @@ func TestRunnerBuild_Launches(t *testing.T) {
 	}
 	if resp.BuildJobID == "" || resp.Image != "ghcr.io/hanzoai/app:v1.2.3" || resp.Status != "queued" {
 		t.Fatalf("unexpected resp: %+v", resp)
-	}
-}
-
-// THE SHARED TOKEN MAY ENQUEUE A BUILD; IT MAY NOT CUT A RELEASE.
-//
-// PLATFORM_BUILD_CALLBACK_TOKEN is a bearer secret with no identity behind it: no
-// membership, no expiry, nothing to revoke but a rotation that restarts every
-// holder, and nothing in an audit log but "the token". It is a second auth system
-// standing beside IAM.
-//
-// It stays for the ordinary build path, because git-push-to-deploy runs on it, and
-// that path is the whole of what it may do.
-func TestSharedTokenBuildsAndOnlyBuilds(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "s3kr3t-fabric-token")
-	app := runnerApp(t)
-
-	enqueue, body := postRunner(t, app, "s3kr3t-fabric-token", map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/app:v1"})
-	if enqueue == http.StatusForbidden {
-		t.Fatalf("the fabric token lost the ordinary build path it exists for: %d (%s)", enqueue, body)
 	}
 }
 

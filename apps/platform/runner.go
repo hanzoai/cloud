@@ -19,7 +19,6 @@ package platform
 import (
 	"cmp"
 	"context"
-	"crypto/subtle"
 	"net/http"
 	"slices"
 	"strings"
@@ -27,7 +26,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
 
@@ -261,36 +259,9 @@ func repoOwnerInOrg(repoURL, org string) bool {
 	return false
 }
 
-// stripBearer returns the token from an "Authorization: Bearer <tok>" header.
-func stripBearer(h string) string {
-	h = strings.TrimSpace(h)
-	if len(h) >= 7 && strings.EqualFold(h[:7], "bearer ") {
-		return strings.TrimSpace(h[7:])
-	}
-	return h
-}
-
-// runnerTokenOK reports whether the request carries the shared build-callback
-// token, compared in constant time. An UNSET server secret can never match (a
-// zero-length secret would otherwise ConstantTimeCompare-equal a zero-length
-// header) — the token path simply does not authorize, and the endpoint stays
-// available via the IAM path rather than ever accepting an empty credential.
-func runnerTokenOK(c *zip.Ctx) bool {
-	want := environ.Or("PLATFORM_BUILD_CALLBACK_TOKEN", "")
-	if want == "" {
-		return false
-	}
-	got := stripBearer(c.Header("Authorization"))
-	if got == "" {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
-}
-
 // runnerOrg resolves the ORGANIZATION a build is authorized for — read off the
 // caller's credential and nothing the caller stated. It answers "" when the request
-// carries no org-scoped identity at all, which is the only case the shared
-// build-callback token has to cover.
+// carries no org-scoped identity at all, and such a request is refused.
 //
 // It reads ONLY the principal.* accessors — the output of the ONE identity verifier
 // — which read authority headers SanitizeIdentity strips on ingress and re-mints
@@ -360,7 +331,6 @@ func runnerOrg(c *zip.Ctx) string {
 // any authorization decision reads it, so a crafted ref cannot smuggle a
 // build-exporter attribute past the check.
 func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuildResp, error) {
-	s := o.s
 	// The request itself, not a tenant: this route resolves the organization from
 	// the credential below and accepts a credential that names none, so asking the
 	// client for a tenant here would refuse the fabric's own build before the route
@@ -369,23 +339,24 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 	if err != nil {
 		return nil, err
 	}
-	req := *body
-	// The organization this build belongs to, read off the credential (runnerOrg).
-	// Empty means the caller named none, and the shared build-callback token is then
-	// the only thing that can authorize the build.
-	//
-	// THE CREDENTIAL THAT NAMES AN ORG IS READ FIRST, and that order is the rule
-	// rather than a preference: a caller presenting a real organization is attributed
-	// to it and confined to it, whether or not an ambient shared secret also rode
-	// along. Reading the token first discarded the org the caller had proved in
-	// favour of a secret that proves none — so a request carrying both got
-	// fabric-wide latitude across every brand's registry, and the build recorded
-	// nobody. An ambient secret must not be able to promote an identity out of its
-	// own tenant.
+	// The organization this build belongs to, read off the credential and nothing
+	// the caller stated. A caller that names none is refused: there used to be a
+	// shared build-callback token that authorized an org-less build for the fabric
+	// itself, and it was a second auth system standing beside IAM — no membership,
+	// no expiry, nothing in an audit log but "the token". The fabric's own builds
+	// arrive over the plane now (PlatformBuild), where the caller is stated.
 	org := runnerOrg(c)
-	if org == "" && !runnerTokenOK(c) {
-		return nil, zip.ErrForbidden("invalid build token")
+	if org == "" {
+		return nil, zip.ErrForbidden("build requires an org-scoped identity")
 	}
+	return build(o.s, ctx, org, principal.IsSuperAdmin(c), *body)
+}
+
+// build launches one image build for org. sudo says whether the caller is a
+// platform SuperAdmin, the one identity not confined to its own registry
+// namespace. The plane path passes false: a caller that stated its org through
+// cloud.For is that org and nothing more.
+func build(s *cloud.Service[state], ctx context.Context, org string, sudo bool, req runnerBuildReq) (*runnerBuildResp, error) {
 
 	req.Repo = strings.TrimSpace(req.Repo)
 	req.Image = strings.TrimSpace(req.Image)
@@ -402,7 +373,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 	// honours, so there is one.
 	ref := cmp.Or(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
 	if len(req.Binaries) > 0 {
-		return runnerArtifactBuild(s, ctx, c, req, ref, org)
+		return runnerArtifactBuild(s, ctx, sudo, req, ref, org)
 	}
 	if req.Repo == "" || req.Image == "" {
 		return nil, zip.ErrBadRequest("repo and image are required")
@@ -429,7 +400,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 	// A real platform SuperAdmin may cross (disabled in prod). The shared token
 	// names no organization, so there is none to confine it to — that, and not a
 	// wider allowlist, is the whole of its extra latitude.
-	if org != "" && !principal.IsSuperAdmin(c) && !imageInOrgRegistry(req.Image, org) {
+	if org != "" && !sudo && !imageInOrgRegistry(req.Image, org) {
 		return nil, zip.ErrForbidden("image registry-org must match your organization")
 	}
 
@@ -462,7 +433,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 // its own: the repo URL (the same allowlisted-git-host validator the image lane
 // uses), the recipe (binarySpec.validate), and the forge owner, which must be one
 // that organization owns.
-func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, req runnerBuildReq, ref, org string) (*runnerBuildResp, error) {
+func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, sudo bool, req runnerBuildReq, ref, org string) (*runnerBuildResp, error) {
 	if strings.TrimSpace(req.Image) != "" {
 		return nil, zip.ErrBadRequest("a build produces binaries or an image, never both")
 	}
@@ -495,7 +466,7 @@ func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ct
 	// Same H1 confinement the image lane applies to a registry namespace: an
 	// organization publishes artifacts only for the forge owner it owns. The shared
 	// token names no organization, so there is none to confine it to.
-	if org != "" && !principal.IsSuperAdmin(c) && !repoOwnerInOrg(repoURL, org) {
+	if org != "" && !sudo && !repoOwnerInOrg(repoURL, org) {
 		return nil, zip.ErrForbidden("repo owner must match your organization")
 	}
 

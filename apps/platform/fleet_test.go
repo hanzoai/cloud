@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hanzoai/cloud/k8s"
 	"github.com/hanzoai/cloud/internal/cluster"
+	"github.com/hanzoai/cloud/k8s"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"

@@ -1,19 +1,17 @@
 package git
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io/fs"
-	"net/http"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/contract"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // build_on_push.go is the NATIVE CI/CD orchestrator: a git-lifecycle reactor that
@@ -52,36 +50,6 @@ const (
 	// turned on by setting this on the git App CR env, exactly like the sync
 	// scheduler's CLOUD_SYNC_RECONCILE_INTERVAL gate.
 	nativeCICDEnabledEnv = "CLOUD_NATIVE_CICD_ENABLED"
-
-	// enqueueTokenEnv is the machine-to-machine bearer for platform's direct build
-	// webhook — the SAME credential name `/v1/runner` and `/v1/build-callback`
-	// check (PLATFORM_BUILD_CALLBACK_TOKEN), KMS-sourced into the CR env, never
-	// hardcoded. Absent ⇒ the orchestrator stays dormant (no unauthenticated POST).
-	enqueueTokenEnv = "PLATFORM_BUILD_CALLBACK_TOKEN"
-
-	// enqueueURLEnv overrides the direct-build endpoint; defaults to CLOUD'S OWN.
-	//
-	// It pointed at https://platform.hanzo.ai/v1/runner — a DIFFERENT deployment,
-	// and one that names a different credential: cloud's runner refuses with
-	// "invalid build token" and that one with "Invalid enqueue token". This holds
-	// PLATFORM_BUILD_CALLBACK_TOKEN, which is the token CLOUD checks
-	// (apps/platform/runner.go runnerTokenOK) — measured against production, that
-	// token is accepted at /v1/platform/runner and rejected at the other address.
-	// So the hop crossed a service boundary to reach the SAME build muscle this
-	// binary already carries (apps/platform launchDirectBuild), presenting a
-	// credential the far side does not use.
-	//
-	// One capability, one owner: apps/platform builds, and the address is the one
-	// it registers. `hanzo.yml`'s deploy block is still evaluated there, so nothing
-	// about WHERE a build rolls moves with this.
-	//
-	// STILL AN HTTP HOP, and that is the remaining defect rather than the fix: a
-	// call from this process to its own edge is the re-entry apps/commerce's
-	// transport documents. The destination is a plane op beside plane.PlatformPush
-	// — same shape, taking the image list instead of the push — at which point the
-	// URL and the shared token both go away.
-	enqueueURLEnv     = "CLOUD_NATIVE_CICD_ENQUEUE_URL"
-	defaultEnqueueURL = "http://cloud.hanzo.svc.cluster.local:8000/v1/platform/runner"
 )
 
 // pipeline is the slice of the contract / `.hanzo/workflows/*.yml` schema the
@@ -114,22 +82,6 @@ type pipelineImage struct {
 	Args map[string]string `json:"args"`
 }
 
-// enqueueReq is platform's /v1/runner body (EnqueueBody). Field-for-field the
-// same shape the `hanzoai/ci mode:delegate` step POSTs, so a native-push build and a
-// delegated GitHub-Actions build are byte-identical downstream — one build path.
-type enqueueReq struct {
-	Repo       string            `json:"repo"`  // GitHub owner/repo — BuildKit's clone context
-	SHA        string            `json:"sha"`   // full commit the build pins to
-	Image      string            `json:"image"` // full pushed ref repo:tag (we own the tag)
-	Branch     string            `json:"branch,omitempty"`
-	Ref        string            `json:"ref,omitempty"`
-	Dockerfile string            `json:"dockerfile,omitempty"`
-	Context    string            `json:"context,omitempty"`
-	OS         string            `json:"os,omitempty"`
-	Arch       string            `json:"arch,omitempty"`
-	Args       map[string]string `json:"args,omitempty"`
-}
-
 // nativeCICDEnabled reports whether the orchestrator is armed: the enable flag is
 // truthy AND the enqueue token is present. Both are required — the flag is the
 // operator's intent, the token is the capability; without either the reactor is a
@@ -139,7 +91,7 @@ func nativeCICDEnabled() bool {
 	case "", "0", "off", "false", "no":
 		return false
 	}
-	return environ.Or(enqueueTokenEnv, "") != ""
+	return true
 }
 
 // buildOnPush is the reactor. On a default-branch push that carries a native
@@ -280,29 +232,28 @@ func blobs(ctx context.Context, repo Repository, rev Revision) contract.Read {
 // (KMS-sourced token); the client carries a hard timeout so a slow platform can
 // never wedge the reactor goroutine.
 func enqueuePipeline(ctx context.Context, s *cloud.Service[state], ev cloud.LifecycleEvent, pl *pipeline) (int, int) {
-	token := environ.Or(enqueueTokenEnv, "")
-	url := environ.Or(enqueueURLEnv, "")
-	if url == "" {
-		url = defaultEnqueueURL
-	}
 	ghRepo := githubOwnerFor(ev.Org) + "/" + normalizeName(ev.Repo)
-	client := &http.Client{Timeout: 20 * time.Second}
-
 	enqueued, failed := 0, 0
 	for _, img := range pl.Images {
-		body := enqueueBody(img, ghRepo, ev.Branch, ev.After)
-		if body == nil {
+		in := enqueueBody(img, ghRepo, ev.Branch, ev.After)
+		if in == nil {
 			failed++ // an image with no repo can't be tagged/pushed — skip, count it
 			s.Log.Warn("native ci/cd: image missing repo", "org", ev.Org, "repo", ev.Repo, "image", img.Name)
 			continue
 		}
-		if err := postEnqueue(ctx, client, url, token, body); err != nil {
+		// The builder is this binary's own platform app, reached over the plane
+		// with the org stated once here. This used to be an HTTP call to our own
+		// edge bearing a shared token; the plane carries the caller instead.
+		bctx, cancel := context.WithTimeout(cloud.For(ctx, ev.Org), 20*time.Second)
+		_, err := plane.Ask[plane.BuildIn, plane.Queued](bctx, "platform", plane.PlatformBuild, in)
+		cancel()
+		if err != nil {
 			failed++
-			s.Log.Warn("native ci/cd: enqueue failed", "org", ev.Org, "repo", ev.Repo, "image", body.Image, "err", err)
+			s.Log.Warn("native ci/cd: enqueue failed", "org", ev.Org, "repo", ev.Repo, "image", in.Image, "err", err)
 			continue
 		}
 		enqueued++
-		s.Log.Info("native ci/cd: build queued", "org", ev.Org, "repo", ev.Repo, "image", body.Image)
+		s.Log.Info("native ci/cd: build queued", "org", ev.Org, "repo", ev.Repo, "image", in.Image)
 	}
 	return enqueued, failed
 }
@@ -312,7 +263,7 @@ func enqueuePipeline(ctx context.Context, s *cloud.Service[state], ev cloud.Life
 // mode:delegate path emits, so a native-push build and a delegated build produce the
 // identical ref — the two entry points converge, never fork a tag. Returns nil for an
 // image with no `repo` (nothing to push to).
-func enqueueBody(img pipelineImage, ghRepo, branch, sha string) *enqueueReq {
+func enqueueBody(img pipelineImage, ghRepo, branch, sha string) *plane.BuildIn {
 	repo := strings.TrimSpace(img.Repo)
 	if repo == "" {
 		return nil
@@ -333,7 +284,7 @@ func enqueueBody(img pipelineImage, ghRepo, branch, sha string) *enqueueReq {
 	if suffix != "" {
 		tag += "-" + suffix
 	}
-	return &enqueueReq{
+	return &plane.BuildIn{
 		Repo:       ghRepo,
 		SHA:        sha,
 		Image:      repo + ":" + tag,
@@ -345,32 +296,6 @@ func enqueueBody(img pipelineImage, ghRepo, branch, sha string) *enqueueReq {
 		Arch:       "amd64",
 		Args:       img.Args,
 	}
-}
-
-// postEnqueue POSTs one build request and treats only HTTP 202 (Accepted = queued)
-// as success — matching the ci delegate contract. A 409 (no live runner) or any
-// other code is an error the caller logs. The token is sent as a bearer, never
-// logged.
-func postEnqueue(ctx context.Context, client *http.Client, url, token string, body *enqueueReq) error {
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buf))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("enqueue %s: HTTP %d", body.Image, resp.StatusCode)
-	}
-	return nil
 }
 
 // brandGitHubOwner maps a native brand org to its GitHub owner — the INVERSE of the

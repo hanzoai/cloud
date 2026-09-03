@@ -251,21 +251,18 @@ func TestGithubOwnerFor(t *testing.T) {
 }
 
 func TestNativeCICDEnabled(t *testing.T) {
-	t.Setenv(enqueueTokenEnv, "tok")
 	for _, v := range []string{"", "0", "off", "false", "no"} {
 		t.Setenv(nativeCICDEnabledEnv, v)
 		if nativeCICDEnabled() {
 			t.Fatalf("enable=%q should be dormant", v)
 		}
 	}
+	// The flag is the whole switch. It used to also require a shared build token,
+	// because the enqueue was an HTTP POST to our own edge; it is a plane call now,
+	// and a plane call carries its caller.
 	t.Setenv(nativeCICDEnabledEnv, "true")
 	if !nativeCICDEnabled() {
-		t.Fatal("enable=true + token present should be armed")
-	}
-	// Armed flag but NO token ⇒ still dormant (never an unauthenticated POST).
-	t.Setenv(enqueueTokenEnv, "")
-	if nativeCICDEnabled() {
-		t.Fatal("no token should be dormant even with enable=true")
+		t.Fatal("enable=true should be armed")
 	}
 }
 

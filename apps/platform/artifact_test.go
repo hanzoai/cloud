@@ -19,9 +19,8 @@ import (
 // The artifact lane accepts a hanzo.yml `binaries:` recipe verbatim and answers
 // with the index URL a host will read — the ci lane's layout, byte for byte.
 func TestRunnerArtifact_LaunchesAndIndexes(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 	app := runnerApp(t)
-	code, body := postRunner(t, app, testBuildTok, map[string]any{
+	code, body := postRunner(t, app, map[string]any{
 		"repo": "https://github.com/hanzoai/cloud", "sha": "0abcdef1234567890a1b2c3d4e5f60718293a4bc",
 		"bucket": "plugins",
 		"binaries": []any{
@@ -59,7 +58,6 @@ func TestRunnerArtifact_LaunchesAndIndexes(t *testing.T) {
 // matters because the tag a release claims exists only on the forge and the
 // build Job clones with no credential.
 func TestRunnerArtifact_TheReleaseRecipeIsAccepted(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 
 	// THE FORGE MUST BE A TRUSTED BUILD SOURCE, AND IT IS NOT TRUSTED BY DEFAULT.
 	// hostAllowed trusts `selfGitHost` — brand.Apex(deps.Domain), set at Mount —
@@ -77,7 +75,7 @@ func TestRunnerArtifact_TheReleaseRecipeIsAccepted(t *testing.T) {
 	t.Cleanup(func() { selfGitHost = prev })
 
 	app := runnerApp(t)
-	code, body := postRunner(t, app, testBuildTok, map[string]any{
+	code, body := postRunner(t, app, map[string]any{
 		"repo":   "https://git.hanzo.ai/hanzoai/cloud",
 		"sha":    "0abcdef1234567890a1b2c3d4e5f60718293a4bc",
 		"tag":    "v1.801.533",
@@ -105,13 +103,12 @@ func TestRunnerArtifact_TheReleaseRecipeIsAccepted(t *testing.T) {
 // `plugins` job carries the env var it does. The day the forge is trusted by
 // some other derivation, this test goes red and says so.
 func TestRunnerArtifact_ForgeIsRefusedUntilTheDeploymentTrustsIt(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 	prev := selfGitHost
 	selfGitHost = ""
 	t.Cleanup(func() { selfGitHost = prev })
 
 	app := runnerApp(t)
-	code, body := postRunner(t, app, testBuildTok, map[string]any{
+	code, body := postRunner(t, app, map[string]any{
 		"repo": "https://git.hanzo.ai/hanzoai/cloud",
 		"sha":  "0abcdef1234567890a1b2c3d4e5f60718293a4bc",
 		"tag":  "v1.801.533", "bucket": "plugins",
@@ -127,7 +124,7 @@ func TestRunnerArtifact_ForgeIsRefusedUntilTheDeploymentTrustsIt(t *testing.T) {
 	}
 	// github.com stays trusted with no configuration at all, which is what makes
 	// this a MISSING TRUST rather than a broken endpoint.
-	code, body = postRunner(t, app, testBuildTok, map[string]any{
+	code, body = postRunner(t, app, map[string]any{
 		"repo": "https://github.com/hanzoai/cloud",
 		"sha":  "0abcdef1234567890a1b2c3d4e5f60718293a4bc",
 		"tag":  "v1.801.533", "bucket": "plugins",
@@ -222,7 +219,6 @@ func TestArtifactJobSpec_ToolchainPerEntryAndCredentialOnlyInPublisher(t *testin
 
 // Bad recipes and lane confusion are 400s, not builds.
 func TestRunnerArtifact_Rejects(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 	app := runnerApp(t)
 	for _, tc := range []struct {
 		name string
@@ -240,7 +236,7 @@ func TestRunnerArtifact_Rejects(t *testing.T) {
 		{"unallowlisted forge", map[string]any{"repo": "https://evil.example.com/hanzoai/cloud",
 			"binaries": []any{map[string]any{"name": "x"}}}, http.StatusBadRequest},
 	} {
-		if code, body := postRunner(t, app, testBuildTok, tc.body); code != tc.want {
+		if code, body := postRunner(t, app, tc.body); code != tc.want {
 			t.Errorf("%s: want %d, got %d (%s)", tc.name, tc.want, code, body)
 		}
 	}
@@ -249,7 +245,6 @@ func TestRunnerArtifact_Rejects(t *testing.T) {
 // An IAM org-admin publishes artifacts only for a forge owner its own org owns —
 // the artifact-lane twin of the registry-namespace binding (H1).
 func TestRunnerArtifact_IAMAdminBoundToItsOwnOwner(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	recipe := []any{map[string]any{"name": "x", "main": "./cmd/x"}}
 	if code, body := postRunnerAs(t, app, "u", "hanzo", true, false, map[string]any{

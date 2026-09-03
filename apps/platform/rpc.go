@@ -98,6 +98,34 @@ func exposeFleet(s *cloud.Service[fleetState]) {
 // registration, which is what the push builder registered directly above it does.
 // Shutdown sets that global back to nil, and a captured pointer would go on
 // serving builds out of a torn-down store.
+// exposeBuild publishes the per-image build the native pipeline asks for, over
+// the plane. Same tenancy as exposePush: the org is the caller's, never the
+// input's, and the `mounted` global is read at call time for the same reason.
+func exposeBuild() {
+	zip.Post[plane.BuildIn, plane.Queued](cloud.Plane(), "/platform/build",
+		func(ctx context.Context, in *plane.BuildIn) (*plane.Queued, error) {
+			who := cloud.Who(ctx)
+			if who.Org == "" {
+				return nil, zip.ErrForbidden("platform build: org required")
+			}
+			s := mounted
+			if s == nil {
+				return nil, zip.Errorf(503, "platform build: platform not mounted")
+			}
+			out, err := build(s, ctx, who.Org, false, runnerBuildReq{
+				Repo: in.Repo, SHA: in.SHA, Image: in.Image, Branch: in.Branch, Ref: in.Ref,
+				Dockerfile: in.Dockerfile, Context: in.Context, DockerTarget: in.DockerTarget,
+				OS: in.OS, Arch: in.Arch, Args: in.Args,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &plane.Queued{BuildJobID: out.BuildJobID, Status: out.Status, RunnerPool: out.RunnerPool, Image: out.Image}, nil
+		},
+		zip.WithOperationID(plane.PlatformBuild),
+		zip.WithSummary("Build one image from a repository at a commit"))
+}
+
 func exposePush() {
 	zip.Post[plane.PushIn, plane.Built](cloud.Plane(), "/platform/push",
 		func(ctx context.Context, in *plane.PushIn) (*plane.Built, error) {
