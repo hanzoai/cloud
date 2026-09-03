@@ -52,13 +52,13 @@ type projectsFile struct {
 	Content string `json:"content"`
 }
 
-// genManifest is the JSON object the model must emit for POST /v1/projects/sites.
+// genManifest is the JSON object the model must emit for POST /v1/project/sites.
 type genManifest struct {
 	Name  string         `json:"name"`
 	Files []projectsFile `json:"files"`
 }
 
-// maxBriefBytes caps the natural-language brief accepted by POST /v1/projects/sites.
+// maxBriefBytes caps the natural-language brief accepted by POST /v1/project/sites.
 const maxBriefBytes = 8 << 10 // 8 KiB
 
 // generateSite turns a natural-language brief into a validated, responsive
@@ -71,7 +71,7 @@ const maxBriefBytes = 8 << 10 // 8 KiB
 // org and payer are REQUIRED, and they are the whole reason this signature has them.
 // cloud's inference decorator gates and debits on the request's billing org, and its
 // one exempt path is the empty string: `if org == "" { return nil }` in the gate and a
-// log line instead of a debit in the record. This call named neither, so POST /v1/projects/sites
+// log line instead of a debit in the record. This call named neither, so POST /v1/project/sites
 // charged its flat hosting fee and gave the model tokens away — on the SAME request
 // that had already resolved the payer for that fee. The tokens are the expensive half.
 func generateSite(ctx context.Context, ai cloud.AIClient, model, brief, org, payer string) (name string, st *site, err error) {
@@ -370,7 +370,7 @@ func siteResponse(p Project, d Deployment, st *site) *projectsSiteDeploy {
 // CSP-safe. `slug` and `name` are optional: the model's own title is preferred,
 // and a slug is derived or minted when none is given.
 //
-// It writes into the SAME org-scoped store as /v1/projects — it ensures a
+// It writes into the SAME org-scoped store as /v1/project — it ensures a
 // project (framework `static`) for the resolved slug and records a deployment —
 // so this is a second entry point to one publish pipeline, not a second copy of
 // project state. Ordering is the billing contract: the hosting gate runs BEFORE
@@ -455,7 +455,7 @@ func (o ops) buildSite(ctx context.Context, in *projectsBuildSite) (*projectsSit
 // a hand-built site is exactly as safe and as responsive as a generated one.
 // `slug` and `name` are optional; a slug is derived from the name or minted.
 //
-// It writes into the SAME org-scoped store as /v1/projects, ensuring a project
+// It writes into the SAME org-scoped store as /v1/project, ensuring a project
 // (framework `static`) for the resolved slug and recording a deployment. The
 // hosting gate runs before the upload and the debit lands once, after the site
 // is live — a failed upload is never billed. Answers 503 when object storage is
@@ -517,7 +517,7 @@ func (o ops) deploySite(ctx context.Context, in *projectsDeploySite) (*projectsS
 
 // ListSites returns the org's deployed sites at the pretty URLs they serve at.
 //
-// It reads the SAME org-scoped store as /v1/projects and keeps only the projects
+// It reads the SAME org-scoped store as /v1/project and keeps only the projects
 // that are actually `live`, so a draft or a failed build is not advertised as a
 // site.
 //
@@ -638,8 +638,8 @@ func ensureProject(s *cloud.Service[state], ctx context.Context, org, slug, name
 		ID: id, Org: org, Slug: slug, Name: name, Framework: "static",
 		Status: "draft", Bucket: s.State.blob.bucket, CreatedAt: now, UpdatedAt: now,
 	}
-	// Same wired-by-default settings as POST /v1/projects — analytics ON, the Base
-	// data-space namespace, and the publishable ingest key — so the /v1/projects/sites create
+	// Same wired-by-default settings as POST /v1/project — analytics ON, the Base
+	// data-space namespace, and the publishable ingest key — so the /v1/project/sites create
 	// path is not a second place defaults are decided. A generated site has no
 	// opt-out knob (nil ⇒ ON).
 	if err := setProjectDefaults(&np, nil); err != nil {

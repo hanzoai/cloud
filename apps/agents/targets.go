@@ -26,11 +26,11 @@ import (
 // machines — reading this registry through the in-process client below rather than
 // copying it.
 //
-//	POST   /v1/agents/targets        register a target -> Target
-//	GET    /v1/agents/targets        list the org's targets (+ live session load)
-//	GET    /v1/agents/targets/:id    one target + its running/total session counts
-//	PATCH  /v1/agents/targets/:id    update label/kind/status/capacity/host
-//	DELETE /v1/agents/targets/:id    deregister
+//	POST   /v1/agent/targets        register a target -> Target
+//	GET    /v1/agent/targets        list the org's targets (+ live session load)
+//	GET    /v1/agent/targets/:id    one target + its running/total session counts
+//	PATCH  /v1/agent/targets/:id    update label/kind/status/capacity/host
+//	DELETE /v1/agent/targets/:id    deregister
 //
 // Every route is org-scoped through principal.Org (tenant), fail-closed — a tenant
 // can never see or mutate another org's targets, exactly like sessions.
@@ -366,7 +366,7 @@ func ResolveTarget(ctx context.Context, org, ref string) (Target, error) {
 }
 
 // LoadOn returns the live session load on one of the org's targets — the same
-// (target id OR host) mapping the HTTP views use, so the board and /v1/agents/
+// (target id OR host) mapping the HTTP views use, so the board and /v1/agent/
 // targets can never disagree about what is running where.
 func LoadOn(ctx context.Context, org, id, host string) (TargetLoad, error) {
 	sto, org, err := mountedStore(org)
@@ -461,7 +461,7 @@ func sampleOf(t Target) samples.Sample {
 //
 //   - it runs on its own bounded context, so neither a slow datastore nor the
 //     client hanging up mid-request can stall or cancel the write;
-//   - it never touches the response, so the /v1/agents/targets contract is
+//   - it never touches the response, so the /v1/agent/targets contract is
 //     byte-identical whether the warehouse is present, absent or on fire;
 //   - a failure is logged, never surfaced — a dropped sample must not cost a
 //     machine its heartbeat.
@@ -656,10 +656,10 @@ type patchTargetIn struct {
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 // mountTargets registers the target routes. Called from Mount BEFORE the
-// /v1/agents/:ref wildcard (Fiber matches in registration order) so "targets" is not
-// captured as a ref. The static /v1/agents/targets precedes /v1/agents/targets/:id.
+// /v1/agent/:ref wildcard (Fiber matches in registration order) so "targets" is not
+// captured as a ref. The static /v1/agent/targets precedes /v1/agent/targets/:id.
 func mountTargets(s *cloud.Service[state], app cloud.Router) {
-	g := app.Group("/v1/agents")
+	g := app.Group("/v1/agent")
 	// TYPED ops, declared on the group itself: zip.Get and friends take any
 	// Router since v1.18.0, so the prefix is part of each op's path and every
 	// projection — the document, the MCP tool, the CLI command, the call plane —

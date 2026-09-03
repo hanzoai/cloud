@@ -1,6 +1,6 @@
 package channels
 
-// routes.go — the /v1/channels HTTP surface. Every route is org-gated
+// routes.go — the /v1/channel HTTP surface. Every route is org-gated
 // (principal.Org) and wrapped cloud.Terminal(cloud.Handle(...)): channels
 // mounts after the commerce /v1 error-flattening filter, so Terminal writes
 // the real 4xx in-band before that filter can rewrite it to 500 (service.go).
@@ -35,7 +35,7 @@ const sendMaxBody = 1 << 20 // 1 MiB
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
-// routes registers the /v1/channels surface. The :channel send route is LAST:
+// routes registers the /v1/channel surface. The :channel send route is LAST:
 // zip matches in registration order, so the static paths above must win.
 //
 // Six of the seven are TYPED ops — one registry entry each, which is what the
@@ -55,7 +55,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) error {
 	// A typed op receives only a context, so the validated org has to be parked
 	// there. cloud.Bridge parks it, and the composer owns that install: the
 	// fused host at its root, a plugin program in its constructor.
-	g := app.Group("/v1/channels")
+	g := app.Group("/v1/channel")
 
 	o := ops{s: s}
 	// cloud.Terminal is func(func(*zip.Ctx) error) func(*zip.Ctx) error; zip.Middleware
@@ -64,7 +64,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) error {
 	//
 	// The two groups exist so the COLLECTION ROOT can be declared as a non-empty
 	// leaf of its parent: joinPath normalises an empty leaf to "/", so
-	// `zip.Get(ch, "", …)` would name /v1/channels/ — a path this API has never
+	// `zip.Get(ch, "", …)` would name /v1/channel/ — a path this API has never
 	// served — and op.Path is the identity every projection keys on.
 	terminal := func(next zip.Handler) zip.Handler { return cloud.Terminal(next) }
 	v1 := zapp.With(terminal).Group("/v1")
@@ -158,11 +158,11 @@ type channelView struct {
 	// GroupPolicy is how this org admits group and thread rooms here: "open",
 	// "allowlist" or "disabled", defaulting to "open". Both policy fields come
 	// back EMPTY — rather than the listing failing — when the policy cannot be
-	// read; GET /v1/channels/allowlist carries the same two with the entries they
+	// read; GET /v1/channel/allowlist carries the same two with the entries they
 	// consult.
 	GroupPolicy GroupPolicy `json:"groupPolicy"`
 	// PendingPairing counts the org's UNEXPIRED pairing requests on this channel:
-	// exactly the rows GET /v1/channels/pairing returns for it, one per person
+	// exactly the rows GET /v1/channel/pairing returns for it, one per person
 	// waiting on an admin. It never exceeds three — the pending cap per
 	// (org, channel) — and expired requests are not counted.
 	PendingPairing int `json:"pendingPairing"`
@@ -241,7 +241,7 @@ type pairingView struct {
 	// Code is the CAPABILITY that authorises the approval: eight characters from a
 	// 32-symbol uppercase alphabet (A-Z0-9 minus the confusables 0, O, 1 and I),
 	// minted with crypto/rand and also sent to the requester in chat. An org admin
-	// passes it with the channel to POST /v1/channels/pairing/approve, which
+	// passes it with the channel to POST /v1/channel/pairing/approve, which
 	// CONSUMES it — the request row is deleted, so a code approves once — and which
 	// takes org admin as well as the code. It lives ONE HOUR from CreatedAt;
 	// expired requests are not listed here, and approving one is a 404. It is shown
@@ -276,7 +276,7 @@ type allowlistView struct {
 	// channel's group rooms outright. "disabled" drops all of them.
 	GroupPolicy GroupPolicy `json:"groupPolicy"`
 	// DM is the CONFIG-managed DM allow entries — the list PUT
-	// /v1/channels/allowlist owns and replaces wholesale. An entry matches a sender
+	// /v1/channel/allowlist owns and replaces wholesale. An entry matches a sender
 	// either EXACTLY, as the transport-native id inbox messages carry, or as
 	// `accessGroup:<name>` resolved through AccessGroups. A bare `*` admits
 	// everyone, but only while DMPolicy is "open": it is gate syntax, not an
@@ -287,7 +287,7 @@ type allowlistView struct {
 	// bare `*` admits every sender in the room.
 	Group []string `json:"group"`
 	// Paired is the senders admitted by PAIRING — the entries POST
-	// /v1/channels/pairing/approve minted, DM scope only. READ-ONLY on this
+	// /v1/channel/pairing/approve minted, DM scope only. READ-ONLY on this
 	// endpoint: the PUT writes config entries and can never revoke one of these
 	// (listing a paired sender under DM instead promotes that entry to config,
 	// which the admin then owns). They admit only while DMPolicy is "pairing".
@@ -338,7 +338,7 @@ type chatChannels struct {
 // that store. This surface used to call integrations.ConnectionFor in-process,
 // which resolves a package-level handle that is only ever set inside integrations
 // itself — so every answer here was a silent "not connected". Measured:
-// /v1/integrations reported the Slack workspace, its team id and nine scopes while
+// /v1/integration reported the Slack workspace, its team id and nine scopes while
 // this listing reported connected:false for the same install, and a send was
 // refused on the strength of that.
 //
@@ -486,7 +486,7 @@ type pairingQueue struct {
 // pairingList returns the pairing requests waiting for the caller org to approve
 // — one per person who messaged a connected bot on a channel whose DM policy is
 // "pairing" and who is not allowed yet. Each row carries the CODE an org admin
-// passes to POST /v1/channels/pairing/approve. Expired requests are not
+// passes to POST /v1/channel/pairing/approve. Expired requests are not
 // returned. Codes are capability strings: they are shown here, and never logged.
 func (o ops) pairingList(ctx context.Context, _ *cloud.Unit) (*pairingQueue, error) {
 	s := o.s
@@ -520,7 +520,7 @@ type approvePairingIn struct {
 	// Channel is the transport the request came in on: discord, slack, teams,
 	// telegram or whatsapp.
 	Channel string `json:"channel" url:"-"`
-	// Code is the pairing code from GET /v1/channels/pairing. It is a capability:
+	// Code is the pairing code from GET /v1/channel/pairing. It is a capability:
 	// holding it is what authorises the approval, alongside org admin.
 	Code string `json:"code" url:"-"`
 }
@@ -775,7 +775,7 @@ func listAccessGroups(ctx context.Context, st *store, org string) (map[string]ma
 // through the same registry Register uses, so it renders only while the router
 // actually serves the route.
 func init() {
-	openapi.Describe("/v1/channels/:channel/send", http.MethodPost,
+	openapi.Describe("/v1/channel/:channel/send", http.MethodPost,
 		"Send a message from your org's bot to one chat room",
 		"Delivers text, attachments and actions to one room on a connected chat transport — "+
 			"discord, github, linear, slack, teams, telegram or whatsapp — and answers that transport's own receipt, the "+
@@ -800,7 +800,7 @@ func init() {
 			"deterministically to one line each after the text rather than dropped.")
 }
 
-// send is POST /v1/channels/:channel/send — the ONE egress endpoint. The body is
+// send is POST /v1/channel/:channel/send — the ONE egress endpoint. The body is
 // the envelope's narrow outbound projection (C2-6): identity fields (sender,
 // account, channel) are not decodable — DisallowUnknownFields rejects them
 // loudly instead of silently dropping them.

@@ -60,7 +60,7 @@ func TestCallbackRefusesNamedInstallation(t *testing.T) {
 	}
 
 	r := req(t, app, http.MethodGet,
-		"/v1/integrations/github/callback?state="+url.QueryEscape(githubState(t, "attacker"))+
+		"/v1/integration/github/callback?state="+url.QueryEscape(githubState(t, "attacker"))+
 			"&installation_id=4242&setup_action=install", "", nil)
 	if r.Code != http.StatusFound || !strings.Contains(r.Location, "error=github") {
 		t.Fatalf("a named installation must be refused, got %d %q", r.Code, r.Location)
@@ -73,10 +73,10 @@ func TestCallbackRefusesNamedInstallation(t *testing.T) {
 		t.Fatalf("a refused callback must write no row, got %+v", conns)
 	}
 	// Unconnected, so the repo surface never mints a token for it.
-	if rr := req(t, app, http.MethodGet, "/v1/integrations/github/repos", "attacker", nil); rr.Code != http.StatusConflict {
+	if rr := req(t, app, http.MethodGet, "/v1/integration/github/repos", "attacker", nil); rr.Code != http.StatusConflict {
 		t.Fatalf("attacker must stay unconnected (409), got %d (%s)", rr.Code, rr.Body)
 	}
-	if rr := req(t, app, http.MethodPost, "/v1/integrations/github/repos/import", "attacker",
+	if rr := req(t, app, http.MethodPost, "/v1/integration/github/repos/import", "attacker",
 		map[string]any{"repos": []string{"victim-gh/secrets"}}); rr.Code != http.StatusConflict {
 		t.Fatalf("attacker import must be refused (409), got %d (%s)", rr.Code, rr.Body)
 	}
@@ -94,7 +94,7 @@ func TestCallbackBindsNoInstallation(t *testing.T) {
 	app := newApp(t, newKMS(t))
 
 	for _, id := range []string{"111", "222", "999999", "not-a-number", ""} {
-		q := "/v1/integrations/github/callback?state=" + url.QueryEscape(githubState(t, "acme"))
+		q := "/v1/integration/github/callback?state=" + url.QueryEscape(githubState(t, "acme"))
 		if id != "" {
 			q += "&installation_id=" + url.QueryEscape(id)
 		}
@@ -182,7 +182,7 @@ func TestClaimNeverTakesAHeldAccount(t *testing.T) {
 		t.Fatalf("upsert: %v", err)
 	}
 
-	r := postJSON(t, app, "/v1/integrations/github/claim", "lux", true,
+	r := postJSON(t, app, "/v1/integration/github/claim", "lux", true,
 		map[string]any{"accounts": []string{"hanzoai"}})
 	if r.Code != http.StatusOK {
 		t.Fatalf("claiming a held account want 200, got %d (%s)", r.Code, r.Body)

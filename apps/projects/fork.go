@@ -10,7 +10,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// projectsFork is the body of POST /v1/projects/fork: which parent to fork and,
+// projectsFork is the body of POST /v1/project/fork: which parent to fork and,
 // optionally, the target project name/slug. Both target fields default from the
 // parent (name = its title, slug = the parent slug) when omitted.
 type projectsFork struct {
@@ -46,7 +46,7 @@ type projectsFork struct {
 // so attribution is a fact recorded at fork time rather than a claim
 // reconstructed later.
 //
-// It funnels through the SAME create path POST /v1/projects uses, so slug
+// It funnels through the SAME create path POST /v1/project uses, so slug
 // validation, org scoping, ID minting and the 409 on a slug the caller's own org
 // already uses are identical.
 //

@@ -81,7 +81,7 @@ func setRunAttr(span trace.Span, runID string) {
 // against an OpenAI-compatible endpoint — the Hanzo LLM gateway
 // (https://api.hanzo.ai/v1). This is the ONE concrete inference client the
 // agents subsystem executes runs through; without it deps.AI is the fail-closed
-// stub and every POST /v1/agents/:name/run fail-closes rather than executing.
+// stub and every POST /v1/agent/:name/run fail-closes rather than executing.
 //
 // Model routing is the gateway's job. The only cloud-side fallback is: an empty
 // request model → the operator-configured default. There is deliberately NO

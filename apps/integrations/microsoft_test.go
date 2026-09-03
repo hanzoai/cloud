@@ -21,7 +21,7 @@ func fakeIDToken(t *testing.T, claims map[string]any) string {
 }
 
 func TestMicrosoftAuthorizeURL(t *testing.T) {
-	raw, err := microsoftAuthorize(OAuthConfig{ClientID: "ms-cid"}, "https://api.hanzo.ai/v1/integrations/microsoft_ads/callback", "st8")
+	raw, err := microsoftAuthorize(OAuthConfig{ClientID: "ms-cid"}, "https://api.hanzo.ai/v1/integration/microsoft_ads/callback", "st8")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}

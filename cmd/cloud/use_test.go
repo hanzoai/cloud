@@ -123,7 +123,7 @@ func do(t *testing.T, app *zip.App, path string) (int, string, string) {
 // first thing that can fail. Before the fix its failure returned from run() and
 // the process exited 1 — every other subsystem in the binary died with it,
 // including the API, IAM validation, billing and the team backend. Nothing about
-// pubsub's inability to open a SQLite file is a reason for /v1/flags to stop
+// pubsub's inability to open a SQLite file is a reason for /v1/flag to stop
 // answering.
 func TestADeadSubsystemDoesNotTakeTheHostDown(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
@@ -134,23 +134,23 @@ func TestADeadSubsystemDoesNotTakeTheHostDown(t *testing.T) {
 		t.Fatalf("a dead OPTIONAL subsystem aborted the host: %v\n"+
 			"this is the 25-minute outage: one child that cannot boot must degrade to absent", err)
 	}
-	if err := mount(app, good(t, "flags", "/v1/flags", `{"flag":"on"}`), false, absent); err != nil {
+	if err := mount(app, good(t, "flags", "/v1/flag", `{"flag":"on"}`), false, absent); err != nil {
 		t.Fatalf("mounting a healthy subsystem after a dead one failed: %v", err)
 	}
 	health(app, absent)
 
 	// 1. EVERY OTHER SUBSYSTEM SERVES. This is the whole point.
-	code, ctype, body := do(t, app, "/v1/flags")
+	code, ctype, body := do(t, app, "/v1/flag")
 	if code != 200 {
-		t.Errorf("GET /v1/flags = %d, want 200 — a healthy subsystem stopped serving because a different one died", code)
+		t.Errorf("GET /v1/flag = %d, want 200 — a healthy subsystem stopped serving because a different one died", code)
 	}
 	// A 200 proves nothing on its own here: the console catch-all answers unrouted
 	// /v1/* with the SPA shell, so assert what came back.
 	if !strings.Contains(ctype, "application/json") {
-		t.Errorf("GET /v1/flags Content-Type = %q, want JSON — this is the SPA shell, not the subsystem", ctype)
+		t.Errorf("GET /v1/flag Content-Type = %q, want JSON — this is the SPA shell, not the subsystem", ctype)
 	}
 	if !strings.Contains(body, `"flag":"on"`) {
-		t.Errorf("GET /v1/flags body = %q, want the subsystem's own JSON", body)
+		t.Errorf("GET /v1/flag body = %q, want the subsystem's own JSON", body)
 	}
 
 	// 2. THE DEAD ONE IS HONEST: 503 "deployed but down", not a 404 a client is
@@ -280,7 +280,7 @@ func TestAbsenceIsObservable(t *testing.T) {
 func TestAHealthyHostReportsNoAbsence(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
 	absent := map[string]string{}
-	if err := mount(app, good(t, "flags", "/v1/flags", `{}`), false, absent); err != nil {
+	if err := mount(app, good(t, "flags", "/v1/flag", `{}`), false, absent); err != nil {
 		t.Fatal(err)
 	}
 	health(app, absent)

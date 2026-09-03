@@ -21,7 +21,7 @@ func stubRegisterCloud(t *testing.T, nsStatus, presenceStatus int, sawPresence *
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/tasks/namespaces"):
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/task/namespaces"):
 			w.WriteHeader(nsStatus)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/activities"):
 			*sawPresence = true

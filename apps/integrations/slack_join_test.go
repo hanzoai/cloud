@@ -89,7 +89,7 @@ func TestJoinRequiresOrgAdmin(t *testing.T) {
 	slackConfiguredEnv(t)
 	stubSlackChannels(t)
 	app := newApp(t, newKMS(t))
-	res := req(t, app, http.MethodPost, "/v1/integrations/slack/join", "acme", nil)
+	res := req(t, app, http.MethodPost, "/v1/integration/slack/join", "acme", nil)
 	if res.Code != http.StatusForbidden {
 		t.Fatalf("a non-admin must be refused 403, got %d (%s)", res.Code, res.Body)
 	}

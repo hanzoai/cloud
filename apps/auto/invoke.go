@@ -18,7 +18,7 @@ import (
 // Two callers reach it, and neither is an HTTP endpoint of this subsystem's own:
 //
 //   - connectorToolProvider.Dispatch — the unified tool plane, which is how a
-//     connector action is reached from POST /v1/tools/call and therefore from the
+//     connector action is reached from POST /v1/tool/call and therefore from the
 //     fleet's one agent MCP server.
 //   - InvokeTool — the in-process client a sibling subsystem (the Business AI guide)
 //     uses to act as an org without an HTTP hop, metering + auditing with no HTTP
@@ -66,7 +66,7 @@ func dispatchTool(ctx context.Context, org, name string, args map[string]any) (a
 
 // InvokeTool runs a single MCP tool as principal `org`, in-process — the same
 // dispatch, credential scope, per-org concurrency bound, metering, and audit as
-// POST /v1/tools/call, minus the HTTP hop. It is the client a sibling
+// POST /v1/tool/call, minus the HTTP hop. It is the client a sibling
 // subsystem (the Business AI guide) uses to act through the per-principal MCP
 // plane. `org` MUST be the caller's VALIDATED principal.Org: the dispatch pins
 // every credential and effect to it, so an in-process caller can never exceed that

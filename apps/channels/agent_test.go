@@ -20,18 +20,18 @@ func TestAgentBinding(t *testing.T) {
 	e := newApp(t)
 
 	// Not admin: refused. Unknown channel: 404.
-	if got := req(t, e, http.MethodPut, "/v1/channels/agent", "acme",
+	if got := req(t, e, http.MethodPut, "/v1/channel/agent", "acme",
 		map[string]any{"channel": "slack", "default": "eng"}); got.Code != http.StatusForbidden {
 		t.Fatalf("non-admin PUT want 403, got %d (%s)", got.Code, got.Body)
 	}
-	if got := reqAdmin(t, e, http.MethodPut, "/v1/channels/agent", "acme",
+	if got := reqAdmin(t, e, http.MethodPut, "/v1/channel/agent", "acme",
 		map[string]any{"channel": "irc", "default": "eng"}); got.Code != http.StatusNotFound {
 		t.Fatalf("unknown channel want 404, got %d", got.Code)
 	}
 
 	// Nothing bound: the built-in answers.
 	var v channelAgents
-	got := req(t, e, http.MethodGet, "/v1/channels/agent?channel=slack", "acme", nil)
+	got := req(t, e, http.MethodGet, "/v1/channel/agent?channel=slack", "acme", nil)
 	if got.Code != http.StatusOK {
 		t.Fatalf("GET want 200, got %d (%s)", got.Code, got.Body)
 	}
@@ -42,7 +42,7 @@ func TestAgentBinding(t *testing.T) {
 	}
 
 	// Bind a default and a room; both come back in one shape.
-	got = reqAdmin(t, e, http.MethodPut, "/v1/channels/agent", "acme",
+	got = reqAdmin(t, e, http.MethodPut, "/v1/channel/agent", "acme",
 		map[string]any{"channel": "slack", "default": "eng", "rooms": map[string]string{"C024BE91L": "des"}})
 	if got.Code != http.StatusOK {
 		t.Fatalf("PUT want 200, got %d (%s)", got.Code, got.Body)
@@ -71,7 +71,7 @@ func TestAgentBinding(t *testing.T) {
 	}
 
 	// Unbind removes; an absent field leaves alone.
-	got = reqAdmin(t, e, http.MethodPut, "/v1/channels/agent", "acme",
+	got = reqAdmin(t, e, http.MethodPut, "/v1/channel/agent", "acme",
 		map[string]any{"channel": "slack", "unbind": []string{"C024BE91L"}})
 	if got.Code != http.StatusOK {
 		t.Fatalf("remove want 200, got %d (%s)", got.Code, got.Body)
@@ -82,7 +82,7 @@ func TestAgentBinding(t *testing.T) {
 		t.Fatalf("after remove = %+v", v)
 	}
 	// Naming the built-in as the default is the same as having none.
-	got = reqAdmin(t, e, http.MethodPut, "/v1/channels/agent", "acme", map[string]any{"channel": "slack", "default": defaultAgent})
+	got = reqAdmin(t, e, http.MethodPut, "/v1/channel/agent", "acme", map[string]any{"channel": "slack", "default": defaultAgent})
 	if got.Code != http.StatusOK {
 		t.Fatalf("restore want 200, got %d", got.Code)
 	}

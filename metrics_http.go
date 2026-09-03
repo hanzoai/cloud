@@ -97,7 +97,7 @@ func observeRequest(product, org string, status int, dur time.Duration) {
 }
 
 // productFromPath resolves the product (route group) from a /v1/<group>/... path:
-// the first segment after /v1/. "/v1/agents/foo" → "agents"; "/v1/o11y/logs" →
+// the first segment after /v1/. "/v1/agent/foo" → "agents"; "/v1/o11y/logs" →
 // "o11y"; "/v1" or "/v1/" → "" (folds to "unknown" at emit).
 func productFromPath(path string) string {
 	rest := strings.TrimPrefix(path, "/v1/")

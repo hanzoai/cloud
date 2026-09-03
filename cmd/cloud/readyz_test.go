@@ -42,7 +42,7 @@ func TestVitalAbsenceIsNotReadyButStaysAlive(t *testing.T) {
 	if err := mount(app, dead(t, "ai", "/v1"), true, absent); err != nil {
 		t.Fatalf("a dead `ai` aborted the host: %v — it must degrade to absent", err)
 	}
-	if err := mount(app, good(t, "flags", "/v1/flags", `{"flag":"on"}`), false, absent); err != nil {
+	if err := mount(app, good(t, "flags", "/v1/flag", `{"flag":"on"}`), false, absent); err != nil {
 		t.Fatal(err)
 	}
 	health(app, absent)
@@ -79,9 +79,9 @@ func TestVitalAbsenceIsNotReadyButStaysAlive(t *testing.T) {
 	// 3. THE SIBLINGS STILL SERVE. NotReady is about routing, not about killing
 	// the process: an operator can still reach the console, the logs and every
 	// healthy subsystem on this pod.
-	code, _, body = do(t, app, "/v1/flags")
+	code, _, body = do(t, app, "/v1/flag")
 	if code != 200 || !strings.Contains(body, `"flag":"on"`) {
-		t.Errorf("GET /v1/flags = %d %q, want the healthy sibling still serving on a NotReady pod", code, body)
+		t.Errorf("GET /v1/flag = %d %q, want the healthy sibling still serving on a NotReady pod", code, body)
 	}
 }
 
@@ -114,7 +114,7 @@ func TestNonVitalAbsenceStaysReady(t *testing.T) {
 func TestAHealthyHostIsReadyAndSaysNothingElse(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
 	absent := map[string]string{}
-	if err := mount(app, good(t, "flags", "/v1/flags", `{}`), false, absent); err != nil {
+	if err := mount(app, good(t, "flags", "/v1/flag", `{}`), false, absent); err != nil {
 		t.Fatal(err)
 	}
 	health(app, absent)

@@ -2,7 +2,7 @@ package coding
 
 // start.go is the ONE way a coding run begins.
 //
-// `POST /v1/agents/coding` is the endpoint, and anything added later arrives
+// `POST /v1/agent/coding` is the endpoint, and anything added later arrives
 // here too. That is not tidiness: an endpoint that assembled its own Dispatcher
 // would be a second ENGINE with its own pool and its own in-flight set, and a
 // run started from chat would be invisible to the app that shares its name. One
@@ -35,7 +35,7 @@ package coding
 // It is not a laundering hole. For SUPPLIES a tenant where there is none and
 // cannot override one, and the org it supplies was resolved server-side — from a
 // Slack-signature-verified team_id, or from the authenticated caller of
-// /v1/agents/coding — never from a field a client can set.
+// /v1/agent/coding — never from a field a client can set.
 
 import (
 	"github.com/hanzoai/cloud/internal/environ"

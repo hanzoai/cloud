@@ -33,7 +33,7 @@ func TestDeployEmitsLifecycle(t *testing.T) {
 	app := mountApp(t)
 
 	// A project linked to a native repo → repoFromURL("…/myapp.git") == "myapp".
-	if code, b := do(t, app, http.MethodPost, "/v1/projects", "acme", map[string]any{
+	if code, b := do(t, app, http.MethodPost, "/v1/project", "acme", map[string]any{
 		"name": "Site", "slug": "myapp",
 		"repo": map[string]any{"url": "https://api.hanzo.test/v1/git/acme/myapp.git", "branch": "main"},
 	}); code != http.StatusCreated {
@@ -41,7 +41,7 @@ func TestDeployEmitsLifecycle(t *testing.T) {
 	}
 
 	// Open a deployment → queued deployment + BuildStarted.
-	code, b := do(t, app, http.MethodPost, "/v1/projects/myapp/deployments", "acme", map[string]any{"commit": "abc123"})
+	code, b := do(t, app, http.MethodPost, "/v1/project/myapp/deployments", "acme", map[string]any{"commit": "abc123"})
 	if code != http.StatusAccepted {
 		t.Fatalf("start deployment want 202, got %d (%s)", code, b)
 	}
@@ -59,7 +59,7 @@ func TestDeployEmitsLifecycle(t *testing.T) {
 	}
 
 	// CI completion (status live) → DeployLive.
-	if code, b := do(t, app, http.MethodPost, "/v1/projects/myapp/deployments/"+dep.ID+"/complete", "acme",
+	if code, b := do(t, app, http.MethodPost, "/v1/project/myapp/deployments/"+dep.ID+"/complete", "acme",
 		map[string]any{"status": "live", "liveUrl": "https://site.example"}); code != http.StatusOK {
 		t.Fatalf("complete want 200, got %d (%s)", code, b)
 	}

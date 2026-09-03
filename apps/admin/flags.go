@@ -10,7 +10,7 @@ package admin
 // through flags.SetPlatformSwitch — the ONE write path, audited in the store's
 // activity log. A flip is hot: this pod applies immediately, peers converge within one
 // evaluation TTL (default 15s), no redeploy. Org/project product flags are managed on
-// /v1/flags (org-scoped); this surface is the platform's own switchboard.
+// /v1/flag (org-scoped); this surface is the platform's own switchboard.
 
 import (
 	"context"

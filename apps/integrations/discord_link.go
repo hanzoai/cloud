@@ -19,9 +19,9 @@ import (
 // Discord OAuth2 `identify` (Discord proves which Discord user is linking), then the
 // shared hanzo.id OIDC leg (channel_link.go):
 //
-//	GET /v1/integrations/discord/link           leg1: set __Host init cookie, redirect to Discord identify
-//	GET /v1/integrations/discord/link/discord    leg2: Discord callback; verify user, bind (guild,discordUser)
-//	GET /v1/integrations/discord/link/callback    leg3: hanzo.id OIDC callback; bind Discord↔Hanzo, seal refresh
+//	GET /v1/integration/discord/link           leg1: set __Host init cookie, redirect to Discord identify
+//	GET /v1/integration/discord/link/discord    leg2: Discord callback; verify user, bind (guild,discordUser)
+//	GET /v1/integration/discord/link/callback    leg3: hanzo.id OIDC callback; bind Discord↔Hanzo, seal refresh
 //
 // The bound Discord user comes ONLY from the identify exchange (Discord-verified),
 // never a URL param — a forwarded link can only bind the clicker's own account.
@@ -43,7 +43,7 @@ func discordLinkURL(s *cloud.Service[state], guildID, _user string) (string, err
 	if err != nil {
 		return "", err
 	}
-	return "https://" + s.Domain + "/v1/integrations/discord/link?state=" + url.QueryEscape(state), nil
+	return "https://" + s.Domain + "/v1/integration/discord/link?state=" + url.QueryEscape(state), nil
 }
 
 // ── leg 1: redirect to Discord identify ─────────────────────────────────────
@@ -214,11 +214,11 @@ func discordLinkCallback(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func discordLinkDiscordURI(s *cloud.Service[state]) string {
-	return "https://" + s.Domain + "/v1/integrations/discord/link/discord"
+	return "https://" + s.Domain + "/v1/integration/discord/link/discord"
 }
 
 func discordLinkCallbackURI(s *cloud.Service[state]) string {
-	return "https://" + s.Domain + "/v1/integrations/discord/link/callback"
+	return "https://" + s.Domain + "/v1/integration/discord/link/callback"
 }
 
 // ── Discord identify (user_scope) code exchange ─────────────────────────────

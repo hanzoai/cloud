@@ -233,7 +233,7 @@ func TestSlackEventsHMAC(t *testing.T) {
 	body := `{"type":"url_verification","challenge":"abc123"}`
 
 	// A bad signature is refused 401 — no challenge echoed.
-	rq := httptest.NewRequest(http.MethodPost, "/v1/integrations/slack/events", strings.NewReader(body))
+	rq := httptest.NewRequest(http.MethodPost, "/v1/integration/slack/events", strings.NewReader(body))
 	rq.Header.Set("X-Slack-Signature", "v0=deadbeef")
 	rq.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(time.Now().Unix(), 10))
 	resp, _ := app.Test(rq)
@@ -243,7 +243,7 @@ func TestSlackEventsHMAC(t *testing.T) {
 	}
 
 	// A missing signature is refused 401.
-	rq2 := httptest.NewRequest(http.MethodPost, "/v1/integrations/slack/events", strings.NewReader(body))
+	rq2 := httptest.NewRequest(http.MethodPost, "/v1/integration/slack/events", strings.NewReader(body))
 	resp2, _ := app.Test(rq2)
 	_ = resp2.Body.Close()
 	if resp2.StatusCode != http.StatusUnauthorized {
@@ -252,7 +252,7 @@ func TestSlackEventsHMAC(t *testing.T) {
 
 	// A stale-but-correctly-MAC'd request is refused (anti-replay).
 	oldTs := strconv.FormatInt(time.Now().Add(-10*time.Minute).Unix(), 10)
-	rq3 := httptest.NewRequest(http.MethodPost, "/v1/integrations/slack/events", strings.NewReader(body))
+	rq3 := httptest.NewRequest(http.MethodPost, "/v1/integration/slack/events", strings.NewReader(body))
 	rq3.Header.Set("X-Slack-Request-Timestamp", oldTs)
 	rq3.Header.Set("X-Slack-Signature", slackSign("sig-secret-1", oldTs, body))
 	resp3, _ := app.Test(rq3)
@@ -262,7 +262,7 @@ func TestSlackEventsHMAC(t *testing.T) {
 	}
 
 	// A correctly-signed challenge is echoed verbatim.
-	res := slackPost(t, app, "/v1/integrations/slack/events", "sig-secret-1", "application/json", body)
+	res := slackPost(t, app, "/v1/integration/slack/events", "sig-secret-1", "application/json", body)
 	if res.Code != http.StatusOK || string(res.Body) != "abc123" {
 		t.Fatalf("valid challenge want 200 'abc123', got %d %q", res.Code, res.Body)
 	}
@@ -317,7 +317,7 @@ func TestSlackBridgeOrgIsolation(t *testing.T) {
 	// to make, and what remains here is the fact this package is actually
 	// responsible for.
 	body := `{"type":"event_callback","team_id":"TACME","event_id":"EvIso1","event":{"type":"app_mention","user":"Uacme","text":"<@BACME> hi","channel":"C1","ts":"9.9"}}`
-	if res := slackPost(t, app, "/v1/integrations/slack/events", "iso-secret", "application/json", body); res.Code != http.StatusOK {
+	if res := slackPost(t, app, "/v1/integration/slack/events", "iso-secret", "application/json", body); res.Code != http.StatusOK {
 		t.Fatalf("events ack want 200, got %d (%s)", res.Code, res.Body)
 	}
 	if org, ok := OrgForExternalID("slack", "TACME"); !ok || org != "acme" {
@@ -344,7 +344,7 @@ func TestSlackBridgeUnconnectedTeamDropped(t *testing.T) {
 	app := newApp(t, newSigningKMS(t, "iso-secret-2"))
 
 	body := `{"type":"event_callback","team_id":"TNOBODY","event_id":"EvX","event":{"type":"app_mention","user":"U9","text":"<@B> hi","channel":"C1","ts":"1.1"}}`
-	if res := slackPost(t, app, "/v1/integrations/slack/events", "iso-secret-2", "application/json", body); res.Code != http.StatusOK {
+	if res := slackPost(t, app, "/v1/integration/slack/events", "iso-secret-2", "application/json", body); res.Code != http.StatusOK {
 		t.Fatalf("ack want 200, got %d", res.Code)
 	}
 	select {
@@ -368,7 +368,7 @@ func TestSlackLinkLeg1SetsCookieAndRedirects(t *testing.T) {
 	app := newApp(t, newKMS(t))
 
 	entry, _ := signSlackLink(mounted.State.stateKey, "TACME", "Uacme", 0)
-	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link?state="+url.QueryEscape(entry), nil)
+	rq := httptest.NewRequest(http.MethodGet, "/v1/integration/slack/link?state="+url.QueryEscape(entry), nil)
 	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
@@ -429,13 +429,13 @@ func TestSlackLinkTransplantRejected(t *testing.T) {
 	ss, _ := signSubject(mounted.State.stateKey, "nonce-A", 0)
 
 	// (a) No init cookie at all → refused.
-	res := req(t, app, http.MethodGet, "/v1/integrations/slack/link/slack?code=c&state="+url.QueryEscape(ss), "", nil)
+	res := req(t, app, http.MethodGet, "/v1/integration/slack/link/slack?code=c&state="+url.QueryEscape(ss), "", nil)
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("transplant with NO init cookie want 400, got %d (%s)", res.Code, res.Body)
 	}
 
 	// (b) A MISMATCHED init cookie → refused.
-	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link/slack?code=c&state="+url.QueryEscape(ss), nil)
+	rq := httptest.NewRequest(http.MethodGet, "/v1/integration/slack/link/slack?code=c&state="+url.QueryEscape(ss), nil)
 	rq.Header.Set("Cookie", slackInitCookie+"=WRONG-NONCE")
 	resp, _ := app.Test(rq)
 	_ = resp.Body.Close()
@@ -456,7 +456,7 @@ func TestSlackLinkTransplantRejected(t *testing.T) {
 func TestSlackLinkCallbackNoCookieRejected(t *testing.T) {
 	slackLinkConfiguredEnv(t)
 	app := newApp(t, newKMS(t))
-	res := req(t, app, http.MethodGet, "/v1/integrations/slack/link/callback?code=c&state=s", "", nil)
+	res := req(t, app, http.MethodGet, "/v1/integration/slack/link/callback?code=c&state=s", "", nil)
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("leg3 without a link cookie want 400, got %d (%s)", res.Code, res.Body)
 	}
@@ -483,7 +483,7 @@ func TestSlackLinkLeg2Continuity(t *testing.T) {
 	// the matching init cookie.
 	const nonce = "leg2-nonce"
 	ss, _ := signSubject(mounted.State.stateKey, nonce, 0)
-	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link/slack?code=usercode-acme&state="+url.QueryEscape(ss), nil)
+	rq := httptest.NewRequest(http.MethodGet, "/v1/integration/slack/link/slack?code=usercode-acme&state="+url.QueryEscape(ss), nil)
 	rq.Header.Set("Cookie", slackInitCookie+"="+nonce)
 	resp, err := app.Test(rq)
 	if err != nil {
@@ -523,10 +523,10 @@ func TestSlackRoutePrecedence(t *testing.T) {
 	slackLinkConfiguredEnv(t)
 	app := newApp(t, newSigningKMS(t, "prec-secret"))
 
-	// GET /v1/integrations/slack/link must hit slackLink (302 to Slack sign-in),
+	// GET /v1/integration/slack/link must hit slackLink (302 to Slack sign-in),
 	// NOT the /:provider GET handler (which would 200 a provider JSON view / 403).
 	entry, _ := signSlackLink(mounted.State.stateKey, "TACME", "Uacme", 0)
-	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link?state="+url.QueryEscape(entry), nil)
+	rq := httptest.NewRequest(http.MethodGet, "/v1/integration/slack/link?state="+url.QueryEscape(entry), nil)
 	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
@@ -537,16 +537,16 @@ func TestSlackRoutePrecedence(t *testing.T) {
 	}
 
 	// The /:provider route still resolves for the bare provider id: GET
-	// /v1/integrations/slack (org-authed) returns the provider view — the literals
+	// /v1/integration/slack (org-authed) returns the provider view — the literals
 	// did not shadow it.
-	if r := req(t, app, http.MethodGet, "/v1/integrations/slack", "acme", nil); r.Code != http.StatusOK {
-		t.Fatalf("GET /v1/integrations/slack (provider view) want 200, got %d (%s)", r.Code, r.Body)
+	if r := req(t, app, http.MethodGet, "/v1/integration/slack", "acme", nil); r.Code != http.StatusOK {
+		t.Fatalf("GET /v1/integration/slack (provider view) want 200, got %d (%s)", r.Code, r.Body)
 	}
 
 	// The events webhook is PUBLIC at the JWT layer: a valid-HMAC challenge with NO
 	// principal reaches slackEvents and echoes — not blocked by any auth gate.
 	body := `{"type":"url_verification","challenge":"pc"}`
-	if res := slackPost(t, app, "/v1/integrations/slack/events", "prec-secret", "application/json", body); res.Code != http.StatusOK || string(res.Body) != "pc" {
+	if res := slackPost(t, app, "/v1/integration/slack/events", "prec-secret", "application/json", body); res.Code != http.StatusOK || string(res.Body) != "pc" {
 		t.Fatalf("events webhook must be reachable unauthenticated, got %d %q", res.Code, res.Body)
 	}
 }
@@ -609,7 +609,7 @@ func TestSlackShedReturnsNon2xxAndDoesNotRecord(t *testing.T) {
 	}
 
 	body := `{"type":"event_callback","team_id":"TACME","event_id":"EvShed","event":{"type":"app_mention","user":"Ushed","text":"<@BACME> hi","channel":"C1","ts":"1.1"}}`
-	res := slackPost(t, app, "/v1/integrations/slack/events", "shed-secret", "application/json", body)
+	res := slackPost(t, app, "/v1/integration/slack/events", "shed-secret", "application/json", body)
 	if res.Code == http.StatusOK || res.Code < 400 {
 		t.Fatalf("a shed turn must return a retriable NON-2xx so Slack re-delivers, got %d", res.Code)
 	}

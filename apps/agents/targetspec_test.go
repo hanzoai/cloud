@@ -113,7 +113,7 @@ func TestGetTargetByHost(t *testing.T) {
 // heartbeat that refreshes the sample + clock, and a spec PATCH updates capability.
 func TestHTTPTargetCapabilityAndHeartbeat(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
-	code, b := do(t, app, http.MethodPost, "/v1/agents/targets", "acme", map[string]any{
+	code, b := do(t, app, http.MethodPost, "/v1/agent/targets", "acme", map[string]any{
 		"label": "spark", "kind": TargetGPU, "host": "spark",
 		"spec": map[string]any{"os": "linux", "arch": "arm64", "cpus": 20, "memory": 137438953472,
 			"gpus": []map[string]any{{"vendor": "nvidia", "model": "GB10", "memory": 103079215104}}},
@@ -139,7 +139,7 @@ func TestHTTPTargetCapabilityAndHeartbeat(t *testing.T) {
 	}
 
 	// A metrics PATCH is a heartbeat: refresh the sample, keep the clock owned by us.
-	code, b = do(t, app, http.MethodPatch, "/v1/agents/targets/"+tv.ID, "acme", map[string]any{
+	code, b = do(t, app, http.MethodPatch, "/v1/agent/targets/"+tv.ID, "acme", map[string]any{
 		"metrics": map[string]any{"load1": 3.0, "memFree": 1000, "at": 99},
 	})
 	if code != http.StatusOK {
@@ -164,7 +164,7 @@ func TestHTTPTargetCapabilityAndHeartbeat(t *testing.T) {
 func TestHTTPTargetUpsertByHost(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
 	// First link on host "evo" -> created (201).
-	code, b := do(t, app, http.MethodPost, "/v1/agents/targets", "acme", map[string]any{
+	code, b := do(t, app, http.MethodPost, "/v1/agent/targets", "acme", map[string]any{
 		"label": "evo", "host": "evo", "capacity": "old", "metrics": map[string]any{"load1": 1},
 	})
 	if code != http.StatusCreated {
@@ -174,7 +174,7 @@ func TestHTTPTargetUpsertByHost(t *testing.T) {
 	mustJSON(t, b, &first)
 
 	// Re-link the SAME host -> updated in place (200), same id, refreshed fields.
-	code, b = do(t, app, http.MethodPost, "/v1/agents/targets", "acme", map[string]any{
+	code, b = do(t, app, http.MethodPost, "/v1/agent/targets", "acme", map[string]any{
 		"label": "evo", "host": "evo", "capacity": "new", "metrics": map[string]any{"load1": 5},
 	})
 	if code != http.StatusOK {
@@ -190,9 +190,9 @@ func TestHTTPTargetUpsertByHost(t *testing.T) {
 	}
 
 	// A different host is a distinct machine -> a second target.
-	_, _ = do(t, app, http.MethodPost, "/v1/agents/targets", "acme", map[string]any{"label": "dbc", "host": "dbc"})
+	_, _ = do(t, app, http.MethodPost, "/v1/agent/targets", "acme", map[string]any{"label": "dbc", "host": "dbc"})
 
-	_, lb := do(t, app, http.MethodGet, "/v1/agents/targets", "acme", nil)
+	_, lb := do(t, app, http.MethodGet, "/v1/agent/targets", "acme", nil)
 	var list targetsResp
 	mustJSON(t, lb, &list)
 	if len(list.Targets) != 2 {
@@ -209,14 +209,14 @@ func TestHTTPTargetRejectsOversizeGPUList(t *testing.T) {
 	for i := range huge {
 		huge[i] = map[string]any{"vendor": "nvidia", "model": "x"}
 	}
-	if code, b := do(t, app, http.MethodPost, "/v1/agents/targets", "acme", map[string]any{
+	if code, b := do(t, app, http.MethodPost, "/v1/agent/targets", "acme", map[string]any{
 		"label": "box", "host": "box", "spec": map[string]any{"gpus": huge},
 	}); code != http.StatusBadRequest {
 		t.Fatalf("oversize gpu list must be rejected 400, got %d (%s)", code, b)
 	}
 	// A normal-sized list is accepted.
 	ok := []map[string]any{{"vendor": "nvidia", "model": "GB10"}, {"vendor": "amd", "model": "8060S"}}
-	if code, b := do(t, app, http.MethodPost, "/v1/agents/targets", "acme", map[string]any{
+	if code, b := do(t, app, http.MethodPost, "/v1/agent/targets", "acme", map[string]any{
 		"label": "box", "host": "box", "spec": map[string]any{"gpus": ok},
 	}); code != http.StatusCreated {
 		t.Fatalf("normal gpu list must be accepted, got %d (%s)", code, b)

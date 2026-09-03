@@ -280,11 +280,11 @@ var inference = map[string]bool{
 //     routes it at /v1/{datastore,docdb,kv,s3,search,sql,vector} instead, so
 //     vector, sql, kv, docdb, search and datastore creates — the EXACT set the
 //     non-LLM billing gap was opened for — were not billable paths at all.
-//   - projects answered /v1/sites and /v1/platform/sites beside /v1/projects; it
+//   - projects answered /v1/sites and /v1/platform/sites beside /v1/project; it
 //     owns one prefix now, and the list is that prefix.
 //   - venue answers /v1/cloud. It was absent entirely.
-//   - tools answered /v1/skills, /v1/plugins and /v1/mcp/servers beside /v1/tools.
-//     All three have since folded under /v1/tools, which is the other half of the
+//   - tools answered /v1/skills, /v1/plugins and /v1/mcp/servers beside /v1/tool.
+//     All three have since folded under /v1/tool, which is the other half of the
 //     lesson: reading the manifest is what makes an address move cost nothing here.
 //
 // And ten Metered surfaces were missing outright (ask, auto, automations, content,
@@ -496,7 +496,7 @@ var reachableTrees = []string{
 	"/v1/plan/",        // the plan catalog — WHAT to buy (@hanzo/plans) — and its sub-routes.
 	"/v1/models/",      // the model catalog the shell reads for discovery, and /v1/models/:id.
 	"/v1/waitlist/",    // admission's join API — an un-admitted user must still reach it.
-	"/v1/flags/",       // the guard's public mode read; also how the kill switch is observed.
+	"/v1/flag/",       // the guard's public mode read; also how the kill switch is observed.
 	"/v1/entitlement/", // per-org enablement reads/writes that sit beside the projection.
 }
 

@@ -11,7 +11,7 @@ import (
 // capability_test.go holds the published capabilities against what the transports
 // actually do.
 //
-// caps is a promise: routes.go projects it onto GET /v1/channels and the send
+// caps is a promise: routes.go projects it onto GET /v1/channel and the send
 // path never consults it again, so a wrong flag is not a refusal — it is a
 // promise a caller acts on and a failure at the platform. Nothing pinned a single
 // one of them. Every flag on every transport could be set true and the suite

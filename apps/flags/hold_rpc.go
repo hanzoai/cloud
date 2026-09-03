@@ -36,7 +36,7 @@ func exposeHold() {
 // evaluated against, and a caller has no way to name either.
 //
 // It goes through [Assign], which is the ONE bucketing in this app — the same
-// pure function of (key, subject, definition) that /v1/flags and the experiments
+// pure function of (key, subject, definition) that /v1/flag and the experiments
 // primitive run. A second evaluator here would be a second answer to "does this
 // org hold X", and the two would disagree on the day a rollout percentage is set.
 //

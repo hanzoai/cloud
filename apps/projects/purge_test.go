@@ -1,11 +1,11 @@
 package projects
 
-// Tests for POST /v1/projects/:slug/purge — the dedicated edge cache purge that
+// Tests for POST /v1/project/:slug/purge — the dedicated edge cache purge that
 // flushes a project's edge cache-tag WITHOUT a redeploy. They prove the contract:
 // org-scoped (403 no principal, 404 wrong org / unknown slug), stamps LastPurgeAt,
 // 200 even when the edge (CF) is unconfigured, and — critically — the S3 origin is
 // never written or deleted (only the edge is flushed). Driven over HTTP through the
-// REAL Mount + zip stack against the in-memory S3 double, exactly like the /v1/projects/sites
+// REAL Mount + zip stack against the in-memory S3 double, exactly like the /v1/project/sites
 // tests; CF is unconfigured in this harness (no CF_API_TOKEN/CF_ZONE_ID), so the
 // purge is a warn-only no-op that must still succeed.
 
@@ -22,12 +22,12 @@ func TestPurge_StampsLastPurgeAt_DraftProject(t *testing.T) {
 	bs := &billServer{available: 1000000}
 	app := mountSites(t, &fakeAI{content: okManifest()}, bs.start(t))
 
-	if code, _ := doSite(t, app, http.MethodPost, "/v1/projects", "acme",
+	if code, _ := doSite(t, app, http.MethodPost, "/v1/project", "acme",
 		map[string]any{"name": "Draft Flush", "slug": "draftflush"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
 
-	code, body := doSite(t, app, http.MethodPost, "/v1/projects/draftflush/purge", "acme", nil)
+	code, body := doSite(t, app, http.MethodPost, "/v1/project/draftflush/purge", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("purge want 200 (unconfigured edge is non-fatal), got %d (%s)", code, body)
 	}
@@ -62,7 +62,7 @@ func TestPurge_S3OriginUntouched(t *testing.T) {
 		t.Fatalf("precondition: site not written to S3 (count=%d)", countBefore)
 	}
 
-	code, body := doSite(t, app, http.MethodPost, "/v1/projects/flushme/purge", "acme", nil)
+	code, body := doSite(t, app, http.MethodPost, "/v1/project/flushme/purge", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("purge want 200, got %d (%s)", code, body)
 	}
@@ -98,13 +98,13 @@ func TestPurge_OrgScoped(t *testing.T) {
 
 	deployVia(t, app, "acme", "flushme") // owned by acme
 
-	if code, _ := doSite(t, app, http.MethodPost, "/v1/projects/flushme/purge", "", nil); code != http.StatusForbidden {
+	if code, _ := doSite(t, app, http.MethodPost, "/v1/project/flushme/purge", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-principal purge want 403, got %d", code)
 	}
-	if code, _ := doSite(t, app, http.MethodPost, "/v1/projects/flushme/purge", "other", nil); code != http.StatusNotFound {
+	if code, _ := doSite(t, app, http.MethodPost, "/v1/project/flushme/purge", "other", nil); code != http.StatusNotFound {
 		t.Fatalf("wrong-org purge want 404, got %d", code)
 	}
-	if code, _ := doSite(t, app, http.MethodPost, "/v1/projects/nope/purge", "acme", nil); code != http.StatusNotFound {
+	if code, _ := doSite(t, app, http.MethodPost, "/v1/project/nope/purge", "acme", nil); code != http.StatusNotFound {
 		t.Fatalf("unknown-slug purge want 404, got %d", code)
 	}
 }

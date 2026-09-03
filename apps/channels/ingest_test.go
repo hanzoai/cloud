@@ -155,7 +155,7 @@ func decodeJSON(t *testing.T, body []byte, out any) {
 
 func putAllowlist(t *testing.T, e *testEnv, org string, body map[string]any) {
 	t.Helper()
-	res := reqAdmin(t, e, http.MethodPut, "/v1/channels/allowlist", org, body)
+	res := reqAdmin(t, e, http.MethodPut, "/v1/channel/allowlist", org, body)
 	if res.Code != http.StatusOK {
 		t.Fatalf("PUT allowlist: %d (%s)", res.Code, res.Body)
 	}
@@ -416,7 +416,7 @@ func TestIngestApproveRoundtrip(t *testing.T) {
 
 	ingest(ctx, ingressEv(org, "telegram", "hanzobot", "42", "777", "", "hi", "k1", ""))
 
-	res := reqAdmin(t, e, http.MethodGet, "/v1/channels/pairing", org, nil)
+	res := reqAdmin(t, e, http.MethodGet, "/v1/channel/pairing", org, nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("pairing list: %d (%s)", res.Code, res.Body)
 	}
@@ -434,19 +434,19 @@ func TestIngestApproveRoundtrip(t *testing.T) {
 	code := pending.Pending[0].Code
 
 	// Plain members may read; anonymous callers may not.
-	if r := req(t, e, http.MethodGet, "/v1/channels/pairing", org, nil); r.Code != http.StatusOK {
+	if r := req(t, e, http.MethodGet, "/v1/channel/pairing", org, nil); r.Code != http.StatusOK {
 		t.Fatalf("member pairing read: %d", r.Code)
 	}
-	if r := req(t, e, http.MethodGet, "/v1/channels/pairing", "", nil); r.Code != http.StatusForbidden {
+	if r := req(t, e, http.MethodGet, "/v1/channel/pairing", "", nil); r.Code != http.StatusForbidden {
 		t.Fatalf("anonymous pairing read: %d, want 403", r.Code)
 	}
 
 	// Approval is admin-gated.
 	approveBody := map[string]any{"channel": "telegram", "code": code}
-	if r := req(t, e, http.MethodPost, "/v1/channels/pairing/approve", org, approveBody); r.Code != http.StatusForbidden {
+	if r := req(t, e, http.MethodPost, "/v1/channel/pairing/approve", org, approveBody); r.Code != http.StatusForbidden {
 		t.Fatalf("non-admin approve: %d, want 403", r.Code)
 	}
-	res = reqAdmin(t, e, http.MethodPost, "/v1/channels/pairing/approve", org, approveBody)
+	res = reqAdmin(t, e, http.MethodPost, "/v1/channel/pairing/approve", org, approveBody)
 	if res.Code != http.StatusOK {
 		t.Fatalf("approve: %d (%s)", res.Code, res.Body)
 	}
@@ -459,13 +459,13 @@ func TestIngestApproveRoundtrip(t *testing.T) {
 		t.Fatalf("approve = %+v, want sender 42 + first-approval owner bootstrap", approved)
 	}
 	// A consumed code is gone.
-	if r := reqAdmin(t, e, http.MethodPost, "/v1/channels/pairing/approve", org, approveBody); r.Code != http.StatusNotFound {
+	if r := reqAdmin(t, e, http.MethodPost, "/v1/channel/pairing/approve", org, approveBody); r.Code != http.StatusNotFound {
 		t.Fatalf("re-approve: %d, want 404", r.Code)
 	}
 
 	// The paired sender's next message lands in the inbox.
 	ingest(ctx, ingressEv(org, "telegram", "hanzobot", "42", "777", "", "hello", "k2", ""))
-	res = req(t, e, http.MethodGet, "/v1/channels/inbox", org, nil)
+	res = req(t, e, http.MethodGet, "/v1/channel/inbox", org, nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("inbox: %d (%s)", res.Code, res.Body)
 	}
@@ -497,7 +497,7 @@ func TestIngestApproveRoundtrip(t *testing.T) {
 	}
 
 	// The cursor excludes what was read.
-	res = req(t, e, http.MethodGet, "/v1/channels/inbox?since="+strconv.FormatInt(inbox.Cursor, 10), org, nil)
+	res = req(t, e, http.MethodGet, "/v1/channel/inbox?since="+strconv.FormatInt(inbox.Cursor, 10), org, nil)
 	var page2 struct {
 		Messages []json.RawMessage `json:"messages"`
 		Cursor   int64             `json:"cursor"`
@@ -601,7 +601,7 @@ func TestIngestGroupPolicy(t *testing.T) {
 	if len(pend) != 1 {
 		t.Fatalf("pending = %+v", pend)
 	}
-	res := reqAdmin(t, e, http.MethodPost, "/v1/channels/pairing/approve", org,
+	res := reqAdmin(t, e, http.MethodPost, "/v1/channel/pairing/approve", org,
 		map[string]any{"channel": "slack", "code": pend[0].Code})
 	if res.Code != http.StatusOK {
 		t.Fatalf("approve: %d (%s)", res.Code, res.Body)
@@ -644,7 +644,7 @@ func TestIngestRouteAfterGate(t *testing.T) {
 	if err != nil || !ok || got != root {
 		t.Fatalf("route = %q ok=%v err=%v, want the stored reply root", got, ok, err)
 	}
-	res := req(t, e, http.MethodPost, "/v1/channels/teams/send", org,
+	res := req(t, e, http.MethodPost, "/v1/channel/teams/send", org,
 		map[string]any{"room": map[string]any{"id": conv}, "text": "reply"})
 	if res.Code != http.StatusOK {
 		t.Fatalf("send: %d (%s)", res.Code, res.Body)
@@ -699,7 +699,7 @@ func TestIngestOrgIsolation(t *testing.T) {
 	ingest(ctx, ingressEv(orgA, "slack", "T1", "u1", "D1", "", "pair", "i2", ""))
 
 	// Org B sees neither A's inbox nor A's pending pairings.
-	res := req(t, e, http.MethodGet, "/v1/channels/inbox", orgB, nil)
+	res := req(t, e, http.MethodGet, "/v1/channel/inbox", orgB, nil)
 	var inbox struct {
 		Messages []json.RawMessage `json:"messages"`
 	}
@@ -707,7 +707,7 @@ func TestIngestOrgIsolation(t *testing.T) {
 	if len(inbox.Messages) != 0 {
 		t.Fatalf("org-b inbox = %s, want empty", res.Body)
 	}
-	res = reqAdmin(t, e, http.MethodGet, "/v1/channels/pairing", orgB, nil)
+	res = reqAdmin(t, e, http.MethodGet, "/v1/channel/pairing", orgB, nil)
 	var pending struct {
 		Pending []json.RawMessage `json:"pending"`
 	}
@@ -744,7 +744,7 @@ func TestIngestDiscordRoute(t *testing.T) {
 	if err != nil || !ok || root != "" {
 		t.Fatalf("route = %q ok=%v err=%v, want present with empty root", root, ok, err)
 	}
-	res := req(t, e, http.MethodPost, "/v1/channels/discord/send", org,
+	res := req(t, e, http.MethodPost, "/v1/channel/discord/send", org,
 		map[string]any{"room": map[string]any{"id": "c-99"}, "text": "pong"})
 	if res.Code != http.StatusOK {
 		t.Fatalf("send: %d (%s)", res.Code, res.Body)
@@ -799,7 +799,7 @@ func TestPairRouteLapsesWithThePairing(t *testing.T) {
   WHERE org = ? AND channel = 'teams' AND room_id = ?`, org, stranger).Scan(&rows); err != nil || rows != 0 {
 		t.Fatalf("lapsed route rows = %d err=%v, want collected", rows, err)
 	}
-	if r := req(t, e, http.MethodPost, "/v1/channels/teams/send", org,
+	if r := req(t, e, http.MethodPost, "/v1/channel/teams/send", org,
 		map[string]any{"room": map[string]any{"id": stranger}, "text": "still here?"}); r.Code != http.StatusConflict {
 		t.Fatalf("send to a lapsed route: %d, want 409", r.Code)
 	}
@@ -834,7 +834,7 @@ func TestApprovalMakesThePairRouteLast(t *testing.T) {
 	if len(pend) != 1 {
 		t.Fatalf("pending = %+v, want one request", pend)
 	}
-	if r := reqAdmin(t, e, http.MethodPost, "/v1/channels/pairing/approve", org,
+	if r := reqAdmin(t, e, http.MethodPost, "/v1/channel/pairing/approve", org,
 		map[string]any{"channel": "teams", "code": pend[0].Code}); r.Code != http.StatusOK {
 		t.Fatalf("approve: %d (%s)", r.Code, r.Body)
 	}

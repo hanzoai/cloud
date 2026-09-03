@@ -5,7 +5,7 @@ package cloud
 // An sk- API key is a customer credential, and IAM mints it no `orgs` claim,
 // because a machine is a member of nothing. Reading the membership set and failing
 // closed on it therefore 403'd every existing customer key on every ORG-SCOPED
-// route (v1.801.244: /v1/agents 403 "X-Org-Id required", /v1/gpus 403,
+// route (v1.801.244: /v1/agent 403 "X-Org-Id required", /v1/gpus 403,
 // /v1/billing/balance 401) while unscoped /v1/models kept returning 200 — which is
 // exactly why a pre-pin probe that only asserted /v1/models could not see it.
 //
@@ -46,7 +46,7 @@ func orgScopedProbe(t *testing.T, v *identityValidator, mutate func(*http.Reques
 	t.Helper()
 	app := zip.New(zip.Config{})
 	app.Use(SanitizeIdentity(v))
-	app.Get("/v1/agents", func(c *zip.Ctx) error {
+	app.Get("/v1/agent", func(c *zip.Ctx) error {
 		o, ok := principal.Org(c)
 		if !ok {
 			return principal.Refused(c)
@@ -54,7 +54,7 @@ func orgScopedProbe(t *testing.T, v *identityValidator, mutate func(*http.Reques
 		org = o
 		return c.JSON(http.StatusOK, map[string]string{"org": o})
 	})
-	req := httptest.NewRequest(http.MethodGet, "/v1/agents", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/agent", nil)
 	if mutate != nil {
 		mutate(req)
 	}

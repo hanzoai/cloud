@@ -297,7 +297,7 @@ type buildRef struct {
 // PUBLIC, no tenancy: it answers only for a session its author explicitly
 // published, which is what makes it safe to be anonymous. An unpublished session
 // is invisible here no matter who asks; its owner reads it through the org-scoped
-// /v1/agents/sessions routes, which need a validated principal.
+// /v1/agent/sessions routes, which need a validated principal.
 //
 // Example: {"org": "hanzo", "project": "landing"}
 func (o sessionOps) build(ctx context.Context, in *buildRef) (*buildView, error) {

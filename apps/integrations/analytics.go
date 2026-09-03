@@ -3,7 +3,7 @@ package integrations
 // analytics.go registers the product-analytics & experimentation connectors that
 // give the agentic loop its "deep insights" — who converted, which experiment won,
 // what a cohort did. Customer-held keys, verified live via keyVerify against each
-// provider's authenticated read, on the per-user /v1/integrations/connectors plane.
+// provider's authenticated read, on the per-user /v1/integration/connectors plane.
 //
 // Least-privilege note: these are READ credentials (dashboards/queries), not
 // ingestion write keys. A publish-only CDP write key (e.g. a Segment source write

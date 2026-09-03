@@ -171,8 +171,8 @@ func TestWantsMarkdown(t *testing.T) {
 		{"accept json preferred by q", "/v1/x", "text/markdown;q=0.3, application/json;q=0.9", "", nil, false},
 		{"accept star only falls to prefix", "/v1/code/y", "*/*", "", []string{"/v1/code/"}, true},
 		{"no signal, no prefix", "/v1/x", "", "", nil, false},
-		{"prefix match", "/v1/agents/run", "", "", []string{"/v1/agents/"}, true},
-		{"prefix miss", "/v1/models", "", "", []string{"/v1/agents/"}, false},
+		{"prefix match", "/v1/agent/run", "", "", []string{"/v1/agent/"}, true},
+		{"prefix miss", "/v1/models", "", "", []string{"/v1/agent/"}, false},
 		{"accept json overrides prefix", "/v1/code/y", "application/json", "", []string{"/v1/code/"}, false},
 	}
 	for _, tc := range cases {

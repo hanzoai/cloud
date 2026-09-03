@@ -103,7 +103,7 @@ func TestTheBotsOwnMessageNeverRunsATurn(t *testing.T) {
 
 	// BACME is the bot user id the install recorded for this org.
 	echo := `{"type":"event_callback","team_id":"TACME","event_id":"EvEcho","event":{"type":"message","channel_type":"channel","user":"BACME","text":"my own words","channel":"C1","ts":"1.1"}}`
-	if res := slackPost(t, app, "/v1/integrations/slack/events", "loop-secret", "application/json", echo); res.Code != http.StatusOK {
+	if res := slackPost(t, app, "/v1/integration/slack/events", "loop-secret", "application/json", echo); res.Code != http.StatusOK {
 		t.Fatalf("echo ack want 200, got %d (%s)", res.Code, res.Body)
 	}
 	if fresh, err := mounted.State.store.MarkEvent(context.Background(), "slack", "EvEcho"); err != nil || !fresh {
@@ -113,7 +113,7 @@ func TestTheBotsOwnMessageNeverRunsATurn(t *testing.T) {
 	// A person's message in the SAME room does run: the guard is the author, not
 	// the surface.
 	human := `{"type":"event_callback","team_id":"TACME","event_id":"EvHuman","event":{"type":"message","channel_type":"channel","user":"Uacme","text":"a real question","channel":"C1","ts":"2.2"}}`
-	if res := slackPost(t, app, "/v1/integrations/slack/events", "loop-secret", "application/json", human); res.Code != http.StatusOK {
+	if res := slackPost(t, app, "/v1/integration/slack/events", "loop-secret", "application/json", human); res.Code != http.StatusOK {
 		t.Fatalf("human ack want 200, got %d (%s)", res.Code, res.Body)
 	}
 	if fresh, err := mounted.State.store.MarkEvent(context.Background(), "slack", "EvHuman"); err != nil || fresh {
@@ -135,7 +135,7 @@ func TestRetryIsDedupedOnEventID(t *testing.T) {
 	}
 	body := `{"type":"event_callback","team_id":"TACME","event_id":"EvRetry","event":{"type":"message","channel_type":"channel","user":"Uacme","text":"hello","channel":"C1","ts":"1.1"}}`
 	for _, delivery := range []string{"first", "Slack's retry"} {
-		if res := slackPost(t, app, "/v1/integrations/slack/events", "retry-secret", "application/json", body); res.Code != http.StatusOK {
+		if res := slackPost(t, app, "/v1/integration/slack/events", "retry-secret", "application/json", body); res.Code != http.StatusOK {
 			t.Fatalf("%s delivery want 200, got %d (%s)", delivery, res.Code, res.Body)
 		}
 	}

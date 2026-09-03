@@ -40,7 +40,7 @@ var marketingKeyProviders = []string{"warpcast", "whatsapp"}
 // Authorize/Exchange + a matching callback RedirectPath + Scope=""; apikey providers
 // declare Kind=apikey + Verify + Configured/Creds and no OAuth callback surface. Each
 // is AdminOnly (linking a client's marketing account is an org-admin action) and on
-// the ORG plane (invisible to the per-user /v1/integrations/connectors surface).
+// the ORG plane (invisible to the per-user /v1/integration/connectors surface).
 func TestMarketingConnectorsRegisteredCoherent(t *testing.T) {
 	for _, want := range marketingOAuthProviders {
 		p, ok := registry[want.id]
@@ -104,7 +104,7 @@ func TestMarketingConnectorsRegisteredCoherent(t *testing.T) {
 // resolves the org from the signed state alone.
 func oauthCallbackViaState(t *testing.T, app *zip.App, provider, org, code string) httpResult {
 	t.Helper()
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/"+provider+"/connect", org, true, nil)
+	res := cfReq(t, app, http.MethodPost, "/v1/integration/"+provider+"/connect", org, true, nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("%s connect want 200, got %d (%s)", provider, res.Code, res.Body)
 	}
@@ -123,7 +123,7 @@ func oauthCallbackViaState(t *testing.T, app *zip.App, provider, org, code strin
 		t.Fatalf("%s authorize url missing state: %s", provider, out.AuthorizeURL)
 	}
 	return req(t, app, http.MethodGet,
-		"/v1/integrations/"+provider+"/callback?state="+url.QueryEscape(state)+"&code="+url.QueryEscape(code), "", nil)
+		"/v1/integration/"+provider+"/callback?state="+url.QueryEscape(state)+"&code="+url.QueryEscape(code), "", nil)
 }
 
 // kmsSecret reads a custodied secret straight from the org's KMS namespace for a

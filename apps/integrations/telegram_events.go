@@ -32,11 +32,11 @@ import (
 // MOUNT HANDOFF (integrations owner adds these — literals BEFORE the /:provider
 // wildcards so they win, same discipline as the Slack bridge):
 //
-//	app.Post("/v1/integrations/telegram/connect", s.telegramConnect)   // shadows generic connect
-//	app.Post("/v1/integrations/telegram/webhook", s.telegramWebhook)
-//	app.Get("/v1/integrations/telegram/link",          s.telegramLink)
-//	app.Get("/v1/integrations/telegram/link/auth",     s.telegramLinkAuth)
-//	app.Get("/v1/integrations/telegram/link/callback", s.telegramLinkCallback)
+//	app.Post("/v1/integration/telegram/connect", s.telegramConnect)   // shadows generic connect
+//	app.Post("/v1/integration/telegram/webhook", s.telegramWebhook)
+//	app.Get("/v1/integration/telegram/link",          s.telegramLink)
+//	app.Get("/v1/integration/telegram/link/auth",     s.telegramLinkAuth)
+//	app.Get("/v1/integration/telegram/link/callback", s.telegramLinkCallback)
 
 const telegramSecretHeader = "X-Telegram-Bot-Api-Secret-Token"
 
@@ -83,7 +83,7 @@ func (o ops) telegramConnect(ctx context.Context, _ *cloud.Unit) (*authorizeOut,
 // ── webhook ─────────────────────────────────────────────────────────────────
 
 // telegramWebhook is the Bot API webhook (setWebhook url:
-// https://{domain}/v1/integrations/telegram/webhook). It constant-time-verifies the
+// https://{domain}/v1/integration/telegram/webhook). It constant-time-verifies the
 // secret token, parses the update, and either binds a chat (/start <code>) or routes
 // an @hanzo trigger to an on-behalf-of agent run — always acking 200 fast and doing
 // billed work async, deduped durably on update_id.

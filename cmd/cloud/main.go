@@ -400,7 +400,7 @@ func run(addr, zapAddr string) error {
 
 	// The console's BYTES are a published site release now, not an embed, so the
 	// app that owns the release pointer has to be running before the host can
-	// read one. `projects` is lazy — its trigger is a request reaching /v1/projects,
+	// read one. `projects` is lazy — its trigger is a request reaching /v1/project,
 	// and none has arrived — and the resolver the edge just installed dials its
 	// socket directly rather than waking it. Without this, the host's first act
 	// after mounting is to ask a process that does not exist. Start is idempotent

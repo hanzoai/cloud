@@ -11,7 +11,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Mount wires the unified tool plane at /v1/tools/* and installs the two providers
+// Mount wires the unified tool plane at /v1/tool/* and installs the two providers
 // this package OWNS — the external-MCP-server source and the org's own authored
 // skills. Every OTHER source (connectors, functions, agents, agent skills)
 // registers its own Provider from its own Mount via tools.Register, so this
@@ -105,15 +105,15 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	serveSkills()
 
 	routes(app, s)
-	b.Log.Info("tools plane mounted", "prefix", "/v1/tools", "brand", cloud.Brand(), "kms", deps.KMS != nil)
+	b.Log.Info("tools plane mounted", "prefix", "/v1/tool", "brand", cloud.Brand(), "kms", deps.KMS != nil)
 	return nil
 }
 
 // routes declares the tool plane on ONE group, /v1.
 //
-// Every path below is under /v1/tools, and the group is still /v1 rather than
-// /v1/tools because the plane's COLLECTION ROOT is /v1/tools itself: joining a
-// /v1/tools group with an empty leaf yields /v1/tools/, an address this API has
+// Every path below is under /v1/tool, and the group is still /v1 rather than
+// /v1/tool because the plane's COLLECTION ROOT is /v1/tool itself: joining a
+// /v1/tool group with an empty leaf yields /v1/tool/, an address this API has
 // never served. One /v1 group spells each path exactly as the wire spells it,
 // and it is also the OpTarget the typed ops are declared on, so zip composes each
 // op's path from the same prefix the router does and cmd/zipdoc resolves it the
@@ -136,7 +136,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(v1, "/tools", o.listTools)
 	// The catalog (catalog.go): our canonical copy of what the public MCP
 	// registries publish, and the two decisions we make about each entry. It hangs
-	// under /v1/tools because it is the SHELF this plane's servers are picked
+	// under /v1/tool because it is the SHELF this plane's servers are picked
 	// from — one noun, not a fifth top-level one.
 	zip.Get(v1, "/tools/catalog", o.listCatalog)
 	zip.Post(v1, "/tools/catalog/sync", o.syncCatalog)
@@ -156,7 +156,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Delete(v1, "/tools/skills/:id", o.deleteSkill)
 	zip.Get(v1, "/tools/plugins", o.listPlugins)
 
-	// The builder (pluginbuild.go). /v1/tools/plugins lists what this deployment
+	// The builder (pluginbuild.go). /v1/tool/plugins lists what this deployment
 	// mounted; /authored is what THIS ORG built, which is a different set with a
 	// different lifecycle, so it is a subpath rather than a mixed collection.
 	zip.Post(v1, "/tools/plugins/build", o.buildPlugin, zip.WithStatus(http.StatusCreated))

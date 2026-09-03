@@ -37,39 +37,39 @@ import (
 //     callback, state-authed and answering 302.
 var untypedByDesign = map[string]string{
 	// ── browser legs: 302 or an HTML page with a __Host- cookie ──
-	"GET /v1/integrations/slack/install":          "the Add-to-Slack entry point; answers a 302 into Slack's own consent flow.",
-	"GET /v1/integrations/slack/link":             "a browser leg: 302 to sign-in, never JSON.",
-	"GET /v1/integrations/slack/link/slack":       "a browser leg: 302 into Slack's OAuth, never JSON.",
-	"GET /v1/integrations/slack/link/callback":    "a browser leg: an HTML confirmation that sets a __Host- cookie.",
-	"GET /v1/integrations/discord/link":           "a browser leg: 302 to sign-in, never JSON.",
-	"GET /v1/integrations/discord/link/discord":   "a browser leg: 302 into Discord's OAuth, never JSON.",
-	"GET /v1/integrations/discord/link/callback":  "a browser leg: an HTML confirmation that sets a __Host- cookie.",
-	"GET /v1/integrations/teams/link":             "a browser leg: 302 to sign-in, never JSON.",
-	"GET /v1/integrations/teams/link/aad":         "a browser leg: 302 into Entra ID, never JSON.",
-	"GET /v1/integrations/teams/link/callback":    "a browser leg: an HTML confirmation that sets a __Host- cookie.",
-	"GET /v1/integrations/telegram/link":          "a browser leg: 302 to sign-in, never JSON.",
-	"GET /v1/integrations/telegram/link/auth":     "a browser leg: 302 into Telegram's login widget, never JSON.",
-	"GET /v1/integrations/telegram/link/callback": "a browser leg: an HTML confirmation that sets a __Host- cookie.",
+	"GET /v1/integration/slack/install":          "the Add-to-Slack entry point; answers a 302 into Slack's own consent flow.",
+	"GET /v1/integration/slack/link":             "a browser leg: 302 to sign-in, never JSON.",
+	"GET /v1/integration/slack/link/slack":       "a browser leg: 302 into Slack's OAuth, never JSON.",
+	"GET /v1/integration/slack/link/callback":    "a browser leg: an HTML confirmation that sets a __Host- cookie.",
+	"GET /v1/integration/discord/link":           "a browser leg: 302 to sign-in, never JSON.",
+	"GET /v1/integration/discord/link/discord":   "a browser leg: 302 into Discord's OAuth, never JSON.",
+	"GET /v1/integration/discord/link/callback":  "a browser leg: an HTML confirmation that sets a __Host- cookie.",
+	"GET /v1/integration/teams/link":             "a browser leg: 302 to sign-in, never JSON.",
+	"GET /v1/integration/teams/link/aad":         "a browser leg: 302 into Entra ID, never JSON.",
+	"GET /v1/integration/teams/link/callback":    "a browser leg: an HTML confirmation that sets a __Host- cookie.",
+	"GET /v1/integration/telegram/link":          "a browser leg: 302 to sign-in, never JSON.",
+	"GET /v1/integration/telegram/link/auth":     "a browser leg: 302 into Telegram's login widget, never JSON.",
+	"GET /v1/integration/telegram/link/callback": "a browser leg: an HTML confirmation that sets a __Host- cookie.",
 
 	// ── inbound webhooks: the platform's protocol over the RAW request ──
-	"POST /v1/integrations/slack/events":         "Slack's HMAC covers the RAW received bytes, which a re-encoded In is not.",
-	"POST /v1/integrations/slack/commands":       "Slack's slash-command wire: form-encoded, HMAC over the raw bytes.",
-	"POST /v1/integrations/github/webhook":       "GitHub's HMAC covers the RAW received bytes.",
-	"POST /v1/integrations/linear/webhook":       "Linear's HMAC covers the RAW received bytes.",
-	"POST /v1/integrations/discord/interactions": "Discord's Ed25519 signature covers the RAW received bytes.",
-	"POST /v1/integrations/teams/events": "header-authed, and answers an EMPTY 200 to a body it cannot parse; zip " +
+	"POST /v1/integration/slack/events":         "Slack's HMAC covers the RAW received bytes, which a re-encoded In is not.",
+	"POST /v1/integration/slack/commands":       "Slack's slash-command wire: form-encoded, HMAC over the raw bytes.",
+	"POST /v1/integration/github/webhook":       "GitHub's HMAC covers the RAW received bytes.",
+	"POST /v1/integration/linear/webhook":       "Linear's HMAC covers the RAW received bytes.",
+	"POST /v1/integration/discord/interactions": "Discord's Ed25519 signature covers the RAW received bytes.",
+	"POST /v1/integration/teams/events": "header-authed, and answers an EMPTY 200 to a body it cannot parse; zip " +
 		"unmarshals before the handler, so a typed In turns that 200 into a 400 and retry-storms the platform.",
-	"POST /v1/integrations/telegram/webhook": "header-authed, same empty-200-on-unparseable contract as Teams.",
-	"GET /v1/integrations/whatsapp/webhook": "Meta's subscription challenge: the token is compared, then its " +
+	"POST /v1/integration/telegram/webhook": "header-authed, same empty-200-on-unparseable contract as Teams.",
+	"GET /v1/integration/whatsapp/webhook": "Meta's subscription challenge: the token is compared, then its " +
 		"`hub.challenge` is echoed as bare text — a typed Out would wrap it in JSON and the subscription would never verify.",
-	"POST /v1/integrations/whatsapp/webhook": "Meta's HMAC covers the RAW received bytes, and it answers 200 to " +
+	"POST /v1/integration/whatsapp/webhook": "Meta's HMAC covers the RAW received bytes, and it answers 200 to " +
 		"anything it cannot act on — a status callback carries no message, and a non-2xx is retried with backoff " +
 		"until the subscription is disabled.",
-	"POST /v1/integrations/openrouter/webhook": "the credential is read from the destination's own Headers map BEFORE the " +
+	"POST /v1/integration/openrouter/webhook": "the credential is read from the destination's own Headers map BEFORE the " +
 		"body is touched, so a caller with no key never buys a decode — an order zip's pre-handler unmarshal inverts.",
 
 	// ── the generic OAuth callback ──
-	"GET /v1/integrations/{provider}/callback": "ONE route serving every provider's OAuth callback (RedirectPath is asserted " +
+	"GET /v1/integration/{provider}/callback": "ONE route serving every provider's OAuth callback (RedirectPath is asserted " +
 		"equal for all of them in Mount), state-authed and answering 302.",
 }
 
@@ -97,7 +97,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 
 	served, typed := map[string]bool{}, map[string]bool{}
 	for path, item := range doc.Paths {
-		if !strings.HasPrefix(path, "/v1/integrations") {
+		if !strings.HasPrefix(path, "/v1/integration") {
 			continue
 		}
 		for method := range item {
@@ -105,7 +105,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 		}
 	}
 	for key := range reg.Ops {
-		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/integrations") {
+		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/integration") {
 			typed[key] = true
 		}
 	}

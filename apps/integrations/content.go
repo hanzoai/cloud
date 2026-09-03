@@ -2,7 +2,7 @@ package integrations
 
 // content.go registers the content & hosting connectors an agentic marketing site
 // publishes through: a CMS (Contentful) and a static host (Netlify). Customer-held
-// tokens on the per-user /v1/integrations/connectors plane, verified live via keyVerify.
+// tokens on the per-user /v1/integration/connectors plane, verified live via keyVerify.
 //
 // Netlify offers full 3-legged OAuth too; the Personal Access Token (a bearer
 // credential) is the token-auth path that fits the one key mechanism, exactly as

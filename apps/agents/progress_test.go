@@ -76,7 +76,7 @@ func (f *progressAI) sent() string {
 // openSession registers one session over the real route and returns its id.
 func openSession(t *testing.T, app *zip.App, org, title string) string {
 	t.Helper()
-	code, body := do(t, app, http.MethodPost, "/v1/agents/sessions", org,
+	code, body := do(t, app, http.MethodPost, "/v1/agent/sessions", org,
 		map[string]any{"agent": "hanzo-dev", "title": title})
 	if code != http.StatusCreated {
 		t.Fatalf("register session: %d %s", code, body)
@@ -94,7 +94,7 @@ func openSession(t *testing.T, app *zip.App, org, title string) string {
 // look like a run with a transcript rather than an empty row.
 func logTurn(t *testing.T, app *zip.App, org, id, kind, payload string) {
 	t.Helper()
-	code, body := do(t, app, http.MethodPost, "/v1/agents/sessions/"+id+"/events", org,
+	code, body := do(t, app, http.MethodPost, "/v1/agent/sessions/"+id+"/events", org,
 		map[string]any{"kind": kind, "payload": json.RawMessage(payload)})
 	if code != http.StatusCreated {
 		t.Fatalf("append %s: %d %s", kind, code, body)
@@ -105,7 +105,7 @@ func logTurn(t *testing.T, app *zip.App, org, id, kind, payload string) {
 // a test can ask whether a key is present rather than what it decoded to.
 func readProgress(t *testing.T, app *zip.App, org, id string) (sessionProgress, []byte) {
 	t.Helper()
-	code, body := do(t, app, http.MethodGet, "/v1/agents/sessions/"+id+"/progress", org, nil)
+	code, body := do(t, app, http.MethodGet, "/v1/agent/sessions/"+id+"/progress", org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("progress: %d %s", code, body)
 	}
@@ -120,7 +120,7 @@ func readProgress(t *testing.T, app *zip.App, org, id string) (sessionProgress, 
 // read a board actually makes.
 func progressInList(t *testing.T, app *zip.App, org, id string) (sessionProgress, []byte) {
 	t.Helper()
-	code, body := do(t, app, http.MethodGet, "/v1/agents/sessions", org, nil)
+	code, body := do(t, app, http.MethodGet, "/v1/agent/sessions", org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("list: %d %s", code, body)
 	}
@@ -386,7 +386,7 @@ func TestTerminalProgressIsNotAnEstimate(t *testing.T) {
 			ai := &progressAI{reply: `{"pct":33,"phase":"running","activity":"a"}`}
 			app := mountApp(t, ai)
 			id := openSession(t, app, "acme", "a run")
-			if code, body := do(t, app, http.MethodPatch, "/v1/agents/sessions/"+id, "acme",
+			if code, body := do(t, app, http.MethodPatch, "/v1/agent/sessions/"+id, "acme",
 				map[string]any{"status": tc.status}); code != http.StatusOK {
 				t.Fatalf("patch: %d %s", code, body)
 			}
@@ -508,10 +508,10 @@ func TestProgressIsOrgScoped(t *testing.T) {
 	app := mountApp(t, &progressAI{reply: `{"pct":50,"phase":"running","activity":"a"}`})
 	id := openSession(t, app, "acme", "a run")
 
-	if code, _ := do(t, app, http.MethodGet, "/v1/agents/sessions/"+id+"/progress", "other", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/agent/sessions/"+id+"/progress", "other", nil); code != http.StatusNotFound {
 		t.Fatalf("another org must not resolve this session, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/agents/sessions/"+id+"/progress", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/agent/sessions/"+id+"/progress", "", nil); code != http.StatusForbidden {
 		t.Fatalf("anonymous must be refused, got %d", code)
 	}
 }
@@ -603,7 +603,7 @@ func TestConcurrentEstimatesAreBounded(t *testing.T) {
 // the append's status and body so a test can assert a refusal too.
 func report(t *testing.T, app *zip.App, org, id, payload string) (int, []byte) {
 	t.Helper()
-	return do(t, app, http.MethodPost, "/v1/agents/sessions/"+id+"/events", org,
+	return do(t, app, http.MethodPost, "/v1/agent/sessions/"+id+"/events", org,
 		map[string]any{"kind": KindProgress, "payload": json.RawMessage(payload)})
 }
 

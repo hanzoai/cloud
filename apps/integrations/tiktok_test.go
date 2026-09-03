@@ -11,7 +11,7 @@ import (
 )
 
 func TestTiktokAuthorizeURL(t *testing.T) {
-	raw, err := tiktokAuthorize(OAuthConfig{ClientID: "tt-app"}, "https://api.hanzo.ai/v1/integrations/tiktok_ads/callback", "st8")
+	raw, err := tiktokAuthorize(OAuthConfig{ClientID: "tt-app"}, "https://api.hanzo.ai/v1/integration/tiktok_ads/callback", "st8")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}

@@ -23,21 +23,21 @@ import (
 // surface that has moved on.
 var readings = []struct{ id, want, route string }{
 	// The shape that made the surface unreadable, whole.
-	{"get_projects", "list_projects", "GET /v1/projects"},
-	{"post_projects", "create_project", "POST /v1/projects"},
-	{"get_projects_by_slug", "get_project", "GET /v1/projects/{slug}"},
-	{"patch_projects_by_slug", "update_project", "PATCH /v1/projects/{slug}"},
-	{"delete_projects_by_slug", "delete_project", "DELETE /v1/projects/{slug}"},
-	{"get_projects_by_slug_deployments", "list_project_deployments", "GET /v1/projects/{slug}/deployments"},
-	{"get_projects_by_slug_deployments_by_id", "get_project_deployment", "GET /v1/projects/{slug}/deployments/{id}"},
-	{"delete_projects_by_slug_domains_by_host", "delete_project_domain", "DELETE /v1/projects/{slug}/domains/{host}"},
+	{"get_projects", "list_projects", "GET /v1/project"},
+	{"post_projects", "create_project", "POST /v1/project"},
+	{"get_projects_by_slug", "get_project", "GET /v1/project/{slug}"},
+	{"patch_projects_by_slug", "update_project", "PATCH /v1/project/{slug}"},
+	{"delete_projects_by_slug", "delete_project", "DELETE /v1/project/{slug}"},
+	{"get_projects_by_slug_deployments", "list_project_deployments", "GET /v1/project/{slug}/deployments"},
+	{"get_projects_by_slug_deployments_by_id", "get_project_deployment", "GET /v1/project/{slug}/deployments/{id}"},
+	{"delete_projects_by_slug_domains_by_host", "delete_project_domain", "DELETE /v1/project/{slug}/domains/{host}"},
 
 	// .../{id}/ACTION — the author wrote the verb, so it leads.
-	{"post_projects_by_slug_deploy", "deploy_project", "POST /v1/projects/{slug}/deploy"},
-	{"post_projects_by_slug_purge", "purge_project", "POST /v1/projects/{slug}/purge"},
-	{"post_projects_by_slug_domains_by_host_verify", "verify_project_domain", "POST /v1/projects/{slug}/domains/{host}/verify"},
-	{"post_projects_by_slug_deployments_by_id_complete", "complete_project_deployment", "POST /v1/projects/{slug}/deployments/{id}/complete"},
-	{"post_projects_by_slug_releases_by_release_activate", "activate_project_release", "POST /v1/projects/{slug}/releases/{release}/activate"},
+	{"post_projects_by_slug_deploy", "deploy_project", "POST /v1/project/{slug}/deploy"},
+	{"post_projects_by_slug_purge", "purge_project", "POST /v1/project/{slug}/purge"},
+	{"post_projects_by_slug_domains_by_host_verify", "verify_project_domain", "POST /v1/project/{slug}/domains/{host}/verify"},
+	{"post_projects_by_slug_deployments_by_id_complete", "complete_project_deployment", "POST /v1/project/{slug}/deployments/{id}/complete"},
+	{"post_projects_by_slug_releases_by_release_activate", "activate_project_release", "POST /v1/project/{slug}/releases/{release}/activate"},
 
 	// A singular segment is only an action when a parameter put it after a ROW.
 	// `/v1/commerce/product` is a collection someone spelled singular, and reading
@@ -59,8 +59,8 @@ var readings = []struct{ id, want, route string }{
 	// Spelling that a naive plural rule gets wrong in both directions.
 	{"get_sandbox", "list_sandboxes", "GET /v1/sandbox — a singular address, and the list phrase is still plural"},
 	{"get_sandbox_by_id", "get_sandbox", "GET /v1/sandbox/{id} — the member reads as the bare noun"},
-	{"get_projects_sites", "list_project_sites", "GET /v1/projects/sites — the collection under its owner"},
-	{"post_projects_by_slug_releases", "create_project_release", "POST /v1/projects/{slug}/releases — `releases` loses only one"},
+	{"get_projects_sites", "list_project_sites", "GET /v1/project/sites — the collection under its owner"},
+	{"post_projects_by_slug_releases", "create_project_release", "POST /v1/project/{slug}/releases — `releases` loses only one"},
 
 	// A DECLARED id is already a verb on an object and is left alone.
 	{"GetUserPreference", "GetUserPreference", "o11y declares its own ids"},
@@ -180,7 +180,7 @@ func TestEveryPublishedNameMeansExactlyOneOperation(t *testing.T) {
 	t.Logf("  %4d keep a route for a name (%.1f%%): the phrase would have been ambiguous, so it is not used.",
 		ambiguous, 100*float64(ambiguous)/float64(len(all)))
 	t.Logf("       These are overwhelmingly the surface's own duplicates — one handler at /tasks and")
-	t.Logf("       /v1/tasks, or post_agent in one subsystem beside post_agents in another.")
+	t.Logf("       /v1/task, or post_agent in one subsystem beside post_agents in another.")
 }
 
 // TestTheGateStillJudgesTheROUTE is the security bar for this change, and it is

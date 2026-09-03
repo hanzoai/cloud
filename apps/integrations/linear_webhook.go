@@ -13,7 +13,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// linear_webhook.go is Linear's delivery address: /v1/integrations/linear/webhook.
+// linear_webhook.go is Linear's delivery address: /v1/integration/linear/webhook.
 // PUBLIC at the JWT layer (Linear has no Hanzo session) — auth is the signature,
 // verified fail-closed over the raw bytes with the secret the org sealed at claim
 // time (linear.go). The tenant is the organization the delivery names, and the

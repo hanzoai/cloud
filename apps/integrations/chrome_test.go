@@ -2,7 +2,7 @@ package integrations
 
 // chrome_test.go proves the Chrome (browser-extension pairing) connector against
 // the REAL plane (real store, real KMS seal/open): it registers on the ORG
-// /v1/integrations surface, verify-before-store holds, the pairing token seals to
+// /v1/integration surface, verify-before-store holds, the pairing token seals to
 // the org's KMS namespace and never leaks, tenant isolation holds, and the
 // org-admin gate is enforced — the same bar social_keys_test.go / cloudflare_test.go
 // set. Unlike those, Chrome has NO remote verify endpoint (the extension bridge is
@@ -23,15 +23,15 @@ const chromePairToken = "hzb.eyJ0IjoicGFpciJ9.Zm9vYmFyYmF6cXV4LS_deadbeef0123456
 
 func chromeConnect(t *testing.T, app *zip.App, org string, admin bool, token string) httpResult {
 	t.Helper()
-	return cfReq(t, app, http.MethodPost, "/v1/integrations/chrome/connect", org, admin,
+	return cfReq(t, app, http.MethodPost, "/v1/integration/chrome/connect", org, admin,
 		map[string]any{"token": token})
 }
 
 // TestChromeListedOnIntegrations asserts Chrome is a real card on the org-plane
-// /v1/integrations surface both hanzo.app and the console render.
+// /v1/integration surface both hanzo.app and the console render.
 func TestChromeListedOnIntegrations(t *testing.T) {
 	app := newApp(t, newKMS(t))
-	res := cfReq(t, app, http.MethodGet, "/v1/integrations/chrome", "acme", false, nil)
+	res := cfReq(t, app, http.MethodGet, "/v1/integration/chrome", "acme", false, nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("GET chrome want 200, got %d (%s)", res.Code, res.Body)
 	}

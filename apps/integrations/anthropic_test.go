@@ -143,7 +143,7 @@ func TestAnthropicRejected(t *testing.T) {
 	if _, err := userHas(t, kc, "acme", userEmail, "anthropic", "default", "api_key"); err == nil {
 		t.Fatal("a rejected credential must not be sealed")
 	}
-	list := decode[listResp](t, asOK(t, app, http.MethodGet, "/v1/integrations/connectors", "acme", userEmail, nil))
+	list := decode[listResp](t, asOK(t, app, http.MethodGet, "/v1/integration/connectors", "acme", userEmail, nil))
 	if len(list.Connectors) != 0 {
 		t.Fatalf("a rejected credential must not create a row: %+v", list.Connectors)
 	}

@@ -246,7 +246,7 @@ func cloudflareCreds() OAuthConfig {
 // cloudflareAuthorize builds Cloudflare's consent URL (Authorization Code flow,
 // confidential client — client_secret, no PKCE, matching the framework's OAuth
 // providers; see slack_link.go). state is the framework's signed single-use CSRF
-// token; redirectURI is /v1/integrations/cloudflare/callback.
+// token; redirectURI is /v1/integration/cloudflare/callback.
 func cloudflareAuthorize(creds OAuthConfig, redirectURI, state string) (string, error) {
 	q := url.Values{
 		"client_id":     {creds.ClientID},

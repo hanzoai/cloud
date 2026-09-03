@@ -91,11 +91,11 @@ var probes = []probe{
 	{"billing-balance", http.MethodGet, "/v1/billing/balance", classAuthed},
 	{"billing-usage", http.MethodGet, "/v1/billing/usage", classAuthed}, // BUG 2: was 500
 	{"router-stats", http.MethodGet, "/v1/router/stats", classAuthed},   // BUG 1: was 402 authed
-	{"projects", http.MethodGet, "/v1/projects", classAuthed},
-	{"agents", http.MethodGet, "/v1/agents", classAuthed},
-	{"functions", http.MethodGet, "/v1/functions", classAuthed},
+	{"projects", http.MethodGet, "/v1/project", classAuthed},
+	{"agents", http.MethodGet, "/v1/agent", classAuthed},
+	{"functions", http.MethodGet, "/v1/function", classAuthed},
 	{"wallets", http.MethodGet, "/v1/wallet", classAuthed},
-	{"integrations", http.MethodGet, "/v1/integrations", classAuthed},
+	{"integrations", http.MethodGet, "/v1/integration", classAuthed},
 	{"marketplace", http.MethodGet, "/v1/marketplace/listings", classAuthed},
 	{"o11y", http.MethodGet, "/v1/o11y/status", classAuthed},
 	{"team", http.MethodGet, "/v1/team/bots", classAuthed},

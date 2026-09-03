@@ -21,9 +21,9 @@ import (
 // the id_token `oid` — the SAME id the inbound activity carries as
 // from.aadObjectId), then the shared hanzo.id OIDC leg (channel_link.go):
 //
-//	GET /v1/integrations/teams/link           leg1: set __Host init cookie, redirect to AAD sign-in
-//	GET /v1/integrations/teams/link/aad        leg2: AAD callback; verify oid+tid, bind (tenant,oid)
-//	GET /v1/integrations/teams/link/callback    leg3: hanzo.id OIDC callback; bind Teams↔Hanzo, seal refresh
+//	GET /v1/integration/teams/link           leg1: set __Host init cookie, redirect to AAD sign-in
+//	GET /v1/integration/teams/link/aad        leg2: AAD callback; verify oid+tid, bind (tenant,oid)
+//	GET /v1/integration/teams/link/callback    leg3: hanzo.id OIDC callback; bind Teams↔Hanzo, seal refresh
 //
 // The bound AAD user comes ONLY from the AAD-signed id_token (leg2), and the leg
 // re-checks the token's tenant (tid) equals the chat's tenant — a forwarded link can
@@ -46,7 +46,7 @@ func teamsLinkURL(s *cloud.Service[state], tenant, _user string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	return "https://" + s.Domain + "/v1/integrations/teams/link?state=" + url.QueryEscape(state), nil
+	return "https://" + s.Domain + "/v1/integration/teams/link?state=" + url.QueryEscape(state), nil
 }
 
 // ── leg 1: redirect to AAD sign-in (in the chat's tenant) ───────────────────
@@ -224,11 +224,11 @@ func teamsLinkCallback(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func teamsLinkAADURI(s *cloud.Service[state]) string {
-	return "https://" + s.Domain + "/v1/integrations/teams/link/aad"
+	return "https://" + s.Domain + "/v1/integration/teams/link/aad"
 }
 
 func teamsLinkCallbackURI(s *cloud.Service[state]) string {
-	return "https://" + s.Domain + "/v1/integrations/teams/link/callback"
+	return "https://" + s.Domain + "/v1/integration/teams/link/callback"
 }
 
 // teamsExchangeIdentify trades the AAD code for the VERIFIED (oid, tid) from the

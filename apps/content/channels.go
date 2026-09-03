@@ -23,7 +23,7 @@ import (
 // The social Public API surface used (Authorization: <per-brand API key>, raw — the
 // social auth middleware reads the header value directly, no "Bearer" prefix):
 //
-//	GET  {social}/public/v1/integrations   → [{id,name,identifier,disabled,...}]
+//	GET  {social}/public/v1/integration   → [{id,name,identifier,disabled,...}]
 //	     a brand's connected channels; `identifier` is the provider (instagram/x/…),
 //	     `id` is the integration id a post must target.
 //	POST {social}/public/v1/posts  {type:"now"|"schedule", date, shortLink, tags:[],
@@ -244,7 +244,7 @@ func resolveTargets(connected []socialIntegration, want []string) (targets []soc
 
 // ── hanzoai/social Public API wire shapes + calls ───────────────────────────────
 
-// socialIntegration is one row of GET /public/v1/integrations (only the fields the
+// socialIntegration is one row of GET /public/v1/integration (only the fields the
 // Distributor needs: the id to target, the provider identifier, and enabled state).
 type socialIntegration struct {
 	ID         string `json:"id"`
@@ -253,11 +253,11 @@ type socialIntegration struct {
 	Disabled   bool   `json:"disabled"`
 }
 
-// listIntegrations calls GET /public/v1/integrations for the brand. An auth failure
+// listIntegrations calls GET /public/v1/integration for the brand. An auth failure
 // (bad/expired key) is fail-closed as not_configured; any other non-2xx or a transport
 // error is errUpstream (503 / retryable), never a 5xx from a bug.
 func (d socialDistributor) listIntegrations(ctx context.Context, key string) ([]socialIntegration, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.baseURL+"/public/v1/integrations", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.baseURL+"/public/v1/integration", nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errUpstream, err)
 	}

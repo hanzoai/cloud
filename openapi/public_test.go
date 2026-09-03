@@ -57,7 +57,7 @@ func TestACustomerOperationIsPublicByItsAddress(t *testing.T) {
 // call; it stays internal whatever product it sits under.
 func TestARelayEndpointIsNotPublic(t *testing.T) {
 	op := &Operation{OperationID: "get_v1_tasks_wildcard1"}
-	if audience("/v1/tasks/{wildcard1}", op) {
+	if audience("/v1/task/{wildcard1}", op) {
 		t.Fatal("a {wildcardN} address came back public")
 	}
 }

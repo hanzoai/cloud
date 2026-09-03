@@ -116,7 +116,7 @@ func (k keys) Resolve(_ context.Context, key string) (event.Attribution, bool, e
 }
 
 // TestProjectKeyIsAdmitted is the defect this endpoint was built with, in one test:
-// a key minted by `POST /v1/projects` lives in the PROJECT store and IAM has never
+// a key minted by `POST /v1/project` lives in the PROJECT store and IAM has never
 // heard of it, so an endpoint that resolves through IAM alone refuses the very key
 // it tells a destination to create. The endpoint calls event.Admit, which asks the
 // project store first — and admitting a key only that store holds is the proof the

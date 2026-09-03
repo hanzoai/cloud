@@ -21,9 +21,9 @@ import (
 // cryptographically signs the auth data with the bot token, so we KNOW the real
 // Telegram user), followed by the shared hanzo.id OIDC leg (channel_link.go):
 //
-//	GET /v1/integrations/telegram/link           leg1: set __Host init+link cookies, render the Login Widget
-//	GET /v1/integrations/telegram/link/auth       leg2: widget callback; verify the signed auth, bind (chat,tgUser)
-//	GET /v1/integrations/telegram/link/callback   leg3: hanzo.id OIDC callback; bind Telegram↔Hanzo, seal refresh
+//	GET /v1/integration/telegram/link           leg1: set __Host init+link cookies, render the Login Widget
+//	GET /v1/integration/telegram/link/auth       leg2: widget callback; verify the signed auth, bind (chat,tgUser)
+//	GET /v1/integration/telegram/link/callback   leg3: hanzo.id OIDC callback; bind Telegram↔Hanzo, seal refresh
 //
 // The bound Telegram user is NEVER a URL param — it comes ONLY from the
 // widget-signed auth data (leg2), exactly as Slack takes it from the Slack sign-in.
@@ -57,7 +57,7 @@ func telegramLinkURL(s *cloud.Service[state], chatID, _user string) (string, err
 	if err != nil {
 		return "", err
 	}
-	return "https://" + s.Domain + "/v1/integrations/telegram/link?state=" + url.QueryEscape(state), nil
+	return "https://" + s.Domain + "/v1/integration/telegram/link?state=" + url.QueryEscape(state), nil
 }
 
 // ── leg 1: render the Telegram Login Widget ─────────────────────────────────
@@ -83,7 +83,7 @@ func telegramLink(s *cloud.Service[state], c *zip.Ctx) error {
 	setLinkCookie(c, telegramInitCookie, nonce)
 	setLinkCookie(c, telegramLinkCookie, linkVal)
 	c.Fiber().Status(http.StatusOK).Type("html")
-	return c.Fiber().SendString(telegramWidgetHTML(telegramBotUsername(), "https://"+s.Domain+"/v1/integrations/telegram/link/auth"))
+	return c.Fiber().SendString(telegramWidgetHTML(telegramBotUsername(), "https://"+s.Domain+"/v1/integration/telegram/link/auth"))
 }
 
 // telegramWidgetHTML renders the Login Widget. The bot's domain must be set to this
@@ -234,7 +234,7 @@ func clearTelegramLinkCookies(c *zip.Ctx) {
 }
 
 func telegramLinkCallbackURI(s *cloud.Service[state]) string {
-	return "https://" + s.Domain + "/v1/integrations/telegram/link/callback"
+	return "https://" + s.Domain + "/v1/integration/telegram/link/callback"
 }
 
 // ── Telegram Login Widget signature verification ────────────────────────────

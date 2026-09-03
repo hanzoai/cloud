@@ -199,14 +199,14 @@ func TestMountFansOutBeforeServing(t *testing.T) {
 	seedLegacy(t, dir, "acme")
 
 	app := mountAppDir(t, dir)
-	code, body := do(t, app, "GET", "/v1/agents", "acme", nil)
+	code, body := do(t, app, "GET", "/v1/agent", "acme", nil)
 	if code != 200 {
 		t.Fatalf("list after upgrade = %d: %s", code, body)
 	}
 	if !strings.Contains(string(body), `"name":"bot"`) {
 		t.Fatalf("the org's agent did not survive the upgrade: %s", body)
 	}
-	code, body = do(t, app, "GET", "/v1/agents/sessions", "acme", nil)
+	code, body = do(t, app, "GET", "/v1/agent/sessions", "acme", nil)
 	if code != 200 || !strings.Contains(string(body), `"id":"sess_acme"`) ||
 		!strings.Contains(string(body), `"https://acme.share.hanzo.ai"`) {
 		t.Fatalf("the org's session did not survive the upgrade: %d %s", code, body)

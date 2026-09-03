@@ -12,14 +12,14 @@
 // namespaces: this one nests under /v1/visor/compute because what it rents you
 // is compute.
 //
-// A bot machine = Agent (cloud /v1/agents) + Machine (vm, kind=bot) + the binding
+// A bot machine = Agent (cloud /v1/agent) + Machine (vm, kind=bot) + the binding
 // between them. Composition, one way per verb:
 //
 //	launch  = vm POST /v1/machines {kind:bot}         THEN vm PUT .../agent
 //	list    = vm GET  /v1/machines?kind=bot           joined with the org's bindings
 //	get     = vm GET  /v1/machines/:owner/:name       joined with its binding
 //	delete  = vm DELETE .../agent (unbind)            THEN vm DELETE /v1/machines/:owner/:name
-//	message = the AGENT path: run the bot's bound agent via /v1/agents/:agent/run
+//	message = the AGENT path: run the bot's bound agent via /v1/agent/:agent/run
 //	stop    = vm DELETE .../agent — halt the bot's @hanzo/bot runtime
 //	pause   = the same halt: DigitalOcean/vm expose no VM-suspend primitive, so a
 //	          bot's stop and pause are one honest capability (detach the agent
@@ -68,7 +68,7 @@ type agentBinding struct {
 	MachineId string `json:"machineId,omitempty"`
 	// Org is the Hanzo tenant the binding belongs to.
 	Org string `json:"org,omitempty"`
-	// AgentName is the cloud Agent (/v1/agents) this machine runs — the agent a
+	// AgentName is the cloud Agent (/v1/agent) this machine runs — the agent a
 	// message to the bot is actually run against. It is the one field that decides
 	// what the bot DOES.
 	AgentName string `json:"agentName,omitempty"`
@@ -191,7 +191,7 @@ func (o ops) listBots(ctx context.Context, _ *cloud.Unit) (*botList, error) {
 }
 
 // botLaunchReq is the POST /v1/visor/compute/bots/launch body. A bot needs a machine size and,
-// for a real launch, a name; agent is the cloud /v1/agents identity the bot runs
+// for a real launch, a name; agent is the cloud /v1/agent identity the bot runs
 // (defaulting to the bot's name so a bot is self-named by default). Model and
 // Instructions configure the auto-created bound agent — both optional: an empty
 // Model takes the deployment default (a valid catalog model) at agent create,
@@ -245,7 +245,7 @@ func launchBot(s *cloud.Service[state], c *zip.Ctx) error {
 
 	// The agent half, FIRST: create-if-absent the cloud Agent this bot runs, so a
 	// launched bot is immediately messageable — messageBot runs the bound agent
-	// via /v1/agents/:agent/run, which Resolves it from the store and 404s "agent
+	// via /v1/agent/:agent/run, which Resolves it from the store and 404s "agent
 	// not found" if it was never created (the gap this closes). Doing it before
 	// the machine launch also fails a bad request (e.g. a non-catalog model → 400)
 	// BEFORE any metered machine is provisioned. org is the validated tenant.
@@ -288,7 +288,7 @@ func launchBot(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 // ensureAgent create-if-absent brings the bot's bound cloud Agent into being so a
-// launched bot is immediately messageable. It self-calls the SAME POST /v1/agents
+// launched bot is immediately messageable. It self-calls the SAME POST /v1/agent
 // the console uses — one create path, never a second store — forwarding the
 // caller's validated identity so the agent is created in the caller's OWN org
 // (IDOR-safe: the agents surface scopes the create by the same principal.Org).
@@ -308,7 +308,7 @@ func ensureAgent(s *cloud.Service[state], c *zip.Ctx, agent, model, instructions
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "bots: encode agent-create: %v", err)
 	}
-	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, agentsBase()+"/v1/agents", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, agentsBase()+"/v1/agent", bytes.NewReader(payload))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "bots: build agent-create request: %v", err)
 	}
@@ -414,7 +414,7 @@ func stopBot(s *cloud.Service[state], c *zip.Ctx, org, id string) error {
 
 // messageBot runs the bot's bound agent with the caller's message. It resolves
 // the agent from the machine's binding, then forwards the body to the ONE agent
-// runner (/v1/agents/:agent/run) so a message is a real agent run — recorded,
+// runner (/v1/agent/:agent/run) so a message is a real agent run — recorded,
 // billed and traced exactly like any other. The caller's identity is forwarded so
 // the run is scoped + gated as the same principal (never a fabricated identity).
 func messageBot(s *cloud.Service[state], c *zip.Ctx, org, id string) error {
@@ -429,7 +429,7 @@ func messageBot(s *cloud.Service[state], c *zip.Ctx, org, id string) error {
 	if agent == "" {
 		return zip.ErrBadRequest("bot has no bound agent to message")
 	}
-	target := agentsBase() + "/v1/agents/" + url.PathEscape(agent) + "/run"
+	target := agentsBase() + "/v1/agent/" + url.PathEscape(agent) + "/run"
 	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, target, bytes.NewReader(c.Body()))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "bots: build agent request: %v", err)
@@ -500,7 +500,7 @@ func botOp(ctx context.Context, in *botRef) (c *zip.Ctx, org, id string, err err
 type bindAgentReq struct {
 	// ID is the machine to bind, from the URL path.
 	ID string `json:"id"`
-	// AgentName is the cloud Agent (/v1/agents) the machine will run. Required.
+	// AgentName is the cloud Agent (/v1/agent) the machine will run. Required.
 	AgentName string `json:"agentName"`
 	// BotVersion pins the @hanzo/bot runtime version; empty takes the default.
 	BotVersion string `json:"botVersion"`
@@ -624,7 +624,7 @@ var selfIdentityHeaders = []string{
 // agent run — the run path (records, billing, tracing) is not re-implemented here.
 var selfClient = &http.Client{Timeout: 60 * time.Second}
 
-// agentsBase is the base of the /v1/agents surface. In the unified binary the
+// agentsBase is the base of the /v1/agent surface. In the unified binary the
 // agents subsystem is mounted on THIS process's app listener, so the default is
 // self (CLOUD_LISTEN :8000); CLOUD_AGENTS_URL overrides it (a split deploy, or a
 // test's fake agents server).

@@ -327,7 +327,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// /v1/event/insights — console READS over the SAME engine, and nothing else: the
 	// PostHog-wire ingest that used to sit at /v1/insights/e is retired onto the one
 	// endpoint, so this group registers no endpoint of its own. Flags live at
-	// /v1/flags.
+	// /v1/flag.
 	ig := app.Group("/v1/event/insights")
 	zip.Get(ig, "/health", o.insightsHealth)
 	zip.Get(ig, "/events", o.insightsEvents)

@@ -49,7 +49,7 @@ type Connection struct {
 }
 
 // Connection is a user's non-secret link to a provider account — the per-user
-// sibling of Connection (the /v1/integrations/connectors plane). The credential itself lives
+// sibling of Connection (the /v1/integration/connectors plane). The credential itself lives
 
 // Grant is one in-flight device authorization. Code/UserCode come from the
 // provider; Interval (seconds) is raised by slow_down; LastPollAt gates the
@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS bridge_events (
 );
 CREATE INDEX IF NOT EXISTS ix_bridge_events_created ON bridge_events(created_at);
 
--- connectors are per-USER links to a provider account (the /v1/integrations/connectors
+-- connectors are per-USER links to a provider account (the /v1/integration/connectors
 -- plane; sibling of the org-scoped connections table). The credential lives
 -- ONLY in KMS at /orgs/{org}/users/{user}/connectors/{provider}/{label}; this
 -- row is non-secret metadata. label allows multiple accounts per provider;
@@ -192,7 +192,7 @@ CREATE INDEX IF NOT EXISTS ix_grants_expires ON grants(expires_at);
 // reached new databases only. An existing one kept whatever shape it was created
 // with, forever, while the code went on selecting the new columns.
 //
-// That is not theoretical. Production answered GET /v1/integrations with HTTP 500
+// That is not theoretical. Production answered GET /v1/integration with HTTP 500
 // `no such column: user`, so every connection in the org read as absent: the Slack
 // workspace looked disconnected to everything that asks this store even though the
 // install was live and its bot was answering, and integrations.db had not been

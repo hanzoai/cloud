@@ -64,7 +64,7 @@ var Apps = []App{
 	{Name: "amqp", Prefixes: []string{"/v1/amqp"}, Eager: true},
 	{Name: "mq", Prefixes: []string{"/v1/mq"}},
 	{Name: "skills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/:product/index.json", "/.well-known/agent-skills/index.json"}},
-	{Name: "flags", Prefixes: []string{"/v1/flags"}},
+	{Name: "flag", Prefixes: []string{"/v1/flag"}},
 	{Name: "kms", Prefixes: []string{"/v1/kms"}},
 	// One store, three signals, one root: the logs and traces endpoints fold under
 	// /v1/metrics (HIP-1241), so the capability's routes are all under its own
@@ -194,27 +194,27 @@ var Apps = []App{
 	// these deliveries was in git's process, where that trigger is nil, so it
 	// answered every push 204 and built nothing.
 	{Name: "platform", Prefixes: []string{"/v1/platform"}},
-	{Name: "projects", Prefixes: []string{"/v1/projects"}},
+	{Name: "project", Prefixes: []string{"/v1/project"}},
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
 	{Name: "domain", Prefixes: []string{"/v1/domain"}},
 	{Name: "prompt", Prefixes: []string{"/v1/prompt"}},
-	// The coding endpoint answers at /v1/agents/coding. A coding run IS an agent run:
+	// The coding endpoint answers at /v1/agent/coding. A coding run IS an agent run:
 	// the engine is in this process because it needs the live session store the
 	// run streams into, the durable tasks engine and the in-memory mailbox a routed
 	// run is handed through — all three of which are agents' — so there is no store
 	// boundary to split on and nothing left to give /v1/coding a root of its own.
 	//
-	// The conversation surface is /v1/agents/chat, under this root rather than
+	// The conversation surface is /v1/agent/chat, under this root rather than
 	// beside it. It was a second root for as long as hanzoai/agent registered its
 	// four routes at one literal path; v1.0.6 takes the address from the composer
-	// (hz.MountAt), and the round answers at a sub-path because POST /v1/agents is
+	// (hz.MountAt), and the round answers at a sub-path because POST /v1/agent is
 	// already the typed create. One name, one root (HIP-1210).
-	{Name: "agents", Prefixes: []string{"/v1/agents"}},
+	{Name: "agent", Prefixes: []string{"/v1/agent"}},
 	{Name: "link", Prefixes: []string{"/v1/link"}},
 	{Name: "wallet", Prefixes: []string{"/v1/wallet"}},
 	{Name: "x402", Prefixes: []string{"/v1/x402"}},
 	{Name: "deploy", Prefixes: []string{"/v1/deploy/account/can-i", "/v1/deploy/applications", "/v1/deploy/callback", "/v1/deploy/clusters", "/v1/deploy/gitops", "/v1/deploy/health", "/v1/deploy/login", "/v1/deploy/logout", "/v1/deploy/projects", "/v1/deploy/reconcile", "/v1/deploy/session/userinfo", "/v1/deploy/settings", "/v1/deploy/stream/applications", "/v1/deploy/version"}},
-	{Name: "functions", Prefixes: []string{"/v1/functions"}},
+	{Name: "function", Prefixes: []string{"/v1/function"}},
 	{Name: "todo", Prefixes: []string{"/v1/todo"}},
 	{Name: "template", Prefixes: []string{"/v1/template"}},
 	{Name: "blueprint", Prefixes: []string{"/v1/blueprint"}},
@@ -381,7 +381,7 @@ var Apps = []App{
 	// names. Both are reads of a public ledger and neither owns any chain state.
 	{Name: "market", Prefixes: []string{"/v1/market"}},
 	{Name: "security", Prefixes: []string{"/v1/security"}},
-	{Name: "integrations", Prefixes: []string{"/v1/integrations"}},
+	{Name: "integration", Prefixes: []string{"/v1/integration"}},
 	// The browser tag config is served by the projects app, which holds both the
 	// handler and the project store it reads (apps/projects/tags.go); it is under
 	// that app's prefix, so this row does not name it. A prefix must be claimed
@@ -407,7 +407,7 @@ var Apps = []App{
 	{Name: "settings", Prefixes: []string{"/v1/settings"}},
 	{Name: "pref", Prefixes: []string{"/v1/pref"}},
 	{Name: "notify", Prefixes: []string{"/v1/notify"}},
-	{Name: "channels", Prefixes: []string{"/v1/channels"}},
+	{Name: "channel", Prefixes: []string{"/v1/channel"}},
 	{Name: "gateway", Prefixes: []string{"/v1/gateway"}},
 	{Name: "entitlement", Prefixes: []string{"/v1/entitlement"}},
 	// The three file addresses used to be roots of their own — /v1/upload,
@@ -474,8 +474,8 @@ var Apps = []App{
 	// its own host (ghcr.io/hanzoai/admin-tasks at tasks.hanzo.ai) and this row used to
 	// claim /tasks for the //go:embed copy. The studio still reads this surface
 	// same-origin — the edge serves the bundle at that host's root and hands
-	// /v1/tasks here, so one origin survives the split.
-	{Name: "tasks", Prefixes: []string{"/v1/tasks"}},
+	// /v1/task here, so one origin survives the split.
+	{Name: "task", Prefixes: []string{"/v1/task"}},
 	{Name: "tel", Prefixes: []string{"/v1/tel"}},
 	// The address was already the word: the product is Hanzo Auto, the app has
 	// always served one group at /v1/auto, and HIP-1063's front matter reads
@@ -500,7 +500,7 @@ var Apps = []App{
 	// app opens and no other does, so each folded under the plane rather than
 	// splitting off an app that would share a store. The last fold vacates the
 	// /v1/mcp root entirely: that address is the host's agent MCP server.
-	{Name: "tools", Prefixes: []string{"/v1/tools"}},
+	{Name: "tool", Prefixes: []string{"/v1/tool"}},
 	{Name: "marketplace", Prefixes: []string{"/v1/marketplace"}},
 	{Name: "referral", Prefixes: []string{"/v1/admin/referral/bonuses", "/v1/admin/referral/sweep", "/v1/referral"}},
 	{Name: "guide", Prefixes: []string{"/v1/guide"}},

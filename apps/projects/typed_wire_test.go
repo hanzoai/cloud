@@ -22,7 +22,7 @@ import (
 // raw handler reached it, so the answer is unchanged.
 func TestBodylessWriteStillRefuses(t *testing.T) {
 	app := mountApp(t)
-	code, body := do(t, app, http.MethodPost, "/v1/projects", "acme", map[string]any{"name": "Landing"})
+	code, body := do(t, app, http.MethodPost, "/v1/project", "acme", map[string]any{"name": "Landing"})
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
@@ -31,7 +31,7 @@ func TestBodylessWriteStillRefuses(t *testing.T) {
 		t.Fatalf("json: %v (%s)", err, body)
 	}
 	// nil body ⇒ no request body at all, which is exactly what c.Bind refuses.
-	if code, body := do(t, app, http.MethodPatch, "/v1/projects/"+p.Slug, "acme", nil); code != http.StatusBadRequest {
+	if code, body := do(t, app, http.MethodPatch, "/v1/project/"+p.Slug, "acme", nil); code != http.StatusBadRequest {
 		t.Fatalf("bodyless patch want 400, got %d (%s)", code, body)
 	}
 }
@@ -44,13 +44,13 @@ func TestBodylessWriteStillRefuses(t *testing.T) {
 // change what `{"name":null}` does without any signature moving.
 func TestExplicitNullLeavesAFieldAlone(t *testing.T) {
 	app := mountApp(t)
-	_, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+	_, body := do(t, app, http.MethodPost, "/v1/project", "acme",
 		map[string]any{"name": "Landing", "description": "the original"})
 	var p projectsProject
 	if err := json.Unmarshal(body, &p); err != nil {
 		t.Fatalf("json: %v (%s)", err, body)
 	}
-	code, ub := do(t, app, http.MethodPatch, "/v1/projects/"+p.Slug, "acme",
+	code, ub := do(t, app, http.MethodPatch, "/v1/project/"+p.Slug, "acme",
 		map[string]any{"name": nil, "description": nil})
 	if code != http.StatusOK {
 		t.Fatalf("patch want 200, got %d (%s)", code, ub)
@@ -71,12 +71,12 @@ func TestExplicitNullLeavesAFieldAlone(t *testing.T) {
 // answer to "how many hosts does this site hold", not a tidier one.
 func TestDomainAnswersKeepTheirEmptyLists(t *testing.T) {
 	app := mountApp(t)
-	_, body := do(t, app, http.MethodPost, "/v1/projects", "acme", map[string]any{"name": "Landing"})
+	_, body := do(t, app, http.MethodPost, "/v1/project", "acme", map[string]any{"name": "Landing"})
 	var p projectsProject
 	if err := json.Unmarshal(body, &p); err != nil {
 		t.Fatalf("json: %v (%s)", err, body)
 	}
-	code, lb := do(t, app, http.MethodGet, "/v1/projects/"+p.Slug+"/domains", "acme", nil)
+	code, lb := do(t, app, http.MethodGet, "/v1/project/"+p.Slug+"/domains", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list domains want 200, got %d (%s)", code, lb)
 	}
@@ -85,7 +85,7 @@ func TestDomainAnswersKeepTheirEmptyLists(t *testing.T) {
 	}
 	// A bind whose every entry cleans to nothing binds no host — and still says so
 	// with an empty list rather than by omitting the field.
-	code, bb := do(t, app, http.MethodPost, "/v1/projects/"+p.Slug+"/domains", "acme",
+	code, bb := do(t, app, http.MethodPost, "/v1/project/"+p.Slug+"/domains", "acme",
 		map[string]any{"domains": []string{"   "}})
 	if code != http.StatusOK {
 		t.Fatalf("bind want 200, got %d (%s)", code, bb)
@@ -101,16 +101,16 @@ func TestDomainAnswersKeepTheirEmptyLists(t *testing.T) {
 // they have always answered.
 func TestDeleteStays204WithNoBody(t *testing.T) {
 	app := mountApp(t)
-	_, body := do(t, app, http.MethodPost, "/v1/projects", "acme", map[string]any{"name": "Landing"})
+	_, body := do(t, app, http.MethodPost, "/v1/project", "acme", map[string]any{"name": "Landing"})
 	var p projectsProject
 	if err := json.Unmarshal(body, &p); err != nil {
 		t.Fatalf("json: %v (%s)", err, body)
 	}
 	// Releasing a host we do not hold is the idempotent 204, so it needs no bind.
-	if code, rb := do(t, app, http.MethodDelete, "/v1/projects/"+p.Slug+"/domains/never.example", "acme", nil); code != http.StatusNoContent || len(rb) != 0 {
+	if code, rb := do(t, app, http.MethodDelete, "/v1/project/"+p.Slug+"/domains/never.example", "acme", nil); code != http.StatusNoContent || len(rb) != 0 {
 		t.Fatalf("release domain want 204 with no body, got %d (%q)", code, rb)
 	}
-	if code, db := do(t, app, http.MethodDelete, "/v1/projects/"+p.Slug, "acme", nil); code != http.StatusNoContent || len(db) != 0 {
+	if code, db := do(t, app, http.MethodDelete, "/v1/project/"+p.Slug, "acme", nil); code != http.StatusNoContent || len(db) != 0 {
 		t.Fatalf("delete project want 204 with no body, got %d (%q)", code, db)
 	}
 }
@@ -125,16 +125,16 @@ func TestDeleteStays204WithNoBody(t *testing.T) {
 // fleet-wide by count, and a count is flat when one route converts and another
 // arrives raw in the same change, which is exactly what this catches.
 var untypedByDesign = map[string]string{
-	"GET /v1/projects/tags": "the PUBLIC browser-tag config a hosted <script> fetches. It sets three " +
+	"GET /v1/project/tags": "the PUBLIC browser-tag config a hosted <script> fetches. It sets three " +
 		"response headers the caller depends on — Access-Control-Allow-Origin: * (it is read " +
 		"cross-origin from every customer site), Cache-Control on a hot path, and an explicit " +
 		"charset — and it resolves the site from the publishable KEY or the request HOST, which are " +
 		"request-side facts a typed op holds no request to read. It already declares its shape and " +
 		"prose through openapi.Register/Describe, so what staying raw costs is the tool, not the " +
 		"schema.",
-	"GET /v1/projects/{slug}/shot": "answers the site's screenshot BYTES; a typed op's only response " +
+	"GET /v1/project/{slug}/shot": "answers the site's screenshot BYTES; a typed op's only response " +
 		"path is c.JSON(out).",
-	"POST /v1/projects/{slug}/deploy": "takes the built artifact as its raw body — the bytes are the " +
+	"POST /v1/project/{slug}/deploy": "takes the built artifact as its raw body — the bytes are the " +
 		"deploy — so a JSON In would refuse every real publish.",
 }
 
@@ -154,7 +154,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 
 	served, typed := map[string]bool{}, map[string]bool{}
 	for path, item := range doc.Paths {
-		if !strings.HasPrefix(path, "/v1/projects") {
+		if !strings.HasPrefix(path, "/v1/project") {
 			continue
 		}
 		for method := range item {
@@ -162,7 +162,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 		}
 	}
 	for key := range reg.Ops {
-		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/projects") {
+		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/project") {
 			typed[key] = true
 		}
 	}

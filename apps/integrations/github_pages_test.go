@@ -165,7 +165,7 @@ func TestPagesGet_ReturnsStatusAndURL(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "acme", nil)
 	if r.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -197,7 +197,7 @@ func TestPagesGet_OwnerFromGrantNotClient(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh") // account label acme-gh, but grant owner is octocorp
 
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/site/pages", "acme", nil); r.Code != http.StatusOK {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos/site/pages", "acme", nil); r.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", r.Code, r.Body)
 	}
 	if !m.sawPath("/repos/octocorp/site/pages") {
@@ -216,7 +216,7 @@ func TestPagesGet_UngrantedRepoNeverReachesGitHub(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/secret-repo/pages", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration/github/repos/secret-repo/pages", "acme", nil)
 	if r.Code != http.StatusNotFound {
 		t.Fatalf("ungranted repo want 404, got %d (%s)", r.Code, r.Body)
 	}
@@ -233,7 +233,7 @@ func TestPagesGet_NotEnabled404(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusNotFound {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusNotFound {
 		t.Fatalf("no-pages want 404, got %d (%s)", r.Code, r.Body)
 	}
 }
@@ -247,10 +247,10 @@ func TestPagesGet_GateFailsClosed(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "beta", nil); r.Code != http.StatusConflict {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "beta", nil); r.Code != http.StatusConflict {
 		t.Fatalf("unconnected org want 409, got %d (%s)", r.Code, r.Body)
 	}
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "", nil); r.Code != http.StatusForbidden {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "", nil); r.Code != http.StatusForbidden {
 		t.Fatalf("no principal want 403, got %d", r.Code)
 	}
 }
@@ -263,7 +263,7 @@ func TestPagesUnconfigured503(t *testing.T) {
 	resetGithubApp()
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "1", "acme-gh")
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusServiceUnavailable {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusServiceUnavailable {
 		t.Fatalf("unconfigured want 503, got %d (%s)", r.Code, r.Body)
 	}
 }
@@ -276,7 +276,7 @@ func TestPagesEnable_BranchSource(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	r := req(t, app, http.MethodPost, "/v1/integrations/github/repos/widgets/pages", "acme",
+	r := req(t, app, http.MethodPost, "/v1/integration/github/repos/widgets/pages", "acme",
 		map[string]any{"branch": "gh-pages", "path": "/docs"})
 	if r.Code != http.StatusCreated {
 		t.Fatalf("want 201, got %d (%s)", r.Code, r.Body)
@@ -304,7 +304,7 @@ func TestPagesEnable_DefaultsToDefaultBranch(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	if r := req(t, app, http.MethodPost, "/v1/integrations/github/repos/widgets/pages", "acme", map[string]any{}); r.Code != http.StatusCreated {
+	if r := req(t, app, http.MethodPost, "/v1/integration/github/repos/widgets/pages", "acme", map[string]any{}); r.Code != http.StatusCreated {
 		t.Fatalf("want 201, got %d (%s)", r.Code, r.Body)
 	}
 	rec, _ := m.find(http.MethodPost, "/repos/acme-gh/widgets/pages")
@@ -320,7 +320,7 @@ func TestPagesEnable_Workflow(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	if r := req(t, app, http.MethodPost, "/v1/integrations/github/repos/widgets/pages", "acme",
+	if r := req(t, app, http.MethodPost, "/v1/integration/github/repos/widgets/pages", "acme",
 		map[string]any{"buildType": "workflow"}); r.Code != http.StatusCreated {
 		t.Fatalf("want 201, got %d (%s)", r.Code, r.Body)
 	}
@@ -337,7 +337,7 @@ func TestPagesUpdate_SetCNAME(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	r := req(t, app, http.MethodPut, "/v1/integrations/github/repos/widgets/pages", "acme",
+	r := req(t, app, http.MethodPut, "/v1/integration/github/repos/widgets/pages", "acme",
 		map[string]any{"cname": "www.example.com", "httpsEnforced": true})
 	if r.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", r.Code, r.Body)
@@ -358,7 +358,7 @@ func TestPagesUpdate_ClearCNAME(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	if r := req(t, app, http.MethodPut, "/v1/integrations/github/repos/widgets/pages", "acme",
+	if r := req(t, app, http.MethodPut, "/v1/integration/github/repos/widgets/pages", "acme",
 		map[string]any{"cname": ""}); r.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -375,7 +375,7 @@ func TestPagesUpdate_InvalidCNAMENeverSent(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	if r := req(t, app, http.MethodPut, "/v1/integrations/github/repos/widgets/pages", "acme",
+	if r := req(t, app, http.MethodPut, "/v1/integration/github/repos/widgets/pages", "acme",
 		map[string]any{"cname": "not a domain"}); r.Code != http.StatusBadRequest {
 		t.Fatalf("invalid cname want 400, got %d (%s)", r.Code, r.Body)
 	}
@@ -391,7 +391,7 @@ func TestPagesUpdate_NoFields400(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	if r := req(t, app, http.MethodPut, "/v1/integrations/github/repos/widgets/pages", "acme",
+	if r := req(t, app, http.MethodPut, "/v1/integration/github/repos/widgets/pages", "acme",
 		map[string]any{}); r.Code != http.StatusBadRequest {
 		t.Fatalf("empty update want 400, got %d (%s)", r.Code, r.Body)
 	}
@@ -404,7 +404,7 @@ func TestPagesBuild_Queued(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	r := req(t, app, http.MethodPost, "/v1/integrations/github/repos/widgets/pages/builds", "acme", nil)
+	r := req(t, app, http.MethodPost, "/v1/integration/github/repos/widgets/pages/builds", "acme", nil)
 	if r.Code != http.StatusAccepted {
 		t.Fatalf("want 202, got %d (%s)", r.Code, r.Body)
 	}
@@ -425,7 +425,7 @@ func TestPagesDisable(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	r := req(t, app, http.MethodDelete, "/v1/integrations/github/repos/widgets/pages", "acme", nil)
+	r := req(t, app, http.MethodDelete, "/v1/integration/github/repos/widgets/pages", "acme", nil)
 	if r.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -458,7 +458,7 @@ func TestPagesErrorNeverLeaksToken(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "acme", nil)
 	if r.Code != http.StatusBadGateway {
 		t.Fatalf("github 500 want 502, got %d (%s)", r.Code, r.Body)
 	}

@@ -23,7 +23,7 @@ import (
 // github_app.go is the GitHub-App engine behind the provider (github.go): it mints
 // short-lived installation access tokens from the App private key, lists the repos
 // an installation grants, and serves the two authed sync routes — GET
-// /v1/integrations/github/repos and POST /v1/integrations/github/repos/import. The
+// /v1/integration/github/repos and POST /v1/integration/github/repos/import. The
 // actual git object work (create + mirror-in) crosses into clients/git via the
 // cloud.GitImporter client, so this file never imports the git package.
 //
@@ -672,7 +672,7 @@ type githubImportIn struct {
 
 // githubImportOut acknowledges the queued import. It reports what was ACCEPTED,
 // not what has landed: the import itself runs in the background, so poll GET
-// /v1/integrations/github/repos for each repository's status to flip to imported.
+// /v1/integration/github/repos for each repository's status to flip to imported.
 type githubImportOut struct {
 	// Queued is how many repositories were handed to the background importer.
 	Queued int `json:"queued"`
@@ -736,7 +736,7 @@ func selectImports(granted []githubRepo, repos []string, all bool) ([]githubImpo
 // selection is intersected with the installation's GRANTED set, so a client can
 // never import a repo the App was not granted (org isolation + a grant check). The
 // import runs in a bounded background worker (don't block the request), so the
-// answer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo
+// answer is 202 Accepted; poll GET /v1/integration/github/repos for the per-repo
 // status to flip to imported.
 //
 // Example: {"repos":["widgets"]}

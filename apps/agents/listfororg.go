@@ -7,7 +7,7 @@ import "context"
 // registry WITHOUT an HTTP hop back through the gateway.
 //
 // It is the decompleced replacement for the old bots-as-members path, which
-// enumerated agents over HTTP (/v1/agents with a forwarded bearer) and broke
+// enumerated agents over HTTP (/v1/agent with a forwarded bearer) and broke
 // when HANZO_API_KEY was rejected (bot_members=0). clients/team calls this
 // directly to project each agent as a space Employee.
 //

@@ -29,12 +29,12 @@ func TestPerOrgStoreFileIsolation(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = Shutdown() })
 
-	if code, b := do(t, app, http.MethodPost, "/v1/functions", "orga",
+	if code, b := do(t, app, http.MethodPost, "/v1/function", "orga",
 		map[string]any{"name": "resize", "runtime": "python", "code": "print(1)"}); code != http.StatusCreated {
 		t.Fatalf("orgA create: %d %s", code, b)
 	}
 
-	code, b := do(t, app, http.MethodGet, "/v1/functions", "orgb", nil)
+	code, b := do(t, app, http.MethodGet, "/v1/function", "orgb", nil)
 	if code != http.StatusOK {
 		t.Fatalf("orgB list: %d %s", code, b)
 	}
@@ -48,7 +48,7 @@ func TestPerOrgStoreFileIsolation(t *testing.T) {
 		t.Fatalf("orgB saw orgA's functions: %+v", listB.Functions)
 	}
 
-	if code, b := do(t, app, http.MethodPost, "/v1/functions", "orgb",
+	if code, b := do(t, app, http.MethodPost, "/v1/function", "orgb",
 		map[string]any{"name": "resize", "runtime": "python", "code": "print(2)"}); code != http.StatusCreated {
 		t.Fatalf("orgB create (same name): %d %s", code, b)
 	}

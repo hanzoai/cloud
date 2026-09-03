@@ -206,7 +206,7 @@ func botActive(status string) bool {
 
 // agentReplyRunner is the ONE client the Chunter responder (chat.go) uses to make
 // a bot answer: it runs the agent through the SAME billed/metered/recorded run
-// path the HTTP POST /v1/agents/:id/run handler uses, on behalf of the human who
+// path the HTTP POST /v1/agent/:id/run handler uses, on behalf of the human who
 // addressed it, and returns the model's text. A run that executed but whose model
 // errored (nil error, error-status Run) surfaces as an error so the responder
 // posts nothing rather than an empty bubble.

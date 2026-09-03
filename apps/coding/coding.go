@@ -730,7 +730,7 @@ func prBody(prompt, base, branch, commit, diffstat, sessionID string) string {
 	if strings.TrimSpace(diffstat) != "" {
 		b.WriteString("\n```\n" + strings.TrimSpace(diffstat) + "\n```\n")
 	}
-	b.WriteString("\nSession: `/v1/agents/sessions/" + sessionID + "`\n")
+	b.WriteString("\nSession: `/v1/agent/sessions/" + sessionID + "`\n")
 	return b.String()
 }
 

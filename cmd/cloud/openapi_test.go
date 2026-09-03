@@ -256,7 +256,7 @@ func TestTheDocumentIsScopedToWhatTheDeploymentRuns(t *testing.T) {
 		if openapi.Host(p) {
 			continue // the endpoints themselves, which every deployment serves
 		}
-		if !strings.HasPrefix(p, "/v1/kms") && !strings.HasPrefix(p, "/v1/flags") {
+		if !strings.HasPrefix(p, "/v1/kms") && !strings.HasPrefix(p, "/v1/flag") {
 			t.Errorf("a deployment running only kms and flags publishes %q — an SDK generated "+
 				"off this document offers a call that 404s here", p)
 		}

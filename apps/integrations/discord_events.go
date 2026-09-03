@@ -28,10 +28,10 @@ import (
 //
 // MOUNT HANDOFF (integrations owner adds these before the /:provider wildcards):
 //
-//	app.Post("/v1/integrations/discord/interactions", s.discordInteractions)
-//	app.Get("/v1/integrations/discord/link",          s.discordLink)
-//	app.Get("/v1/integrations/discord/link/discord",  s.discordLinkDiscord)
-//	app.Get("/v1/integrations/discord/link/callback", s.discordLinkCallback)
+//	app.Post("/v1/integration/discord/interactions", s.discordInteractions)
+//	app.Get("/v1/integration/discord/link",          s.discordLink)
+//	app.Get("/v1/integration/discord/link/discord",  s.discordLinkDiscord)
+//	app.Get("/v1/integration/discord/link/callback", s.discordLinkCallback)
 
 // Discord interaction + response type numbers.
 const (

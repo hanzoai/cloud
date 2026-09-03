@@ -52,10 +52,10 @@ func domainApp(t *testing.T, s *cloud.Service[state]) *zip.App {
 	app.Use(cloud.DenyEnvelope())
 	r := cloud.ZipApp(app)
 	o := ops{s: s}
-	zip.Post(r, "/v1/projects/:slug/domains", o.bindDomains)
-	zip.Get(r, "/v1/projects/:slug/domains", o.listDomains)
-	zip.Post(r, "/v1/projects/:slug/domains/:host/verify", o.verifyDomain)
-	zip.Delete(r, "/v1/projects/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
+	zip.Post(r, "/v1/project/:slug/domains", o.bindDomains)
+	zip.Get(r, "/v1/project/:slug/domains", o.listDomains)
+	zip.Post(r, "/v1/project/:slug/domains/:host/verify", o.verifyDomain)
+	zip.Delete(r, "/v1/project/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
 	return app
 }
 
@@ -81,7 +81,7 @@ func domainsApp(t *testing.T, s *cloud.Service[state]) func(c caller, slug, host
 	return func(c caller, slug, host string) (int, projectsDomain) {
 		t.Helper()
 		body, _ := json.Marshal(projectsDomainsBind{Domains: []string{host}})
-		req := httptest.NewRequest(http.MethodPost, "/v1/projects/"+slug+"/domains", bytes.NewReader(body))
+		req := httptest.NewRequest(http.MethodPost, "/v1/project/"+slug+"/domains", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		identify(req, c)
 		resp, err := app.Test(req)
@@ -468,7 +468,7 @@ func TestReleaseOnlyAddressesNamesBindCouldHaveMade(t *testing.T) {
 		t.Helper()
 		// Escaped, so a hostile value is what the ROUTE decodes rather than what the
 		// test harness refuses to build a URL from.
-		req := httptest.NewRequest(http.MethodDelete, "/v1/projects/acme/domains/"+url.PathEscape(host), nil)
+		req := httptest.NewRequest(http.MethodDelete, "/v1/project/acme/domains/"+url.PathEscape(host), nil)
 		identify(req, caller{org: "acme", orgAdmin: true})
 		resp, err := app.Test(req)
 		if err != nil {
@@ -528,7 +528,7 @@ func TestVerifyDomainPromotesOnlyOnProof(t *testing.T) {
 	who := caller{org: "acme", orgAdmin: true}
 	verify := func(host string) (int, projectsDomain) {
 		t.Helper()
-		req := httptest.NewRequest(http.MethodPost, "/v1/projects/acme/domains/"+host+"/verify", nil)
+		req := httptest.NewRequest(http.MethodPost, "/v1/project/acme/domains/"+host+"/verify", nil)
 		identify(req, who)
 		resp, err := app.Test(req)
 		if err != nil {

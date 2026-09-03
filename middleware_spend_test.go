@@ -175,7 +175,7 @@ func TestBillable(t *testing.T) {
 		// claimed the bare /v1/s3 with no route behind it, so a routing claim
 		// nothing served was widening the metered tree over a neighbour's root.
 		{"POST", "/v1/s3/buckets", true, "object storage data plane"},
-		{"POST", "/v1/agents/run", true, "per-run agent fee"},
+		{"POST", "/v1/agent/run", true, "per-run agent fee"},
 		{"POST", "/v1/security/scan", true, "scan fee"},
 
 		// Reads are NEVER billable. Gating them has already caused one outage, and a
@@ -199,7 +199,7 @@ func TestBillable(t *testing.T) {
 		{"GET", "/v1/code/tree", false, "reading the index spends nothing"},
 		{"GET", "/v1/code/file", false, "reading a file spends nothing"},
 		{"GET", "/v1/s3/health", false, "a probe is never billed"},
-		{"GET", "/v1/agents/runs", false, "reading a run back spends nothing"},
+		{"GET", "/v1/agent/runs", false, "reading a run back spends nothing"},
 		{"GET", "/v1/codex/ask", false, "a neighbour of the name, not the name"},
 
 		// The path to payment, and the surfaces that render it.

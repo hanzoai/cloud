@@ -14,7 +14,7 @@ import (
 // is NOT task-backed, so those events are never forwarded to a tasks engine —
 // the running surface consumes them itself by polling here.
 //
-// GET /v1/agents/sessions/:id/control?after=<seq> returns the control commands
+// GET /v1/agent/sessions/:id/control?after=<seq> returns the control commands
 // newer than the caller's cursor, oldest first, with a cursor to poll from next.
 // It is READ-ONLY and org-scoped (org is the ONLY tenant key): the same validated
 // principal + same-org ownership that guards the session guards this, so a poller

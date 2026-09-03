@@ -2,15 +2,15 @@ package flags
 
 // The canonical PLATFORM launch switches — the runtime knobs the SuperAdmin flips from
 // admin.hanzo.ai. Each is an Insights feature flag (the engine); this table names it,
-// categorizes it, and pins a hardcoded Default. RUNTIME flags resolve from /v1/flags
-// (the DB engine) → Default, with NO env gate — /v1/flags is the single source of truth,
+// categorizes it, and pins a hardcoded Default. RUNTIME flags resolve from /v1/flag
+// (the DB engine) → Default, with NO env gate — /v1/flag is the single source of truth,
 // flipped live, no redeploy. Only BOOT-TIME, ReadOnly rows (subsystem activation applied
 // via CLOUD_ENABLE/CLOUD_*; network-id display) pin an Env, because that IS their boot
 // mechanism, not a redundant runtime override. Subsystems may Register MORE at init —
 // this seed is the launch set, not a closed list.
 func init() {
 	for _, d := range []Def{
-		// ── Launch / Waitlist (runtime flags: /v1/flags is the single source of truth; DB → Default, no env gate) ──
+		// ── Launch / Waitlist (runtime flags: /v1/flag is the single source of truth; DB → Default, no env gate) ──
 		{Key: "waitlist_open", Category: "Launch", Label: "Waitlist intake open", Desc: "Accept new waitlist signups. Off closes intake platform-wide.", Type: TypeBool, Default: "true"},
 		{Key: "waitlist_access_capacity", Category: "Launch", Label: "Access capacity", Desc: "How many waitlisted users are granted product access (Insights flag payload = the number).", Type: TypeInt, Default: "0"},
 		{Key: "waitlist_points_referral", Category: "Launch", Label: "Points · referral", Desc: "Queue-position points awarded per referral.", Type: TypeInt, Default: "0"},
@@ -19,7 +19,7 @@ func init() {
 		{Key: "waitlist_turnstile", Category: "Launch", Label: "Turnstile challenge", Desc: "Require the Cloudflare Turnstile challenge on waitlist signup.", Type: TypeBool, Default: "false"},
 		{Key: "waitlist_signup_rate_limit", Category: "Launch", Label: "Signup rate limit", Desc: "Max waitlist signups per source per minute (0 = unlimited).", Type: TypeInt, Default: "0"},
 
-		// ── Signup (runtime flag: /v1/flags only) ──
+		// ── Signup (runtime flag: /v1/flag only) ──
 		{Key: "public_signup", Category: "Signup", Label: "Public open signup", Desc: "Allow anyone to create an account (off = invite / waitlist only).", Type: TypeBool, Default: "false"},
 
 		// ── Subsystem activation (boot-time; applying a flip needs an operator reconcile) ──

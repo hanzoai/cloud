@@ -199,7 +199,7 @@ func TestStoreDeleteIdempotent(t *testing.T) {
 //
 // This is the production failure, reproduced. `CREATE TABLE IF NOT EXISTS` is a
 // no-op on an existing table, so the new columns reached new databases only, and
-// GET /v1/integrations answered HTTP 500 `no such column: user` on every real one
+// GET /v1/integration answered HTTP 500 `no such column: user` on every real one
 // — the Slack workspace read as disconnected to everything that asks this store
 // while its install was live. Without alignConnections this test fails on the very
 // first query, exactly as production did.

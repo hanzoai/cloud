@@ -368,7 +368,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 	n := seedRegistry(cloud.Brand(), log)
 	// The guard's public runtime mode read (host→service→waitlist.<svc>), one namespace
-	// under /v1/flags. It is what the ingress guard asks, and it is exempt from the
+	// under /v1/flag. It is what the ingress guard asks, and it is exempt from the
 	// guard's own gating so a user on the waitlist can still resolve mode.
 	//
 	// A typed op receives only a context, so the request the ?host= default falls

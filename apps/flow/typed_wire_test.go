@@ -50,7 +50,7 @@ var intentRefused = map[string]string{
 	// are not its component model, app-connections/triggers/store-entries are
 	// not its primitives. The goja piece runtime lives at /v1/automations.
 	"/v1/flow/pieces":          "the product has no pieces registry; the piece runtime is apps/automations",
-	"/v1/flow/app-connections": "the product has no app-connections primitive; connectors live at /v1/integrations",
+	"/v1/flow/app-connections": "the product has no app-connections primitive; connectors live at /v1/integration",
 	"/v1/flow/trigger-events":  "the product has no trigger-event queue; automations owns triggers",
 	"/v1/flow/store-entries":   "the product has no key-value store surface; provisioning owns /v1/kv",
 	"/v1/flow/templates":       "the product's starter examples are not a template CRUD; /v1/template is the fleet's template plane",
@@ -72,7 +72,7 @@ type upstreamCall struct {
 }
 
 // fakeFlow is a minimal in-memory flow service speaking the measured wire:
-// /v1/projects/ (list, create), /v1/flows/ (paged list, create), /v1/flows/{id}
+// /v1/project/ (list, create), /v1/flows/ (paged list, create), /v1/flows/{id}
 // (get, patch, delete), /v1/run/{id}, /v1/monitor/builds.
 type fakeFlow struct {
 	mu       sync.Mutex
@@ -117,13 +117,13 @@ func (f *fakeFlow) handler() http.Handler {
 			js(200, map[string]string{"status": "ok"})
 		case r.URL.Path == "/v1/version":
 			js(200, map[string]string{"version": "1.8.2", "package": "Flow"})
-		case r.URL.Path == "/v1/projects/" && r.Method == http.MethodGet:
+		case r.URL.Path == "/v1/project/" && r.Method == http.MethodGet:
 			rows := []map[string]any{}
 			for name, id := range f.projects {
 				rows = append(rows, map[string]any{"id": id, "name": name, "parent_id": nil})
 			}
 			js(200, rows)
-		case r.URL.Path == "/v1/projects/" && r.Method == http.MethodPost:
+		case r.URL.Path == "/v1/project/" && r.Method == http.MethodPost:
 			var in struct {
 				Name string `json:"name"`
 			}

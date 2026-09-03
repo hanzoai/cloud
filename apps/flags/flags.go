@@ -14,7 +14,7 @@
 //
 // TWO surfaces, ONE engine:
 //
-//   - /v1/flags — the product API (org-scoped via the gateway principal): evaluate
+//   - /v1/flag — the product API (org-scoped via the gateway principal): evaluate
 //     flags for a distinct_id + properties, manage definitions, read the activity
 //     log. The verdict carries each flag's state, variant and payload.
 //
@@ -436,7 +436,7 @@ type SwitchView struct {
 }
 
 // BoardView is the full control-plane read board: the engine status plus every
-// switch's live value. Definitions are edited in place over /v1/flags (the cockpit
+// switch's live value. Definitions are edited in place over /v1/flag (the cockpit
 // writes through SetPlatformSwitch); the activity log is the native change audit.
 type BoardView struct {
 	// Engine names the evaluator serving these values: "hanzo-flags", running
@@ -448,9 +448,9 @@ type BoardView struct {
 	// fail. That is the fail-safe posture, not an outage.
 	Configured bool `json:"configured"`
 	// ManageURL is where the definitions behind these switches are read and
-	// written: /v1/flags/defs.
+	// written: /v1/flag/defs.
 	ManageURL string `json:"manageUrl"`
-	// AuditURL is where the change log for those writes lives: /v1/flags/activity.
+	// AuditURL is where the change log for those writes lives: /v1/flag/activity.
 	AuditURL string `json:"auditUrl"`
 	// Switches is every registered switch with the value in force, in registration
 	// order — the seeded platform set first, then whatever each subsystem added at
@@ -470,7 +470,7 @@ func Board() BoardView {
 			Type: string(d.Type), Value: val, Source: src, Env: d.Env, ReadOnly: d.ReadOnly,
 		})
 	}
-	return BoardView{Engine: "hanzo-flags", Configured: mounted.configured(), ManageURL: "/v1/flags/defs", AuditURL: "/v1/flags/activity", Switches: sw}
+	return BoardView{Engine: "hanzo-flags", Configured: mounted.configured(), ManageURL: "/v1/flag/defs", AuditURL: "/v1/flag/activity", Switches: sw}
 }
 
 // ── lifecycle ────────────────────────────────────────────────────────────────
@@ -480,7 +480,7 @@ type state struct {
 }
 
 // Mount opens the per-org definition stores, installs the process-wide evaluation
-// client, and registers the /v1/flags surface. A store that cannot be opened
+// client, and registers the /v1/flag surface. A store that cannot be opened
 // degrades every switch to env/default and the HTTP surface reports it — never an
 // error at boot.
 func Use(app cloud.Router, deps cloud.Deps) error {

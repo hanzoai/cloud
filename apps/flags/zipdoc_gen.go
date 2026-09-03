@@ -9,14 +9,14 @@ import (
 )
 
 func init() {
-	zip.Describe("github.com/hanzoai/cloud/apps/flags DELETE /v1/flags/defs/:key", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flags DELETE /v1/flag/defs/:key", zip.Doc{
 		Description: "Removes one flag definition by key and records the\ndeletion in the change log. A key the caller's store does not hold is a 404.",
 		Fields: map[string]string{
 			"deletedOut.deleted": "Deleted is the key that no longer exists.",
 			"keyIn.key":          "Key is the flag key to act on, from the path.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/flags GET /v1/flags/activity", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flags GET /v1/flag/activity", zip.Doc{
 		Description: "Returns the caller's flag change log newest-first: every\ncreate, update and delete, with the actor and the time.",
 		Fields: map[string]string{
 			"ActivityRow.action": "Action is one of created, updated, deleted.",
@@ -29,7 +29,7 @@ func init() {
 			"activityOut.data":   "Data is the change log newest-first: who created, updated or deleted which key, when.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/flags GET /v1/flags/defs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flags GET /v1/flag/defs", zip.Doc{
 		Description: "Returns every flag definition in the caller's (org,\nproject) store, by key, with its version and who last changed it.",
 		Fields: map[string]string{
 			"DefRow.definition": "Definition is the flag-definition document the evaluator consumes, kept\nBYTE-FOR-BYTE as it was written. It is the engine's format rather than this\npackage's, so it carries fields no Go type here names — targeting groups,\nrollout percentages, variants, payloads — and a caller must round-trip it\nwhole rather than rebuilding it from the parts it recognizes.",
@@ -40,7 +40,7 @@ func init() {
 			"defsOut.data":      "Data is every definition in the caller's (org, project) store, by key.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/flags GET /v1/flags/defs/:key", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flags GET /v1/flag/defs/:key", zip.Doc{
 		Description: "Returns one flag definition by key, or 404 when the caller's\nstore has none under that key.",
 		Fields: map[string]string{
 			"DefRow.definition": "Definition is the flag-definition document the evaluator consumes, kept\nBYTE-FOR-BYTE as it was written. It is the engine's format rather than this\npackage's, so it carries fields no Go type here names — targeting groups,\nrollout percentages, variants, payloads — and a caller must round-trip it\nwhole rather than rebuilding it from the parts it recognizes.",
@@ -51,7 +51,7 @@ func init() {
 			"keyIn.key":         "Key is the flag key to act on, from the path.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/flags GET /v1/flags/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flags GET /v1/flag/health", zip.Doc{
 		Description: "Health reports that the flag engine is serving. It is not gated: liveness must\nbe probe-able without a token.",
 		Fields: map[string]string{
 			"healthOut.engine": "Engine names the evaluator this deployment runs.",
@@ -60,7 +60,7 @@ func init() {
 		Response: json.RawMessage(`{"ok":true,"engine":"hanzo-flags"}`),
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /flags/board", zip.Doc{
-		Description: "Answers the switchboard through this app's own [Board], so the plane and\n/v1/flags render one value. A second projection here would be a second answer to\n\"what is in force\", and the two would disagree the day a default moves.",
+		Description: "Answers the switchboard through this app's own [Board], so the plane and\n/v1/flag render one value. A second projection here would be a second answer to\n\"what is in force\", and the two would disagree the day a default moves.",
 		Fields: map[string]string{
 			"FlagBoard.auditUrl":     "AuditURL is where the change log for those writes lives.",
 			"FlagBoard.configured":   "Configured is whether the definition stores opened. False means every value\nbelow is a default or an env fallback and a write will be refused.",
@@ -79,7 +79,7 @@ func init() {
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /flags/hold", zip.Doc{
-		Description: "Evaluates one flag FOR THE CALLER'S OWN ORG.\n\nThe subject is the org, not a person: a capability flag says whether a customer\nhas been let into a product, which is a fact about the tenant. So the org is\nboth the tenant whose definitions are read and the distinct_id they are\nevaluated against, and a caller has no way to name either.\n\nIt goes through [Assign], which is the ONE bucketing in this app — the same\npure function of (key, subject, definition) that /v1/flags and the experiments\nprimitive run. A second evaluator here would be a second answer to \"does this\norg hold X\", and the two would disagree on the day a rollout percentage is set.\n\nA flag this org has no definition for is OFF, which is a real answer and the\nright one: a capability nobody was let into is held by nobody. An engine that\ncannot answer is an ERROR, never a false — the caller fails closed on it, and\nsilently reporting \"not held\" would make an outage indistinguishable from a\ndecision.",
+		Description: "Evaluates one flag FOR THE CALLER'S OWN ORG.\n\nThe subject is the org, not a person: a capability flag says whether a customer\nhas been let into a product, which is a fact about the tenant. So the org is\nboth the tenant whose definitions are read and the distinct_id they are\nevaluated against, and a caller has no way to name either.\n\nIt goes through [Assign], which is the ONE bucketing in this app — the same\npure function of (key, subject, definition) that /v1/flag and the experiments\nprimitive run. A second evaluator here would be a second answer to \"does this\norg hold X\", and the two would disagree on the day a rollout percentage is set.\n\nA flag this org has no definition for is OFF, which is a real answer and the\nright one: a capability nobody was let into is held by nobody. An engine that\ncannot answer is an ERROR, never a false — the caller fails closed on it, and\nsilently reporting \"not held\" would make an outage indistinguishable from a\ndecision.",
 		Fields: map[string]string{
 			"FlagIn.key": "the flag's key; for a capability's stage it is the capability's name",
 		},
@@ -93,7 +93,7 @@ func init() {
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /flags/value", zip.Doc{
-		Description: "Resolves one flag for the CALLER'S OWN org.\n\nThe caller supplies its own Default, and that is what makes this op possible\nwithout a catalog: a Def is declared where its flag is used — in a loop over\ntiers, or per service registered at run time — so this app cannot be assumed to\nhold one for every key. What it holds is the operator's setting, which is the\nhalf the caller genuinely cannot know.\n\nParsing happens HERE, by the same [Client.resolve] that serves /v1/flags, so a\nstored value means one thing however it is asked for. A caller that parsed the\ntext itself would be a second parser, and the two would disagree the first time\nsomebody wrote \"yes\" instead of \"true\".",
+		Description: "Resolves one flag for the CALLER'S OWN org.\n\nThe caller supplies its own Default, and that is what makes this op possible\nwithout a catalog: a Def is declared where its flag is used — in a loop over\ntiers, or per service registered at run time — so this app cannot be assumed to\nhold one for every key. What it holds is the operator's setting, which is the\nhalf the caller genuinely cannot know.\n\nParsing happens HERE, by the same [Client.resolve] that serves /v1/flag, so a\nstored value means one thing however it is asked for. A caller that parsed the\ntext itself would be a second parser, and the two would disagree the first time\nsomebody wrote \"yes\" instead of \"true\".",
 		Fields: map[string]string{
 			"FlagValue.n":         "N is Value as an integer, 0 when it is not one.",
 			"FlagValue.on":        "On is Value as a boolean, false when it is not one.",
@@ -104,7 +104,7 @@ func init() {
 			"FlagValueIn.kind":    "Kind is how to parse a stored value: \"bool\", \"int\" or \"string\".",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /v1/flags", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /v1/flag", zip.Doc{
 		Description: "Evaluate runs the caller's flag definitions for one identity and returns the\nflag verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
 		Fields: map[string]string{
 			"evaluateIn.distinct_id":       "DistinctID is the identity the flags are evaluated for. Required.",
@@ -114,7 +114,7 @@ func init() {
 		Example:  json.RawMessage(`{"distinct_id":"u1","person_properties":{"plan":"pro"},"groups":{"0":{"key":"acme"}}}`),
 		Response: json.RawMessage(`{"featureFlags":{"new-editor":true},"featureFlagPayloads":{},"errorsWhileComputingFlags":false}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /v1/flags/decide", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /v1/flag/decide", zip.Doc{
 		Description: "Evaluate runs the caller's flag definitions for one identity and returns the\nflag verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
 		Fields: map[string]string{
 			"evaluateIn.distinct_id":       "DistinctID is the identity the flags are evaluated for. Required.",
@@ -124,7 +124,7 @@ func init() {
 		Example:  json.RawMessage(`{"distinct_id":"u1","person_properties":{"plan":"pro"},"groups":{"0":{"key":"acme"}}}`),
 		Response: json.RawMessage(`{"featureFlags":{"new-editor":true},"featureFlagPayloads":{},"errorsWhileComputingFlags":false}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/flags PUT /v1/flags/defs/:key", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flags PUT /v1/flag/defs/:key", zip.Doc{
 		Description: "Creates or replaces the flag definition at the path's key and\nreturns the stored row. The BODY IS THE DEFINITION DOCUMENT — the flag-definition\nJSON object the evaluator consumes — and it is stored verbatim except that its\n\"key\" is forced to the key in the URL, so a document can never be filed under a\nname other than the one it was addressed by. Every write bumps the version and\nappends to the change log under the caller's identity.",
 		Fields: map[string]string{
 			"DefRow.definition":   "Definition is the flag-definition document the evaluator consumes, kept\nBYTE-FOR-BYTE as it was written. It is the engine's format rather than this\npackage's, so it carries fields no Go type here names — targeting groups,\nrollout percentages, variants, payloads — and a caller must round-trip it\nwhole rather than rebuilding it from the parts it recognizes.",

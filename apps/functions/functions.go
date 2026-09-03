@@ -1,7 +1,7 @@
 // Package functions is your serverless code: publish it, call it over HTTP,
 // watch every run and what it cost.
 //
-// The /v1/functions registry is per-org — one function, one owner. Every
+// The /v1/function registry is per-org — one function, one owner. Every
 // function belongs to exactly one org (the
 // gateway-minted X-Org-Id, HIP-0026); org isolation is the org column,
 // enforced on every query. The registry stores a function's runtime, source,
@@ -10,17 +10,17 @@
 //
 // Surface (the shape console's FunctionsModule / functions.ts consume):
 //
-//	GET    /v1/functions                    list functions           -> {functions:[...]}
-//	POST   /v1/functions                    create / redeploy        -> ServerlessFunction
-//	GET    /v1/functions/metrics            invocations chart + donut -> {series,status,costCents}
-//	GET    /v1/functions/triggers           all triggers (HTTP)      -> {triggers:[...]}
-//	GET    /v1/functions/deployments        current deployments      -> {functions:[...]}
-//	GET    /v1/functions/secrets            mounted secret NAMES      -> {secrets:[...]}
-//	GET    /v1/functions/:name              detail + triggers + calls -> FunctionDetail
-//	DELETE /v1/functions/:name              delete (+ its invocations)
-//	GET    /v1/functions/:name/invocations  recent invocations       -> {invocations:[...]}
-//	GET    /v1/functions/:name/logs         last invocation output   -> {logs:"..."}
-//	POST   /v1/functions/:name/invoke       run the function {input} -> Invocation
+//	GET    /v1/function                    list functions           -> {functions:[...]}
+//	POST   /v1/function                    create / redeploy        -> ServerlessFunction
+//	GET    /v1/function/metrics            invocations chart + donut -> {series,status,costCents}
+//	GET    /v1/function/triggers           all triggers (HTTP)      -> {triggers:[...]}
+//	GET    /v1/function/deployments        current deployments      -> {functions:[...]}
+//	GET    /v1/function/secrets            mounted secret NAMES      -> {secrets:[...]}
+//	GET    /v1/function/:name              detail + triggers + calls -> FunctionDetail
+//	DELETE /v1/function/:name              delete (+ its invocations)
+//	GET    /v1/function/:name/invocations  recent invocations       -> {invocations:[...]}
+//	GET    /v1/function/:name/logs         last invocation output   -> {logs:"..."}
+//	POST   /v1/function/:name/invoke       run the function {input} -> Invocation
 //
 // Invoke delegates to a SANDBOX through apps/exec — this
 // binary NEVER runs org code in-process. When the sandbox is not configured
@@ -166,7 +166,7 @@ type functionDetail struct {
 	Secrets []string `json:"secrets"`
 }
 
-func endpointFor(name string) string { return "/v1/functions/" + name + "/invoke" }
+func endpointFor(name string) string { return "/v1/function/" + name + "/invoke" }
 
 // toView maps a Function to the ServerlessFunction shape, folding in the REAL
 // 7-day invocation rollup (nil pointers → omitted → the UI shows "—", never a
@@ -236,12 +236,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
 	za := cloud.ZipApp(app)
 
-	// Collection root stays flat: Group("/v1/functions").Get("") would register
-	// "/v1/functions/", not the bare collection path.
-	zip.Get(za, "/v1/functions", o.list)
-	zip.Post(za, "/v1/functions", o.create, zip.WithStatus(http.StatusCreated))
+	// Collection root stays flat: Group("/v1/function").Get("") would register
+	// "/v1/function/", not the bare collection path.
+	zip.Get(za, "/v1/function", o.list)
+	zip.Post(za, "/v1/function", o.create, zip.WithStatus(http.StatusCreated))
 
-	g := app.Group("/v1/functions")
+	g := app.Group("/v1/function")
 	// cloud.DenyEnvelope BEFORE the leaves, because fiber runs middleware in
 	// registration order and one installed after its leaves never runs. An invoke
 	// gates on the caller's balance, and the envelope is what makes that refusal

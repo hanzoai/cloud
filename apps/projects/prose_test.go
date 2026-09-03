@@ -37,7 +37,7 @@ import (
 // entry here that starts publishing prose goes red too — that is the day the
 // generator learns, and this ledger must shrink then rather than outlive the gap.
 var proseless = map[string]bool{
-	// REFLECTION CLIENT. GET /v1/projects/tags is declared with openapi.Register (tags.go)
+	// REFLECTION CLIENT. GET /v1/project/tags is declared with openapi.Register (tags.go)
 	// because it answers a hosted page's tag config rather than a typed op's Out.
 	// Register derives a schema by REFLECTION, and Go drops comments at compile
 	// time, so zipdoc — which walks zip's TYPED registrations — can never reach a

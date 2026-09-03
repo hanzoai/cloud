@@ -17,7 +17,7 @@ func TestRunOnBehalfBillsActor(t *testing.T) {
 	_ = app
 
 	// Create the agent the bridge will address by ref (name "hanzo").
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "hanzo", "model": "gpt-4o-mini", "instructions": "x"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
@@ -59,7 +59,7 @@ func TestRunOnBehalfOrgScoped(t *testing.T) {
 	_ = app
 
 	// "secret" exists only in globex.
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "globex",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "globex",
 		map[string]any{"name": "secret", "model": "m", "instructions": "y"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
@@ -81,7 +81,7 @@ func TestRunOnBehalfGatesUnfunded(t *testing.T) {
 	ai := &fakeAI{content: "must not run"}
 	app := mountBilled(t, bs.start(t), ai)
 	_ = app
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "a", "model": "m", "instructions": "x"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}

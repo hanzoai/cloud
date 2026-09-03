@@ -47,12 +47,12 @@ func TestNoUpstreamNameOnTheWire(t *testing.T) {
 
 	// 1. An agent created with NO model. The configured default is an upstream
 	//    name; normalization must still store and answer the Hanzo name.
-	code, body := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "defaulted", "instructions": "be terse"})
 	if code != http.StatusCreated {
 		t.Fatalf("create defaulted: want 201, got %d (%s)", code, body)
 	}
-	scanUpstream(t, "POST /v1/agents (defaulted)", body)
+	scanUpstream(t, "POST /v1/agent (defaulted)", body)
 	var created agentView
 	if err := json.Unmarshal(body, &created); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -64,36 +64,36 @@ func TestNoUpstreamNameOnTheWire(t *testing.T) {
 	// 2. A caller who explicitly POSTs an upstream model the gateway really does
 	//    serve. It is accepted (not a 400 — the name was ours to leak, not theirs
 	//    to be punished for) but normalized, so it never enters the registry.
-	code, body = do(t, app, http.MethodPost, "/v1/agents", "acme",
+	code, body = do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "pinned", "model": "deepseek-v4-flash"})
 	if code != http.StatusCreated {
 		t.Fatalf("create pinned: want 201, got %d (%s)", code, body)
 	}
-	scanUpstream(t, "POST /v1/agents (explicit upstream model)", body)
+	scanUpstream(t, "POST /v1/agent (explicit upstream model)", body)
 
 	// 3. PATCH to an upstream model is normalized the same way.
-	code, body = do(t, app, http.MethodPatch, "/v1/agents/pinned", "acme",
+	code, body = do(t, app, http.MethodPatch, "/v1/agent/pinned", "acme",
 		map[string]any{"model": "glm-5.2"})
 	if code != http.StatusOK {
 		t.Fatalf("patch: want 200, got %d (%s)", code, body)
 	}
-	scanUpstream(t, "PATCH /v1/agents/:ref", body)
+	scanUpstream(t, "PATCH /v1/agent/:ref", body)
 
 	// 4. A run, and the run history and activity feed that record it.
-	if code, body = do(t, app, http.MethodPost, "/v1/agents/defaulted/run", "acme",
+	if code, body = do(t, app, http.MethodPost, "/v1/agent/defaulted/run", "acme",
 		map[string]any{"input": "hi"}); code != http.StatusOK {
 		t.Fatalf("run: want 200, got %d (%s)", code, body)
 	}
-	scanUpstream(t, "POST /v1/agents/:ref/run", body)
+	scanUpstream(t, "POST /v1/agent/:ref/run", body)
 
 	// 5. Every remaining read surface.
 	for _, path := range []string{
-		"/v1/agents",
-		"/v1/agents/defaulted",
-		"/v1/agents/pinned",
-		"/v1/agents/defaulted/runs",
-		"/v1/agents/activity",
-		"/v1/agents/metrics",
+		"/v1/agent",
+		"/v1/agent/defaulted",
+		"/v1/agent/pinned",
+		"/v1/agent/defaulted/runs",
+		"/v1/agent/activity",
+		"/v1/agent/metrics",
 	} {
 		code, body := do(t, app, http.MethodGet, path, "acme", nil)
 		if code != http.StatusOK {
@@ -209,9 +209,9 @@ func TestSeedPersonasUsesHanzoModel(t *testing.T) {
 	if n != len(personas) {
 		t.Fatalf("seeded %d personas, want %d", n, len(personas))
 	}
-	code, body := do(t, app, http.MethodGet, "/v1/agents", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/agent", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list: want 200, got %d (%s)", code, body)
 	}
-	scanUpstream(t, "GET /v1/agents after SeedPersonas", body)
+	scanUpstream(t, "GET /v1/agent after SeedPersonas", body)
 }

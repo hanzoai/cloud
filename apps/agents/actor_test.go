@@ -20,7 +20,7 @@ import (
 func TestOnBehalfNamesThePersonOnTheModelCall(t *testing.T) {
 	ai := &fakeAI{content: "answered"}
 	app := mountApp(t, ai)
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "hanzo", "model": "gpt-4o-mini", "instructions": "x"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
@@ -41,11 +41,11 @@ func TestOnBehalfNamesThePersonOnTheModelCall(t *testing.T) {
 func TestRunNamesTheCaller(t *testing.T) {
 	ai := &fakeAI{content: "answered"}
 	app := mountApp(t, ai)
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "hanzo", "model": "gpt-4o-mini", "instructions": "x"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents/hanzo/run", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent/hanzo/run", "acme",
 		map[string]any{"input": "hi"}); code != http.StatusOK {
 		t.Fatalf("run want 200")
 	}

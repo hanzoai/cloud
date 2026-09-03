@@ -5,7 +5,7 @@ package integrations
 //
 // WHY AN OFFER AND NOT AN IMPORT. A repo the App can now see is not a repo the org
 // wants mirrored — importing on sight would mirror every repo anyone creates, which
-// is a policy decision the org owns. GET /v1/integrations/github/repos already
+// is a policy decision the org owns. GET /v1/integration/github/repos already
 // lists every granted repo with imported=false, so the ABILITY to import arrives
 // with the grant; what was missing is anyone being TOLD. This closes that gap and
 // leaves the decision where it was.
@@ -106,7 +106,7 @@ func importOffer(fullName, htmlURL string, private bool, action string) string {
 		b.WriteString(htmlURL)
 	}
 	b.WriteString("\n\nImport it into git.hanzo.ai:\n")
-	b.WriteString(`POST /v1/integrations/github/import {"repos":["`)
+	b.WriteString(`POST /v1/integration/github/import {"repos":["`)
 	b.WriteString(fullName)
 	b.WriteString(`"]}`)
 	return b.String()

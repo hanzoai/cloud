@@ -11,7 +11,7 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 )
 
-// This file is the MEASUREMENT that typing /v1/channels did not move its wire,
+// This file is the MEASUREMENT that typing /v1/channel did not move its wire,
 // and the CLOSED ledger of the one route that stayed untyped. Before this pass
 // all seven of the subsystem's operations published no summary and no
 // description — the set that projects to NOTHING: no prose, no MCP tool, no CLI
@@ -20,7 +20,7 @@ import (
 // untypedByDesign is the closed list of channels operations that are NOT typed
 // ops, each with the WIRE FACT that typing it would move.
 var untypedByDesign = map[string]string{
-	"POST /v1/channels/{channel}/send": "send has TWO independent blockers. (1) A PACKAGE-LOCAL body " +
+	"POST /v1/channel/{channel}/send": "send has TWO independent blockers. (1) A PACKAGE-LOCAL body " +
 		"cap: it reads c.Body() and refuses anything over sendMaxBody (1 MiB) with 400 \"body exceeds 1 " +
 		"MiB\" (routes.go). A typed op never sees the raw bytes — zip decodes first — and cloud's global " +
 		"zip BodyLimit is far larger, so the cap would silently vanish. (2) DisallowUnknownFields: the " +
@@ -46,7 +46,7 @@ func channelOps(t *testing.T) (served map[string]bool, typed map[string]*openapi
 	if err != nil {
 		t.Fatalf("typed registry: %v", err)
 	}
-	ours := func(p string) bool { return strings.HasPrefix(p, "/v1/channels") }
+	ours := func(p string) bool { return strings.HasPrefix(p, "/v1/channel") }
 	served, typed = map[string]bool{}, map[string]*openapi.Operation{}
 	for path, item := range doc.Paths {
 		if !ours(path) {
@@ -145,7 +145,7 @@ func TestSendKeepsItsCapAndItsStrictness(t *testing.T) {
 	// BodyLimit and is invisible to a typed op.
 	big := bytes.Repeat([]byte("x"), sendMaxBody+1)
 	body := append(append([]byte(`{"room":{"id":"r1"},"text":"`), big...), []byte(`"}`)...)
-	rq := httptest.NewRequest(http.MethodPost, "/v1/channels/telegram/send", bytes.NewReader(body))
+	rq := httptest.NewRequest(http.MethodPost, "/v1/channel/telegram/send", bytes.NewReader(body))
 	rq.Header.Set("Content-Type", "application/json")
 	rq.Header.Set("X-Org-Id", "acme")
 	rq.Header.Set("X-User-Id", "u-acme")
@@ -159,7 +159,7 @@ func TestSendKeepsItsCapAndItsStrictness(t *testing.T) {
 	}
 	// (2) DisallowUnknownFields: an identity field the outbound projection does
 	// NOT carry is refused loudly, never dropped silently.
-	got := req(t, e, http.MethodPost, "/v1/channels/telegram/send", "acme",
+	got := req(t, e, http.MethodPost, "/v1/channel/telegram/send", "acme",
 		map[string]any{"room": map[string]any{"id": "r1"}, "text": "hi", "sender": "spoofed"})
 	if got.Code != http.StatusBadRequest {
 		t.Fatalf("a body carrying an identity field got %d, want 400 — the strict decode is gone (%s)", got.Code, got.Body)
@@ -173,16 +173,16 @@ func TestSendKeepsItsCapAndItsStrictness(t *testing.T) {
 // would have silently dropped the check.
 func TestMutationsRequireOrgAdmin(t *testing.T) {
 	e := newApp(t)
-	if got := req(t, e, http.MethodPost, "/v1/channels/pairing/approve", "acme",
+	if got := req(t, e, http.MethodPost, "/v1/channel/pairing/approve", "acme",
 		map[string]any{"channel": "telegram", "code": "X"}); got.Code != http.StatusForbidden {
 		t.Errorf("approve as a non-admin got %d, want 403 (%s)", got.Code, got.Body)
 	}
-	if got := req(t, e, http.MethodPut, "/v1/channels/allowlist", "acme",
+	if got := req(t, e, http.MethodPut, "/v1/channel/allowlist", "acme",
 		map[string]any{"channel": "telegram", "dmPolicy": "open"}); got.Code != http.StatusForbidden {
 		t.Errorf("allowlist PUT as a non-admin got %d, want 403 (%s)", got.Code, got.Body)
 	}
 	// And an ADMIN still gets through — the gate is not simply always-403.
-	if got := reqAdmin(t, e, http.MethodPut, "/v1/channels/allowlist", "acme",
+	if got := reqAdmin(t, e, http.MethodPut, "/v1/channel/allowlist", "acme",
 		map[string]any{"channel": "telegram", "dmPolicy": "open"}); got.Code != http.StatusOK {
 		t.Errorf("allowlist PUT as an org admin got %d, want 200 (%s)", got.Code, got.Body)
 	}
@@ -198,7 +198,7 @@ func TestAbsentIsNotEmptyOnTheAllowlistPut(t *testing.T) {
 	e := newApp(t)
 	set := func(body map[string]any) allowlistView {
 		t.Helper()
-		got := reqAdmin(t, e, http.MethodPut, "/v1/channels/allowlist", "acme", body)
+		got := reqAdmin(t, e, http.MethodPut, "/v1/channel/allowlist", "acme", body)
 		if got.Code != http.StatusOK {
 			t.Fatalf("allowlist PUT got %d (%s)", got.Code, got.Body)
 		}
@@ -231,7 +231,7 @@ func TestAbsentIsNotEmptyOnTheAllowlistPut(t *testing.T) {
 // nothing else.
 func TestTheQueryStringCannotRedirectAWrite(t *testing.T) {
 	e := newApp(t)
-	got := reqAdmin(t, e, http.MethodPut, "/v1/channels/allowlist?dmPolicy=open&channel=slack", "acme",
+	got := reqAdmin(t, e, http.MethodPut, "/v1/channel/allowlist?dmPolicy=open&channel=slack", "acme",
 		map[string]any{"channel": "telegram", "dmPolicy": "allowlist"})
 	if got.Code != http.StatusOK {
 		t.Fatalf("allowlist PUT got %d (%s)", got.Code, got.Body)
@@ -242,7 +242,7 @@ func TestTheQueryStringCannotRedirectAWrite(t *testing.T) {
 		t.Fatalf("the query string overrode the body's dmPolicy: %q", v.DMPolicy)
 	}
 	// And the write landed on telegram, not on the channel the query named.
-	got = req(t, e, http.MethodGet, "/v1/channels/allowlist?channel=telegram", "acme", nil)
+	got = req(t, e, http.MethodGet, "/v1/channel/allowlist?channel=telegram", "acme", nil)
 	decodeJSON(t, got.Body, &v)
 	if v.DMPolicy != DMAllowlist {
 		t.Fatalf("telegram's policy is %q — the query string redirected the write", v.DMPolicy)
@@ -254,13 +254,13 @@ func TestTheQueryStringCannotRedirectAWrite(t *testing.T) {
 // zero, so an int64 field would turn this 400 into a read from the beginning.
 func TestInboxStillRefusesANonIntegerCursor(t *testing.T) {
 	e := newApp(t)
-	if got := req(t, e, http.MethodGet, "/v1/channels/inbox?since=abc", "acme", nil); got.Code != http.StatusBadRequest {
+	if got := req(t, e, http.MethodGet, "/v1/channel/inbox?since=abc", "acme", nil); got.Code != http.StatusBadRequest {
 		t.Errorf("?since=abc got %d, want 400 (%s)", got.Code, got.Body)
 	}
-	if got := req(t, e, http.MethodGet, "/v1/channels/inbox?limit=abc", "acme", nil); got.Code != http.StatusBadRequest {
+	if got := req(t, e, http.MethodGet, "/v1/channel/inbox?limit=abc", "acme", nil); got.Code != http.StatusBadRequest {
 		t.Errorf("?limit=abc got %d, want 400 (%s)", got.Code, got.Body)
 	}
-	if got := req(t, e, http.MethodGet, "/v1/channels/inbox?since=0&limit=10", "acme", nil); got.Code != http.StatusOK {
+	if got := req(t, e, http.MethodGet, "/v1/channel/inbox?since=0&limit=10", "acme", nil); got.Code != http.StatusOK {
 		t.Errorf("a well-formed cursor got %d, want 200 (%s)", got.Code, got.Body)
 	}
 }
@@ -273,12 +273,12 @@ func TestFailsClosedWithoutAValidatedPrincipal(t *testing.T) {
 		method, path string
 		body         any
 	}{
-		{http.MethodGet, "/v1/channels", nil},
-		{http.MethodGet, "/v1/channels/inbox", nil},
-		{http.MethodGet, "/v1/channels/pairing", nil},
-		{http.MethodPost, "/v1/channels/pairing/approve", map[string]any{"channel": "telegram", "code": "X"}},
-		{http.MethodGet, "/v1/channels/allowlist?channel=telegram", nil},
-		{http.MethodPut, "/v1/channels/allowlist", map[string]any{"channel": "telegram"}},
+		{http.MethodGet, "/v1/channel", nil},
+		{http.MethodGet, "/v1/channel/inbox", nil},
+		{http.MethodGet, "/v1/channel/pairing", nil},
+		{http.MethodPost, "/v1/channel/pairing/approve", map[string]any{"channel": "telegram", "code": "X"}},
+		{http.MethodGet, "/v1/channel/allowlist?channel=telegram", nil},
+		{http.MethodPut, "/v1/channel/allowlist", map[string]any{"channel": "telegram"}},
 	} {
 		if got := req(t, e, r.method, r.path, "", r.body); got.Code != http.StatusForbidden {
 			t.Errorf("%s %s anonymous got %d, want 403 (%s)", r.method, r.path, got.Code, got.Body)

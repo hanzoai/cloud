@@ -60,7 +60,7 @@ func TestTagsKeyHost(t *testing.T) {
 		app := zip.New(zip.Config{DisableStartupMessage: true})
 		var key, host string
 		reached := false
-		app.Get("/v1/projects/tags", func(c *zip.Ctx) error {
+		app.Get("/v1/project/tags", func(c *zip.Ctx) error {
 			key, host, reached = tagsKey(c), tagsHost(c), true
 			return c.NoContent(http.StatusNoContent)
 		})
@@ -81,22 +81,22 @@ func TestTagsKeyHost(t *testing.T) {
 		}
 		return key, host
 	}
-	if k, _ := mk("/v1/projects/tags?key=pk-q", "", "", ""); k != "pk-q" {
+	if k, _ := mk("/v1/project/tags?key=pk-q", "", "", ""); k != "pk-q" {
 		t.Errorf("?key= → %q", k)
 	}
-	if k, _ := mk("/v1/projects/tags", "Bearer pk-b", "", ""); k != "pk-b" {
+	if k, _ := mk("/v1/project/tags", "Bearer pk-b", "", ""); k != "pk-b" {
 		t.Errorf("Bearer → %q", k)
 	}
-	if k, _ := mk("/v1/projects/tags?key=pk-q", "Bearer pk-b", "", ""); k != "pk-b" {
+	if k, _ := mk("/v1/project/tags?key=pk-q", "Bearer pk-b", "", ""); k != "pk-b" {
 		t.Errorf("Bearer must win → %q", k)
 	}
-	if _, h := mk("/v1/projects/tags?host=hanzo.ai", "", "", ""); h != "hanzo.ai" {
+	if _, h := mk("/v1/project/tags?host=hanzo.ai", "", "", ""); h != "hanzo.ai" {
 		t.Errorf("?host= → %q", h)
 	}
-	if _, h := mk("/v1/projects/tags", "", "https://hanzo.chat", ""); h != "hanzo.chat" {
+	if _, h := mk("/v1/project/tags", "", "https://hanzo.chat", ""); h != "hanzo.chat" {
 		t.Errorf("Origin → %q", h)
 	}
-	if _, h := mk("/v1/projects/tags", "", "", "https://hanzo.app/x?y=1"); h != "hanzo.app" {
+	if _, h := mk("/v1/project/tags", "", "", "https://hanzo.app/x?y=1"); h != "hanzo.app" {
 		t.Errorf("Referer → %q", h)
 	}
 }
@@ -106,13 +106,13 @@ func TestTagsKeyHost(t *testing.T) {
 func TestServeTagsFailSafe(t *testing.T) {
 	s := &cloud.Service[state]{}
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Get("/v1/projects/tags", func(c *zip.Ctx) error { return serveTags(s, c) })
+	app.Get("/v1/project/tags", func(c *zip.Ctx) error { return serveTags(s, c) })
 	if err := app.Build(); err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	res, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, "/v1/projects/tags", nil))
+	res, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, "/v1/project/tags", nil))
 	if err != nil {
-		t.Fatalf("GET /v1/projects/tags: %v", err)
+		t.Fatalf("GET /v1/project/tags: %v", err)
 	}
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", res.StatusCode)

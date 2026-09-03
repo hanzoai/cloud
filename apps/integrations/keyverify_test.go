@@ -5,7 +5,7 @@ package integrations
 // the provider expects it, verify is fail-closed (only 2xx stores), errors are
 // token-free on EVERY failure path (including the queryAt key-in-URL case),
 // offline rejects never touch the network, account-derived origins/paths resolve,
-// and the whole ecommerce+AI catalog is well-formed for Mount and /v1/integrations/connectors.
+// and the whole ecommerce+AI catalog is well-formed for Mount and /v1/integration/connectors.
 
 import (
 	"context"
@@ -328,7 +328,7 @@ var catalogIDs = []string{
 
 // TestCatalogWellFormed asserts every registered connector satisfies Mount's
 // user-scope contract (Verify present, secrets + category set, NO org-plane
-// fields) so boot cannot panic and /v1/integrations/connectors derives method "token".
+// fields) so boot cannot panic and /v1/integration/connectors derives method "token".
 func TestCatalogWellFormed(t *testing.T) {
 	for _, id := range catalogIDs {
 		p, ok := registry[id]

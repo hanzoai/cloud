@@ -90,7 +90,7 @@ func TestSuperAdminSeesUnboundInstallations(t *testing.T) {
 	withGithubApp(t, mockInstallations(t, twoAccounts()))
 	app := newApp(t, newKMS(t))
 
-	r := superReq(t, app, http.MethodGet, "/v1/integrations/github/installations", "admin")
+	r := superReq(t, app, http.MethodGet, "/v1/integration/github/installations", "admin")
 	if r.Code != http.StatusOK {
 		t.Fatalf("super admin installations want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -124,7 +124,7 @@ func TestSuperAdminConnectedReflectsBinding(t *testing.T) {
 		t.Fatalf("upsert: %v", err)
 	}
 
-	got := installations(t, superReq(t, app, http.MethodGet, "/v1/integrations/github/installations", "admin").Body)
+	got := installations(t, superReq(t, app, http.MethodGet, "/v1/integration/github/installations", "admin").Body)
 	if len(got) != 2 {
 		t.Fatalf("want 2 installs, got %d", len(got))
 	}
@@ -149,18 +149,18 @@ func TestTenantNeverSeesOtherAccounts(t *testing.T) {
 	}
 
 	// acme bound one account → it sees exactly that one, never luxfi.
-	got := installations(t, req(t, app, http.MethodGet, "/v1/integrations/github/installations", "acme", nil).Body)
+	got := installations(t, req(t, app, http.MethodGet, "/v1/integration/github/installations", "acme", nil).Body)
 	if len(got) != 1 || got[0].Login != "hanzoai" {
 		t.Fatalf("tenant should see only its bound account, got %+v", got)
 	}
 
 	// beta bound nothing → it sees nothing, though two installs exist.
-	if got := installations(t, req(t, app, http.MethodGet, "/v1/integrations/github/installations", "beta", nil).Body); len(got) != 0 {
+	if got := installations(t, req(t, app, http.MethodGet, "/v1/integration/github/installations", "beta", nil).Body); len(got) != 0 {
 		t.Fatalf("unbound tenant must see no installs, got %+v", got)
 	}
 
 	// No principal → 403, same as every org-scoped op here.
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/installations", "", nil); r.Code != http.StatusForbidden {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/installations", "", nil); r.Code != http.StatusForbidden {
 		t.Fatalf("no-principal installations want 403, got %d", r.Code)
 	}
 }
@@ -177,7 +177,7 @@ func TestSuperAdminInstallationsUpstreamFailure(t *testing.T) {
 	withGithubApp(t, srv)
 	app := newApp(t, newKMS(t))
 
-	if r := superReq(t, app, http.MethodGet, "/v1/integrations/github/installations", "admin"); r.Code != http.StatusBadGateway {
+	if r := superReq(t, app, http.MethodGet, "/v1/integration/github/installations", "admin"); r.Code != http.StatusBadGateway {
 		t.Fatalf("super admin installations on upstream failure want 502, got %d (%s)", r.Code, r.Body)
 	}
 }

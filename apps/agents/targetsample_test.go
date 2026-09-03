@@ -122,7 +122,7 @@ func TestRecordSampleSkipsWhenNoHeartbeat(t *testing.T) {
 func TestHeartbeatStill200sWithoutDatastore(t *testing.T) {
 	app := mountApp(t, nil)
 
-	code, body := do(t, app, http.MethodPost, "/v1/agents/targets", "acme", map[string]any{
+	code, body := do(t, app, http.MethodPost, "/v1/agent/targets", "acme", map[string]any{
 		"label": "Box", "kind": TargetGPU, "host": "box.local",
 		"spec":    map[string]any{"os": "linux", "cpus": 20, "gpus": []map[string]any{{"vendor": "nvidia", "model": "GB10"}}},
 		"metrics": map[string]any{"load1": 2.5, "gpuUtil": 0.75, "memUsed": 100},
@@ -142,7 +142,7 @@ func TestHeartbeatStill200sWithoutDatastore(t *testing.T) {
 	}
 
 	// The heartbeat itself.
-	code, body = do(t, app, http.MethodPatch, "/v1/agents/targets/"+created.ID, "acme", map[string]any{
+	code, body = do(t, app, http.MethodPatch, "/v1/agent/targets/"+created.ID, "acme", map[string]any{
 		"metrics": map[string]any{"load1": 4, "gpuUtil": 0.9, "memUsed": 200},
 	})
 	if code != http.StatusOK {
@@ -157,7 +157,7 @@ func TestHeartbeatStill200sWithoutDatastore(t *testing.T) {
 	}
 
 	// A re-link (same org+host) is idempotent and still carries a heartbeat.
-	code, body = do(t, app, http.MethodPost, "/v1/agents/targets", "acme", map[string]any{
+	code, body = do(t, app, http.MethodPost, "/v1/agent/targets", "acme", map[string]any{
 		"label": "Box", "kind": TargetGPU, "host": "box.local",
 		"metrics": map[string]any{"load1": 1},
 	})
@@ -179,7 +179,7 @@ func TestHeartbeatStill200sWithoutDatastore(t *testing.T) {
 // them, so a cross-tenant id must never resolve.
 func TestInProcessClientIsOrgScopedAndFailsClosed(t *testing.T) {
 	app := mountApp(t, nil)
-	code, body := do(t, app, http.MethodPost, "/v1/agents/targets", "acme", map[string]any{
+	code, body := do(t, app, http.MethodPost, "/v1/agent/targets", "acme", map[string]any{
 		"label": "Secret", "kind": TargetGPU, "host": "secret.local",
 	})
 	if code != http.StatusCreated {

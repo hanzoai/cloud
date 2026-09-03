@@ -40,13 +40,13 @@ func TestSetProjectDefaults(t *testing.T) {
 }
 
 // TestCreateProject_AnalyticsDefaultOn is the wire proof that a freshly created
-// project is analytics-ON and space-wired with NO opt-in: POST /v1/projects with
+// project is analytics-ON and space-wired with NO opt-in: POST /v1/project with
 // just a name returns a project whose analytics is true and whose Base data space
 // is "<org>/<slug>". The default base embed is OFF, so this also proves the
 // fail-soft path — space provisioning returns ErrNotEmbedded yet create is 201.
 func TestCreateProject_AnalyticsDefaultOn(t *testing.T) {
 	app := mountApp(t)
-	code, body := do(t, app, http.MethodPost, "/v1/projects", "acme", map[string]any{"name": "Landing"})
+	code, body := do(t, app, http.MethodPost, "/v1/project", "acme", map[string]any{"name": "Landing"})
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
@@ -61,7 +61,7 @@ func TestCreateProject_AnalyticsDefaultOn(t *testing.T) {
 		t.Fatalf("space want acme/%s, got %q", p.Slug, p.Space)
 	}
 	// The default persists: a fresh GET reports the same wired defaults.
-	_, gb := do(t, app, http.MethodGet, "/v1/projects/"+p.Slug, "acme", nil)
+	_, gb := do(t, app, http.MethodGet, "/v1/project/"+p.Slug, "acme", nil)
 	var got projectsProject
 	_ = json.Unmarshal(gb, &got)
 	if !got.Analytics || got.Space != p.Space {
@@ -73,7 +73,7 @@ func TestCreateProject_AnalyticsDefaultOn(t *testing.T) {
 // create opts the project out. Default-ON, but overridable.
 func TestCreateProject_AnalyticsOptOut(t *testing.T) {
 	app := mountApp(t)
-	code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+	code, body := do(t, app, http.MethodPost, "/v1/project", "acme",
 		map[string]any{"name": "Private", "analytics": false})
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
@@ -103,7 +103,7 @@ func TestCreateProject_ProvisionsSpace(t *testing.T) {
 		gotOrg = org
 		return nil
 	}
-	code, body := do(t, app, http.MethodPost, "/v1/projects", "acme", map[string]any{"name": "Shop"})
+	code, body := do(t, app, http.MethodPost, "/v1/project", "acme", map[string]any{"name": "Shop"})
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
@@ -126,7 +126,7 @@ func TestCreateProject_ProvisionFailureIsFailSoft(t *testing.T) {
 	mounted.State.ensureSpace = func(_ context.Context, _ string) error {
 		return errors.New("base down")
 	}
-	code, body := do(t, app, http.MethodPost, "/v1/projects", "acme", map[string]any{"name": "Resilient"})
+	code, body := do(t, app, http.MethodPost, "/v1/project", "acme", map[string]any{"name": "Resilient"})
 	if code != http.StatusCreated {
 		t.Fatalf("provisioning failure must not fail create: want 201, got %d (%s)", code, body)
 	}
@@ -138,7 +138,7 @@ func TestCreateProject_ProvisionFailureIsFailSoft(t *testing.T) {
 		t.Fatalf("defaults must still apply on fail-soft: analytics=%v space=%q", p.Analytics, p.Space)
 	}
 	// The project really persisted despite the provisioning error.
-	if gc, _ := do(t, app, http.MethodGet, "/v1/projects/"+p.Slug, "acme", nil); gc != http.StatusOK {
+	if gc, _ := do(t, app, http.MethodGet, "/v1/project/"+p.Slug, "acme", nil); gc != http.StatusOK {
 		t.Fatalf("project must persist on fail-soft, GET got %d", gc)
 	}
 }

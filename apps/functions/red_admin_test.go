@@ -45,17 +45,17 @@ func TestRed_NoAdminBucketConfusion(t *testing.T) {
 
 	// SuperAdmin, empty org -> 403 (no bucket to write into). Per-org data
 	// requires an explicit org even for admins.
-	if code, _ := doAdmin(t, app, http.MethodPost, "/v1/functions",
+	if code, _ := doAdmin(t, app, http.MethodPost, "/v1/function",
 		map[string]any{"name": "admin-only", "runtime": "python", "code": "PRIV"}); code != http.StatusForbidden {
 		t.Fatalf("SuperAdmin with empty org want 403 (no admin bucket), got %d", code)
 	}
 
 	// "Admin" and "admin" are distinct exact buckets — no case-fold collision.
-	if code, _ := do(t, app, http.MethodPost, "/v1/functions", "Admin",
+	if code, _ := do(t, app, http.MethodPost, "/v1/function", "Admin",
 		map[string]any{"name": "cap-a", "runtime": "python", "code": "X"}); code != http.StatusCreated {
 		t.Fatalf("create under org \"Admin\" want 201, got %d", code)
 	}
-	code, body := do(t, app, http.MethodGet, "/v1/functions", "admin", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/function", "admin", nil)
 	var listed struct {
 		Functions []functionView `json:"functions"`
 	}

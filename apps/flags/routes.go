@@ -1,6 +1,6 @@
 package flags
 
-// /v1/flags — the product flag API, org-scoped through the gateway principal
+// /v1/flag — the product flag API, org-scoped through the gateway principal
 // (HIP-0026) and project-scoped through the principal's project. Evaluation is
 // the embedded evaluator over the caller's own SQLite definitions; responses
 // carry each flag's state, variant and payload.
@@ -44,12 +44,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 		return
 	}
 	o := ops{s: s}
-	g := app.Group("/v1/flags")
+	g := app.Group("/v1/flag")
 	zip.Get(g, "/health", o.health)
 	// The root of the surface, declared on the App with its WHOLE path: joining
-	// "/v1/flags" with an empty leaf yields "/v1/flags/", a different path from the
+	// "/v1/flag" with an empty leaf yields "/v1/flag/", a different path from the
 	// one this route has always served.
-	zip.Post(zapp, "/v1/flags", o.evaluate)
+	zip.Post(zapp, "/v1/flag", o.evaluate)
 	// The SDK protocol spells this leaf; both paths reach the one evaluator, so a
 	// client that speaks the wire needs no special case here.
 	zip.Post(g, "/decide", o.evaluate)
@@ -196,7 +196,7 @@ type deletedOut struct {
 	Deleted string `json:"deleted"`
 }
 
-// putDefIn is the PUT /v1/flags/defs/:key input, and it is the one input here
+// putDefIn is the PUT /v1/flag/defs/:key input, and it is the one input here
 // that is not a plain struct: the request body IS the flag definition document
 // and it is stored VERBATIM (modulo the key the server forces), so no named
 // field set can carry it — a struct In would silently drop every field of the
@@ -207,7 +207,7 @@ type deletedOut struct {
 // MarshalJSON hands it back, which makes zip publish "any JSON" for the request
 // body — schemaOf reads the marshaler first — rather than inventing a field list
 // that is not the contract. The path parameter still binds, because bindURL walks
-// the STRUCT and binds the path LAST: PUT /v1/flags/defs/abc keys "abc" whatever
+// the STRUCT and binds the path LAST: PUT /v1/flag/defs/abc keys "abc" whatever
 // the document's own "key" field says, exactly as the untyped handler did.
 type putDefIn struct {
 	// Key is the flag key to write, from the path.

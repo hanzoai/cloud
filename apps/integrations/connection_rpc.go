@@ -17,8 +17,8 @@ import (
 // handle to the mounted service, which is only correct inside this process — a
 // caller anywhere else got a silent "not connected" for a workspace that was
 // plainly connected, with no error and no log to say the question never really
-// arrived. It is measured: /v1/integrations reported the Slack workspace, its team
-// id and nine scopes, while /v1/channels reported connected:false for that same
+// arrived. It is measured: /v1/integration reported the Slack workspace, its team
+// id and nine scopes, while /v1/channel reported connected:false for that same
 // install and refused every send.
 //
 // A question that crosses a process boundary has to look like one. So it is an op,

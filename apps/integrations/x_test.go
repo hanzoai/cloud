@@ -18,7 +18,7 @@ import (
 // is least-privilege read (no write).
 func TestXPKCEAuthorizeURL(t *testing.T) {
 	creds := OAuthConfig{ClientID: "cid", ClientSecret: "csecret"}
-	raw, err := xAuthorize(creds, "https://api.hanzo.ai/v1/integrations/x/callback", "st8")
+	raw, err := xAuthorize(creds, "https://api.hanzo.ai/v1/integration/x/callback", "st8")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestXExchangeBasicAuthAndVerifier(t *testing.T) {
 	m := &xMock{}
 	newXMock(t, m)
 	creds := OAuthConfig{ClientID: "cid", ClientSecret: "csecret"}
-	res, err := xExchange(context.Background(), creds, "https://api.hanzo.ai/v1/integrations/x/callback", "authcode")
+	res, err := xExchange(context.Background(), creds, "https://api.hanzo.ai/v1/integration/x/callback", "authcode")
 	if err != nil {
 		t.Fatalf("exchange: %v", err)
 	}

@@ -64,11 +64,11 @@ func req(t *testing.T, h http.Handler, method, path, org string, body any) (int,
 func TestSurfaceOpenAndGated(t *testing.T) {
 	mux := httpMux(testEngine(t))
 
-	if code, body := req(t, mux, http.MethodGet, "/v1/tasks/settings", "", nil); code != http.StatusOK {
-		t.Fatalf("open GET /v1/tasks/settings want 200, got %d: %s", code, body)
+	if code, body := req(t, mux, http.MethodGet, "/v1/task/settings", "", nil); code != http.StatusOK {
+		t.Fatalf("open GET /v1/task/settings want 200, got %d: %s", code, body)
 	}
-	if code, body := req(t, mux, http.MethodGet, "/v1/tasks/namespaces", "", nil); code != http.StatusForbidden {
-		t.Fatalf("unvalidated GET /v1/tasks/namespaces want 403, got %d: %s", code, body)
+	if code, body := req(t, mux, http.MethodGet, "/v1/task/namespaces", "", nil); code != http.StatusForbidden {
+		t.Fatalf("unvalidated GET /v1/task/namespaces want 403, got %d: %s", code, body)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestOrglessValidatedPrincipalIsRefused(t *testing.T) {
 			b, _ := json.Marshal(body)
 			r = bytes.NewReader(b)
 		}
-		rq := httptest.NewRequest(method, "/v1/tasks/namespaces", r)
+		rq := httptest.NewRequest(method, "/v1/task/namespaces", r)
 		if body != nil {
 			rq.Header.Set("Content-Type", "application/json")
 		}
@@ -114,10 +114,10 @@ func TestOrglessValidatedPrincipalIsRefused(t *testing.T) {
 		"config":        map[string]any{"workflowExecutionRetentionTtl": "24h"},
 	}
 	if code, body := orgless(http.MethodPost, create); code != http.StatusForbidden {
-		t.Fatalf("org-less validated POST /v1/tasks/namespaces want 403, got %d: %s", code, body)
+		t.Fatalf("org-less validated POST /v1/task/namespaces want 403, got %d: %s", code, body)
 	}
 	if code, body := orgless(http.MethodGet, nil); code != http.StatusForbidden {
-		t.Fatalf("org-less validated GET /v1/tasks/namespaces want 403, got %d: %s", code, body)
+		t.Fatalf("org-less validated GET /v1/task/namespaces want 403, got %d: %s", code, body)
 	}
 
 	// The refusal envelope is the ENGINE's, not zip's — the gate answers in the
@@ -129,8 +129,8 @@ func TestOrglessValidatedPrincipalIsRefused(t *testing.T) {
 	}
 
 	// An org-bearing validated principal is unaffected.
-	if code, body := req(t, mux, http.MethodGet, "/v1/tasks/namespaces", "acme", nil); code != http.StatusOK {
-		t.Fatalf("org-scoped GET /v1/tasks/namespaces want 200, got %d: %s", code, body)
+	if code, body := req(t, mux, http.MethodGet, "/v1/task/namespaces", "acme", nil); code != http.StatusOK {
+		t.Fatalf("org-scoped GET /v1/task/namespaces want 200, got %d: %s", code, body)
 	}
 }
 
@@ -144,16 +144,16 @@ func TestNamespaceRoundTripIsOrgScoped(t *testing.T) {
 		"namespaceInfo": map[string]any{"name": "smoke", "state": "NAMESPACE_STATE_REGISTERED"},
 		"config":        map[string]any{"workflowExecutionRetentionTtl": "24h"},
 	}
-	if code, body := req(t, mux, http.MethodPost, "/v1/tasks/namespaces", "acme", create); code != http.StatusOK {
+	if code, body := req(t, mux, http.MethodPost, "/v1/task/namespaces", "acme", create); code != http.StatusOK {
 		t.Fatalf("POST namespace (acme) want 200, got %d: %s", code, body)
 	}
 
-	code, body := req(t, mux, http.MethodGet, "/v1/tasks/namespaces", "acme", nil)
+	code, body := req(t, mux, http.MethodGet, "/v1/task/namespaces", "acme", nil)
 	if code != http.StatusOK || !strings.Contains(body, "smoke") {
 		t.Fatalf("GET namespaces (acme) want 200 containing \"smoke\", got %d: %s", code, body)
 	}
 
-	code, body = req(t, mux, http.MethodGet, "/v1/tasks/namespaces", "other", nil)
+	code, body = req(t, mux, http.MethodGet, "/v1/task/namespaces", "other", nil)
 	if code != http.StatusOK {
 		t.Fatalf("GET namespaces (other) want 200, got %d: %s", code, body)
 	}
@@ -173,7 +173,7 @@ func TestMountFailSoftWhenEngineNil(t *testing.T) {
 	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
-	rq := httptest.NewRequest(http.MethodGet, "/v1/tasks/settings", nil)
+	rq := httptest.NewRequest(http.MethodGet, "/v1/task/settings", nil)
 	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("Test: %v", err)

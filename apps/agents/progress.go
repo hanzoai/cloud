@@ -477,7 +477,7 @@ func parseEstimate(s string) (Progress, bool) {
 // transcript — the same route, the same guard, the same bound, the same stream
 // as every other turn:
 //
-//	POST /v1/agents/sessions/{id}/events
+//	POST /v1/agent/sessions/{id}/events
 //	{"kind":"progress","payload":{"pct":60,"phase":"running","activity":"…"}}
 //
 // It is an event kind rather than a route of its own because progress IS

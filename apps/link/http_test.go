@@ -261,7 +261,7 @@ func TestRevokeStopsSessions(t *testing.T) {
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 
 	// A live session tagged with the account it runs under, on host "box1".
-	code, body := req(t, app, http.MethodPost, "/v1/agents/sessions", "acme", "alice", map[string]any{
+	code, body := req(t, app, http.MethodPost, "/v1/agent/sessions", "acme", "alice", map[string]any{
 		"agent": "dev", "host": "box1", "provider": "claude", "account": "alice@x",
 	})
 	if code != http.StatusCreated {
@@ -279,7 +279,7 @@ func TestRevokeStopsSessions(t *testing.T) {
 	}
 
 	// The SAME account in ANOTHER org — must be untouched by acme's revoke.
-	code, body = req(t, app, http.MethodPost, "/v1/agents/sessions", "evil", "mallory", map[string]any{
+	code, body = req(t, app, http.MethodPost, "/v1/agent/sessions", "evil", "mallory", map[string]any{
 		"agent": "dev", "host": "box1", "provider": "claude", "account": "alice@x",
 	})
 	if code != http.StatusCreated {
@@ -311,7 +311,7 @@ func TestRevokeStopsSessions(t *testing.T) {
 	}
 
 	// The acme session is now terminal (stopped).
-	_, body = req(t, app, http.MethodGet, "/v1/agents/sessions/"+sess.ID, "acme", "alice", nil)
+	_, body = req(t, app, http.MethodGet, "/v1/agent/sessions/"+sess.ID, "acme", "alice", nil)
 	var after struct {
 		Status string `json:"status"`
 	}
@@ -321,7 +321,7 @@ func TestRevokeStopsSessions(t *testing.T) {
 	}
 
 	// The evil org's identical session is UNTOUCHED (org-scoped stop).
-	_, body = req(t, app, http.MethodGet, "/v1/agents/sessions/"+evil.ID, "evil", "mallory", nil)
+	_, body = req(t, app, http.MethodGet, "/v1/agent/sessions/"+evil.ID, "evil", "mallory", nil)
 	var evilAfter struct {
 		Status string `json:"status"`
 	}
@@ -356,7 +356,7 @@ func TestRevokeCannotStopCoTenantSessions(t *testing.T) {
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 
 	// Bob's live claude session in org acme.
-	code, body := req(t, app, http.MethodPost, "/v1/agents/sessions", "acme", "bob", map[string]any{
+	code, body := req(t, app, http.MethodPost, "/v1/agent/sessions", "acme", "bob", map[string]any{
 		"agent": "dev", "host": "boxBob", "provider": "claude", "account": "bob@x",
 	})
 	if code != http.StatusCreated {
@@ -389,7 +389,7 @@ func TestRevokeCannotStopCoTenantSessions(t *testing.T) {
 	}
 
 	// Bob's session is STILL running.
-	_, body = req(t, app, http.MethodGet, "/v1/agents/sessions/"+bob.ID, "acme", "bob", nil)
+	_, body = req(t, app, http.MethodGet, "/v1/agent/sessions/"+bob.ID, "acme", "bob", nil)
 	var after struct {
 		Status string `json:"status"`
 	}

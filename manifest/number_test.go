@@ -121,7 +121,7 @@ func TestNoTwoCapabilitiesShareAnAlias(t *testing.T) {
 // Normalize touches the capability's own name segment and NOTHING else. A word
 // that is some other app's name, sitting deep inside a subtree, belongs to the
 // app that owns the subtree — /v1/git/projects is git's, whole, even while
-// /v1/projects is an alias somewhere else.
+// /v1/project is an alias somewhere else.
 func TestNormalizeIsAnchoredAtTheRoot(t *testing.T) {
 	for spelt, canonical := range alias {
 		if got := Normalize(spelt); got != canonical {
@@ -233,7 +233,7 @@ func TestNoAliasIsPublished(t *testing.T) {
 		for _, spelt := range spellings {
 			// A published path is a whole line's worth of address. Match the
 			// address followed by a boundary, so /v1/agent never reads as a hit
-			// inside /v1/agents.
+			// inside /v1/agent.
 			for _, boundary := range []string{"'", "\"", ":", "/", "}"} {
 				if strings.Contains(body, spelt+boundary) {
 					t.Errorf("%s publishes %q — the alias is the router's courtesy, not an address the document claims (HIP-0139 §2.2)",

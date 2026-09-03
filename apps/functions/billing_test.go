@@ -97,7 +97,7 @@ func seedFn(t *testing.T, s *cloud.Service[state], org, name string) {
 	}
 }
 
-// fireInvoke fires POST /v1/functions/:name/invoke for org through the real handler.
+// fireInvoke fires POST /v1/function/:name/invoke for org through the real handler.
 func fireInvoke(t *testing.T, s *cloud.Service[state], org, name string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
@@ -105,11 +105,11 @@ func fireInvoke(t *testing.T, s *cloud.Service[state], org, name string) *http.R
 	// its context; DenyEnvelope writes a refused balance gate in the fleet's own
 	// money envelope. The composer installs both in production, in this order.
 	app.Use(cloud.Bridge())
-	g := app.Group("/v1/functions")
+	g := app.Group("/v1/function")
 	g.Use(cloud.DenyEnvelope())
 	zip.Post(g, "/:name/invoke", ops{s: s}.invoke,
 		zip.WithStatus(http.StatusOK, http.StatusBadGateway, http.StatusServiceUnavailable))
-	req := httptest.NewRequest("POST", "/v1/functions/"+name+"/invoke", bytes.NewReader([]byte(`{"input":"x"}`)))
+	req := httptest.NewRequest("POST", "/v1/function/"+name+"/invoke", bytes.NewReader([]byte(`{"input":"x"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)

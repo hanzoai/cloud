@@ -105,12 +105,12 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 func TestHTTPGateIsolationAndRun(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "the answer"})
 
-	if code, _ := do(t, app, http.MethodGet, "/v1/agents", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/agent", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org list want 403, got %d", code)
 	}
 
 	// maxpower creates an agent (model required).
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "maxpower",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "maxpower",
 		map[string]any{"name": "helper", "model": "gpt-4o-mini", "instructions": "be terse"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
@@ -119,7 +119,7 @@ func TestHTTPGateIsolationAndRun(t *testing.T) {
 	// a hand-built test Deps left empty — but LoadConfig never did, so the 400 was
 	// reachable only from a fixture and NEVER from a deployment. The test pinned a
 	// state production could not be in; with the field gone there is one behaviour.
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "maxpower",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "maxpower",
 		map[string]any{"name": "nomodel"}); code != http.StatusCreated {
 		t.Fatalf("create without model want 201 on the default model, got %d", code)
 	}
@@ -127,7 +127,7 @@ func TestHTTPGateIsolationAndRun(t *testing.T) {
 	// List shape is {agents:[...]}. maxpower owns BOTH creates above — the
 	// explicit-model one and the defaulted one — and sees neither org's rows but
 	// its own.
-	code, body := do(t, app, http.MethodGet, "/v1/agents", "maxpower", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/agent", "maxpower", nil)
 	var listed struct {
 		Agents []agentView `json:"agents"`
 	}
@@ -144,7 +144,7 @@ func TestHTTPGateIsolationAndRun(t *testing.T) {
 	}
 
 	// run executes via the (fake) AI and returns a real recorded run.
-	code, body = do(t, app, http.MethodPost, "/v1/agents/helper/run", "maxpower", map[string]any{"input": "hi"})
+	code, body = do(t, app, http.MethodPost, "/v1/agent/helper/run", "maxpower", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("run want 200, got %d (%s)", code, body)
 	}
@@ -155,18 +155,18 @@ func TestHTTPGateIsolationAndRun(t *testing.T) {
 	}
 
 	// The run was recorded and is org-scoped.
-	code, body = do(t, app, http.MethodGet, "/v1/agents/helper/runs", "maxpower", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/agent/helper/runs", "maxpower", nil)
 	if code != http.StatusOK || !bytes.Contains(body, []byte("the answer")) {
 		t.Fatalf("runs history want the recorded run, got %d %s", code, body)
 	}
 
 	// acme cannot see, run, or read runs for maxpower's agent.
-	code, body = do(t, app, http.MethodGet, "/v1/agents", "acme", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/agent", "acme", nil)
 	_ = json.Unmarshal(body, &listed)
 	if code != http.StatusOK || len(listed.Agents) != 0 {
 		t.Fatalf("acme must see zero agents, got %d %+v", code, listed.Agents)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents/helper/run", "acme", map[string]any{"input": "hi"}); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent/helper/run", "acme", map[string]any{"input": "hi"}); code != http.StatusNotFound {
 		t.Fatalf("acme run on maxpower agent want 404, got %d", code)
 	}
 }
@@ -180,7 +180,7 @@ func TestHTTPCreateThenGetRunByReturnedID(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "the answer"})
 
 	// Create — capture the id the API returns (exactly what a client keeps).
-	code, body := do(t, app, http.MethodPost, "/v1/agents", "maxpower",
+	code, body := do(t, app, http.MethodPost, "/v1/agent", "maxpower",
 		map[string]any{"name": "verify-run", "model": "gpt-4o-mini", "instructions": "be terse"})
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
@@ -195,7 +195,7 @@ func TestHTTPCreateThenGetRunByReturnedID(t *testing.T) {
 	id := created.ID
 
 	// GET by the RETURNED ID must be 200 and the same agent (was 404 pre-fix).
-	code, body = do(t, app, http.MethodGet, "/v1/agents/"+id, "maxpower", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/agent/"+id, "maxpower", nil)
 	if code != http.StatusOK {
 		t.Fatalf("GET by returned id want 200, got %d (%s)", code, body)
 	}
@@ -206,7 +206,7 @@ func TestHTTPCreateThenGetRunByReturnedID(t *testing.T) {
 	}
 
 	// GET by NAME must resolve the SAME agent (both identifiers work).
-	code, body = do(t, app, http.MethodGet, "/v1/agents/verify-run", "maxpower", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/agent/verify-run", "maxpower", nil)
 	if code != http.StatusOK {
 		t.Fatalf("GET by name want 200, got %d (%s)", code, body)
 	}
@@ -217,7 +217,7 @@ func TestHTTPCreateThenGetRunByReturnedID(t *testing.T) {
 	}
 
 	// RUN by the RETURNED ID must execute and return real output (was 404 pre-fix).
-	code, body = do(t, app, http.MethodPost, "/v1/agents/"+id+"/run", "maxpower", map[string]any{"input": "hi"})
+	code, body = do(t, app, http.MethodPost, "/v1/agent/"+id+"/run", "maxpower", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("run by returned id want 200, got %d (%s)", code, body)
 	}
@@ -228,41 +228,41 @@ func TestHTTPCreateThenGetRunByReturnedID(t *testing.T) {
 	}
 
 	// The run recorded under the agent is visible via runs-by-id AND runs-by-name.
-	code, body = do(t, app, http.MethodGet, "/v1/agents/"+id+"/runs", "maxpower", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/agent/"+id+"/runs", "maxpower", nil)
 	if code != http.StatusOK || !bytes.Contains(body, []byte("the answer")) {
 		t.Fatalf("runs by id want the recorded run, got %d %s", code, body)
 	}
-	code, body = do(t, app, http.MethodGet, "/v1/agents/verify-run/runs", "maxpower", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/agent/verify-run/runs", "maxpower", nil)
 	if code != http.StatusOK || !bytes.Contains(body, []byte("the answer")) {
 		t.Fatalf("runs by name want the same recorded run, got %d %s", code, body)
 	}
 
 	// Cross-org fail-closed: acme cannot GET or run maxpower's agent BY ITS ID.
-	if c2, _ := do(t, app, http.MethodGet, "/v1/agents/"+id, "acme", nil); c2 != http.StatusNotFound {
+	if c2, _ := do(t, app, http.MethodGet, "/v1/agent/"+id, "acme", nil); c2 != http.StatusNotFound {
 		t.Fatalf("acme GET maxpower agent by id want 404, got %d", c2)
 	}
-	if c2, _ := do(t, app, http.MethodPost, "/v1/agents/"+id+"/run", "acme", map[string]any{"input": "x"}); c2 != http.StatusNotFound {
+	if c2, _ := do(t, app, http.MethodPost, "/v1/agent/"+id+"/run", "acme", map[string]any{"input": "x"}); c2 != http.StatusNotFound {
 		t.Fatalf("acme run maxpower agent by id want 404, got %d", c2)
 	}
 }
 
-// TestHTTPMetricsAndActivityNotShadowed proves /v1/agents/metrics and
-// /v1/agents/activity resolve to their own handlers (not captured by the :name
+// TestHTTPMetricsAndActivityNotShadowed proves /v1/agent/metrics and
+// /v1/agent/activity resolve to their own handlers (not captured by the :name
 // wildcard) and that every number is derived from REAL recorded runs.
 func TestHTTPMetricsAndActivityNotShadowed(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "ok"})
 
 	// Both org-wide surfaces require a tenant, like every other route.
-	if code, _ := do(t, app, http.MethodGet, "/v1/agents/metrics", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/agent/metrics", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org metrics want 403, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/agents/activity", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/agent/activity", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org activity want 403, got %d", code)
 	}
 
 	// Empty org: honest empty shapes, NOT a 404 (proves no wildcard shadowing)
 	// and NOT a fabricated trend.
-	code, body := do(t, app, http.MethodGet, "/v1/agents/metrics?range=7D", "maxpower", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/agent/metrics?range=7D", "maxpower", nil)
 	if code != http.StatusOK {
 		t.Fatalf("metrics want 200 (not shadowed 404), got %d (%s)", code, body)
 	}
@@ -286,7 +286,7 @@ func TestHTTPMetricsAndActivityNotShadowed(t *testing.T) {
 		t.Fatalf("resource metering is unsourced — must be null, got %+v", m.Resource)
 	}
 
-	code, body = do(t, app, http.MethodGet, "/v1/agents/activity", "maxpower", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/agent/activity", "maxpower", nil)
 	if code != http.StatusOK {
 		t.Fatalf("activity want 200 (not shadowed 404), got %d (%s)", code, body)
 	}
@@ -299,16 +299,16 @@ func TestHTTPMetricsAndActivityNotShadowed(t *testing.T) {
 	}
 
 	// Seed a real agent + a real run, then the surfaces must reflect exactly it.
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "maxpower",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "maxpower",
 		map[string]any{"name": "helper", "model": "gpt-4o-mini"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents/helper/run", "maxpower", map[string]any{"input": "hi"}); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent/helper/run", "maxpower", map[string]any{"input": "hi"}); code != http.StatusOK {
 		t.Fatalf("run want 200, got %d", code)
 	}
 
 	// Metrics now carry a real invocation series for "helper" summing to 1.
-	_, body = do(t, app, http.MethodGet, "/v1/agents/metrics?range=24H", "maxpower", nil)
+	_, body = do(t, app, http.MethodGet, "/v1/agent/metrics?range=24H", "maxpower", nil)
 	_ = json.Unmarshal(body, &m)
 	if len(m.Series) != 1 || m.Series[0].Key != "helper" {
 		t.Fatalf("metrics want one series for helper, got %+v", m.Series)
@@ -322,7 +322,7 @@ func TestHTTPMetricsAndActivityNotShadowed(t *testing.T) {
 	}
 
 	// Activity now carries the real invoked event + the created event, newest first.
-	_, body = do(t, app, http.MethodGet, "/v1/agents/activity", "maxpower", nil)
+	_, body = do(t, app, http.MethodGet, "/v1/agent/activity", "maxpower", nil)
 	var feed struct {
 		Activity []activityView `json:"activity"`
 	}
@@ -344,12 +344,12 @@ func TestHTTPMetricsAndActivityNotShadowed(t *testing.T) {
 	}
 
 	// Cross-org isolation: acme sees none of maxpower's metrics/activity.
-	_, body = do(t, app, http.MethodGet, "/v1/agents/metrics?range=24H", "acme", nil)
+	_, body = do(t, app, http.MethodGet, "/v1/agent/metrics?range=24H", "acme", nil)
 	_ = json.Unmarshal(body, &m)
 	if len(m.Series) != 0 {
 		t.Fatalf("acme must see zero series, got %+v", m.Series)
 	}
-	_, body = do(t, app, http.MethodGet, "/v1/agents/activity", "acme", nil)
+	_, body = do(t, app, http.MethodGet, "/v1/agent/activity", "acme", nil)
 	_ = json.Unmarshal(body, &feed)
 	if len(feed.Activity) != 0 {
 		t.Fatalf("acme must see zero activity, got %+v", feed.Activity)
@@ -360,9 +360,9 @@ func TestHTTPMetricsAndActivityNotShadowed(t *testing.T) {
 // never fabricates output.
 func TestHTTPRunWithoutAIFailsClosed(t *testing.T) {
 	app := mountApp(t, nil)
-	do(t, app, http.MethodPost, "/v1/agents", "maxpower",
+	do(t, app, http.MethodPost, "/v1/agent", "maxpower",
 		map[string]any{"name": "a", "model": "m", "instructions": "x"})
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents/a/run", "maxpower", map[string]any{"input": "hi"}); code != http.StatusServiceUnavailable {
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent/a/run", "maxpower", map[string]any{"input": "hi"}); code != http.StatusServiceUnavailable {
 		t.Fatalf("run without AI want 503, got %d", code)
 	}
 }

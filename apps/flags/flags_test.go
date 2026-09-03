@@ -33,7 +33,7 @@ func newTestClient(t *testing.T) *Client {
 func TestEnvFallbackAndDefault(t *testing.T) {
 	// No engine/store configured. Runtime flags carry no Env, so they resolve to
 	// their literal default and an env var must NOT move them — that is what makes
-	// /v1/flags the single source of truth, flippable live without a redeploy.
+	// /v1/flag the single source of truth, flippable live without a redeploy.
 	// Boot-time ReadOnly rows keep Env, because env IS their boot mechanism.
 	prev := mounted
 	mounted = &Client{} // not configured

@@ -10,22 +10,22 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The separately-listed registries: /v1/tools/skills, /v1/tools/mcp/servers, /v1/tools/plugins.
+// The separately-listed registries: /v1/tool/skills, /v1/tool/mcp/servers, /v1/tool/plugins.
 //
-// /v1/tools/skills is the SAME registry as /v1/tools viewed through one Source, so a
+// /v1/tool/skills is the SAME registry as /v1/tool viewed through one Source, so a
 // client asking "what skills does this org have" does not have to know to pass
 // ?source=skill. It is a view, not a store — a tool is still registered in
 // exactly one place (tools.Register) and activation lives in exactly one place
 // (ActivationStore), which is what keeps a source from drifting into its own
 // half-parallel plane.
 //
-// /v1/tools/mcp/servers owns the EXTERNAL MCP SERVER registry (the connection records),
+// /v1/tool/mcp/servers owns the EXTERNAL MCP SERVER registry (the connection records),
 // because a server is a thing an org creates and deletes, not a tool the registry
-// enumerates. The tools those servers offer are reported by GET /v1/tools with
+// enumerates. The tools those servers offer are reported by GET /v1/tool with
 // ?source=mcp — there is no second view of them, and /v1/mcp itself is the
 // FLEET's one agent MCP address, served by the host.
 //
-// /v1/tools/plugins is deliberately NOT a tool source. A plugin here is a mounted
+// /v1/tool/plugins is deliberately NOT a tool source. A plugin here is a mounted
 // subsystem (cloud.Plugin: Name, Mount, Price, Prefixes) — code that extends
 // the deployment's own surface — whereas a tool is something an agent calls
 // through that surface. Its inventory is cloud.Subsystems(), the boot snapshot
@@ -33,7 +33,7 @@ import (
 // than a second list that could disagree with it.
 
 // sourceQuery narrows a single-source listing. Activated is a STRING and not a
-// bool for the same reason it is on GET /v1/tools: the route has always compared
+// bool for the same reason it is on GET /v1/tool: the route has always compared
 // the raw query value to the literal "true", and a bool field would make zip's
 // binder read `?activated=1` and a bare `?activated` as true, which is a
 // different set of tools for the same URL.
@@ -55,7 +55,7 @@ type sourceToolList struct {
 // ListSkills lists the skills the caller's org can reach — the brand's embedded
 // catalogue plus the org's own authored ones — with each one's activation flag.
 // A skill is discovery and activation metadata attached to an agent, never called
-// directly, so every entry here is non-dispatchable. It is GET /v1/tools narrowed
+// directly, so every entry here is non-dispatchable. It is GET /v1/tool narrowed
 // to one source, not a second store: a name a caller sees here is the same entry,
 // with the same activation state, that discovery reports.
 func (o toolOps) listSkills(ctx context.Context, in *sourceQuery) (*sourceToolList, error) {
@@ -183,7 +183,7 @@ type authoredSkillList struct {
 }
 
 // ListAuthoredSkills lists the caller org's OWN skills with their SKILL.md
-// bodies. GET /v1/tools/skills is the registry view — the brand's catalogue plus this
+// bodies. GET /v1/tool/skills is the registry view — the brand's catalogue plus this
 // org's, with activation flags and no bodies; this is the EDITABLE set, so it
 // carries the content that view omits and nothing the org did not write.
 func (o toolOps) listAuthoredSkills(ctx context.Context, _ *cloud.Unit) (*authoredSkillList, error) {

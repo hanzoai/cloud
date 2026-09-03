@@ -267,7 +267,7 @@ func singular(w string) string {
 // published and an MCP server that guessed which of two operations was meant
 // would be dispatching on a coin toss. 7.3% of the surface's operations keep their
 // ids, and they are overwhelmingly the surface's own duplicates: `/tasks` and
-// `/v1/tasks` serving one handler at two addresses, `post_v1_agent` beside
+// `/v1/task` serving one handler at two addresses, `post_v1_agent` beside
 // `post_v1_agents` in a different subsystem.
 //
 // This runs over the SURVIVORS. Everything [refuse] withheld is already gone

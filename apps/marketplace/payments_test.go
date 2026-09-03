@@ -236,7 +236,7 @@ func (m *market) unpublish(org, id string) {
 // call dispatches a tool as org, optionally paying.
 func (m *market) call(org, tool, proof string) (int, []byte, http.Header) {
 	m.t.Helper()
-	return m.req(http.MethodPost, "/v1/tools/call", org, proof, `{"name":"`+tool+`"}`)
+	return m.req(http.MethodPost, "/v1/tool/call", org, proof, `{"name":"`+tool+`"}`)
 }
 
 // pay signs an authorization over exactly the challenge's terms — what a compliant

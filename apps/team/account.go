@@ -43,7 +43,7 @@ import (
 const authCookie = "account-token"
 
 // iamTokenCookie carries the caller's IAM access_token (RS256) to the browser so
-// the same-origin /v1/agents proxy can forward it to the cloud gateway. HttpOnly —
+// the same-origin /v1/agent proxy can forward it to the cloud gateway. HttpOnly —
 // never exposed to page JS.
 const iamTokenCookie = "hanzo_iam_token"
 

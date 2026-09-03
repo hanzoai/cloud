@@ -36,7 +36,7 @@ import "strings"
 // That is not the knob this file used to describe. There WAS a deployment knob
 // beside this line (CLOUD_AI_DEFAULT_MODEL → Config.AIDefaultModel →
 // Deps.AIDefaultModel) and it was deleted for drifting twice: once shipping an
-// UPSTREAM name to customers through GET /v1/agents (84a7f7b9), and once masking
+// UPSTREAM name to customers through GET /v1/agent (84a7f7b9), and once masking
 // a wrong constant because production set the variable to a different value
 // (3fdb4b88). The defect there was TWO SOURCES, not runtime resolution. There is
 // one source now — the row — and this constant is reached only when the row

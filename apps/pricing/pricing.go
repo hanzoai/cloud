@@ -225,7 +225,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// already lives at /v1/pricing/models, so the bare alias would only shadow
 	// AI's contract route with a different shape — a regression. Keep pricing
 	// strictly under /v1/pricing/*. (Same reasoning the note below records for
-	// /v1/plan, /v1/tools, /v1/gpu, /v1/cloud, /v1/subscriptions, /v1/iam —
+	// /v1/plan, /v1/tool, /v1/gpu, /v1/cloud, /v1/subscriptions, /v1/iam —
 	// all owned by other subsystems at the top level to avoid collisions.)
 	// Live sync trigger — admin only. Network fetch in Go, markup in goja.
 	zip.Post(zapp, "/v1/pricing/sync", o.sync)

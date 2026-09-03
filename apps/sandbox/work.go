@@ -14,7 +14,7 @@ package sandbox
 //
 // NARRATION GOES WHERE EVERY OTHER RUN'S NARRATION ALREADY GOES. apps/agents owns
 // the fleet's live run feed — one durable ordered event log per session, fanned
-// out to GET /v1/agents/sessions/stream — and that is the ONE place a surface
+// out to GET /v1/agent/sessions/stream — and that is the ONE place a surface
 // watches a run. This appends to it over the internal plane. It invents no second
 // feed, and it does not touch POST /v1/event, which warehouses product events for
 // the webhooks engine and has no live tail to read at all.

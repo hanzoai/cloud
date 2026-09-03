@@ -84,21 +84,21 @@ func send(t *testing.T, app *zip.App, method, path, org string, body any, admin 
 	return result{Code: resp.StatusCode, Body: b}
 }
 
-// call runs POST /v1/tools/call — the ONE dispatch endpoint onto the dynamic plane.
+// call runs POST /v1/tool/call — the ONE dispatch endpoint onto the dynamic plane.
 func call(t *testing.T, app *zip.App, org, name string, args map[string]any) result {
 	t.Helper()
 	if args == nil {
 		args = map[string]any{}
 	}
-	return do(t, app, http.MethodPost, "/v1/tools/call", org,
+	return do(t, app, http.MethodPost, "/v1/tool/call", org,
 		map[string]any{"name": name, "arguments": args})
 }
 
-// activated lists the caller's callable tools — GET /v1/tools?activated=true, the
+// activated lists the caller's callable tools — GET /v1/tool?activated=true, the
 // discovery half the dispatch endpoint is paired with.
 func activated(t *testing.T, app *zip.App, org string) []string {
 	t.Helper()
-	return toolNames(t, do(t, app, http.MethodGet, "/v1/tools?activated=true", org, nil).Body)
+	return toolNames(t, do(t, app, http.MethodGet, "/v1/tool?activated=true", org, nil).Body)
 }
 
 // TestCallGate403: the dispatch endpoint refuses a caller with no validated principal —
@@ -113,7 +113,7 @@ func TestCallGate403(t *testing.T) {
 
 // TestActivationAndCall: the full activation round-trip. A registered source's tool
 // is not callable and not in the activated listing until it is switched on via PUT
-// /v1/tools/activation; once activated it is listed and POST /v1/tools/call
+// /v1/tool/activation; once activated it is listed and POST /v1/tool/call
 // dispatches it; an unactivated sibling is refused 403.
 func TestActivationAndCall(t *testing.T) {
 	app := newApp(t, nil)
@@ -132,12 +132,12 @@ func TestActivationAndCall(t *testing.T) {
 	}
 
 	// Activate one tool via the activation API.
-	act := do(t, app, http.MethodPut, "/v1/tools/activation", "acme", map[string]any{"activate": []string{"acme_hello"}})
+	act := do(t, app, http.MethodPut, "/v1/tool/activation", "acme", map[string]any{"activate": []string{"acme_hello"}})
 	if act.Code != 200 {
 		t.Fatalf("activate want 200, got %d (%s)", act.Code, act.Body)
 	}
 	// GET reflects it.
-	get := do(t, app, http.MethodGet, "/v1/tools/activation", "acme", nil)
+	get := do(t, app, http.MethodGet, "/v1/tool/activation", "acme", nil)
 	if !bytes.Contains(get.Body, []byte("acme_hello")) {
 		t.Fatalf("activation list must contain acme_hello, got %s", get.Body)
 	}

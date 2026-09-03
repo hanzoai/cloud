@@ -10,7 +10,7 @@ package cloud
 //
 // A caller selects markdown with `Accept: text/markdown` or `?format=md`; JSON
 // stays the default. Endpoints in cfg.MarkdownDefaultPrefixes (e.g. /v1/code/,
-// /v1/agents/) may default to markdown, but a caller always keeps the override
+// /v1/agent/) may default to markdown, but a caller always keeps the override
 // (?format=json or Accept: application/json).
 //
 // Fail-safe by construction: only SUCCESSFUL (err==nil) application/json

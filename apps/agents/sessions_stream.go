@@ -30,7 +30,7 @@ type streamUpdate struct {
 // bus is the in-process publish/subscribe fan-out under the sessions surface. It
 // is the SINGLE client the live stream hangs off:
 //
-//   - Today: the SSE handler (GET /v1/agents/sessions/stream) subscribes and
+//   - Today: the SSE handler (GET /v1/agent/sessions/stream) subscribes and
 //     writes each update as an SSE frame. Because zip's SendStreamWriter streams
 //     THROUGH the ZAP machine transport natively (proven by zip stream_test
 //     TestListenZAP_Streams), that SSE endpoint IS the live ZAP stream — a ZAP
@@ -133,7 +133,7 @@ func (b *bus) close() {
 	}
 }
 
-// sessionsStream is GET /v1/agents/sessions/stream — a Server-Sent Events feed of
+// sessionsStream is GET /v1/agent/sessions/stream — a Server-Sent Events feed of
 // live session + event updates for the caller's org. Optional ?root=<id> scopes
 // the feed to one subagent tree. Org-scoped (fail-closed): a subscriber only ever
 // receives its own tenant's updates because the bus filters on org.

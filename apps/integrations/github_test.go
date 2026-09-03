@@ -205,7 +205,7 @@ func TestReposHandlerOrgScope(t *testing.T) {
 	}
 
 	// acme is connected → 200 with its repo.
-	r := req(t, app, http.MethodGet, "/v1/integrations/github/repos", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration/github/repos", "acme", nil)
 	if r.Code != http.StatusOK {
 		t.Fatalf("acme repos want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -220,12 +220,12 @@ func TestReposHandlerOrgScope(t *testing.T) {
 	}
 
 	// beta has NOT connected GitHub → 409 (never sees acme's repos).
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos", "beta", nil); r.Code != http.StatusConflict {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos", "beta", nil); r.Code != http.StatusConflict {
 		t.Fatalf("un-connected org repos want 409, got %d (%s)", r.Code, r.Body)
 	}
 
 	// No principal → 403.
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos", "", nil); r.Code != http.StatusForbidden {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos", "", nil); r.Code != http.StatusForbidden {
 		t.Fatalf("no-principal repos want 403, got %d", r.Code)
 	}
 }
@@ -239,7 +239,7 @@ func TestReposHandlerUnconfigured503(t *testing.T) {
 	resetGithubApp()
 	app := newApp(t, newKMS(t))
 	_ = mounted.State.store.Upsert(context.Background(), Connection{Org: "acme", Provider: "github", ExternalID: "1"})
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos", "acme", nil); r.Code != http.StatusServiceUnavailable {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos", "acme", nil); r.Code != http.StatusServiceUnavailable {
 		t.Fatalf("unconfigured repos want 503, got %d (%s)", r.Code, r.Body)
 	}
 }

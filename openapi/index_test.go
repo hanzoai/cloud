@@ -45,8 +45,8 @@ func parts() []Part {
 		{App: "agents", Doc: &Document{
 			Info: Info{Description: "Package agents is your agents and their runs."},
 			Paths: map[string]PathItem{
-				"/v1/agents":      {"get": op("get_agents", "List your agents")},
-				"/v1/agents/{id}": {"get": op("get_agent", "Read one agent")},
+				"/v1/agent":      {"get": op("get_agents", "List your agents")},
+				"/v1/agent/{id}": {"get": op("get_agent", "Read one agent")},
 			}}},
 		{App: "search", Doc: &Document{
 			Info: Info{Description: "Package search is one query over everything you can see."},
@@ -151,7 +151,7 @@ func TestTheIndexYieldsWhereTheCapabilityAnswersItsOwnRoot(t *testing.T) {
 	root, per := Discover(fleet(t))
 
 	if _, mine := per["agents"]; mine {
-		t.Error("agents has an index at /v1/agents, and GET /v1/agents is its own operation — " +
+		t.Error("agents has an index at /v1/agent, and GET /v1/agent is its own operation — " +
 			"the index would answer in front of the capability's collection")
 	}
 	// Per (method, path): search ACTS at its own root and reads nothing there, so
@@ -191,8 +191,8 @@ func indexed(t *testing.T) *zip.App {
 	t.Helper()
 	app := newApp()
 	UseIndex(app, func() ([]Part, error) { return parts(), nil })
-	app.Get("/v1/agents", func(c *zip.Ctx) error {
-		c.SetHeader("Link", `</v1/agents?page=2>; rel="next"`)
+	app.Get("/v1/agent", func(c *zip.Ctx) error {
+		c.SetHeader("Link", `</v1/agent?page=2>; rel="next"`)
 		return c.String(http.StatusOK, "the agents collection")
 	})
 	return app
@@ -216,8 +216,8 @@ func TestTheEndpointsAnswerAndTheCapabilityStillAnswersItsOwn(t *testing.T) {
 	if _, body := served(t, app, http.MethodGet, "/v1/kms"); !strings.Contains(body, `"name":"kms"`) {
 		t.Errorf("GET /v1/kms answered %.120q, not kms's index", body)
 	}
-	if _, body := served(t, app, http.MethodGet, "/v1/agents"); body != "the agents collection" {
-		t.Errorf("GET /v1/agents answered %.120q — the index took an address the capability serves", body)
+	if _, body := served(t, app, http.MethodGet, "/v1/agent"); body != "the agents collection" {
+		t.Errorf("GET /v1/agent answered %.120q — the index took an address the capability serves", body)
 	}
 	// An index is a GET. Anything else at the same address belongs to whoever is
 	// behind it, which here is nobody.
@@ -246,11 +246,11 @@ func TestAnUnpublishedNameIsAnsweredLikeAnyUnclaimedAddress(t *testing.T) {
 func TestEveryAnswerCarriesItsLinksAndClobbersNone(t *testing.T) {
 	app := indexed(t)
 
-	resp, _ := served(t, app, http.MethodGet, "/v1/agents")
+	resp, _ := served(t, app, http.MethodGet, "/v1/agent")
 	got := resp.Header.Values("Link")
 	want := []string{
-		`</v1/agents?page=2>; rel="next"`,
-		`</v1/agents>; rel="self"`,
+		`</v1/agent?page=2>; rel="next"`,
+		`</v1/agent>; rel="self"`,
 		`<` + Path + `>; rel="describedby"`,
 		`<` + RootPath + `>; rel="index"`,
 	}
@@ -321,7 +321,7 @@ func TestAnAnswerSaysWhatItAcceptsAndWhatIsAboveIt(t *testing.T) {
 
 	for _, tc := range []struct{ path, allow, rel, up string }{
 		// A member's parent is the collection it belongs to (RFC 6573).
-		{path: "/v1/agents/a1", allow: "GET", rel: "collection", up: "/v1/agents"},
+		{path: "/v1/agent/a1", allow: "GET", rel: "collection", up: "/v1/agent"},
 		{path: "/v1/kms/secrets/db", allow: "PUT", rel: "collection", up: "/v1/kms/secrets"},
 		// Asked with the wrong method, the answer still says which one works.
 		{path: "/v1/search", allow: "POST"},
@@ -394,8 +394,8 @@ func TestOptionsAnswersWhatAnAddressAccepts(t *testing.T) {
 		allow string
 		code  int
 	}{
-		{path: "/v1/agents", allow: "GET", code: http.StatusNoContent},
-		{path: "/v1/agents/a1", allow: "GET", code: http.StatusNoContent},
+		{path: "/v1/agent", allow: "GET", code: http.StatusNoContent},
+		{path: "/v1/agent/a1", allow: "GET", code: http.StatusNoContent},
 		{path: "/v1/kms/secrets/db", allow: "PUT", code: http.StatusNoContent},
 		// Beta: a capability the index will not name does not advertise its
 		// methods here either. One rule, asked in both places — so this address
@@ -423,7 +423,7 @@ func TestOptionsAnswersWhatAnAddressAccepts(t *testing.T) {
 // header that defines it.
 func TestAPreflightIsNotThisEndpoint(t *testing.T) {
 	app := indexed(t)
-	req := httptest.NewRequest(http.MethodOptions, "/v1/agents", nil)
+	req := httptest.NewRequest(http.MethodOptions, "/v1/agent", nil)
 	req.Header.Set("Origin", "https://example.test")
 	req.Header.Set("Access-Control-Request-Method", "POST")
 	resp, err := app.Test(req)

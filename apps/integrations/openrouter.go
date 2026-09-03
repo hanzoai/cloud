@@ -16,7 +16,7 @@
 // spend there lands in the SAME ledger as everything else we spend.
 //
 // It is an INTEGRATION, and it lives with the others: a third party posts to us at
-// /v1/integrations/<vendor>/<what the vendor calls it>, which is why Slack's is
+// /v1/integration/<vendor>/<what the vendor calls it>, which is why Slack's is
 // /events, Discord's is /interactions and this one is /webhook — OpenRouter's own
 // console calls it Observability ▸ New Webhook Destination. That the rows it writes
 // are usage rows is the DESTINATION and not the endpoint.
@@ -68,7 +68,7 @@ import (
 )
 
 const (
-	openrouterPath = "/v1/integrations/openrouter/webhook"
+	openrouterPath = "/v1/integration/openrouter/webhook"
 
 	// openrouter is the row's provider label — the value that folds this spend into
 	// the GROUP BY provider every money lens already runs.

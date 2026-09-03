@@ -1,9 +1,9 @@
 package flags
 
-// The wire contract of the typed /v1/flags surface — the parts a status-code
+// The wire contract of the typed /v1/flag surface — the parts a status-code
 // test would not see.
 //
-// PUT /v1/flags/defs/:key is the one route here whose BODY IS AN OPEN DOCUMENT:
+// PUT /v1/flag/defs/:key is the one route here whose BODY IS AN OPEN DOCUMENT:
 // the store keeps it verbatim, minus the key the server forces. A typed op whose
 // In were an ordinary struct would drop every field the struct does not name,
 // which is silent data loss with a perfectly green 200. These tests pin the
@@ -81,7 +81,7 @@ func TestPutDefinitionKeepsTheWholeDocument(t *testing.T) {
 	app := mountHTTP(t)
 	const doc = `{"key":"new-editor","active":true,"filters":{"groups":[{"rollout_percentage":25,"properties":[{"key":"plan","value":"pro"}]}]},"ensure_experience_continuity":true,"deleted":false}`
 
-	code, body := do(t, app, http.MethodPut, "/v1/flags/defs/new-editor", "acme", []byte(doc))
+	code, body := do(t, app, http.MethodPut, "/v1/flag/defs/new-editor", "acme", []byte(doc))
 	if code != http.StatusOK {
 		t.Fatalf("put: want 200, got %d (%s)", code, body)
 	}
@@ -114,7 +114,7 @@ func TestPutDefinitionKeepsTheWholeDocument(t *testing.T) {
 // names the record, whatever the document's own "key" claims.
 func TestPutDefinitionKeyComesFromTheURL(t *testing.T) {
 	app := mountHTTP(t)
-	code, body := do(t, app, http.MethodPut, "/v1/flags/defs/real-key",
+	code, body := do(t, app, http.MethodPut, "/v1/flag/defs/real-key",
 		"acme", []byte(`{"key":"impostor","active":true}`))
 	if code != http.StatusOK {
 		t.Fatalf("put: want 200, got %d (%s)", code, body)
@@ -134,10 +134,10 @@ func TestPutDefinitionKeyComesFromTheURL(t *testing.T) {
 		t.Fatalf("stored definition key = %v, want the path's %q", def["key"], "real-key")
 	}
 	// And it is readable back under the URL's key, not the body's.
-	if code, _ := do(t, app, http.MethodGet, "/v1/flags/defs/real-key", "acme", nil); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodGet, "/v1/flag/defs/real-key", "acme", nil); code != http.StatusOK {
 		t.Fatalf("get real-key: want 200, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/flags/defs/impostor", "acme", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/flag/defs/impostor", "acme", nil); code != http.StatusNotFound {
 		t.Fatalf("get impostor: want 404, got %d", code)
 	}
 }
@@ -157,7 +157,7 @@ func TestPutDefinitionRefusesNonObjects(t *testing.T) {
 		{"empty", []byte(``)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			code, body := do(t, app, http.MethodPut, "/v1/flags/defs/k", "acme", tc.body)
+			code, body := do(t, app, http.MethodPut, "/v1/flag/defs/k", "acme", tc.body)
 			if code != http.StatusBadRequest {
 				t.Fatalf("put %s: want 400, got %d (%s)", tc.name, code, body)
 			}
@@ -174,10 +174,10 @@ func TestFlagOpsRefuseAnUnvalidatedPrincipal(t *testing.T) {
 		method, path string
 		body         []byte
 	}{
-		{http.MethodGet, "/v1/flags/defs", nil},
-		{http.MethodGet, "/v1/flags/defs/k", nil},
-		{http.MethodDelete, "/v1/flags/defs/k", nil},
-		{http.MethodGet, "/v1/flags/activity", nil},
+		{http.MethodGet, "/v1/flag/defs", nil},
+		{http.MethodGet, "/v1/flag/defs/k", nil},
+		{http.MethodDelete, "/v1/flag/defs/k", nil},
+		{http.MethodGet, "/v1/flag/activity", nil},
 	} {
 		code, body := do(t, app, tc.method, tc.path, "", tc.body)
 		if code != http.StatusForbidden {
@@ -185,7 +185,7 @@ func TestFlagOpsRefuseAnUnvalidatedPrincipal(t *testing.T) {
 		}
 	}
 	// Health is deliberately NOT gated — liveness must be probe-able.
-	if code, _ := do(t, app, http.MethodGet, "/v1/flags/health", "", nil); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodGet, "/v1/flag/health", "", nil); code != http.StatusOK {
 		t.Fatalf("health unvalidated: want 200, got %d", code)
 	}
 }
@@ -194,10 +194,10 @@ func TestFlagOpsRefuseAnUnvalidatedPrincipal(t *testing.T) {
 // always answered 200 with {"deleted": key}, not 204.
 func TestDeleteDefinitionAnswers200WithTheKey(t *testing.T) {
 	app := mountHTTP(t)
-	if code, body := do(t, app, http.MethodPut, "/v1/flags/defs/gone", "acme", []byte(`{"active":true}`)); code != http.StatusOK {
+	if code, body := do(t, app, http.MethodPut, "/v1/flag/defs/gone", "acme", []byte(`{"active":true}`)); code != http.StatusOK {
 		t.Fatalf("seed: want 200, got %d (%s)", code, body)
 	}
-	code, body := do(t, app, http.MethodDelete, "/v1/flags/defs/gone", "acme", nil)
+	code, body := do(t, app, http.MethodDelete, "/v1/flag/defs/gone", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("delete: want 200, got %d (%s)", code, body)
 	}
@@ -208,7 +208,7 @@ func TestDeleteDefinitionAnswers200WithTheKey(t *testing.T) {
 	if out.Deleted != "gone" {
 		t.Fatalf("deleted = %q, want %q", out.Deleted, "gone")
 	}
-	if code, _ := do(t, app, http.MethodDelete, "/v1/flags/defs/gone", "acme", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/flag/defs/gone", "acme", nil); code != http.StatusNotFound {
 		t.Fatalf("second delete: want 404, got %d", code)
 	}
 }
@@ -216,13 +216,13 @@ func TestDeleteDefinitionAnswers200WithTheKey(t *testing.T) {
 // TestDefinitionsAreOrgScoped proves the boundary holds across two tenants.
 func TestDefinitionsAreOrgScoped(t *testing.T) {
 	app := mountHTTP(t)
-	if code, _ := do(t, app, http.MethodPut, "/v1/flags/defs/secret", "acme", []byte(`{"active":true}`)); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodPut, "/v1/flag/defs/secret", "acme", []byte(`{"active":true}`)); code != http.StatusOK {
 		t.Fatalf("acme seed failed")
 	}
-	if code, body := do(t, app, http.MethodGet, "/v1/flags/defs/secret", "beta", nil); code != http.StatusNotFound {
+	if code, body := do(t, app, http.MethodGet, "/v1/flag/defs/secret", "beta", nil); code != http.StatusNotFound {
 		t.Fatalf("beta reading acme's flag: want 404, got %d (%s)", code, body)
 	}
-	code, body := do(t, app, http.MethodGet, "/v1/flags/defs", "beta", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/flag/defs", "beta", nil)
 	if code != http.StatusOK {
 		t.Fatalf("beta list: want 200, got %d (%s)", code, body)
 	}
@@ -248,7 +248,7 @@ func jsonEqual(a, b any) bool {
 // store answers the engine's zero verdict, which is the shape to pin.
 func TestEvaluateRelaysTheEvaluatorVerbatim(t *testing.T) {
 	app := mountHTTP(t)
-	for _, path := range []string{"/v1/flags", "/v1/flags/decide"} {
+	for _, path := range []string{"/v1/flag", "/v1/flag/decide"} {
 		code, body := do(t, app, http.MethodPost, path, "acme", []byte(`{"distinct_id":"u1"}`))
 		if code != http.StatusOK {
 			t.Fatalf("%s: want 200, got %d (%s)", path, code, body)
@@ -264,10 +264,10 @@ func TestEvaluateRelaysTheEvaluatorVerbatim(t *testing.T) {
 		}
 	}
 	// distinct_id is the one required field, and it is refused before the store.
-	if code, _ := do(t, app, http.MethodPost, "/v1/flags", "acme", []byte(`{}`)); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/flag", "acme", []byte(`{}`)); code != http.StatusBadRequest {
 		t.Fatalf("missing distinct_id: want 400, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/flags", "", []byte(`{"distinct_id":"u1"}`)); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodPost, "/v1/flag", "", []byte(`{"distinct_id":"u1"}`)); code != http.StatusForbidden {
 		t.Fatalf("unvalidated evaluate: want 403, got %d", code)
 	}
 }
@@ -286,24 +286,24 @@ func TestProjectKeyEvaluatesButCannotAuthor(t *testing.T) {
 	t.Cleanup(func() { resolveKeyOrg = prev })
 
 	// Seeded by a principal, read back by a key: the key sees its own org's flags.
-	if code, body := do(t, app, http.MethodPut, "/v1/flags/defs/new-editor", "acme",
+	if code, body := do(t, app, http.MethodPut, "/v1/flag/defs/new-editor", "acme",
 		[]byte(`{"active":true,"filters":{"groups":[{"rollout_percentage":100}]}}`)); code != http.StatusOK {
 		t.Fatalf("seed: want 200, got %d (%s)", code, body)
 	}
-	if code, body := do(t, app, http.MethodPost, "/v1/flags?api_key=pk_acme", "",
+	if code, body := do(t, app, http.MethodPost, "/v1/flag?api_key=pk_acme", "",
 		[]byte(`{"distinct_id":"u1"}`)); code != http.StatusOK {
 		t.Fatalf("evaluate by key: want 200, got %d (%s)", code, body)
 	}
 
 	// The same key cannot change what everyone else reads.
-	code, body := do(t, app, http.MethodPut, "/v1/flags/defs/new-editor?api_key=pk_acme", "",
+	code, body := do(t, app, http.MethodPut, "/v1/flag/defs/new-editor?api_key=pk_acme", "",
 		[]byte(`{"active":false}`))
 	if code != http.StatusForbidden {
 		t.Fatalf("author by key: want 403, got %d (%s)", code, body)
 	}
 
 	// An unresolvable key fails CLOSED rather than falling back to a host or a default.
-	if code, body := do(t, app, http.MethodPost, "/v1/flags?api_key=pk_nobody", "",
+	if code, body := do(t, app, http.MethodPost, "/v1/flag?api_key=pk_nobody", "",
 		[]byte(`{"distinct_id":"u1"}`)); code != http.StatusForbidden {
 		t.Fatalf("unknown key: want 403, got %d (%s)", code, body)
 	}

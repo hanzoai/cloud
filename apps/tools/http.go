@@ -20,7 +20,7 @@ const (
 	maxBatch = 256
 )
 
-// ── GET /v1/tools — discovery (all sources, activated flags) ────────────────────
+// ── GET /v1/tool — discovery (all sources, activated flags) ────────────────────
 
 // toolQuery narrows the discovery listing. Both fields are query parameters and
 // both are optional.
@@ -51,7 +51,7 @@ type toolList struct {
 // surface: one flat set of names spanning connector actions, user functions,
 // zap-service routes, agents, skills and the org's own external MCP servers,
 // deduplicated by name so the highest-precedence source wins a collision. It
-// lists; it does not call — dispatch is POST /v1/tools/call.
+// lists; it does not call — dispatch is POST /v1/tool/call.
 func (o toolOps) listTools(ctx context.Context, in *toolQuery) (*toolList, error) {
 	scope, err := scopeOf(ctx)
 	if err != nil {
@@ -73,11 +73,11 @@ func (o toolOps) listTools(ctx context.Context, in *toolQuery) (*toolList, error
 	return &toolList{Tools: out}, nil
 }
 
-// ── POST /v1/tools/call — the DYNAMIC half of the tool plane ───────────────────
+// ── POST /v1/tool/call — the DYNAMIC half of the tool plane ───────────────────
 
 // toolCall names a tool and the arguments to run it with.
 type toolCall struct {
-	// Name is the tool to run, exactly as GET /v1/tools reports it.
+	// Name is the tool to run, exactly as GET /v1/tool reports it.
 	Name string `json:"name"`
 	// Arguments is the tool's own input object, passed through verbatim to
 	// whichever source owns it.
@@ -106,7 +106,7 @@ type toolResult struct {
 // dispatch to the winning source bound to the caller's own (org, project). One
 // metered unit, one audit record. A caller can only ever dispatch its own tools.
 //
-// Discovery is GET /v1/tools — ?activated=true for the callable set.
+// Discovery is GET /v1/tool — ?activated=true for the callable set.
 //
 // Example: {"name": "slack_post_message", "arguments": {"channel": "#general", "text": "hi"}}
 func (o toolOps) callTool(ctx context.Context, in *toolCall) (*toolResult, error) {
@@ -265,7 +265,7 @@ type createServerReq struct {
 	// PUBLIC host: loopback, link-local, private and cloud-metadata addresses are
 	// refused here and again when the dialer connects.
 	URL string `json:"url"`
-	// Listing enables a CATALOG entry instead — the id from GET /v1/tools/catalog.
+	// Listing enables a CATALOG entry instead — the id from GET /v1/tool/catalog.
 	// The endpoint is the listing's own streamable-http remote, so a listing that
 	// only ships a stdio package is refused: there is nothing to reach yet.
 	Listing string `json:"listing"`
@@ -486,7 +486,7 @@ type mcpCatalog struct {
 // decided about each entry.
 //
 // This is the SHELF an org picks from. A listing with a streamable-http endpoint
-// can be enabled as-is — POST /v1/tools/mcp/servers with its id — and its tools then
+// can be enabled as-is — POST /v1/tool/mcp/servers with its id — and its tools then
 // join the org's tool plane and the fleet's MCP server. A listing that only ships a
 // stdio package needs a process to run it, which is why the transports are on
 // every entry rather than implied.

@@ -158,7 +158,7 @@ func capture(ctx context.Context, url string) []byte {
 	return png
 }
 
-// shotOf serves GET /v1/projects/:slug/shot — a PNG of the live site, or 404.
+// shotOf serves GET /v1/project/:slug/shot — a PNG of the live site, or 404.
 //
 // It is UNTYPED because it answers image bytes: a typed op declares one JSON Out
 // and would have to describe a PNG as one, which is a schema that lies about what

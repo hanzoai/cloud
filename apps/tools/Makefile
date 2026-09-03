@@ -4,5 +4,5 @@
 # needs: build, test, vet, openapi, clean. This names the app(s) this package
 # backs and includes it. Written from the same manifest.Apps rows that write
 # plugin/<app>/main.go, so an app cannot have a main and no Makefile.
-APPS := tools
+APPS := tool
 include ../../mk/plugin.mk

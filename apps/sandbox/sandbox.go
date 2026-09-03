@@ -21,7 +21,7 @@
 //
 // A RUN IS WATCHABLE AND IT IS STOPPABLE. Name a session on a run and the
 // command's output is appended to that session's live log as it is produced, so
-// a surface reading GET /v1/agents/sessions/stream watches the work happen
+// a surface reading GET /v1/agent/sessions/stream watches the work happen
 // instead of a blank pause; `stop_run` interrupts what a sandbox is running and
 // leaves the sandbox leased, because a run that went wrong is one somebody still
 // wants to look at. See work.go — both are the same fact, that a command in

@@ -41,7 +41,7 @@ const (
 // document for reconciliation (queued → published). The real Distributor (wired at
 // Mount) calls the social Public API:
 //
-//	GET  {social}/public/v1/integrations?group=<brand>   → a brand's channels
+//	GET  {social}/public/v1/integration?group=<brand>   → a brand's channels
 //	POST {social}/public/v1/posts  {type:"now"|"schedule", date, posts:[{integration:{id},
 //	     value:[{content,image}], settings:{__type:<provider>}}]}   (Authorization: <org API key>)
 //

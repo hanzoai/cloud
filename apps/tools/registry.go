@@ -109,7 +109,7 @@ func (r *Registry) SetCharger(c Charger) {
 }
 
 // Activate turns a tool on for (org, project), recording its resolved source. This
-// is the ONE activation write the marketplace "install" and the /v1/tools/activation
+// is the ONE activation write the marketplace "install" and the /v1/tool/activation
 // API both drive, so activation is one store reached one way.
 func (r *Registry) Activate(ctx context.Context, org, project, tool, byUser string) error {
 	_, act, _ := r.snapshot()

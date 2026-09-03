@@ -178,7 +178,7 @@ func (m *Message) validate() error {
 	return nil
 }
 
-// SendRequest is the narrow body of POST /v1/channels/:channel/send — the
+// SendRequest is the narrow body of POST /v1/channel/:channel/send — the
 // envelope's outbound projection. Identity fields (Sender, Account, Channel)
 // are not decodable here: the route path names the channel and the caller's
 // authenticated org supplies the tenant.

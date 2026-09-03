@@ -148,7 +148,7 @@ func newRunFnCmd(envOf func() *Env) *cobra.Command {
 	var envKV []string
 	c := &cobra.Command{
 		Use:   "fn <source>",
-		Short: "Run a source function, scale-to-zero (POST /v1/functions)",
+		Short: "Run a source function, scale-to-zero (POST /v1/function)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			env := envOf()
@@ -156,7 +156,7 @@ func newRunFnCmd(envOf func() *Env) *cobra.Command {
 			spec.Shape = "function"
 			spec.Env = parseEnvKV(envKV)
 			out := &RunResult{}
-			if err := cloudCall(cmd.Context(), env, http.MethodPost, "/v1/functions", &spec, out); err != nil {
+			if err := cloudCall(cmd.Context(), env, http.MethodPost, "/v1/function", &spec, out); err != nil {
 				return err
 			}
 			return env.emit(out, func(w io.Writer) {

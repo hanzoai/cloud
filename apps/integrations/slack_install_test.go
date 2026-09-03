@@ -36,7 +36,7 @@ func TestInstallSendsPeopleToTheConsoleNotToSlack(t *testing.T) {
 func installLocation(t *testing.T) string {
 	t.Helper()
 	app := newApp(t, newKMS(t))
-	req := httptest.NewRequest("GET", "/v1/integrations/slack/install", nil)
+	req := httptest.NewRequest("GET", "/v1/integration/slack/install", nil)
 	res, err := app.Fiber().Test(req)
 	if err != nil {
 		t.Fatalf("install: %v", err)

@@ -358,12 +358,12 @@ func cannotAttribute(presented bool) *zip.HTTPError {
 	if presented {
 		return &zip.HTTPError{
 			Status: http.StatusForbidden, Code: "ingest_key_unknown",
-			Msg: "this ingest key names no project: create one (POST /v1/projects) and send the key it mints",
+			Msg: "this ingest key names no project: create one (POST /v1/project) and send the key it mints",
 		}
 	}
 	return &zip.HTTPError{
 		Status: http.StatusUnauthorized, Code: "ingest_key_required",
-		Msg: "no event could be attributed: create a project (POST /v1/projects) and send its key as ?ingest_key= or Authorization: Bearer",
+		Msg: "no event could be attributed: create a project (POST /v1/project) and send its key as ?ingest_key= or Authorization: Bearer",
 	}
 }
 

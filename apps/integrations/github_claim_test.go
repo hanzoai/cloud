@@ -60,7 +60,7 @@ func TestTenantCannotClaim(t *testing.T) {
 	app := newApp(t, newKMS(t))
 
 	for _, name := range []string{"plain member", "own-org admin"} {
-		rq := httptest.NewRequest(http.MethodPost, "/v1/integrations/github/claim",
+		rq := httptest.NewRequest(http.MethodPost, "/v1/integration/github/claim",
 			bytes.NewReader([]byte(`{"all":true}`)))
 		rq.Header.Set("Content-Type", "application/json")
 		rq.Header.Set("X-Org-Id", "acme")
@@ -84,7 +84,7 @@ func TestTenantCannotClaim(t *testing.T) {
 	if conns := Connections("acme", "github"); len(conns) != 0 {
 		t.Fatalf("refused claim must write no rows, got %+v", conns)
 	}
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos", "acme", nil); r.Code != http.StatusConflict {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos", "acme", nil); r.Code != http.StatusConflict {
 		t.Fatalf("acme should still be unconnected (409), got %d (%s)", r.Code, r.Body)
 	}
 }
@@ -95,7 +95,7 @@ func TestClaimBindsToCallerOrgOnly(t *testing.T) {
 	withGithubApp(t, mockInstallations(t, twoAccounts()))
 	app := newApp(t, newKMS(t))
 
-	r := postJSON(t, app, "/v1/integrations/github/claim", "hanzo", true, map[string]any{"all": true})
+	r := postJSON(t, app, "/v1/integration/github/claim", "hanzo", true, map[string]any{"all": true})
 	if r.Code != http.StatusOK {
 		t.Fatalf("claim want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -117,7 +117,7 @@ func TestClaimIsIdempotent(t *testing.T) {
 	withGithubApp(t, mockInstallations(t, twoAccounts()))
 	app := newApp(t, newKMS(t))
 
-	first := claimOut(t, postJSON(t, app, "/v1/integrations/github/claim", "hanzo", true,
+	first := claimOut(t, postJSON(t, app, "/v1/integration/github/claim", "hanzo", true,
 		map[string]any{"all": true}).Body)
 	if len(first.Claimed) != 2 || len(first.Already) != 0 {
 		t.Fatalf("first claim should bind both, got %+v", first)
@@ -127,7 +127,7 @@ func TestClaimIsIdempotent(t *testing.T) {
 		t.Fatalf("get: %v", err)
 	}
 
-	second := claimOut(t, postJSON(t, app, "/v1/integrations/github/claim", "hanzo", true,
+	second := claimOut(t, postJSON(t, app, "/v1/integration/github/claim", "hanzo", true,
 		map[string]any{"all": true}).Body)
 	if len(second.Claimed) != 0 || len(second.Already) != 2 {
 		t.Fatalf("second claim should bind nothing, got %+v", second)
@@ -154,7 +154,7 @@ func TestClaimNamedAccounts(t *testing.T) {
 	app := newApp(t, newKMS(t))
 
 	// Case-insensitive, since GitHub logins are.
-	got := claimOut(t, postJSON(t, app, "/v1/integrations/github/claim", "lux", true,
+	got := claimOut(t, postJSON(t, app, "/v1/integration/github/claim", "lux", true,
 		map[string]any{"accounts": []string{"LuxFi"}}).Body)
 	if len(got.Claimed) != 1 || got.Claimed[0] != "luxfi" {
 		t.Fatalf("want [luxfi] claimed, got %+v", got)
@@ -164,7 +164,7 @@ func TestClaimNamedAccounts(t *testing.T) {
 	}
 
 	// One unknown name refuses everything — no partial write.
-	r := postJSON(t, app, "/v1/integrations/github/claim", "lux", true,
+	r := postJSON(t, app, "/v1/integration/github/claim", "lux", true,
 		map[string]any{"accounts": []string{"hanzoai", "nope"}})
 	if r.Code != http.StatusBadRequest {
 		t.Fatalf("unknown account want 400, got %d (%s)", r.Code, r.Body)
@@ -174,7 +174,7 @@ func TestClaimNamedAccounts(t *testing.T) {
 	}
 
 	// Naming nothing at all is a 400, not a silent success.
-	if r := postJSON(t, app, "/v1/integrations/github/claim", "lux", true,
+	if r := postJSON(t, app, "/v1/integration/github/claim", "lux", true,
 		map[string]any{}); r.Code != http.StatusBadRequest {
 		t.Fatalf("empty claim want 400, got %d (%s)", r.Code, r.Body)
 	}
@@ -193,7 +193,7 @@ func TestClaimRefreshesReinstalledAccount(t *testing.T) {
 		t.Fatalf("upsert: %v", err)
 	}
 
-	got := claimOut(t, postJSON(t, app, "/v1/integrations/github/claim", "hanzo", true,
+	got := claimOut(t, postJSON(t, app, "/v1/integration/github/claim", "hanzo", true,
 		map[string]any{"accounts": []string{"hanzoai"}}).Body)
 	if len(got.Already) != 1 {
 		t.Fatalf("an existing binding reports already, got %+v", got)
@@ -213,9 +213,9 @@ func TestClaimThenInstallationsReadConnected(t *testing.T) {
 	withGithubApp(t, mockInstallations(t, twoAccounts()))
 	app := newApp(t, newKMS(t))
 
-	postJSON(t, app, "/v1/integrations/github/claim", "hanzo", true, map[string]any{"all": true})
+	postJSON(t, app, "/v1/integration/github/claim", "hanzo", true, map[string]any{"all": true})
 
-	got := installations(t, superReq(t, app, http.MethodGet, "/v1/integrations/github/installations", "hanzo").Body)
+	got := installations(t, superReq(t, app, http.MethodGet, "/v1/integration/github/installations", "hanzo").Body)
 	if len(got) != 2 {
 		t.Fatalf("want 2 installations, got %d", len(got))
 	}

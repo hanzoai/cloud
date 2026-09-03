@@ -6,7 +6,7 @@ package event
 // (what @hanzo/insights and every PostHog-compatible SDK emit) are mapped onto
 // the native CaptureEvent and flow through the ONE capture path (normalize →
 // scrub → the event plane), and the console reads recent events back from
-// event.fact's act rows through the ONE datastore client. Flags stay at /v1/flags (the
+// event.fact's act rows through the ONE datastore client. Flags stay at /v1/flag (the
 // native flags engine) — this namespace deliberately does not duplicate them.
 //
 // The PostHog wire had an endpoint of its own here — /v1/event/insights/e — because external

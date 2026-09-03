@@ -1,7 +1,7 @@
 // Package channels is one inbox for the chat apps you connect — Discord, Slack,
 // Teams, Telegram.
 //
-// The /v1/channels routes carry a portable chat envelope, per-org access policy
+// The /v1/channel routes carry a portable chat envelope, per-org access policy
 // (pairing / allowlist / open), a durable inbox, and outbound send across every
 // connected transport. Identity and token custody stay in apps/integrations:
 // inbound events arrive on the plane (plane.ChannelsIngest) and replies leave
@@ -27,7 +27,7 @@ type state struct {
 // detached event reads it race-free. nil ⇒ unmounted; ingest drops.
 var mounted atomic.Pointer[cloud.Service[state]]
 
-// Mount wires /v1/channels/* onto app and registers the ingress consumer.
+// Mount wires /v1/channel/* onto app and registers the ingress consumer.
 func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("channels.Use:  nil app")

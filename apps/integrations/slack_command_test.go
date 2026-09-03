@@ -697,7 +697,7 @@ func TestCommandTurn_UnlinkedIsThePrompt(t *testing.T) {
 	if !strings.Contains(text, "Connect your Hanzo account") {
 		t.Fatalf("want the link prompt, got %q", text)
 	}
-	if !strings.Contains(text, "https://api.hanzo.ai/v1/integrations/slack/link?state=") {
+	if !strings.Contains(text, "https://api.hanzo.ai/v1/integration/slack/link?state=") {
 		t.Fatalf("the prompt must carry the link URL: %q", text)
 	}
 	if store.puts != 0 {
@@ -754,7 +754,7 @@ func TestUserBearer_TellsARefusalFromAnOutage(t *testing.T) {
 
 	// The sentence a refused grant produces names the fix and carries the URL.
 	say := relink(s, in)
-	if !strings.Contains(say, "expired") || !strings.Contains(say, "/v1/integrations/slack/link?state=") {
+	if !strings.Contains(say, "expired") || !strings.Contains(say, "/v1/integration/slack/link?state=") {
 		t.Fatalf("relink must say what broke and how to fix it: %q", say)
 	}
 	if strings.Contains(say, "try again") {

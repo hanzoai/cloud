@@ -277,10 +277,10 @@ func TestTerminalReportsHitCorrectActivityPath(t *testing.T) {
 	if err := w.claimAndRun(context.Background(), io.Discard); err != nil {
 		t.Fatalf("run2 (unknown→fail): %v", err)
 	}
-	if got := terminal["complete"]; got != "/v1/tasks/namespaces/gpu-jobs/activities/wf1/wf1/complete" {
+	if got := terminal["complete"]; got != "/v1/task/namespaces/gpu-jobs/activities/wf1/wf1/complete" {
 		t.Fatalf("complete path = %q, want the claimed activity's exact ns+ids", got)
 	}
-	if got := terminal["fail"]; got != "/v1/tasks/namespaces/gpu-jobs/activities/wf2/wf2/fail" {
+	if got := terminal["fail"]; got != "/v1/task/namespaces/gpu-jobs/activities/wf2/wf2/fail" {
 		t.Fatalf("fail path = %q, want the claimed activity's exact ns+ids", got)
 	}
 }

@@ -3,7 +3,7 @@
 // advertised as ONE op projected into every surface (REST · OpenAPI · MCP · CLI
 // · the op-call plane), and cloud's raw routes were slated to migrate onto it.
 // It measures the projection against the route shapes cloud ACTUALLY has: a path
-// param (/v1/agents/sessions/:id), query filters (?live&host=), and an org that
+// param (/v1/agent/sessions/:id), query filters (?live&host=), and an org that
 // must come from the validated principal rather than the caller.
 //
 // The result gates the migration, so it is a test, not a memo: it fails the
@@ -42,7 +42,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The In/Out shapes /v1/agents/sessions would use, mirroring the real handlers:
+// The In/Out shapes /v1/agent/sessions would use, mirroring the real handlers:
 // the session id off the path plus principal.Org(c).
 type sessionKey struct {
 	ID string `json:"id"`
@@ -148,7 +148,7 @@ func TestTypedOpBindsURL(t *testing.T) {
 	var got bound
 	app := zip.New(zip.Config{AppName: "probe", OpenAPI: zip.OpenAPIConfig{Title: "cloud", Version: "v1.0.0"}})
 
-	zip.Get[sessionKey, sessionView](app, "/v1/agents/sessions/:id",
+	zip.Get[sessionKey, sessionView](app, "/v1/agent/sessions/:id",
 		func(ctx context.Context, in *sessionKey) (*sessionView, error) {
 			got.key = *in
 			got.ctx = fmt.Sprintf("%T", ctx)
@@ -158,7 +158,7 @@ func TestTypedOpBindsURL(t *testing.T) {
 		zip.WithSummary("Get one agent session by id"),
 		zip.WithTags("agents", "sessions"))
 
-	zip.Get[sessionFilter, sessionList](app, "/v1/agents/sessions",
+	zip.Get[sessionFilter, sessionList](app, "/v1/agent/sessions",
 		func(ctx context.Context, in *sessionFilter) (*sessionList, error) {
 			got.filter = *in
 			return &sessionList{Sessions: []sessionView{}}, nil
@@ -169,13 +169,13 @@ func TestTypedOpBindsURL(t *testing.T) {
 
 	base := serve(t, app)
 
-	_, body := get(t, base+"/v1/agents/sessions/sess-abc123", map[string]string{"X-Org-Id": "acme"})
-	t.Logf("GET /v1/agents/sessions/sess-abc123 -> %s", body)
+	_, body := get(t, base+"/v1/agent/sessions/sess-abc123", map[string]string{"X-Org-Id": "acme"})
+	t.Logf("GET /v1/agent/sessions/sess-abc123 -> %s", body)
 	t.Logf("  In.ID   = %q", got.key.ID)
 	t.Logf("  ctx     = %s", got.ctx)
 
-	_, _ = get(t, base+"/v1/agents/sessions?live=true&host=evo", map[string]string{"X-Org-Id": "acme"})
-	t.Logf("GET /v1/agents/sessions?live=true&host=evo")
+	_, _ = get(t, base+"/v1/agent/sessions?live=true&host=evo", map[string]string{"X-Org-Id": "acme"})
+	t.Logf("GET /v1/agent/sessions?live=true&host=evo")
 	t.Logf("  In      = %+v", got.filter)
 
 	// THE FINDING, as the current contract: the whole URL reaches the handler.
@@ -196,7 +196,7 @@ func TestTypedOpBindsURL(t *testing.T) {
 // against the zip this module names.
 func TestTypedOpProjectionsPopulate(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "probe", OpenAPI: zip.OpenAPIConfig{Title: "cloud", Version: "v1.0.0"}})
-	zip.Get[sessionKey, sessionView](app, "/v1/agents/sessions/:id",
+	zip.Get[sessionKey, sessionView](app, "/v1/agent/sessions/:id",
 		func(ctx context.Context, in *sessionKey) (*sessionView, error) {
 			return &sessionView{ID: in.ID}, nil
 		},
@@ -226,7 +226,7 @@ func TestTypedOpProjectionsPopulate(t *testing.T) {
 	// The path is templated, so OpenAPI 3.1 REQUIRES a matching path-parameter
 	// object. It has one — and the parameter is TYPED from the In field it binds
 	// to, so the document describes the same value the handler receives.
-	params := digParams(t, doc, "/v1/agents/sessions/{id}", "get")
+	params := digParams(t, doc, "/v1/agent/sessions/{id}", "get")
 	if len(params) != 1 {
 		t.Fatalf("parameters = %v, want the one path param — a templated path with no "+
 			"parameter object is an invalid document that cannot tell a client about :id", params)
@@ -238,7 +238,7 @@ func TestTypedOpProjectionsPopulate(t *testing.T) {
 	if sch, _ := p["schema"].(map[string]any); sch["type"] != "string" {
 		t.Fatalf("parameter schema = %v, want the type of sessionKey.ID", p["schema"])
 	}
-	t.Log("PINNED: the doc declares templated path /v1/agents/sessions/{id} WITH its " +
+	t.Log("PINNED: the doc declares templated path /v1/agent/sessions/{id} WITH its " +
 		"parameter object, typed from the In field it binds to.")
 }
 
@@ -269,7 +269,7 @@ func digParams(t *testing.T, doc map[string]any, path, method string) []any {
 func TestTypedOpMCPIsAnonymous(t *testing.T) {
 	var got bound
 	app := zip.New(zip.Config{AppName: "probe", OpenAPI: zip.OpenAPIConfig{Title: "cloud", Version: "v1.0.0"}})
-	zip.Get[sessionKey, sessionView](app, "/v1/agents/sessions/:id",
+	zip.Get[sessionKey, sessionView](app, "/v1/agent/sessions/:id",
 		func(ctx context.Context, in *sessionKey) (*sessionView, error) {
 			got.key = *in
 			if v, ok := ctx.Value(orgKey{}).(string); ok {
@@ -325,7 +325,7 @@ func TestPrincipalBridgeCarriesOrg(t *testing.T) {
 		return c.Next()
 	}))
 
-	zip.Get[sessionKey, sessionView](app, "/v1/agents/sessions/:id",
+	zip.Get[sessionKey, sessionView](app, "/v1/agent/sessions/:id",
 		func(ctx context.Context, in *sessionKey) (*sessionView, error) {
 			got.key = *in
 			got.org, _ = ctx.Value(orgKey{}).(string)
@@ -340,7 +340,7 @@ func TestPrincipalBridgeCarriesOrg(t *testing.T) {
 	base := serve(t, app)
 
 	got = bound{}
-	_, body := get(t, base+"/v1/agents/sessions/sess-abc", map[string]string{"X-Org-Id": "acme"})
+	_, body := get(t, base+"/v1/agent/sessions/sess-abc", map[string]string{"X-Org-Id": "acme"})
 	t.Logf("REST  GET :id (X-Org-Id: acme) -> %s ; org reached handler = %q", body, got.org)
 	if got.org != "acme" {
 		t.Errorf("org did NOT reach the typed handler over REST — the bridge does not work")

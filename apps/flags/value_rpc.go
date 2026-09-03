@@ -40,7 +40,7 @@ func exposeValue() {
 // hold one for every key. What it holds is the operator's setting, which is the
 // half the caller genuinely cannot know.
 //
-// Parsing happens HERE, by the same [Client.resolve] that serves /v1/flags, so a
+// Parsing happens HERE, by the same [Client.resolve] that serves /v1/flag, so a
 // stored value means one thing however it is asked for. A caller that parsed the
 // text itself would be a second parser, and the two would disagree the first time
 // somebody wrote "yes" instead of "true".

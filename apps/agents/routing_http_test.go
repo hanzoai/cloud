@@ -36,7 +36,7 @@ func doKey(t *testing.T, app *zip.App, method, path, org, key string) (int, []by
 // (targetID, claimKey).
 func registerAndMint(t *testing.T, app *zip.App, org, host string) (string, string) {
 	t.Helper()
-	code, body := do(t, app, "POST", "/v1/agents/targets", org, map[string]any{"label": host, "host": host})
+	code, body := do(t, app, "POST", "/v1/agent/targets", org, map[string]any{"label": host, "host": host})
 	if code != 201 && code != 200 {
 		t.Fatalf("register target: %d %s", code, body)
 	}
@@ -44,7 +44,7 @@ func registerAndMint(t *testing.T, app *zip.App, org, host string) (string, stri
 		ID string `json:"id"`
 	}
 	_ = json.Unmarshal(body, &tv)
-	code, body = doKey(t, app, "POST", "/v1/agents/targets/"+tv.ID+"/key", org, "")
+	code, body = doKey(t, app, "POST", "/v1/agent/targets/"+tv.ID+"/key", org, "")
 	if code != 200 {
 		t.Fatalf("mint claim key: %d %s", code, body)
 	}
@@ -69,15 +69,15 @@ func TestClaim_RequiresMachineKey(t *testing.T) {
 	id, key := registerAndMint(t, app, "acme", "evo")
 
 	// No key => 403.
-	if code, _ := doKey(t, app, "POST", "/v1/agents/targets/"+id+"/claim", "acme", ""); code != 403 {
+	if code, _ := doKey(t, app, "POST", "/v1/agent/targets/"+id+"/claim", "acme", ""); code != 403 {
 		t.Fatalf("claim with no key must be 403, got %d", code)
 	}
 	// Wrong key => 403.
-	if code, _ := doKey(t, app, "POST", "/v1/agents/targets/"+id+"/claim", "acme", "tgtk_wrong"); code != 403 {
+	if code, _ := doKey(t, app, "POST", "/v1/agent/targets/"+id+"/claim", "acme", "tgtk_wrong"); code != 403 {
 		t.Fatalf("claim with wrong key must be 403, got %d", code)
 	}
 	// Right key, no work => 204 (never 200, never another tenant's run).
-	if code, _ := doKey(t, app, "POST", "/v1/agents/targets/"+id+"/claim", "acme", key); code != 204 {
+	if code, _ := doKey(t, app, "POST", "/v1/agent/targets/"+id+"/claim", "acme", key); code != 204 {
 		t.Fatalf("claim with right key + no work must be 204, got %d", code)
 	}
 }
@@ -94,18 +94,18 @@ func TestClaim_CrossMachineAndCrossOrgDenied(t *testing.T) {
 	idB, _ := registerAndMint(t, app, "acme", "evoB")
 
 	// A's key against B => 403 (constant-time mismatch on B's stored hash).
-	if code, _ := doKey(t, app, "POST", "/v1/agents/targets/"+idB+"/claim", "acme", keyA); code != 403 {
+	if code, _ := doKey(t, app, "POST", "/v1/agent/targets/"+idB+"/claim", "acme", keyA); code != 403 {
 		t.Fatalf("A's key claiming B must be 403, got %d", code)
 	}
 
 	// Offer a run for acme/idA, then a DIFFERENT org cannot claim idA at all (its
 	// org scope resolves no such target => 403), and the run is never handed out.
 	OfferRoutedRun(RoutedRun{Org: "acme", TargetID: idA, SessionID: "sess_a", Repo: "api"})
-	if code, _ := doKey(t, app, "POST", "/v1/agents/targets/"+idA+"/claim", "evil", keyA); code != 403 {
+	if code, _ := doKey(t, app, "POST", "/v1/agent/targets/"+idA+"/claim", "evil", keyA); code != 403 {
 		t.Fatalf("another org claiming acme's target must be 403, got %d", code)
 	}
 	// acme WITH A's key claims its own run.
-	code, body := doKey(t, app, "POST", "/v1/agents/targets/"+idA+"/claim", "acme", keyA)
+	code, body := doKey(t, app, "POST", "/v1/agent/targets/"+idA+"/claim", "acme", keyA)
 	if code != 200 {
 		t.Fatalf("acme must claim its own run, got %d %s", code, body)
 	}
@@ -126,7 +126,7 @@ func TestClaimReport_RoundTrip(t *testing.T) {
 
 	off := OfferRoutedRun(RoutedRun{Org: "acme", TargetID: id, SessionID: "sess_rt", Repo: "api", Branch: "agent/rt"})
 
-	code, body := doKey(t, app, "POST", "/v1/agents/targets/"+id+"/claim", "acme", key)
+	code, body := doKey(t, app, "POST", "/v1/agent/targets/"+id+"/claim", "acme", key)
 	if code != 200 {
 		t.Fatalf("claim: %d %s", code, body)
 	}
@@ -134,7 +134,7 @@ func TestClaimReport_RoundTrip(t *testing.T) {
 	got := make(chan RoutedResult, 1)
 	go func() { res, _ := off.Await(context.Background()); got <- res }()
 
-	code, _ = doKeyBody(t, app, "POST", "/v1/agents/targets/"+id+"/runs/sess_rt/report", "acme", key,
+	code, _ = doKeyBody(t, app, "POST", "/v1/agent/targets/"+id+"/runs/sess_rt/report", "acme", key,
 		map[string]any{"ok": true, "changed": true, "commitSha": "cafe"})
 	if code != 200 {
 		t.Fatalf("report: %d", code)
@@ -295,7 +295,7 @@ func reqAs(t *testing.T, app *zip.App, method, path, org, user string, admin boo
 // registerAs registers a target in org OWNED by the given principal, returning its id.
 func registerAs(t *testing.T, app *zip.App, org, user, host string) string {
 	t.Helper()
-	code, body := reqAs(t, app, "POST", "/v1/agents/targets", org, user, false, "", map[string]any{"label": host, "host": host})
+	code, body := reqAs(t, app, "POST", "/v1/agent/targets", org, user, false, "", map[string]any{"label": host, "host": host})
 	if code != 201 && code != 200 {
 		t.Fatalf("register target: %d %s", code, body)
 	}
@@ -317,27 +317,27 @@ func TestClaimKeyPlane_OwnerScoped(t *testing.T) {
 	id := registerAs(t, app, "acme", "alice", "evo")
 
 	// A non-owner member of the same org is DENIED on every management verb.
-	if code, _ := reqAs(t, app, "POST", "/v1/agents/targets/"+id+"/key", "acme", "mallory", false, "", nil); code != 404 {
+	if code, _ := reqAs(t, app, "POST", "/v1/agent/targets/"+id+"/key", "acme", "mallory", false, "", nil); code != 404 {
 		t.Fatalf("non-owner mint must be denied (no oracle -> 404), got %d", code)
 	}
-	if code, _ := reqAs(t, app, "PATCH", "/v1/agents/targets/"+id, "acme", "mallory", false, "", map[string]any{"status": TargetOffline}); code != 404 {
+	if code, _ := reqAs(t, app, "PATCH", "/v1/agent/targets/"+id, "acme", "mallory", false, "", map[string]any{"status": TargetOffline}); code != 404 {
 		t.Fatalf("non-owner patch must be denied, got %d", code)
 	}
-	if code, _ := reqAs(t, app, "DELETE", "/v1/agents/targets/"+id, "acme", "mallory", false, "", nil); code != 404 {
+	if code, _ := reqAs(t, app, "DELETE", "/v1/agent/targets/"+id, "acme", "mallory", false, "", nil); code != 404 {
 		t.Fatalf("non-owner delete must be denied, got %d", code)
 	}
 
 	// The OWNER can mint.
-	code, body := reqAs(t, app, "POST", "/v1/agents/targets/"+id+"/key", "acme", "alice", false, "", nil)
+	code, body := reqAs(t, app, "POST", "/v1/agent/targets/"+id+"/key", "acme", "alice", false, "", nil)
 	if code != 200 {
 		t.Fatalf("owner mint must succeed, got %d %s", code, body)
 	}
 
 	// An ORG ADMIN (self-service org management) can manage any of the org's machines.
-	if code, _ := reqAs(t, app, "POST", "/v1/agents/targets/"+id+"/key", "acme", "boss", true, "", nil); code != 200 {
+	if code, _ := reqAs(t, app, "POST", "/v1/agent/targets/"+id+"/key", "acme", "boss", true, "", nil); code != 200 {
 		t.Fatalf("org admin mint must succeed, got %d", code)
 	}
-	if code, _ := reqAs(t, app, "PATCH", "/v1/agents/targets/"+id, "acme", "boss", true, "", map[string]any{"status": TargetOnline}); code != 200 {
+	if code, _ := reqAs(t, app, "PATCH", "/v1/agent/targets/"+id, "acme", "boss", true, "", map[string]any{"status": TargetOnline}); code != 200 {
 		t.Fatalf("org admin patch must succeed, got %d", code)
 	}
 }
@@ -352,7 +352,7 @@ func TestClaimReport_OwnerScoped(t *testing.T) {
 
 	id := registerAs(t, app, "acme", "alice", "evo")
 	// Alice mints her machine's key.
-	code, body := reqAs(t, app, "POST", "/v1/agents/targets/"+id+"/key", "acme", "alice", false, "", nil)
+	code, body := reqAs(t, app, "POST", "/v1/agent/targets/"+id+"/key", "acme", "alice", false, "", nil)
 	if code != 200 {
 		t.Fatalf("owner mint: %d %s", code, body)
 	}
@@ -364,15 +364,15 @@ func TestClaimReport_OwnerScoped(t *testing.T) {
 	// Mallory (same org, not the owner) with the RIGHT key is still refused: she does
 	// not own the machine. (In practice she cannot obtain the key, since mint is
 	// owner-scoped — this is the defense-in-depth arm.)
-	if code, _ := reqAs(t, app, "POST", "/v1/agents/targets/"+id+"/claim", "acme", "mallory", false, kv.ClaimKey, nil); code != 403 {
+	if code, _ := reqAs(t, app, "POST", "/v1/agent/targets/"+id+"/claim", "acme", "mallory", false, kv.ClaimKey, nil); code != 403 {
 		t.Fatalf("non-owner claim must be 403, got %d", code)
 	}
-	if code, _ := reqAs(t, app, "POST", "/v1/agents/targets/"+id+"/runs/sess_x/report", "acme", "mallory", false, kv.ClaimKey, map[string]any{"ok": true}); code != 403 {
+	if code, _ := reqAs(t, app, "POST", "/v1/agent/targets/"+id+"/runs/sess_x/report", "acme", "mallory", false, kv.ClaimKey, map[string]any{"ok": true}); code != 403 {
 		t.Fatalf("non-owner report must be 403, got %d", code)
 	}
 
 	// The owner with her key claims (no work -> 204) and reports fine.
-	if code, _ := reqAs(t, app, "POST", "/v1/agents/targets/"+id+"/claim", "acme", "alice", false, kv.ClaimKey, nil); code != 204 {
+	if code, _ := reqAs(t, app, "POST", "/v1/agent/targets/"+id+"/claim", "acme", "alice", false, kv.ClaimKey, nil); code != 204 {
 		t.Fatalf("owner claim (no work) must be 204, got %d", code)
 	}
 }
@@ -388,16 +388,16 @@ func TestUnownedTarget_AdminOnly_ThenBoundByRegister(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A plain member cannot mint on an unowned row.
-	if code, _ := reqAs(t, app, "POST", "/v1/agents/targets/tgt_legacy/key", "acme", "alice", false, "", nil); code != 404 {
+	if code, _ := reqAs(t, app, "POST", "/v1/agent/targets/tgt_legacy/key", "acme", "alice", false, "", nil); code != 404 {
 		t.Fatalf("unowned row must be member-denied, got %d", code)
 	}
 	// An org admin can.
-	if code, _ := reqAs(t, app, "POST", "/v1/agents/targets/tgt_legacy/key", "acme", "boss", true, "", nil); code != 200 {
+	if code, _ := reqAs(t, app, "POST", "/v1/agent/targets/tgt_legacy/key", "acme", "boss", true, "", nil); code != 200 {
 		t.Fatalf("unowned row must be admin-manageable, got %d", code)
 	}
 	// The owner heals it by re-registering the SAME host — register ADOPTS the
 	// unowned row and BINDS the owner (no duplicate).
-	code, body := reqAs(t, app, "POST", "/v1/agents/targets", "acme", "alice", false, "", map[string]any{"label": "old", "host": "old"})
+	code, body := reqAs(t, app, "POST", "/v1/agent/targets", "acme", "alice", false, "", map[string]any{"label": "old", "host": "old"})
 	if code != 200 && code != 201 {
 		t.Fatalf("re-register: %d %s", code, body)
 	}
@@ -409,7 +409,7 @@ func TestUnownedTarget_AdminOnly_ThenBoundByRegister(t *testing.T) {
 		t.Fatalf("re-register must adopt the unowned row (same id), got %q", tv.ID)
 	}
 	// Now alice (the bound owner) can mint.
-	if code, _ := reqAs(t, app, "POST", "/v1/agents/targets/tgt_legacy/key", "acme", "alice", false, "", nil); code != 200 {
+	if code, _ := reqAs(t, app, "POST", "/v1/agent/targets/tgt_legacy/key", "acme", "alice", false, "", nil); code != 200 {
 		t.Fatalf("after binding, the owner must be able to mint, got %d", code)
 	}
 }
