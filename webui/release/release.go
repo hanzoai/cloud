@@ -31,7 +31,7 @@ import (
 	s3 "github.com/hanzos3/go"
 	luxlog "github.com/luxfi/log"
 
-	"github.com/hanzoai/cloud/apps/s3admin"
+	"github.com/hanzoai/cloud/s3admin"
 	"github.com/hanzoai/cloud/apps/sites"
 )
 
