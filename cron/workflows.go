@@ -3,15 +3,17 @@
 package cron
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/hanzoai/authz"
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/tasks/pkg/sdk/temporal"
 	"github.com/hanzoai/tasks/pkg/sdk/workflow"
 )
@@ -79,11 +81,21 @@ func ReconcileWorkflow(ctx workflow.Context) error {
 	return workflow.ExecuteActivity(actCtx, ReconcileActivity).Get(actCtx, nil)
 }
 
-// pokeSpec is the poke.json payload of a poke entry. bearerEnv names an env
-// var on THIS process (KMS-synced) whose value becomes the Authorization
-// bearer — the ConfigMap never carries a secret.
+// pokeSpec is the poke.json payload of a poke entry, in one of two shapes.
+//
+// A plane poke names an app and an op: the run asks that op by name over the
+// internal plane, as the platform, and there is no URL and nothing to present.
+// This is how a schedule reaches work this binary already carries — the
+// recharge sweep, the catalog sync — and it replaced a POST to our own writer
+// bearing a shared service token.
+//
+// An HTTP poke names a URL. bearerEnv names an env var on THIS process
+// (KMS-synced) whose value becomes the Authorization bearer — the ConfigMap
+// never carries a secret. It is for endpoints outside this binary.
 type pokeSpec struct {
-	URL       string `json:"url"`
+	App       string `json:"app,omitempty"`       // plane poke: the app serving the op
+	Op        string `json:"op,omitempty"`        // plane poke: the operation id
+	URL       string `json:"url,omitempty"`       // HTTP poke
 	Method    string `json:"method,omitempty"`    // default POST
 	BearerEnv string `json:"bearerEnv,omitempty"` // env var holding the bearer token
 	Timeout   string `json:"timeout,omitempty"`   // Go duration, default 10m
@@ -116,6 +128,14 @@ func PokeActivity(ctx context.Context, in EntryInput) (PokeResult, error) {
 	}
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	if p.Op != "" {
+		// The platform, stated once: a scheduled run acts for the fleet, and the
+		// reserved admin org is the name the fleet's own work carries.
+		if _, err := cloud.Ask[struct{}, map[string]any](cloud.For(cctx, authz.AdminOrg), p.App, p.Op, &struct{}{}); err != nil {
+			return PokeResult{}, fmt.Errorf("poke %q: %s/%s: %w", in.Name, p.App, p.Op, err)
+		}
+		return PokeResult{URL: "plane:" + p.App + "/" + p.Op, Status: http.StatusOK}, nil
+	}
 	req, err := http.NewRequestWithContext(cctx, method, p.URL, strings.NewReader("{}"))
 	if err != nil {
 		return PokeResult{}, err

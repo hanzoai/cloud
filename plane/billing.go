@@ -1085,7 +1085,26 @@ const (
 
 	BillingSubscribe = "billing_subscribe"
 	BillingRecharge  = "billing_recharge"
+
+	// CatalogRefresh pulls the upstream model catalog and lands it in commerce:
+	// the scheduled sync, as a plane call. The cron app asks it by name as the
+	// platform, which replaced a POST to our own writer bearing a shared
+	// COMMERCE_SERVICE_TOKEN — the gate on that route admitted the token, and
+	// this op takes the caller the plane states.
+	CatalogRefresh = "commerce_catalog_refresh"
 )
+
+// Refreshed is what one catalog sync did — the module's RefreshResult, on the
+// wire.
+type Refreshed struct {
+	Serves    string   `json:"serves"`
+	Upstream  int      `json:"upstream"`
+	Created   int      `json:"created"`
+	Updated   int      `json:"updated"`
+	Withdrawn []string `json:"withdrawn,omitempty"`
+	Restored  []string `json:"restored,omitempty"`
+	SyncedAt  string   `json:"syncedAt"`
+}
 
 // CardIn charges a single-use card token and credits the subject's wallet.
 //
