@@ -753,7 +753,7 @@ func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
 	via, base := aiRoute(cfg)
 	if base != "" && cfg.AIAPIKey != "" && !publishableKey(cfg.AIAPIKey) {
 		log.Info("deps.AI (completions) → static secret key", "at", base, "socket", via != nil, "default_model", DefaultModel)
-		return clients.AIHTTPOn(base, cfg.AIAPIKey, DefaultModel, via)
+		return clients.AIHTTPOn(base, cfg.AIAPIKey, defaultModelFor, via)
 	}
 	if cfg.AIAPIKey != "" && publishableKey(cfg.AIAPIKey) {
 		log.Info("deps.AI (completions) → refusing read-only publishable (pk-) key for chat; using M2M", "at", base)
@@ -762,7 +762,7 @@ func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
 		if tokenURL := aiM2MTokenURL(cfg); tokenURL != "" {
 			log.Info("deps.AI (completions) → IAM M2M", "at", base, "socket", via != nil,
 				"token_url", tokenURL, "client_id", cfg.AIAuthClientID, "default_model", DefaultModel)
-			return clients.AIHTTPM2MOn(base, tokenURL, cfg.AIAuthClientID, cfg.AIAuthClientSecret, DefaultModel, via)
+			return clients.AIHTTPM2MOn(base, tokenURL, cfg.AIAuthClientID, cfg.AIAuthClientSecret, defaultModelFor, via)
 		}
 	}
 	log.Info("deps.AI (completions) → disabled (no secret key, no IAM M2M identity, no gateway configured)")
@@ -782,7 +782,7 @@ func pickEmbedClient(cfg *Config, log luxlog.Logger) AIClient {
 	via, base := aiRoute(cfg)
 	if base != "" && cfg.AIAPIKey != "" {
 		log.Info("deps.Embed → static embed key", "at", base, "socket", via != nil, "default_model", DefaultModel)
-		return clients.AIHTTPOn(base, cfg.AIAPIKey, DefaultModel, via)
+		return clients.AIHTTPOn(base, cfg.AIAPIKey, defaultModelFor, via)
 	}
 	return pickCompletionsClient(cfg, log)
 }
@@ -1577,4 +1577,12 @@ func (p *provenStore) PutIfVersion(ctx context.Context, key string, data []byte,
 		return "", err
 	}
 	return p.store.PutIfVersion(ctx, key, data, expect)
+}
+
+// defaultModelFor is the runtime answer to "which model when the caller named
+// none": the platform's `ai` configuration, edited at admin.hanzo.ai, read on the
+// request rather than at boot. DefaultModel is the floor it falls back to, so a
+// deployment that has configured nothing behaves exactly as this binary shipped.
+func defaultModelFor(ctx context.Context) string {
+	return Model(ctx, RoleDefault, DefaultModel)
 }

@@ -52,7 +52,7 @@ func TestAIHTTP_DefaultModelAndContent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ai := AIHTTPAt(srv.URL, "sk-test", defaultModel)
+	ai := AIHTTPAt(srv.URL, "sk-test", FixedModel(defaultModel))
 
 	// (1) empty model → default substituted; content parsed.
 	got, err := ai.ChatCompletion(context.Background(), &types.ChatRequest{Prompt: "say hi"})
@@ -91,7 +91,7 @@ func TestAIHTTP_UpstreamErrorMapped(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":{"message":"rate limited","type":"rate_limit_error"}}`))
 	}))
 	defer srv.Close()
-	_, err := AIHTTPAt(srv.URL, "sk-test", "deepseek-v4-flash").
+	_, err := AIHTTPAt(srv.URL, "sk-test", FixedModel("deepseek-v4-flash")).
 		ChatCompletion(context.Background(), &types.ChatRequest{Prompt: "x"})
 	if err == nil {
 		t.Fatal("expected error on 429, got nil")
@@ -132,7 +132,7 @@ func TestAIHTTP_TransientTagged(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := serve(tc.status, tc.body)
 			defer srv.Close()
-			_, err := AIHTTPAt(srv.URL, "sk-test", "deepseek-v4-flash").
+			_, err := AIHTTPAt(srv.URL, "sk-test", FixedModel("deepseek-v4-flash")).
 				ChatCompletion(context.Background(), &types.ChatRequest{Prompt: "x"})
 			if err == nil {
 				t.Fatalf("%s: expected an error", tc.name)
@@ -152,7 +152,7 @@ func TestAIHTTP_ServerErrorMapped(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":{"message":"boom"}}`))
 	}))
 	defer srv.Close()
-	if _, err := AIHTTPAt(srv.URL, "sk-test", "deepseek-v4-flash").
+	if _, err := AIHTTPAt(srv.URL, "sk-test", FixedModel("deepseek-v4-flash")).
 		ChatCompletion(context.Background(), &types.ChatRequest{Prompt: "x"}); err == nil {
 		t.Fatal("expected error on 500, got nil")
 	}
@@ -194,7 +194,7 @@ func TestAIHTTP_M2M(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ai := AIHTTPM2M(srv.URL /*baseURL*/, srv.URL+"/v1/iam/oauth/token" /*tokenURL*/, "hanzo-cloud", "s3cr3t", "deepseek-v4-flash")
+	ai := AIHTTPM2M(srv.URL /*baseURL*/, srv.URL+"/v1/iam/oauth/token" /*tokenURL*/, "hanzo-cloud", "s3cr3t", FixedModel("deepseek-v4-flash"))
 	got, err := ai.ChatCompletion(context.Background(), &types.ChatRequest{Prompt: "ping"})
 	if err != nil {
 		t.Fatalf("M2M ChatCompletion: %v", err)
@@ -226,7 +226,7 @@ func TestAIHTTP_EmptyChoices(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":"x","object":"chat.completion","choices":[]}`))
 	}))
 	defer srv.Close()
-	_, err := AIHTTPAt(srv.URL, "sk-test", "deepseek-v4-flash").
+	_, err := AIHTTPAt(srv.URL, "sk-test", FixedModel("deepseek-v4-flash")).
 		ChatCompletion(context.Background(), &types.ChatRequest{Prompt: "x"})
 	if err == nil {
 		t.Fatal("expected error on empty choices, got nil")
@@ -279,7 +279,7 @@ func TestAIHTTP_UnparsedCallRefused(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			got, err := AIHTTPAt(srv.URL, "sk-test", "enso").
+			got, err := AIHTTPAt(srv.URL, "sk-test", FixedModel("enso")).
 				ChatCompletion(context.Background(), &types.ChatRequest{Prompt: "latest on x.com?"})
 			if err == nil {
 				t.Fatalf("an unparsed tool call was returned as an answer: %q", got.Content)
@@ -311,7 +311,7 @@ func TestAIHTTP_ToolCallsKept(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := AIHTTPAt(srv.URL, "sk-test", "enso").
+	got, err := AIHTTPAt(srv.URL, "sk-test", FixedModel("enso")).
 		ChatCompletion(context.Background(), &types.ChatRequest{Prompt: "latest on x.com?"})
 	if err != nil {
 		t.Fatalf("a parsed tool call was refused: %v", err)
@@ -342,7 +342,7 @@ func TestAIHTTP_Models(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	lister, ok := AIHTTPAt(srv.URL, "sk-test", "deepseek-v4-flash").(types.ModelLister)
+	lister, ok := AIHTTPAt(srv.URL, "sk-test", FixedModel("deepseek-v4-flash")).(types.ModelLister)
 	if !ok {
 		t.Fatal("httpAI must implement types.ModelLister")
 	}
@@ -380,7 +380,7 @@ func TestAIHTTP_Rerank(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ai := AIHTTPAt(srv.URL, "sk-test", "deepseek-v4-flash")
+	ai := AIHTTPAt(srv.URL, "sk-test", FixedModel("deepseek-v4-flash"))
 	scores, err := ai.Rerank(context.Background(), &types.RerankRequest{
 		Model: "zen-rerank", Query: "q", Documents: []string{"a", "b", "c"}, Org: "acme",
 	})
@@ -407,7 +407,7 @@ func TestAIHTTP_RerankRefusesPartialAnswer(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"results": []map[string]any{{"index": 0, "relevance_score": 1}}})
 	}))
 	defer srv.Close()
-	_, err := AIHTTPAt(srv.URL, "sk-test", "m").Rerank(context.Background(), &types.RerankRequest{
+	_, err := AIHTTPAt(srv.URL, "sk-test", FixedModel("m")).Rerank(context.Background(), &types.RerankRequest{
 		Model: "zen-rerank", Query: "q", Documents: []string{"a", "b"},
 	})
 	if err == nil {

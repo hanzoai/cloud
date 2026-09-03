@@ -92,7 +92,7 @@ type httpAI struct {
 	http         *http.Client // authenticated transport (static-key header or M2M oauth2), reused for /embeddings
 	baseURL      string       // gateway /v1 root
 	apiKey       string       // static bearer; "" when M2M (the http transport injects the Bearer)
-	defaultModel string
+	defaultModel ModelFor
 }
 
 // aiHTTPTimeout bounds a single completion so a hung upstream cannot wedge an
@@ -100,6 +100,22 @@ type httpAI struct {
 // deadline on the caller's context, so a caller carrying a tighter deadline
 // still wins — this is only a ceiling.
 const aiHTTPTimeout = 120 * time.Second
+
+// ModelFor answers which model a request runs on when the caller named none.
+//
+// It is a FUNCTION rather than a string because AI routing is configured at
+// runtime and read per request: a tier can be repriced or a backend retired
+// without rebuilding this binary. package cloud supplies one that asks the
+// platform's own `ai` configuration (cloud.Model); this package holds no policy
+// and cannot — it is below cloud in the import graph.
+type ModelFor func(context.Context) string
+
+// FixedModel is the constant case, spelled out. A caller that genuinely has one
+// model — a test, or a client pinned to a single backend — says so here rather
+// than getting a second constructor that takes a string.
+func FixedModel(name string) ModelFor {
+	return func(context.Context) string { return name }
+}
 
 // AIHTTPAt returns a types.AIClient that POSTs OpenAI-compatible chat
 // completions to baseURL, authenticated with apiKey. baseURL is the gateway
@@ -109,7 +125,7 @@ const aiHTTPTimeout = 120 * time.Second
 // apiKey is a KMS-injected secret and is NEVER logged: it lives only inside the
 // go-openai client's Authorization header. Callers log the base URL and default
 // model, never the key.
-func AIHTTPAt(baseURL, apiKey, defaultModel string) types.AIClient {
+func AIHTTPAt(baseURL, apiKey string, defaultModel ModelFor) types.AIClient {
 	return AIHTTPOn(baseURL, apiKey, defaultModel, nil)
 }
 
@@ -126,7 +142,7 @@ func AIHTTPAt(baseURL, apiKey, defaultModel string) types.AIClient {
 // rt nil ⇒ the default transport, so AIHTTPAt is unchanged. When rt dials a
 // fixed socket the base URL's HOST is inert — it names the peer for logs and
 // error text, and the path prefix still matters.
-func AIHTTPOn(baseURL, apiKey, defaultModel string, rt http.RoundTripper) types.AIClient {
+func AIHTTPOn(baseURL, apiKey string, defaultModel ModelFor, rt http.RoundTripper) types.AIClient {
 	base := strings.TrimRight(baseURL, "/")
 	hc := &http.Client{Timeout: aiHTTPTimeout, Transport: rt}
 	cfg := openai.DefaultConfig(apiKey)
@@ -158,7 +174,7 @@ func AIHTTPOn(baseURL, apiKey, defaultModel string, rt http.RoundTripper) types.
 // go-openai sets its own Authorization header only when its authToken is
 // non-empty; here it is empty, so the sole auth header is the fresh Bearer the
 // oauth2 transport injects on every request.
-func AIHTTPM2M(baseURL, tokenURL, clientID, clientSecret, defaultModel string) types.AIClient {
+func AIHTTPM2M(baseURL, tokenURL, clientID, clientSecret string, defaultModel ModelFor) types.AIClient {
 	return AIHTTPM2MOn(baseURL, tokenURL, clientID, clientSecret, defaultModel, nil)
 }
 
@@ -167,7 +183,7 @@ func AIHTTPM2M(baseURL, tokenURL, clientID, clientSecret, defaultModel string) t
 // peer over its own socket instead of the public listener. Only the INFERENCE
 // leg rides rt — the token exchange keeps the default transport, because IAM is
 // a different peer and naming it is a separate question.
-func AIHTTPM2MOn(baseURL, tokenURL, clientID, clientSecret, defaultModel string, rt http.RoundTripper) types.AIClient {
+func AIHTTPM2MOn(baseURL, tokenURL, clientID, clientSecret string, defaultModel ModelFor, rt http.RoundTripper) types.AIClient {
 	cc := &clientcredentials.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
@@ -202,7 +218,7 @@ func AIHTTPM2MOn(baseURL, tokenURL, clientID, clientSecret, defaultModel string,
 func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*types.ChatResponse, error) {
 	model := strings.TrimSpace(req.Model)
 	if model == "" {
-		model = a.defaultModel
+		model = a.defaultModel(ctx)
 	}
 
 	// GenAI client span (OTel semantic conventions) — one span per LLM call,
@@ -404,7 +420,7 @@ func readToolCalls(calls []openai.ToolCall) []types.ToolCall {
 func (a *httpAI) ChatStream(ctx context.Context, req *types.ChatRequest, emit func(delta string) error) (*types.ChatResponse, error) {
 	model := strings.TrimSpace(req.Model)
 	if model == "" {
-		model = a.defaultModel
+		model = a.defaultModel(ctx)
 	}
 
 	ctx, span := StartGenAISpan(ctx, "hanzo", "chat", model, req.Org, req.Project)

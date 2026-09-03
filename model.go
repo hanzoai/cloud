@@ -28,16 +28,19 @@ import "strings"
 // default names the tier it actually wants. A caller who needs more pins
 // enso-pro or enso-ultra; a caller who wants the router's judgement pins `enso`.
 //
-// This constant is THE literal, and now the only one. There used to be a
-// deployment knob beside it (CLOUD_AI_DEFAULT_MODEL → Config.AIDefaultModel →
-// Deps.AIDefaultModel), which meant changing the tier was "this line plus the
-// deployment's env" — two places holding one decision, and the only thing a
-// second place can add is disagreement. It added exactly that twice: once
-// shipping an UPSTREAM name to customers through GET /v1/agents (84a7f7b9), and
-// once masking a wrong constant for an unknown period, because production set
-// the variable to the right value while the constant said something else
-// (3fdb4b88). The knob's entire production history is a deployment setting it to
-// the byte-identical value of this line. Changing the tier is now this line.
+// THIS CONSTANT IS THE FLOOR, NOT THE SOURCE. The live answer is the platform's
+// `ai` product document, resolved per request by [Model] and edited at
+// admin.hanzo.ai — AI routing moves on a different clock than this binary, and a
+// retired backend or a repriced tier must not need a rebuild and a rollout.
+//
+// That is not the knob this file used to describe. There WAS a deployment knob
+// beside this line (CLOUD_AI_DEFAULT_MODEL → Config.AIDefaultModel →
+// Deps.AIDefaultModel) and it was deleted for drifting twice: once shipping an
+// UPSTREAM name to customers through GET /v1/agents (84a7f7b9), and once masking
+// a wrong constant because production set the variable to a different value
+// (3fdb4b88). The defect there was TWO SOURCES, not runtime resolution. There is
+// one source now — the row — and this constant is reached only when the row
+// cannot be read, so it cannot disagree with a live deployment: nothing sets it.
 const DefaultModel = "enso-flash"
 
 // ChatModel is the tier the INTERACTIVE assistant answers on — the @hanzo turn in
