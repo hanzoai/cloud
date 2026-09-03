@@ -239,14 +239,14 @@ interface git {
     # purge that fails is logged and the delete still succeeds — and a second call
     # is a 404, not a second delete.
     delete_git_repos_by_name(req: repoRef)
-    # Removes one outbound mirror target; later pushes stop being
-    # forwarded to it. Answers 204 with no body. Nothing is done to the downstream
-    # remote itself — only this repo's intent to push there is dropped.
-    delete_git_repos_by_name_mirrors_by_id(req: childRef)
     # Removes one Slack subscription from a repo; the notifier stops
     # posting that repo's events to that channel. Answers 204 with no body. An id
     # that is not this repo's subscription is not found.
     delete_git_repos_by_name_subscriptions_by_id(req: childRef)
+    # Removes one outbound mirror target; later pushes stop being
+    # forwarded to it. Answers 204 with no body. Nothing is done to the downstream
+    # remote itself — only this repo's intent to push there is dropped.
+    delete_git_repos_by_name_targets_by_id(req: childRef)
     # Returns the SSH public keys registered to the caller's org — the keys
     # that authenticate `git clone git@<host>:<org>/<repo>.git`. Keys are org-scoped
     # on read even though the fingerprint index is global, so one org never sees
@@ -282,9 +282,6 @@ interface git {
     # between "this file is empty" and "this file was not read" — silently omitting
     # it is how a pruning reconcile deletes what the missing file declared.
     get_git_repos_by_name_files(req: globRef) returns (rep: filesJSON)
-    # Returns a repo's outbound mirror targets — the downstream remotes
-    # the mirror reactor pushes to whenever a push lands here.
-    get_git_repos_by_name_mirrors(req: repoRef) returns (rep: mirrorList)
     # Returns a repo's pull requests, newest number first — what is
     # waiting to be reviewed, and what has already landed. Narrow it with
     # ?state=open or ?state=merged; omit state for every proposal.
@@ -302,6 +299,9 @@ interface git {
     # Returns a repo's Slack subscriptions — which channels the
     # lifecycle notifier posts this repo's push and deploy events to.
     get_git_repos_by_name_subscriptions(req: repoRef) returns (rep: subscriptionList)
+    # Returns a repo's outbound mirror targets — the downstream remotes
+    # the mirror reactor pushes to whenever a push lands here.
+    get_git_repos_by_name_targets(req: repoRef) returns (rep: mirrorList)
     # Lists the immediate children of one directory at one revision,
     # directories before files. It does not recurse — walk down a level at a time.
     get_git_repos_by_name_tree(req: pathRef) returns (rep: treeJSON)
@@ -341,14 +341,6 @@ interface git {
     # semantics. Mirrored bytes are metered exactly like a push, and a push.landed
     # event is emitted for the default branch so the code index picks the repo up.
     post_git_repos_by_name_mirror(req: mirrorReq) returns (rep: repoView)
-    # Registers a downstream remote the repo's advanced refs are pushed to
-    # whenever a push lands here. Answers 201. The URL must be https to a host on the
-    # mirror allowlist (github.com / gitlab.com): the same set the mirror credential
-    # may be sent to, so a target can never capture the shared token or point the push
-    # at an internal service. Any embedded userinfo is stripped — credentials ride
-    # env-only at push time and never enter the stored URL. One mirror per host per
-    # repo; a second is a 409.
-    post_git_repos_by_name_mirrors(req: mirrorTargetReq) returns (rep: mirrorTargetView)
     # Proposes a branch for merging and returns it with its number. Answers
     # 201. Both branches must already exist — a proposal naming a branch nobody
     # pushed is a typo, not a plan — and base defaults to the repo's default branch.
@@ -380,6 +372,14 @@ interface git {
     # on one repo is a 409; a repo outside the caller's scope is a 404, exactly as
     # reading it is.
     post_git_repos_by_name_subscriptions(req: subscribeReq) returns (rep: subscriptionView)
+    # Registers a downstream remote the repo's advanced refs are pushed to
+    # whenever a push lands here. Answers 201. The URL must be https to a host on the
+    # mirror allowlist (github.com / gitlab.com): the same set the mirror credential
+    # may be sent to, so a target can never capture the shared token or point the push
+    # at an internal service. Any embedded userinfo is stripped — credentials ride
+    # env-only at push time and never enter the stored URL. One mirror per host per
+    # repo; a second is a 409.
+    post_git_repos_by_name_targets(req: mirrorTargetReq) returns (rep: mirrorTargetView)
 }
 
 # ---------------------------------------------------------------------
