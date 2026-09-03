@@ -175,6 +175,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	exposeSubs()
 	exposeStoreCosts()
 	exposeTxns()
+	exposeCatalogRefresh()
 	exposeSpend()
 	exposeScopeRules()
 	exposeInvoices()

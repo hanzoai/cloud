@@ -72,6 +72,7 @@ var Ops = []string{
 	plane.BillingTransaction,
 	plane.BillingTransactions,
 	plane.BillingWire,
+	plane.CatalogRefresh,
 	plane.FinanceAuthorize,
 	plane.FinanceBalance,
 	plane.FinanceCosts,
@@ -378,6 +379,13 @@ func BillingTransactions(ctx context.Context, in *plane.TransactionsIn) (*plane.
 // Calls plane.BillingWire on commerce over the peer plane.
 func BillingWire(ctx context.Context, in *plane.WireIn) (*plane.WireInstructions, error) {
 	return plane.Ask[plane.WireIn, plane.WireInstructions](ctx, App, plane.BillingWire, in)
+}
+
+// CatalogRefresh refresh the model catalog by reading the upstream provider.
+//
+// Calls plane.CatalogRefresh on commerce over the peer plane.
+func CatalogRefresh(ctx context.Context) (*plane.Refreshed, error) {
+	return plane.Ask[struct{}, plane.Refreshed](ctx, App, plane.CatalogRefresh, &struct{}{})
 }
 
 // FinanceAuthorize authorize one prepaid spend.

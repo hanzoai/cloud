@@ -18,7 +18,9 @@
 //	    apiVersion: batch/v1
 //	    kind: Job
 //	    ...
-//	  poke.json: |                  # OR: an HTTP poke
+//	  poke.json: |                  # OR: a plane poke — an op this binary serves,
+//	    {"app":"commerce","op":"billing_recharge"}    # asked by name as the platform
+//	  poke.json: |                  # OR: an HTTP poke, for endpoints outside it
 //	    {"url":"http://pricing.hanzo.svc:8080/v1/sync",
 //	     "method":"POST","bearerEnv":"PRICING_API_KEY"}
 //
@@ -35,9 +37,9 @@
 package cron
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"time"
 
 	"github.com/hanzoai/cloud"
