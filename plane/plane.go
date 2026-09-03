@@ -584,6 +584,11 @@ const (
 	FlagsHold = "flags_hold"
 	// FlagsValue resolves one flag's value for the caller's org.
 	FlagsValue = "flags_value"
+	// FlagsBoard is the operator switchboard: every declared flag with the value
+	// in force.
+	FlagsBoard = "flags_board"
+	// FlagsSet writes one platform switch.
+	FlagsSet = "flags_set"
 
 	// EntitlementHolds answers whether the caller's org has turned on one product.
 	// A framework module asks it on every document op (apps/framework/elective.go).
@@ -1069,6 +1074,74 @@ type Send struct {
 // caller's org, which is why there is no field for one — see [FlagsHold].
 type FlagIn struct {
 	Key string `json:"key"` // the flag's key; for a capability's stage it is the capability's name
+}
+
+// Unit is the empty value, for an op that takes nothing or answers nothing.
+//
+// It is an ALIAS of struct{}, and so is cloud.Unit — the same type under two
+// names rather than two types. The name exists here because this package
+// deliberately imports no cloud (the root imports plane clients, so the edge
+// only runs one way), and an op declared with cloud.Unit would close that loop.
+type Unit = struct{}
+
+// FlagSwitch is one row of the operator switchboard.
+type FlagSwitch struct {
+	// Key is the flag's key.
+	Key string `json:"key"`
+	// Category groups it on the board.
+	Category string `json:"category"`
+	// Label is the switch's name as an operator reads it.
+	Label string `json:"label"`
+	// Description says what turning it does.
+	Description string `json:"description"`
+	// Type is "bool", "int" or "string". The field is spelled as the admin board
+	// already spells it on the wire, because this type replaces flags.SwitchView
+	// in that response and a rename here would move a live API.
+	Type string `json:"type"`
+	// Value is the value in force.
+	Value string `json:"value"`
+	// Source is where that value came from: "flags", "env" or "default".
+	Source string `json:"source"`
+	// Env names the environment variable supplying a fallback, when one does.
+	Env string `json:"env,omitempty"`
+	// ReadOnly marks a switch the board shows but cannot write. NOT omitempty: the
+	// board it replaces always wrote the field, and dropping a false would change
+	// the shape a rendered switch has.
+	ReadOnly bool `json:"readOnly"`
+}
+
+// FlagBoard is the whole switchboard for the caller's own org.
+//
+// It carries no org and could not: the tenant is the validated caller, read from
+// the peer context, and a board that took one as an argument would be a board of
+// any tenant's switches for whoever asked.
+type FlagBoard struct {
+	// Engine names the evaluator that answered.
+	Engine string `json:"engine"`
+	// Configured is whether the definition stores opened. False means every value
+	// below is a default or an env fallback and a write will be refused.
+	Configured bool `json:"configured"`
+	// ManageURL is where the definitions behind these switches are read and written.
+	ManageURL string `json:"manageUrl"`
+	// AuditURL is where the change log for those writes lives.
+	AuditURL string `json:"auditUrl"`
+	// Switches is every declared switch with the value in force.
+	Switches []FlagSwitch `json:"switches"`
+}
+
+// FlagSetIn writes one platform switch.
+//
+// The ACTOR travels and the org does not, and the difference is the point: the
+// tenant is who the caller IS, which the plane already carries and no argument may
+// restate, while the actor is which human the surface authenticated — a fact the
+// store audits and only the caller knows.
+type FlagSetIn struct {
+	// Key is the flag to write.
+	Key string `json:"key"`
+	// Definition is the flag-definition document, kept byte-for-byte.
+	Definition []byte `json:"definition"`
+	// Actor is the human the write is recorded against.
+	Actor string `json:"actor"`
 }
 
 // FlagValueIn asks what an operator has set one flag to.
