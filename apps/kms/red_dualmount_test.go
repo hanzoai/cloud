@@ -26,6 +26,7 @@ import (
 
 func newDualApp(t *testing.T, mk string) *zip.App {
 	t.Helper()
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	cfg := &cloud.Config{
 		Brand: "hanzo", Domain: "api.hanzo.ai", IAMIssuer: "https://hanzo.id",
 		DataDir:         t.TempDir(),

@@ -188,7 +188,7 @@ build: cloud ## FAST PATH (default): build the light host into ./bin/cloud. Then
 # named cloud — it IS the one real binary, and its ENTRYPOINT the image ships.
 cloud: ## Build the light host into ./bin/cloud (links zip + the manifest, none of the apps).
 	@mkdir -p bin
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS) $(STAMP)" -o bin/$@ ./cmd/$@
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -tags "$(TAGS)" -ldflags="$(LDFLAGS) $(STAMP)" -o bin/$@ ./cmd/$@
 	@echo ">> bin/cloud — $$(CGO_ENABLED=$(CGO_ENABLED) $(GO) list -deps ./cmd/cloud | wc -l) packages, $$(du -h bin/cloud | cut -f1)"
 
 # THE RELEASE LAYOUT: the light host plus one dedicated binary per app, all in
@@ -214,7 +214,7 @@ apps: $(APP_BINS) ## Build every app binary into ./bin. Parallelise: make -j app
 $(APP_BINS): bin/%:
 	@test -d plugin/$* || { echo "no plugin/$* — run 'make generate', or check the name against 'make plugin' with no APP"; exit 1; }
 	@mkdir -p bin
-	GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS) $(STAMP)" -o $@ ./plugin/$*
+	GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -tags "$(TAGS)" -ldflags="$(LDFLAGS) $(STAMP)" -o $@ ./plugin/$*
 
 plugin: ## Build ONE app into ./bin: make plugin APP=wallets.
 	@test -n "$(APP)" || { echo "usage: make plugin APP=<name>"; echo "apps: $(APPS)"; exit 1; }
@@ -305,12 +305,28 @@ DEV_KMS_KEY := AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 DEV_CSRF_KEY := ZGV2LWNzcmYta2V5LWZvci10ZXN0cy1vbmx5LTAwMDA=
 TEST_ENV = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)}" CONSOLE_CSRF_KEY="$${CONSOLE_CSRF_KEY:-$(DEV_CSRF_KEY)}"
 
-# The release image builds with -tags "libsqlite3 sqlite_fts5" (see Dockerfile).
-# libsqlite3 needs cgo and the C library, but sqlite_fts5 does not — and without it
-# any store whose migration declares an FTS5 table fails to open, so a subsystem
-# built on full-text search (apps/code) cannot be tested at all. Carry the tag
-# the shipped build carries, so the suite exercises the same schema surface.
-TEST_TAGS := sqlite_fts5
+# TAGS is what a SHIPPED binary is built with, and `make ship` carries it, so a
+# binary built here is the binary that runs.
+#
+# It had to be passed by hand, and the drift was not visible in anything but a
+# crash. libsqlite3 selects the C SQLCipher codec; without it the same source links
+# the pure-Go backend, which refuses to adopt a hot -wal sidecar the C codec left
+# rather than drop committed frames. So an untagged binary dropped in beside tagged
+# data starts, finds a sidecar it will not open, and dies before it serves — which
+# the host reports as "mount /v1: no instance running", naming neither the tag nor
+# the store. Two identical-looking builds, one that runs.
+#
+# libsqlite3 REQUIRES cgo, so it rides with cgo rather than beside it: `dist`
+# cross-compiles with CGO_ENABLED=0 for every GOOS/GOARCH and has no C toolchain
+# per target, and a tag that cannot apply is worse than absent — it builds a binary
+# that claims the codec and links the other one.
+TAGS := $(if $(filter 1,$(CGO_ENABLED)),libsqlite3 sqlite_fts5 sqlite_math_functions,sqlite_fts5 sqlite_math_functions)
+
+# TEST_TAGS is that set minus libsqlite3, because the suite must run without a C
+# toolchain: sqlite_fts5 needs no cgo, and without it any store whose migration
+# declares an FTS5 table fails to open, so a subsystem built on full-text search
+# (apps/code) cannot be tested at all.
+TEST_TAGS := sqlite_fts5 sqlite_math_functions
 
 # Go drops comments at compile time, so cmd/zipdoc is the ONLY path from a typed
 # handler's prose to /v1/openapi.json — the document the SDK repos and the CLI

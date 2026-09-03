@@ -93,6 +93,7 @@ func mintMachineToken(t *testing.T, key *rsa.PrivateKey, owner, aud string, exp 
 
 func e2eCfg(t *testing.T, jwksURL string) *cloud.Config {
 	t.Helper()
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	return &cloud.Config{
 		Brand:           "hanzo",
 		Domain:          "api.hanzo.ai",

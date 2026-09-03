@@ -71,6 +71,7 @@ func newApp(t *testing.T, cfg *cloud.Config) (*zip.App, cloud.Deps) {
 
 func baseCfg(t *testing.T, masterKey string) *cloud.Config {
 	t.Helper()
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	return &cloud.Config{
 		Brand:           "hanzo",
 		Domain:          "api.hanzo.ai",
@@ -157,6 +158,7 @@ func TestKMSClientRoundtrip(t *testing.T) {
 // (never store secrets in plaintext).
 func TestSecretNotStoredInPlaintext(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("CLOUD_DATA_DIR", dir)
 	cfg := &cloud.Config{
 		Brand: "hanzo", Domain: "api.hanzo.ai", IAMIssuer: "https://hanzo.id",
 		DataDir: dir, Enable: []string{"kms"}, KMSMasterKeyRef: masterKeyB64(t),
