@@ -187,9 +187,14 @@ var paidVendor = map[string]string{
 	"TEL_CARRIER_KEY":      "telephony carrier — numbers, and per-message and per-minute charges",
 
 	// Capacity we run ourselves, bought by the node-hour rather than by invoice.
-	"CRAWL_API_TOKEN":      "the render pod — a headless browser held for up to 45s per page",
-	"LIVEKIT_API_KEY":      "the media server — a live audio/video pipe per admitted seat",
-	"CODE_EXEC_API_KEY":    "the interpreter — a sandbox pod per program run",
+	"CRAWL_API_TOKEN": "the render pod — a headless browser held for up to 45s per page",
+	"LIVEKIT_API_KEY": "the media server — a live audio/video pipe per admitted seat",
+	// NOT the interpreter, and it is worth saying why the row went. A sandbox pod
+	// per program run is still real money; apps/exec simply has no credential left
+	// to key on — it authenticates by IAM principal now and reads no env at all —
+	// and this walk finds cost by finding credentials. What keeps exec honest is
+	// its meter (cloud.NewMeter(deps, "exec")), which prices the run directly
+	// rather than inferring the price from a secret lying nearby.
 	"PIECES_RUNNER_SECRET": "the auto engine's runner — a JS connector piece executed on its pods",
 	"ZROK_ADMIN_TOKEN":     "the share fabric — a public ingress tunnel held open per share",
 

@@ -41,11 +41,11 @@
 package flow
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"net/url"
@@ -73,7 +73,7 @@ func upstream() string {
 
 // key is the platform's service credential for the flow deployment, presented
 // as x-api-key on every upstream call. KMS-synced into the pod env as
-// FLOW_API_KEY (the same custody pattern as exec's CODE_EXEC_API_KEY). Empty is
+// FLOW_API_KEY. Empty is
 // a valid dev posture: an AUTO_LOGIN flow accepts keyless calls, and a locked
 // one answers 401/403 which this subsystem reports as 503 (misconfiguration,
 // not caller auth).
