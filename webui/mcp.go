@@ -39,7 +39,7 @@ import (
 // to expose, so a plugin with no typed ops of its own — kms, whose four secret
 // ops are on the internal plane by design — reached here AT ITS OWN MCP ADDRESS
 // and was sent to an address only a host serves. The signpost is the host's, and
-// it lives with the host's MCP server now (fleet.Use).
+// it lives with the host's MCP server now (surface.Use).
 func (h *consoleHandler) serveMCP(w http.ResponseWriter, r *http.Request, upath string) bool {
 	switch upath {
 	case manifest.FrameworkMCPPath:

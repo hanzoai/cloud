@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package fleet
+package surface
 
 import (
 	"strings"
@@ -41,17 +41,17 @@ import (
 //
 // After the gate, in the projection, and never before either.
 //
-// [refuse] reads a tool NAME to decide whether the fleet will project it at all
-// (fleet/surface.go), and it is the only gate there is. If a rename ran first, an
+// [refuse] reads a tool NAME to decide whether the surface will project it at all
+// (surface/surface.go), and it is the only gate there is. If a rename ran first, an
 // operation whose route says `post_v1_iam_users` would be offered up as something
 // whose words no longer trip clause 2 — a credential-minting operation projected
 // because it was renamed politely. So [MCP.gather] refuses the CHILD's own name,
 // exactly as it always did, and [offer] runs over what survives. The refused set
 // is therefore identical by construction and not by luck: the gate's input never
-// changed. fleet/verbs_test.go asserts that over the fleet's whole corpus.
+// changed. surface/verbs_test.go asserts that over the surface's whole corpus.
 //
 // [rank] reads the same child name for the same reason — it matches route stems
-// (fleet/surface.go, productStems), so it must see a route.
+// (surface/surface.go, productStems), so it must see a route.
 //
 // # The presented name is a DECODING, exactly like the envelope
 //
@@ -128,12 +128,12 @@ type segment struct {
 // A parameter contributes NO word: `by_slug` says a row is addressed, not which
 // one, and the name of the addressing column is the caller's business at call
 // time and nobody's here. The version is dropped for the same reason — it names
-// nothing, and every operation in the fleet carries the same one.
+// nothing, and every operation in the surface carries the same one.
 //
 // zip renders a parameter as `by_<name>` after reducing the name to [a-z0-9.-],
 // so a parameter whose name contains an underscore (`{file_id}` → `by_file_id`)
 // spends one token on `by` and TWO on the name, and this reads the second as a
-// literal segment. Three of the fleet's 2,060 derived operations are shaped that
+// literal segment. Three of the surface's 2,060 derived operations are shaped that
 // way; they get a clumsier phrase, not a wrong one, and if the phrase they get
 // is ambiguous [offer] keeps their id instead. Guessing where a parameter's name
 // stops would trade a cosmetic defect for an inexact mapping.
@@ -211,7 +211,7 @@ func changes(method string) bool {
 }
 
 // isVersion reports whether a segment is an API version — `v1` and nothing else
-// in this fleet, but the shape rather than the value, because a `v2` would be
+// in this surface, but the shape rather than the value, because a `v2` would be
 // just as much scaffolding.
 func isVersion(w string) bool {
 	if len(w) < 2 || w[0] != 'v' {
@@ -265,8 +265,8 @@ func singular(w string) string {
 // already called it. Otherwise the operation keeps its id — both of them do,
 // when two collide — because a tools/call arrives carrying whatever was
 // published and an MCP server that guessed which of two operations was meant
-// would be dispatching on a coin toss. 7.3% of the fleet's operations keep their
-// ids, and they are overwhelmingly the fleet's own duplicates: `/tasks` and
+// would be dispatching on a coin toss. 7.3% of the surface's operations keep their
+// ids, and they are overwhelmingly the surface's own duplicates: `/tasks` and
 // `/v1/tasks` serving one handler at two addresses, `post_v1_agent` beside
 // `post_v1_agents` in a different subsystem.
 //
@@ -291,7 +291,7 @@ func offer(all []named) {
 }
 
 // summaryMax is how much of an operation's own documentation fits beside its
-// name. See [summary]; the fleet's median first sentence is 63 characters and
+// name. See [summary]; the surface's median first sentence is 63 characters and
 // its 90th percentile is 157, so this keeps nearly all of them whole and clips
 // the essays.
 const summaryMax = 120
@@ -301,7 +301,7 @@ const summaryMax = 120
 //
 // The prose is already there — it is the doc comment zip's generator lifts into
 // the descriptor, the same bytes [MCP.describe] hands back whole — so this is a
-// projection of what the fleet wrote about itself, never a second description
+// projection of what the surface wrote about itself, never a second description
 // that could disagree with the first.
 func summary(doc string) string {
 	para, _, _ := strings.Cut(strings.TrimSpace(doc), "\n\n")

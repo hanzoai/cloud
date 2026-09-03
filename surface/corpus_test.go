@@ -1,18 +1,18 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package fleet
+package surface
 
 import (
 	"sort"
 	"testing"
 )
 
-// THE FLEET'S OWN OPERATIONS, for any test that needs to be about this fleet.
+// THE FLEET'S OWN OPERATIONS, for any test that needs to be about this surface.
 //
 // The corpus is plugin/*/openapi.json — each subsystem's own spec, written by
 // its own binary, which is where its operation ids and its documentation come
 // from in the first place. Names someone invented for a test would measure a
-// fleet that does not exist, and a naming rule tuned against invented names is a
+// surface that does not exist, and a naming rule tuned against invented names is a
 // rule tuned against nothing.
 //
 // It is exported so the internal tests (the gate, the naming) and the wire tests
@@ -26,7 +26,7 @@ import (
 // Doc is the OpenAPI `description`, not the `summary`, because that is what a
 // child's MCP descriptor actually carries — zip's mcpToolOf prefers the doc
 // comment the generator lifted and falls back to the summary (zip@v1.27.0
-// mcp.go). A fixture built on summaries would measure prose the fleet does not
+// mcp.go). A fixture built on summaries would measure prose the surface does not
 // send.
 type CorpusOp struct {
 	App string
@@ -34,7 +34,7 @@ type CorpusOp struct {
 	Doc string
 }
 
-// Corpus reads every operation this fleet declares, ordered by subsystem and
+// Corpus reads every operation this surface declares, ordered by subsystem and
 // then by id — the order gather would see before it sorts by [rank], so a test
 // that prints it prints something stable.
 func Corpus(t *testing.T) []CorpusOp {
@@ -46,7 +46,7 @@ func Corpus(t *testing.T) []CorpusOp {
 		}
 	}
 	if len(out) == 0 {
-		t.Fatal("the catalog is empty: run `go run ./plugin/gen-fleet-catalog .`")
+		t.Fatal("the catalog is empty: run `go run ./plugin/gen-surface-catalog .`")
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].App != out[j].App {

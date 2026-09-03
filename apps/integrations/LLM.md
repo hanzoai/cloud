@@ -76,7 +76,7 @@ pairing and allowlist gates never ran on real traffic. It now crosses as
 
 **Still owed:** the turn itself. `bridge.go` should not exist — channels already
 carries the ingress, the policy gate, the inbox and all four egress endpoints
-(`slackDoor`/`teamsDoor`/`discordDoor`/`telegramDoor`), and its own code names
+(`slackEndpoint`/`teamsEndpoint`/`discordEndpoint`/`telegramEndpoint`), and its own code names
 the gap: *"Agent delivery is NOT built this pass."* Moving it means:
 
 - `apps/channels/turn.go` takes the bounded per-org pool, `runBridgeTurn`,

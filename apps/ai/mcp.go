@@ -40,7 +40,7 @@ package ai
 // under the subtree the manifest grants exactly one subsystem, so two defaults
 // cannot meet; an op that DOES name itself escapes that, so the name is checked
 // instead — the fleet MCP server refuses to serve one name from two apps and logs
-// both (fleet/mcp.go). A hand-written id in this package therefore carries its
+// both (surface/mcp.go). A hand-written id in this package therefore carries its
 // subsystem: aiMCPTools, never mcpTools.
 
 import (

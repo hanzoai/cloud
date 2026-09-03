@@ -1,6 +1,6 @@
-package fleet
+package surface
 
-// graphql.go answers a GraphQL request against the WHOLE fleet.
+// graphql.go answers a GraphQL request against the WHOLE surface.
 //
 // The schema it answers is openapi.GraphQL over this deployment's composed
 // document, and the dispatch is openapi.Fields over the SAME document at the same

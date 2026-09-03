@@ -9,7 +9,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/surface"
 	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/types"
 )
@@ -131,7 +131,7 @@ func runOnBehalfModel(s *cloud.Service[state], ctx context.Context, org, userSub
 // A person who wants a different tier pins one in the App Home menu, and that pin
 // still wins below.
 //
-// Tools is the fleet's whole tool surface (ToolsAll), not empty: the tool-calling
+// Tools is the surface's whole tool surface (ToolsAll), not empty: the tool-calling
 // loop decides what may be OFFERED, but an agent that declares nothing is offered
 // nothing, which is how the default assistant came to report it could not reach a
 // cloud that was one socket away.
@@ -148,7 +148,7 @@ func builtinAgent(org, ref, model string) (Agent, bool) {
 		Instructions: builtinAgentInstructions,
 		Description:  "The default Hanzo assistant that answers in chat.",
 		Status:       "ready", ExecutionMode: ModeOneShot,
-		// The default assistant is offered the fleet's whole tool surface. Its
+		// The default assistant is offered the surface's whole tool surface. Its
 		// instructions tell it the tools exist and how to call them; without this it
 		// was handed an empty offer and correctly reported it could not reach the
 		// cloud, while the MCP server served 88 tools one socket away.
@@ -203,7 +203,7 @@ const builtinAgentInstructions = "" +
 	"Your tools are grouped one per subsystem, and a tool IS its subsystem's name. " +
 	"Each takes an `op` (choose from its enum) and an `input` object. The enum lists " +
 	"operation names only — to see what an operation accepts or returns, call `" +
-	fleet.Describe + "` with that op name first, then call it. " +
+	surface.Describe + "` with that op name first, then call it. " +
 	// Scoped to the questions it is actually true of. Unscoped — "you are answering
 	// about THIS organization's live cloud" — it read as a statement of what the
 	// whole conversation is about, which is the other half of why every reply came

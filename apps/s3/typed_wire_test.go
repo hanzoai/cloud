@@ -16,7 +16,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/s3"
-	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/surface"
 	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
@@ -395,8 +395,8 @@ func TestTheGraphCanAimTheDelete(t *testing.T) {
 	from.Header.Set("X-Org-Id", "acme")
 	from.Header.Set("X-User-Id", "u-acme")
 
-	graph := fleet.NewGraph(doc, func(string) (string, string, error) { return sock, "/", nil })
-	answer := graph.Run(fleet.Request{Query: `{ ` + graphDelete + `(bucket: "photos", wildcard1: "` + deep + `") }`}, from)
+	graph := surface.NewGraph(doc, func(string) (string, string, error) { return sock, "/", nil })
+	answer := graph.Run(surface.Request{Query: `{ ` + graphDelete + `(bucket: "photos", wildcard1: "` + deep + `") }`}, from)
 	if len(answer.Errors) > 0 {
 		t.Fatalf("the graph could not run the delete: %+v", answer.Errors)
 	}

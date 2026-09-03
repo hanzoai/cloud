@@ -118,13 +118,13 @@ var unpricedRoot = map[string]bool{
 	// The generator that scaffolds the other roots. It writes Price declarations;
 	// it does not make one.
 	"gen-app-cmds": true,
-	// Writes fleet/catalog.json from the apps' own published subsets, so the
+	// Writes surface/catalog.json from the apps' own published subsets, so the
 	// agent MCP server can answer tools/list without starting a process per subsystem.
 	// It READS what every surface serves and emits a file; it registers no route
 	// and is never mounted, so there is nothing here for the edge to price.
-	"gen-fleet-catalog": true,
+	"gen-surface-catalog": true,
 	// Writes apps/skills/catalog from the apps' own published subsets — the same
-	// input gen-fleet-catalog reads — so the agent-skills surface is a projection
+	// input gen-surface-catalog reads — so the agent-skills surface is a projection
 	// of the routes this fleet serves rather than of another repo's authored
 	// intent. Same shape as its sibling above: it READS specs and emits files,
 	// registers no route and is never mounted, so the edge has nothing to price.

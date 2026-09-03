@@ -351,7 +351,7 @@ func (c *Client) Clusters(ctx context.Context) ([]Cluster, error) {
 
 // Kubeconfig fetches a cluster's admin kubeconfig. DO returns a token-based config
 // against the cluster's public https endpoint (never an exec plugin), which the
-// caller must still funnel through fleet.SafeRESTConfig before dialing.
+// caller must still funnel through surface.SafeRESTConfig before dialing.
 func (c *Client) Kubeconfig(ctx context.Context, clusterID string) ([]byte, error) {
 	if strings.TrimSpace(clusterID) == "" {
 		return nil, fmt.Errorf("cluster id required")

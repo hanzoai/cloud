@@ -111,7 +111,7 @@ func TestTheIndexNamesTheAgentEndpoint(t *testing.T) {
 		}
 		// The sentence is the operation's own, lifted from the published
 		// contract — so an empty one means the contract stopped describing it
-		// and the generator wrote a endpoint nobody can use.
+		// and the generator wrote an endpoint nobody can use.
 		if strings.TrimSpace(doc.MCP.Description) == "" {
 			t.Errorf("%s names the endpoint and says nothing about it", b.Name())
 		}

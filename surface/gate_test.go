@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package fleet_test
+package surface_test
 
 // The gate, over the wire, with a child that really does serve the dangerous op.
 //
@@ -22,12 +22,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/surface"
 	"github.com/zap-proto/zip"
 )
 
 // startNamed brings up a child serving exactly the ops named, one route each.
-// The names are real fleet operation ids, so the child is a faithful stand-in
+// The names are real surface operation ids, so the child is a faithful stand-in
 // for the subsystem that serves them.
 func startNamed(t *testing.T, name string, ops ...string) *child {
 	t.Helper()
@@ -90,13 +90,13 @@ func TestTheEndpointDoesNotProjectACredentialOpItsChildServes(t *testing.T) {
 	// in that spelling — and the dangerous half is asked in both, because a refused
 	// operation must not reappear under a friendlier name.
 	for _, n := range dangerous {
-		if got[n] || got[fleet.Phrase(n)] {
+		if got[n] || got[surface.Phrase(n)] {
 			t.Errorf("the MCP server PROJECTED %q — an agent can mint or read a credential with it", n)
 		}
 	}
 	for _, n := range useful {
-		if !got[fleet.Phrase(n)] {
-			t.Errorf("the MCP server dropped %q (offered as %q) — the gate ate a product tool", n, fleet.Phrase(n))
+		if !got[surface.Phrase(n)] {
+			t.Errorf("the MCP server dropped %q (offered as %q) — the gate ate a product tool", n, surface.Phrase(n))
 		}
 	}
 }
@@ -158,7 +158,7 @@ func TestTheProductSurfaceLeadsTheList(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("the MCP server listed nothing")
 	}
-	if got[0] != fleet.Phrase("post_chat_completions") {
+	if got[0] != surface.Phrase("post_chat_completions") {
 		t.Errorf("the first tool is %q; chat leads the product surface", got[0])
 	}
 	// Ranking reads the ROUTE and the enum carries the phrase, so a lookup names
@@ -166,11 +166,11 @@ func TestTheProductSurfaceLeadsTheList(t *testing.T) {
 	// server published it. That the two agree for every entry is the point.
 	at := func(id string) int {
 		for i, n := range got {
-			if n == fleet.Phrase(id) {
+			if n == surface.Phrase(id) {
 				return i
 			}
 		}
-		t.Fatalf("%q (offered as %q) is missing from %v", id, fleet.Phrase(id), got)
+		t.Fatalf("%q (offered as %q) is missing from %v", id, surface.Phrase(id), got)
 		return -1
 	}
 	for _, product := range []string{"post_chat_completions", "get_models", "post_code_ask"} {
@@ -203,15 +203,15 @@ func TestTheEndpointSAYSHowMuchItWithheld(t *testing.T) {
 	if !ok {
 		t.Fatalf("tools/list withheld %d tools and said nothing: %v", len(dangerous), res)
 	}
-	row, ok := meta[fleet.Refused].(map[string]any)
+	row, ok := meta[surface.Refused].(map[string]any)
 	if !ok {
-		t.Fatalf("_meta has no %q: %v", fleet.Refused, meta)
+		t.Fatalf("_meta has no %q: %v", surface.Refused, meta)
 	}
 	if n, _ := row["count"].(float64); int(n) != len(dangerous) {
-		t.Errorf("_meta[%q].count = %v, want %d", fleet.Refused, row["count"], len(dangerous))
+		t.Errorf("_meta[%q].count = %v, want %d", surface.Refused, row["count"], len(dangerous))
 	}
-	if rule, _ := row["rule"].(string); rule != fleet.TheRule {
-		t.Errorf("_meta[%q].rule = %q; an operator who wonders where a tool went must be able to read why", fleet.Refused, rule)
+	if rule, _ := row["rule"].(string); rule != surface.TheRule {
+		t.Errorf("_meta[%q].rule = %q; an operator who wonders where a tool went must be able to read why", surface.Refused, rule)
 	}
 }
 
@@ -228,7 +228,7 @@ func TestAQuietFleetReportsNoMetaAtAll(t *testing.T) {
 
 // TestTheGateIsNotAHeaderTrick: the child answers tools/list for the CALLER, so
 // a client could try to influence what it is offered. Nothing about the MCP
-// server's refusal reads the request, and this pins that: the same fleet, asked
+// server's refusal reads the request, and this pins that: the same surface, asked
 // with a bearer token, an admin-looking header, and nothing at all, projects the
 // same tools. (It also documents the finding this change did NOT fix — see the note
 // on transport auth in the report: a bogus bearer is accepted today because

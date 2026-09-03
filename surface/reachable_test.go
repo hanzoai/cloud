@@ -1,11 +1,11 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package fleet_test
+package surface_test
 
 // THE ASSISTANT COULD NOT CHECK THE WEATHER, and it was right not to try.
 //
 // Measured on the deployed MCP server: tools/list carried 88 grouped tools and NONE of
-// them was websearch, crawl, index or exec. Not because the fleet cannot search
+// them was websearch, crawl, index or exec. Not because the surface cannot search
 // the web — apps/websearch is a working keyless meta-search and apps/crawl is a
 // working fetch-and-extract, both in-process, both serving over HTTP the whole
 // time — but because ONLY TYPED OPS PROJECT. A raw handler appends nothing to
@@ -18,14 +18,14 @@ package fleet_test
 // So this test asks the question the way a client asks it, and it asks it of the
 // REAL thing at every hop: each subsystem composed the way cloud.Serve composes a
 // plugin child (cloud.App → its own Mount → the console last), listening on its
-// own unix socket, with the fleet's composed MCP server over the top. Nothing is
+// own unix socket, with the surface's composed MCP server over the top. Nothing is
 // stubbed, and in particular [refuse] is not stubbed — a name that trips the
 // disclosure or authority rules is dropped in [MCP.gather] before the routing
 // table is written, so an operation that passes here is one an agent can actually
 // reach.
 //
 // It asserts the OPERATIONS, not the tool count. The MCP server projects one tool per
-// subsystem and carries the operations in that tool's `op` enum (fleet/grouped.go),
+// subsystem and carries the operations in that tool's `op` enum (surface/grouped.go),
 // so a `websearch` tool existing is not the claim — `search_web` being
 // inside it is.
 
@@ -40,7 +40,7 @@ import (
 	"github.com/hanzoai/cloud/apps/crawl"
 	"github.com/hanzoai/cloud/apps/exec"
 	"github.com/hanzoai/cloud/apps/websearch"
-	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/surface"
 )
 
 // reach is one capability the agent needs, and the operation that is its entry point.
@@ -53,7 +53,7 @@ type reach struct {
 }
 
 // TestTheAgentCanReachTheWeb drives all three over one MCP server at once, because that
-// is the composition a client meets: a single tools/list over the whole fleet.
+// is the composition a client meets: a single tools/list over the whole surface.
 func TestTheAgentCanReachTheWeb(t *testing.T) {
 	want := []reach{
 		{"websearch", websearch.Use, "search_web",
@@ -88,8 +88,8 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 		// The enum carries the name the MCP server PUBLISHES for an operation, so that
 		// is what a model reads and that is what is asked for here. A DECLARED id
 		// (read_page, search_web, research_web) is published verbatim; only a
-		// route-derived one is rephrased. fleet/verbs.go is why.
-		as := fleet.Phrase(w.op)
+		// route-derived one is rephrased. surface/verbs.go is why.
+		as := surface.Phrase(w.op)
 		if !slices.Contains(offering, as) {
 			t.Errorf("%s (offered as %s) does NOT project — so the assistant still cannot %s.\n"+
 				"  the MCP server offers: %s", w.op, as, w.why, strings.Join(offering, " "))
@@ -100,7 +100,7 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 		// mapping a published name onto a REAL child's own descriptor — not a
 		// string this test computed twice.
 		desc := rpc(t, h, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"`+
-			fleet.Describe+`","arguments":{"op":"`+as+`"}}}`)
+			surface.Describe+`","arguments":{"op":"`+as+`"}}}`)
 		content, _ := desc["content"].([]any)
 		if len(content) == 0 {
 			t.Errorf("%s describes to nothing: %v", as, desc)
@@ -124,5 +124,5 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 // here. It has one home already: `survivors` and `refusals` in
 // surface_internal_test.go are where a name is checked against the rule, and the
 // three names above are in the survivors table. A second gate assertion would be
-// a second place the policy is stated, which is the thing fleet/surface.go's own
+// a second place the policy is stated, which is the thing surface/surface.go's own
 // note spends a page avoiding.

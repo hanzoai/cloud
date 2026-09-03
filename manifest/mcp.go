@@ -65,7 +65,7 @@ const (
 	// moving it would break the host's forward.
 	//
 	// On the HOST the server is not here, so the host CLAIMS this path anyway and
-	// signposts it — registered by fleet.Use, the one call that also registers
+	// signposts it — registered by surface.Use, the one call that also registers
 	// the target, so a hop can never name an address the process does not serve.
 	//
 	// It used to be signposted from the console's terminal handler instead, on the
@@ -83,7 +83,7 @@ const (
 	// ResourceMetadataPath is where the host publishes RFC 9728 metadata for the
 	// MCP server: which authorization server mints the bearer a tools/call needs. A
 	// client that reaches the endpoint with no credential is sent here by the
-	// WWW-Authenticate header the server answers with (fleet/mcp.go), and the host
+	// WWW-Authenticate header the server answers with (surface/mcp.go), and the host
 	// serves it (cmd/cloud/oauth.go) — one name, two readers, so the challenge
 	// can never point at an address the host does not answer.
 	ResourceMetadataPath = mcp.Metadata

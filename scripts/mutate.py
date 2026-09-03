@@ -85,12 +85,12 @@ PML = "./apps/ml/"
 MUTANTS = [
     ("handle: drop the presented-but-unresolvable 403 branch", [
         (E, '\tif presented(c) {\n\t\treturn zip.ErrForbidden("valid bearer or a resolvable ingest key required")\n\t}\n', '')],
-     "TestEveryDoorFailsClosedOnUnresolvableCredential", PA),
+     "TestEveryEndpointFailsClosedOnUnresolvableCredential", PA),
 
     ("routes: register a POST outside the endpoints loop", [
         (A, '\tapp.Get("/v1/errors", cloud.Handle(s, errorsLens))',
             '\tapp.Post("/v1/rogue", cloud.Handle(s, errorsLens))\n\tapp.Get("/v1/errors", cloud.Handle(s, errorsLens))')],
-     "TestRoutedPostSetIsExactlyTheDoors", PA),
+     "TestRoutedPostSetIsExactlyTheEndpoints", PA),
 
     ("endpoints: silently drop a declared endpoint", [
         (E, '\t{path: "/v1/todo", decode: decodeIngest, source: sourceCapture},\n', '')],
@@ -109,12 +109,12 @@ MUTANTS = [
     ("routes: resurrect the retired /v1/ingest endpoint", [
         (A, '\tapp.Get("/v1/errors", cloud.Handle(s, errorsLens))',
             '\tapp.Post("/v1/ingest", cloud.Handle(s, endpoints[0].ingest))\n\tapp.Get("/v1/errors", cloud.Handle(s, errorsLens))')],
-     "TestRetiredDoorIsGoneFromBothSurfaces", PA),
+     "TestRetiredEndpointIsGoneFromBothSurfaces", PA),
 
     ("carve: hand sites fewer paths than are routed", [
         (A, '\tfor _, d := range endpoints {\n\t\tcarve[d.path] = d.anon\n\t}',
             '\tfor _, d := range endpoints[:1] {\n\t\tcarve[d.path] = d.anon\n\t}')],
-     "TestSiteHostCarvesExactlyTheDoors", PA),
+     "TestSiteHostCarvesExactlyTheEndpoints", PA),
 
     ("sites: widen the carve lookup to a prefix match", [
         (S, '\treturn h, ok && h != nil',
@@ -124,7 +124,7 @@ MUTANTS = [
     ("sites: the same prefix widening, seen from analytics", [
         (S, '\treturn h, ok && h != nil',
             '\tif ok && h != nil {\n\t\treturn h, true\n\t}\n\tfor p, ph := range analyticsHost {\n\t\tif ph != nil && strings.HasPrefix(c.Path(), p) {\n\t\t\treturn ph, true\n\t\t}\n\t}\n\treturn nil, false')],
-     "TestSiteHostCarvesExactlyTheDoors", PA),
+     "TestSiteHostCarvesExactlyTheEndpoints", PA),
 
     ("sites: drop the POST line from the carve", [
         (S, '\tif c.Method() != http.MethodPost {\n\t\treturn nil, false\n\t}\n', '')],
@@ -132,7 +132,7 @@ MUTANTS = [
 
     ("sites: dispatch a present-but-nil carve handler", [
         (S, '\treturn h, ok && h != nil', '\treturn h, ok')],
-     "TestMiddlewareNilHandlerIsNotADoor", PS),
+     "TestMiddlewareNilHandlerIsNotAnEndpoint", PS),
 
     ("sites: carve without requiring a resolved Site", [
         (S, '\t\t\tif h, ok := analyticsIngest(c); ok {\n\t\t\t\tif site, ok := s.resolveLivePinned(c.Context(), slug, firstParty); ok {\n\t\t\t\t\treturn h(site.Org, c)\n\t\t\t\t}\n\t\t\t}',
@@ -142,7 +142,7 @@ MUTANTS = [
     ("handle: give the anonymous lane a brand-host tenant at FULL capability", [
         (E, '\treturn publicIngest(c, dec, publicTenant, source)',
             '\tif org, ok := cloud.BrandForHostOK(string(c.Fiber().Request().Host())); ok {\n\t\tevs, err := dec(c.Body())\n\t\tif err != nil {\n\t\t\treturn zip.ErrBadRequest("malformed event payload")\n\t\t}\n\t\treturn ingestDecoded(c, org, source, evs, 0)\n\t}\n\treturn publicIngest(c, dec, publicTenant, source)')],
-     "TestEveryDoorProjectsTheAnonymousCaller", PA),
+     "TestEveryEndpointProjectsTheAnonymousCaller", PA),
 
     ("handle: give the credential-less lane a brand-host tenant", [
         (E, '\treturn publicIngest(c, dec, publicTenant, source)',
@@ -152,7 +152,7 @@ MUTANTS = [
     ("publicIngest: let the anonymous lane keep every kind", [
         (P, 'var publicKinds = map[string]bool{"pageview": true, "error": true}',
             'var publicKinds = map[string]bool{"pageview": true, "error": true, "event": true, "identify": true, "group": true}')],
-     "TestAnonIdentity_RefusedAtEveryDoor|TestEveryDoorProjectsTheAnonymousCaller", PA),
+     "TestAnonIdentity_RefusedAtEveryEndpoint|TestEveryEndpointProjectsTheAnonymousCaller", PA),
 
     ("endpoint.anon: file the site's beacon under the public tenant", [
         (E, '\treturn publicIngest(c, d.decode, org, d.source)',
@@ -181,13 +181,13 @@ MUTANTS = [
 
     ("write core: drop the $source stamp on the way to the row", [
         (C, '\t\te.Properties = withSource(e.Properties, source)', '')],
-     "TestEveryDoorStampsItsOwnSource", PA),
+     "TestEveryEndpointStampsItsOwnSource", PA),
 
     # ── the anon lane's own $source: a second handler, stamped independently ──
     ("endpoint.anon: stamp a CONSTANT source instead of the endpoint's own", [
         (E, '\treturn publicIngest(c, d.decode, org, d.source)',
             '\treturn publicIngest(c, d.decode, org, sourceEvent)')],
-     "TestEveryDoorStampsItsOwnSource", PA),
+     "TestEveryEndpointStampsItsOwnSource", PA),
 
     # ── the write path's clients: silent data loss behind a 200 receipt ─────────
     ("client: warehouseExec defaults to a no-op that discards every INSERT", [

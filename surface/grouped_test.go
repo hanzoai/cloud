@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package fleet_test
+package surface_test
 
 // The grouped surface, over the wire, at the scale that broke the flat one.
 //
@@ -12,13 +12,13 @@ package fleet_test
 //
 // ~244,000 tokens to enumerate what can be called, and Slack keeps 128 of them.
 // So [liveFlatBytes] below is a real number from a real server, and
-// TestTheWholeFleetFitsInAModelsHead puts the SAME fleet through the new MCP
+// TestTheWholeFleetFitsInAModelsHead puts the SAME surface through the new MCP
 // server and prints what it costs now.
 //
-// "The same fleet" is literal: the corpus is plugin/*/openapi.json — each
+// "The same surface" is literal: the corpus is plugin/*/openapi.json — each
 // subsystem's own spec, written by its own binary, which is where its operation
 // ids come from in the first place. Names someone invented for a test would
-// measure a fleet that does not exist.
+// measure a surface that does not exist.
 
 import (
 	"context"
@@ -30,7 +30,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/surface"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
@@ -48,17 +48,17 @@ const (
 const slackKeeps = 128
 
 // ---------------------------------------------------------------------------
-// the fleet's own operation corpus
+// the surface's own operation corpus
 // ---------------------------------------------------------------------------
 
-// corpus is every operation this fleet declares, by the subsystem that declares
-// it. The reading lives in fleet/corpus_test.go, because the naming tests are
+// corpus is every operation this surface declares, by the subsystem that declares
+// it. The reading lives in surface/corpus_test.go, because the naming tests are
 // inside the package and read the same one — a corpus with two loaders is the
 // second source this package exists to delete.
-func corpus(t *testing.T) map[string][]fleet.CorpusOp {
+func corpus(t *testing.T) map[string][]surface.CorpusOp {
 	t.Helper()
-	out := map[string][]fleet.CorpusOp{}
-	for _, op := range fleet.Corpus(t) {
+	out := map[string][]surface.CorpusOp{}
+	for _, op := range surface.Corpus(t) {
 		out[op.App] = append(out[op.App], op)
 	}
 	return out
@@ -67,11 +67,11 @@ func corpus(t *testing.T) map[string][]fleet.CorpusOp {
 // serving brings up one child per app, each declaring the operations given, and
 // returns an MCP server over all of them.
 //
-// The routes are this test's, the ids and the DOCUMENTATION are the fleet's: zip
+// The routes are this test's, the ids and the DOCUMENTATION are the surface's: zip
 // derives a tool name from the route only when nobody declared one, and every op
 // here declares. Carrying the real doc comment is what makes the byte
 // measurement below a measurement — an enum's prose is a projection of it.
-func serving(t *testing.T, by map[string][]fleet.CorpusOp) *zip.App {
+func serving(t *testing.T, by map[string][]surface.CorpusOp) *zip.App {
 	t.Helper()
 	dir := planetest.Dir(t)
 	kids := map[string]*child{}
@@ -86,7 +86,7 @@ func serving(t *testing.T, by map[string][]fleet.CorpusOp) *zip.App {
 	return host(t, apps, kids)
 }
 
-func serve(t *testing.T, dir, name string, ops []fleet.CorpusOp) *child {
+func serve(t *testing.T, dir, name string, ops []surface.CorpusOp) *child {
 	t.Helper()
 	sock := filepath.Join(dir, name+".sock")
 	a := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
@@ -102,14 +102,14 @@ func serve(t *testing.T, dir, name string, ops []fleet.CorpusOp) *child {
 }
 
 // declaring is a fixture built from ids alone, for the tests whose subject is the
-// shape of the surface rather than what the fleet documents.
+// shape of the surface rather than what the surface documents.
 func declaring(t *testing.T, by map[string][]string) *zip.App {
 	t.Helper()
-	ops := map[string][]fleet.CorpusOp{}
+	ops := map[string][]surface.CorpusOp{}
 	for app, list := range by {
-		ops[app] = make([]fleet.CorpusOp, 0, len(list))
+		ops[app] = make([]surface.CorpusOp, 0, len(list))
 		for _, id := range list {
-			ops[app] = append(ops[app], fleet.CorpusOp{App: app, ID: id, Doc: "what " + app + " does at " + id})
+			ops[app] = append(ops[app], surface.CorpusOp{App: app, ID: id, Doc: "what " + app + " does at " + id})
 		}
 	}
 	return serving(t, ops)
@@ -131,13 +131,13 @@ func TestTheEndpointPublishesOneToolPerSubsystem(t *testing.T) {
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 
 	got := names(res)
-	want := []string{fleet.Describe, "ai", "git"}
+	want := []string{surface.Describe, "ai", "git"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("the MCP server publishes %v, want %v", got, want)
 	}
 	// describe leads because everything else is unusable without it; the
 	// subsystems then follow in productStems order, chat before git.
-	if got[0] != fleet.Describe {
+	if got[0] != surface.Describe {
 		t.Errorf("the first tool is %q; the tool a truncated surface cannot do without leads", got[0])
 	}
 	// Within an enum the order is gather's: rank first (chat before models),
@@ -159,22 +159,22 @@ func TestTheEndpointPublishesOneToolPerSubsystem(t *testing.T) {
 
 // TestNoSubsystemIsCalledDescribe is the one thing dropping the `hanzo_` prefix
 // put at risk, checked where it is decidable: the MCP server's tools are the app
-// names plus [fleet.Describe], so an app called `describe` would publish a SECOND
+// names plus [surface.Describe], so an app called `describe` would publish a SECOND
 // tool under that name and the MCP server would answer it as its own — the subsystem
 // silently unreachable, with nothing in either file to say why.
 //
-// It reads the manifest, which is the fleet's source of truth for app names, so
+// It reads the manifest, which is the surface's source of truth for app names, so
 // the collision is caught when the row is added rather than when a model calls it.
 func TestNoSubsystemIsCalledDescribe(t *testing.T) {
 	for _, a := range manifest.Apps {
-		if a.Name == fleet.Describe {
+		if a.Name == surface.Describe {
 			t.Fatalf("manifest declares an app named %q, which is also the MCP server's own tool; "+
 				"rename the app or rename the tool — they cannot share one name", a.Name)
 		}
 	}
 }
 
-// TestTheWholeFleetFitsInAModelsHead is the measurement, over this fleet's own
+// TestTheWholeFleetFitsInAModelsHead is the measurement, over this surface's own
 // operation corpus, through the real MCP server, on the wire.
 func TestTheWholeFleetFitsInAModelsHead(t *testing.T) {
 	by := corpus(t)
@@ -200,14 +200,14 @@ func TestTheWholeFleetFitsInAModelsHead(t *testing.T) {
 		owns[app] = map[string]bool{}
 		for _, op := range ops {
 			owns[app][op.ID] = true
-			owns[app][fleet.Phrase(op.ID)] = true
+			owns[app][surface.Phrase(op.ID)] = true
 		}
 	}
 	subsystems := 0
 	for _, tl := range published(res) {
 		m, _ := tl.(map[string]any)
 		name, _ := m["name"].(string)
-		if name == fleet.Describe {
+		if name == surface.Describe {
 			continue
 		}
 		subsystems++
@@ -223,7 +223,7 @@ func TestTheWholeFleetFitsInAModelsHead(t *testing.T) {
 	}
 	if len(tools) != subsystems+1 {
 		t.Errorf("published %d tools for %d subsystems; the surface is one per subsystem plus %s",
-			len(tools), subsystems, fleet.Describe)
+			len(tools), subsystems, surface.Describe)
 	}
 	// Reachable, not merely listed: an op in two enums would be ambiguous, an op
 	// in none would be lost. This is what makes the change a smaller surface and
@@ -239,10 +239,10 @@ func TestTheWholeFleetFitsInAModelsHead(t *testing.T) {
 	if len(tools) >= slackKeeps {
 		t.Fatalf("the MCP server publishes %d tools and a client keeps %d — the cap is still binding", len(tools), slackKeeps)
 	}
-	if tools[0] != fleet.Describe {
+	if tools[0] != surface.Describe {
 		t.Errorf("the first tool is %q; a client that truncates must keep the one tool the enums cannot be read without", tools[0])
 	}
-	// The claim is per OPERATION, because this corpus is the whole fleet and the
+	// The claim is per OPERATION, because this corpus is the whole surface and the
 	// baseline was taken while 31 subsystems were down: a surface of names must
 	// cost an order of magnitude less per op than a surface of schemas.
 	was, now := float64(liveFlatBytes)/float64(liveFlatTools), float64(len(body))/float64(len(ops))
@@ -250,7 +250,7 @@ func TestTheWholeFleetFitsInAModelsHead(t *testing.T) {
 		t.Fatalf("an operation costs %.0f bytes to enumerate, against %.0f flat", now, was)
 	}
 
-	t.Logf("MEASURED — the fleet's own corpus (plugin/*/openapi.json), one child per subsystem:")
+	t.Logf("MEASURED — the surface's own corpus (plugin/*/openapi.json), one child per subsystem:")
 	// The names themselves, because they are the surface a model reads and a bare
 	// list is the only way to SEE that they carry no prefix. The loop above already
 	// fails if one does — `app := name` is the whole mapping now — but a reader of
@@ -382,7 +382,7 @@ func TestACallByThePUBLISHEDNameReachesTheSameHandler(t *testing.T) {
 	// 4. describe answers to the published name too, with the OWNER's own
 	//    descriptor — which carries the child's name, which is why that spelling
 	//    has to keep working.
-	desc := rpc(t, h, `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"`+fleet.Describe+
+	desc := rpc(t, h, `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"`+surface.Describe+
 		`","arguments":{"op":"deploy_project"}}}`)
 	if text := textOf(t, desc); !strings.Contains(text, `"name":"post_projects_by_slug_deploy"`) ||
 		!strings.Contains(text, `"which"`) {
@@ -430,17 +430,17 @@ func TestDescribeReturnsTheOWNERsOwnSchema(t *testing.T) {
 	h := host(t, []string{"alpha"}, map[string]*child{"alpha": kid})
 
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":5,"method":"tools/call",`+
-		`"params":{"name":"`+fleet.Describe+`","arguments":{"op":"alpha_opb"}}}`)
+		`"params":{"name":"`+surface.Describe+`","arguments":{"op":"alpha_opb"}}}`)
 	content, _ := res["content"].([]any)
 	if len(content) == 0 {
-		t.Fatalf("%s returned no content: %v", fleet.Describe, res)
+		t.Fatalf("%s returned no content: %v", surface.Describe, res)
 	}
 	first, _ := content[0].(map[string]any)
 	text, _ := first["text"].(string)
 
 	var got map[string]any
 	if err := json.Unmarshal([]byte(text), &got); err != nil {
-		t.Fatalf("%s returned %q, which is not a tool descriptor: %v", fleet.Describe, text, err)
+		t.Fatalf("%s returned %q, which is not a tool descriptor: %v", surface.Describe, text, err)
 	}
 	var want map[string]any
 	for _, tl := range kid.app.MCPTools() {
@@ -466,7 +466,7 @@ func TestDescribeReturnsTheOWNERsOwnSchema(t *testing.T) {
 func TestDescribeOfANameNobodyServesIsRefused(t *testing.T) {
 	h := host(t, []string{"alpha"}, map[string]*child{"alpha": start(t, "alpha", 1)})
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":6,"method":"tools/call",`+
-		`"params":{"name":"`+fleet.Describe+`","arguments":{"op":"ghost_op"}}}`)
+		`"params":{"name":"`+surface.Describe+`","arguments":{"op":"ghost_op"}}}`)
 	if _, refused := res["error"].(map[string]any); !refused {
 		t.Fatalf("describe answered for an op nobody serves: %v", res)
 	}
@@ -488,7 +488,7 @@ func TestDescribeOfANameNobodyServesIsRefused(t *testing.T) {
 //	tools/call        console{op:CreateServiceAccountKey} does not run it
 //	describe          its schema cannot be read either
 //
-// All three are the same gate: [fleet.MCP.gather] refuses before it writes the
+// All three are the same gate: [surface.MCP.gather] refuses before it writes the
 // routing table, and list, call and describe all read that one gathered set.
 func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 	kid := startNamed(t, "console", "CreateServiceAccountKey", "GetUser", "post_chat_completions")
@@ -533,10 +533,10 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 	}
 
 	// 3. not describable.
-	desc := rpc(t, h, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"`+fleet.Describe+`",`+
+	desc := rpc(t, h, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"`+surface.Describe+`",`+
 		`"arguments":{"op":"CreateServiceAccountKey"}}}`)
 	if _, refused := desc["error"].(map[string]any); !refused {
-		t.Fatalf("%s handed back the refused op's schema: %v", fleet.Describe, desc)
+		t.Fatalf("%s handed back the refused op's schema: %v", surface.Describe, desc)
 	}
 
 	// The refusal says nothing a caller could not have guessed. Naming which of

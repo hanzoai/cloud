@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# THE ONE MCP DOOR, end to end, against a real host and real plugin processes.
+# THE ONE MCP ENDPOINT, end to end, against a real host and real plugin processes.
 #
 # It proves the two properties the design rests on, by MEASURING them rather than
 # by reading code:

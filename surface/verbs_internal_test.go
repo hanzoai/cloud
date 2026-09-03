@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package fleet
+package surface
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// The naming, against the fleet's own operations — and against the gate, which
+// The naming, against the surface's own operations — and against the gate, which
 // is the thing renaming could break and must not.
 
 // readings is what a route MEANS, one real operation at a time.
@@ -20,7 +20,7 @@ import (
 // route is beside it, because the claim is that the phrase says what the route
 // says. TestAPhraseSaysWhatTheRouteSays checks that the ids still exist, so a
 // route that is renamed upstream turns this red instead of quietly testing a
-// fleet that has moved on.
+// surface that has moved on.
 var readings = []struct{ id, want, route string }{
 	// The shape that made the surface unreadable, whole.
 	{"get_projects", "list_projects", "GET /v1/projects"},
@@ -67,7 +67,7 @@ var readings = []struct{ id, want, route string }{
 	{"ListTraceFunnels", "ListTraceFunnels", "…and they are not routes to read back"},
 }
 
-// declaredInSpecs is every operation id the fleet SERVES, read from the per-app
+// declaredInSpecs is every operation id the surface SERVES, read from the per-app
 // documents.
 //
 // The anchor below asks whether a table entry still names a real route, and the
@@ -179,7 +179,7 @@ func TestEveryPublishedNameMeansExactlyOneOperation(t *testing.T) {
 	t.Logf("  %4d already were one — a subsystem declared its own id, and it is left alone", declared)
 	t.Logf("  %4d keep a route for a name (%.1f%%): the phrase would have been ambiguous, so it is not used.",
 		ambiguous, 100*float64(ambiguous)/float64(len(all)))
-	t.Logf("       These are overwhelmingly the fleet's own duplicates — one handler at /tasks and")
+	t.Logf("       These are overwhelmingly the surface's own duplicates — one handler at /tasks and")
 	t.Logf("       /v1/tasks, or post_agent in one subsystem beside post_agents in another.")
 }
 
@@ -226,7 +226,7 @@ func TestTheGateStillJudgesTheROUTE(t *testing.T) {
 	}
 
 	t.Logf("MEASURED — over %d declared operations: %d refused, %d offered", len(held)+len(offered), len(held), len(offered))
-	t.Logf("  the gate's input is the child's own id, before naming; see fleet/verbs.go.")
+	t.Logf("  the gate's input is the child's own id, before naming; see surface/verbs.go.")
 	t.Logf("  first refusals, in order: %s", strings.Join(held[:min(6, len(held))], " "))
 }
 

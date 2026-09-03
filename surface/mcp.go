@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package fleet
+package surface
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The fleet's ONE agent MCP server, composed AT THE MOMENT OF ASKING.
+// The surface's ONE agent MCP server, composed AT THE MOMENT OF ASKING.
 //
 // zip serves this MCP server for an app out of that app's own typed-op registry,
 // plus whatever build-time catalogues a host handed it. The light host has
@@ -51,7 +51,7 @@ const protocolVersion = "2026-07-28"
 // answer, so it reads a partial catalogue as a complete one. MCP puts extension
 // data on the result's _meta, so the outage travels with the answer it qualifies
 // and a client that only reads `tools` still gets every tool that exists —
-// blanking a working fleet because one app is down would be a worse answer than
+// blanking a working surface because one app is down would be a worse answer than
 // a shorter list, but an UNANNOUNCED shorter list is worse than both.
 const Unavailable = "hanzo.ai/unavailable"
 
@@ -66,7 +66,7 @@ type Outage struct {
 //
 // HOW to reach one is deliberately NOT here. The same MCP server is published at
 // two addresses with two different populations behind them — the edge, and the
-// fleet's own internal socket — and a subsystem's is likewise reached at two
+// surface's own internal socket — and a subsystem's is likewise reached at two
 // (see [At]). Holding one reach on the server would make the routing table and the
 // hop one fact, so publishing the MCP server anywhere would publish the edge's
 // hop everywhere.
@@ -85,7 +85,7 @@ type MCP struct {
 	// PUBLISHED for an operation → the id its owner knows it by. It holds only the
 	// operations whose published name differs, it is rewritten by the same gather,
 	// and it is read at exactly two places — [MCP.lookup] and [MCP.describe]. See
-	// fleet/verbs.go for why the name it undoes is not the name the gate judged.
+	// surface/verbs.go for why the name it undoes is not the name the gate judged.
 	mu    sync.RWMutex
 	owner map[string]string
 	alias map[string]string
@@ -103,7 +103,7 @@ type MCP struct {
 // descriptorOf is what the server hands back for a published operation: the same
 // shape a child's own registry projects, carrying the two fields a catalog can
 // hold. The input schema is not among them — [MCP.describe] asks the owner for
-// that, which starts ONE subsystem rather than the fleet.
+// that, which starts ONE subsystem rather than the surface.
 func descriptorOf(app string, op Op) json.RawMessage {
 	raw, err := json.Marshal(map[string]any{
 		"name":        op.ID,
@@ -116,7 +116,7 @@ func descriptorOf(app string, op Op) json.RawMessage {
 	return raw
 }
 
-// Mount serves the fleet's agent MCP server at path, over apps, reaching one
+// Mount serves the surface's agent MCP server at path, over apps, reaching one
 // with at.
 //
 // apps is the deployment's COMPOSED set (cmd/cloud's `composed`), never the whole
@@ -133,7 +133,7 @@ func descriptorOf(app string, op Op) json.RawMessage {
 // precisely so no route runs from the edge to a secret — has NO route at its own
 // MCP path, fell through to the console, and was told its server was at an
 // address only a host serves. Measured: POST /mcp -> 308, then POST /v1/mcp ->
-// 404, and the fleet reads that non-2xx as an outage for a child that is serving
+// 404, and the surface reads that non-2xx as an outage for a child that is serving
 // fine.
 //
 // A signpost is only true where the server actually moved, and this is the one
@@ -152,9 +152,9 @@ func Use(host *zip.App, path string, apps []string, at At) *MCP {
 // Serve publishes THIS server at another address — the same gather, the same
 // routing table, the same [refuse] gate.
 //
-// It exists because the fleet's own subsystems need the MCP server too, and the
+// It exists because the surface's own subsystems need the MCP server too, and the
 // address a subsystem can reach is not the edge's. An agent inside `agents` that
-// asked api.hanzo.ai for its tools would leave the fleet, re-enter through the
+// asked api.hanzo.ai for its tools would leave the surface, re-enter through the
 // edge and arrive back one process away carrying whatever credential it could
 // find; the host's internal socket is one hop with no edge on it (see
 // cmd/cloud/wake.go, which is the one caller).
@@ -168,11 +168,11 @@ func Use(host *zip.App, path string, apps []string, at At) *MCP {
 // at is how a caller who reached THIS address may reach a subsystem, and it is
 // per-address for the reason the two addresses exist at all — see [At]. The edge
 // forwards into a subsystem's edge endpoint, where the identity boundary judges
-// what arrived; the fleet's own socket forwards into its plane endpoint, where
+// what arrived; the surface's own socket forwards into its plane endpoint, where
 // the caller is a sibling and its statement of who it acts for is what the socket
 // makes it worth. Same routing table, same curation, same hop — one value apart.
 func (d *MCP) Serve(on *zip.App, path string, at At) {
-	// The PLANE endpoint: a sibling on the fleet's own socket carries its identity
+	// The PLANE endpoint: a sibling on the surface's own socket carries its identity
 	// as headers the socket vouches for, never a bearer, so it is never challenged.
 	on.Post(path, func(c *zip.Ctx) error { return d.serve(c, at, false) })
 }
@@ -210,7 +210,7 @@ func (d *MCP) serve(c *zip.Ctx, at At, edge bool) error {
 	//
 	// THE COMPOSED SERVER NEEDS ITS OWN CASE. zip answers server/discover for a
 	// subsystem, but /v1/mcp is this composed server and dispatches methods here,
-	// so teaching only the children left the fleet's public address replying
+	// so teaching only the children left the surface's public address replying
 	// `method not found: server/discover` while already declaring 2026-07-28 — the
 	// exact mismatch the version constant is supposed to rule out. Caught by asking
 	// the live address rather than trusting the child fix.
@@ -241,17 +241,17 @@ func (d *MCP) list(c *zip.Ctx, req message, at At) error {
 	tools, down, held := d.gather(c, at)
 	// ONE TOOL PER SUBSYSTEM, the operation carried in an argument. The flat
 	// projection was 1,189 tools in 977 KB, which no model holds and every client
-	// truncates. See fleet/grouped.go.
+	// truncates. See surface/grouped.go.
 	result := map[string]any{"tools": group(tools)}
 	meta := map[string]any{}
 	if held > 0 {
 		// The same obligation as Unavailable, for a different cause: a list
-		// shortened by POLICY must say so too. See fleet/surface.go.
+		// shortened by POLICY must say so too. See surface/surface.go.
 		meta[Refused] = map[string]any{"count": held, "rule": TheRule}
 	}
 	if len(down) > 0 {
 		meta[Unavailable] = down
-		d.host.Logger().Warn("fleet mcp: tools/list is INCOMPLETE — subsystems did not answer",
+		d.host.Logger().Warn("surface mcp: tools/list is INCOMPLETE — subsystems did not answer",
 			"unavailable", len(down), "apps", len(d.apps), "tools", len(tools))
 	}
 	if len(meta) > 0 {
@@ -374,7 +374,7 @@ type named struct {
 	app  string
 	name string
 	// as is the name the server PUBLISHES for this operation: its id read back as
-	// a verb on an object (fleet/verbs.go), or the id itself when that reading
+	// a verb on an object (surface/verbs.go), or the id itself when that reading
 	// would be ambiguous. Written by [offer], never by the child.
 	as   string
 	desc string
@@ -389,7 +389,7 @@ type named struct {
 // The request it sends is the CALLER's, with the body replaced by a canonical
 // tools/list: the headers ride along, so a child whose tools depend on who is
 // asking answers for this caller, while the body cannot be a tools/call the
-// discovery path would otherwise execute on every child in the fleet.
+// discovery path would otherwise execute on every child in the surface.
 //
 // This is also where the tool surface is GATED, and it is the only place, on
 // purpose. The routing table [MCP.owner] is written here and nowhere else, so a
@@ -399,7 +399,7 @@ type named struct {
 // applied in list() instead would have been a suggestion.
 //
 // It returns the tools themselves rather than their bytes because every caller
-// needs the OWNER too: list() groups by it (fleet/grouped.go) and describe()
+// needs the OWNER too: list() groups by it (surface/grouped.go) and describe()
 // answers out of the same gated set.
 func (d *MCP) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 	var all []named
@@ -410,12 +410,12 @@ func (d *MCP) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 	// EVERY app is read from what it PUBLISHED, and none is asked. A tools/list is
 	// a question about names, and the names are known before anything runs — each
 	// app's binary wrote them from its own router at build time (see
-	// plugin/gen-fleet-catalog and fleet/catalog.go).
+	// plugin/gen-surface-catalog and surface/catalog.go).
 	//
 	// Asking a RUNNING subsystem used to be free enough to be worth the live
 	// answer, and that reasoning does not survive contact with the deployment. This
 	// server is the one caller that touches all of them, so its cost is the whole
-	// fleet's: measured on the deployed host, one list took 92 seconds against
+	// surface's: measured on the deployed host, one list took 92 seconds against
 	// Cloudflare's 100-second ceiling, and three in a row drove the pod past its
 	// own liveness probe until the kubelet killed it and the API served 503. A
 	// question about names must not be able to do that.
@@ -444,7 +444,7 @@ func (d *MCP) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 			continue
 		}
 		for _, t := range a.tools {
-			// The gate, before the routing table. See fleet/surface.go.
+			// The gate, before the routing table. See surface/surface.go.
 			if refuse(t.name) {
 				held++
 				continue
@@ -455,7 +455,7 @@ func (d *MCP) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 			// silently dropped, because a tool that vanished into a collision looks
 			// identical to one that was never declared.
 			if held, dup := owner[t.name]; dup {
-				d.host.Logger().Warn("fleet mcp: two subsystems claim one tool name; the first in mount order serves it",
+				d.host.Logger().Warn("surface mcp: two subsystems claim one tool name; the first in mount order serves it",
 					"tool", t.name, "serving", held, "shadowed", a.app)
 				continue
 			}
@@ -466,7 +466,7 @@ func (d *MCP) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 	}
 	// Product surface FIRST, then alphabetical — because clients truncate, and a
 	// list sorted only by name put 128 o11y console ops in front of every product
-	// tool the fleet has. rank() states the mechanism; nothing is hidden by it.
+	// tool the surface has. rank() states the mechanism; nothing is hidden by it.
 	sort.Slice(all, func(i, j int) bool {
 		ri, rj := rank(all[i].name), rank(all[j].name)
 		if ri != rj {
@@ -478,7 +478,7 @@ func (d *MCP) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 	// AFTER the gate and after the sort, because both read the CHILD's own name:
 	// [refuse] must judge the route it was given, and [rank] matches route stems.
 	// Naming is the last thing that happens to a surviving operation. See
-	// fleet/verbs.go.
+	// surface/verbs.go.
 	offer(all)
 	alias := make(map[string]string, len(all))
 	for _, t := range all {
@@ -504,7 +504,7 @@ func (d *MCP) published(app string) []Op {
 }
 
 // find reads whatever a tools/call named into the operation id its owner knows,
-// and the app that owns it — asking the fleet ONCE if the tables are cold.
+// and the app that owns it — asking the surface ONCE if the tables are cold.
 //
 // Both halves have to be answered by one lookup, and that is the whole reason
 // this is a function. The tables are written together by [MCP.gather] and a

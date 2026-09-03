@@ -225,7 +225,7 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 // returns before registering the route at all (zip@v1.25.1 mcp.go:99). That is
 // the right default for a program nobody interrogates, and the wrong one for
 // every program built here, because the fleet's MCP server ASKS EVERY COMPOSED
-// SUBSYSTEM on each tools/list (fleet.Ask). A subsystem whose routes are all raw
+// SUBSYSTEM on each tools/list (surface.Ask). A subsystem whose routes are all raw
 // — a reverse proxy, or a surface owned by another module — projects no typed op,
 // so nothing claimed POST /mcp in its process, so the ask fell through to the
 // console's terminal handler and was answered with the signpost that is correct
@@ -257,7 +257,7 @@ func callerTools(declared zip.Source) zip.Source {
 //
 // Its Call is reached only for a name the build-time catalogue did not claim, and
 // it answers with the same sentence zip's own miss does — the fleet's MCP server
-// never routes one here (it refuses an unlisted name itself, fleet/mcp.go), so
+// never routes one here (it refuses an unlisted name itself, surface/mcp.go), so
 // this is the reply to a client that guessed.
 type noCallerTools struct{}
 

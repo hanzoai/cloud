@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/surface"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/webui"
 	"github.com/zap-proto/zip"
@@ -41,11 +41,11 @@ func doMethod(t *testing.T, app *zip.App, method, path, body string) (int, strin
 // test is therefore a test of the COMPOSED host and not of a helper: neuter
 // serveMCP (webui/mcp.go) and every case below fails with the console shell.
 //
-// The MCP server is the HOST's, registered by fleet.Use, and zip's is disabled — the
+// The MCP server is the HOST's, registered by surface.Use, and zip's is disabled — the
 // same pair run() sets. It fronts no app here (an empty composed set), which is
 // exactly right for this file: what is being tested is that the ADDRESS is
 // reachable and answers JSON-RPC, not what is behind it. What is behind it is
-// tested against running subsystems in fleet/mcp_test.go.
+// tested against running subsystems in surface/mcp_test.go.
 func app308(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{
@@ -53,7 +53,7 @@ func app308(t *testing.T) *zip.App {
 		DisableStartupMessage: true,
 		MCP:                   zip.MCPConfig{Disabled: true},
 	})
-	fleet.Use(app, manifest.MCPPath, nil, func(string) (string, string, error) {
+	surface.Use(app, manifest.MCPPath, nil, func(string) (string, string, error) {
 		return "", "", errNoFleetHere
 	})
 	if err := webui.Use(app, consoleBundle()); err != nil {

@@ -147,7 +147,7 @@ func TestPublishRefusesADanglingReference(t *testing.T) {
 // bodies, MCP knows it, it is public, and an app describing itself never carries it.
 func TestTheAgentEndpointIsTheFleetsAndNoApps(t *testing.T) {
 	if !Host(mcp.Path) {
-		t.Fatal("the agent MCP endpoint is not a MCP")
+		t.Fatal("the agent MCP endpoint is not one of the host's own addresses")
 	}
 	app := newApp()
 	app.Get("/v1/widgets", func(c *zip.Ctx) error { return c.JSON(200, "ok") })

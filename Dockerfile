@@ -7,7 +7,7 @@
 # fleet together, which is the whole point of this layout. cmd/cloud IS the one
 # real binary; the fused monolith it replaced is gone.
 #
-# cmd/cloud — the front door — owns "/" and serves the white-labelled SPA for every
+# cmd/cloud — the edge — owns "/" and serves the white-labelled SPA for every
 # path no app prefix claims. It does NOT carry the console: the bytes are a
 # published site release, read at boot and re-read on a poll (webui/release), so
 # this image ships no console at all. cmd/cloud also threads the deployment's

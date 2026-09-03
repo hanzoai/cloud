@@ -1,13 +1,13 @@
 package agents
 
-// fleet.go — where a run's tools come from once the fleet is more than one
-// process: the fleet's OWN agent MCP server, asked over the internal socket.
+// surface.go — where a run's tools come from once the surface is more than one
+// process: the surface's OWN agent MCP server, asked over the internal socket.
 //
 // # Why this is not a new mechanism
 //
-// The fleet already aggregates. fleet.MCP asks every composed app what it
+// The surface already aggregates. surface.MCP asks every composed app what it
 // serves right now, merges the answers, remembers which app listed which name,
-// and forwards a tools/call to that app (fleet/mcp.go). It is what serves
+// and forwards a tools/call to that app (surface/mcp.go). It is what serves
 // api.hanzo.ai/v1/mcp and what a Slack MCP client already talks to. Building a
 // tools_catalog/tools_call op pair on the tool plane would have been a SECOND
 // aggregation over the same children, with a second place for the curation rule
@@ -16,7 +16,7 @@ package agents
 // So nothing here aggregates. The host publishes the MCP server it already
 // built on the socket every child can already reach (cmd/cloud/wake.go), and an
 // agent is simply another MCP client of it. Same JSON-RPC, same union, same
-// order, same [fleet] denylist — which is enforced inside gather, where the
+// order, same [surface] denylist — which is enforced inside gather, where the
 // routing table is written, so a name the MCP server will not project is not
 // routable for anyone. An agent therefore CANNOT see a surface an external
 // client cannot; there is no second surface to see.
@@ -33,7 +33,7 @@ package agents
 //	               box. Fall back to [registryTools], which is the real answer
 //	               there and empty everywhere else.
 //	unusable       an outage. Zero tools, recorded on the run's span, never
-//	               laundered into "this fleet has no tools".
+//	               laundered into "this surface has no tools".
 //
 // # Identity is stated by the RUN, and the model never touches it
 //
@@ -45,7 +45,7 @@ package agents
 // scheduled run has no inbound request at all, and a nested one may be running
 // for a different principal than whoever made the outermost HTTP call.
 //
-// The socket carries no credential and needs none: it is 0700 in the fleet's own
+// The socket carries no credential and needs none: it is 0700 in the surface's own
 // run directory and the kernel attests the peer, which is the same trust
 // zip.WithCaller rides on for every other internal call.
 
@@ -57,7 +57,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/surface"
 	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
@@ -69,35 +69,35 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// fleetTools is the tool plane read from the FLEET's composed agent MCP server.
-type fleetTools struct{}
+// surfaceTools is the tool plane read from the FLEET's composed agent MCP server.
+type surfaceTools struct{}
 
-// errNoFleet reports that this process is not part of a fleet: nothing is
+// errNoSurface reports that this process is not part of a surface: nothing is
 // listening on the router's socket, so there is no composed MCP server to ask.
 //
 // It is the ONE error a caller may read as "fall back", exactly as plane.ErrNoPeer
 // is on the peer plane. Every other failure is an outage and is reported as one —
-// an MCP server that is present and broken must never read as a fleet with no
+// an MCP server that is present and broken must never read as a surface with no
 // tools.
-var errNoFleet = errors.New("agents: no fleet MCP server on this host")
+var errNoSurface = errors.New("agents: no surface MCP server on this host")
 
-// catalog resolves the agent's declared names against the fleet's own surface.
+// catalog resolves the agent's declared names against the surface's own surface.
 //
 // It asks the MCP server WHAT IS OFFERED and then, for the handful of names this
 // agent declared, what each one takes. Those are two questions because the MCP
 // server's tools/list answers only the first: it publishes one tool per
 // subsystem, whose `op` enum carries the operation names and no schemas, since
-// the flat list of this fleet's operations was 977 KB that no model can hold and
-// every client truncates (fleet/grouped.go). fleet.Describe answers the second,
+// the flat list of this surface's operations was 977 KB that no model can hold and
+// every client truncates (surface/grouped.go). surface.Describe answers the second,
 // one operation at a time, out of the same gathered set — so a declared name the
 // MCP server does not offer is simply absent, which is the same rule
 // registryTools follows: offering a tool that would be refused at dispatch
 // teaches the model a lie.
-func (fleetTools) catalog(ctx context.Context, org, actor string, want []string) []types.ToolDef {
+func (surfaceTools) catalog(ctx context.Context, org, actor string, want []string) []types.ToolDef {
 	if org == "" || len(want) == 0 {
 		return nil
 	}
-	// ToolsAll is the ONE way to say "whatever the fleet serves", and it has to be
+	// ToolsAll is the ONE way to say "whatever the surface serves", and it has to be
 	// said rather than implied.
 	//
 	// An agent that declares nothing gets nothing — that default is correct and
@@ -130,7 +130,7 @@ func (fleetTools) catalog(ctx context.Context, org, actor string, want []string)
 		return nil
 	}
 	res, err := ask(ctx, org, actor, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
-	if errors.Is(err, errNoFleet) {
+	if errors.Is(err, errNoSurface) {
 		return registryTools{}.catalog(ctx, org, actor, want)
 	}
 	if err != nil {
@@ -154,7 +154,7 @@ func (fleetTools) catalog(ctx context.Context, org, actor string, want []string)
 		Meta json.RawMessage `json:"_meta"`
 	}
 	if err := json.Unmarshal(res, &listed); err != nil {
-		trace.SpanFromContext(ctx).RecordError(fmt.Errorf("agents: the fleet MCP server's tools/list is not a tool list: %w", err))
+		trace.SpanFromContext(ctx).RecordError(fmt.Errorf("agents: the surface MCP server's tools/list is not a tool list: %w", err))
 		return nil
 	}
 	offered := map[string]bool{}
@@ -164,7 +164,7 @@ func (fleetTools) catalog(ctx context.Context, org, actor string, want []string)
 		}
 	}
 	// ToolsAll offers the MCP server's tools AS THE MCP SERVER GROUPS THEM — one
-	// per subsystem, named for it, carrying an `op` enum, plus [fleet.Describe] —
+	// per subsystem, named for it, carrying an `op` enum, plus [surface.Describe] —
 	// and not the ops flattened back out.
 	//
 	// The grouping is the whole reason the surface is affordable: 1,189 flat tools
@@ -173,7 +173,7 @@ func (fleetTools) catalog(ctx context.Context, org, actor string, want []string)
 	// MCP server just saved and blow the context before the question is read.
 	//
 	// It is also what the assistant's instructions describe — pick a subsystem,
-	// choose an op from its enum, call [fleet.Describe] for a shape you do not know.
+	// choose an op from its enum, call [surface.Describe] for a shape you do not know.
 	// The prose and the offer have to be the same surface or the model is being
 	// taught a protocol it cannot practise.
 	if all {
@@ -207,7 +207,7 @@ func (fleetTools) catalog(ctx context.Context, org, actor string, want []string)
 		out = append(out, def)
 	}
 	// A declared name that resolved to nothing has two very different causes — a
-	// subsystem that is DOWN and a tool the fleet REFUSES to project — and the
+	// subsystem that is DOWN and a tool the surface REFUSES to project — and the
 	// MCP server already distinguishes them. Carrying its answer onto the span is
 	// what makes "declared 3, offered 1" diagnosable instead of a shrug.
 	if len(out) < len(wanted) && len(listed.Meta) > 0 {
@@ -234,7 +234,7 @@ func opsOf(schema json.RawMessage) []string {
 }
 
 // describe fetches ONE operation's descriptor through the MCP server's own
-// fleet.Describe, and reads the owning subsystem's bytes back out of it.
+// surface.Describe, and reads the owning subsystem's bytes back out of it.
 //
 // What the client guarantees is that the model is offered exactly what it will
 // CALL, and op is that name: it came out of a subsystem tool's `op` enum a
@@ -244,16 +244,16 @@ func opsOf(schema json.RawMessage) []string {
 //
 // The descriptor's own `name` is NOT compared to op, and that is a change. The
 // MCP server publishes an operation as a verb on an object — `deploy_project`
-// for `post_v1_projects_by_slug_deploy` (fleet/verbs.go) — while the descriptor
+// for `post_v1_projects_by_slug_deploy` (surface/verbs.go) — while the descriptor
 // it hands back is the owning subsystem's, carried verbatim, so it still says
-// the id. Requiring the two to match would reject 1,730 of the fleet's 2,229
+// the id. Requiring the two to match would reject 1,730 of the surface's 2,229
 // operations for being correctly named.
 func describe(ctx context.Context, org, actor, op string) (types.ToolDef, error) {
 	args, err := json.Marshal(map[string]string{"op": op})
 	if err != nil {
 		return types.ToolDef{}, err
 	}
-	body, err := toolCallBody(fleet.Describe, string(args))
+	body, err := toolCallBody(surface.Describe, string(args))
 	if err != nil {
 		return types.ToolDef{}, err
 	}
@@ -271,13 +271,13 @@ func describe(ctx context.Context, org, actor, op string) (types.ToolDef, error)
 		InputSchema json.RawMessage `json:"inputSchema"`
 	}
 	if err := json.Unmarshal([]byte(text), &d); err != nil || d.Name == "" || len(d.InputSchema) == 0 {
-		return types.ToolDef{}, fmt.Errorf("agents: %s did not answer %s's own descriptor", fleet.Describe, op)
+		return types.ToolDef{}, fmt.Errorf("agents: %s did not answer %s's own descriptor", surface.Describe, op)
 	}
 	return types.ToolDef{Name: op, Description: d.Description, Schema: d.InputSchema}, nil
 }
 
 // maxMeta bounds what one span attribute may carry: `_meta` names every
-// subsystem that did not answer, and a fleet-wide outage would otherwise put a
+// subsystem that did not answer, and a surface-wide outage would otherwise put a
 // hundred rows on every run's trace.
 const maxMeta = 1024
 
@@ -292,13 +292,13 @@ func preview(s string, n int) string {
 // the app that listed it and forwards this message verbatim to that app's
 // registry, so the host can only ever ROUTE a call and never invoke something
 // the owner did not declare.
-func (fleetTools) call(ctx context.Context, org, actor, name, args string) (string, error) {
+func (surfaceTools) call(ctx context.Context, org, actor, name, args string) (string, error) {
 	body, err := toolCallBody(name, args)
 	if err != nil {
 		return "", err
 	}
 	res, err := ask(ctx, org, actor, body)
-	if errors.Is(err, errNoFleet) {
+	if errors.Is(err, errNoSurface) {
 		return registryTools{}.call(ctx, org, actor, name, args)
 	}
 	if err != nil {
@@ -354,7 +354,7 @@ func toolResult(res json.RawMessage) (string, error) {
 		IsError bool `json:"isError"`
 	}
 	if err := json.Unmarshal(res, &out); err != nil {
-		return "", fmt.Errorf("agents: the fleet MCP server answered a tool result that will not decode: %w", err)
+		return "", fmt.Errorf("agents: the surface MCP server answered a tool result that will not decode: %w", err)
 	}
 	parts := make([]string, 0, len(out.Content))
 	for _, c := range out.Content {
@@ -373,7 +373,7 @@ func toolResult(res json.RawMessage) (string, error) {
 	return truncateToolResult(text), nil
 }
 
-// ask puts one JSON-RPC message to the fleet's MCP server as (org, actor)
+// ask puts one JSON-RPC message to the surface's MCP server as (org, actor)
 // and returns the `result` member.
 //
 // A JSON-RPC ERROR is an error here, deliberately: a tool the MCP server will
@@ -410,10 +410,10 @@ func ask(ctx context.Context, org, actor string, body []byte) (json.RawMessage, 
 	req.SetBody(body)
 
 	if err := transport(addr).Do(req, resp); err != nil {
-		return nil, fmt.Errorf("agents: the fleet MCP server at %s did not answer: %w", addr, err)
+		return nil, fmt.Errorf("agents: the surface MCP server at %s did not answer: %w", addr, err)
 	}
 	if code := resp.StatusCode(); code < 200 || code > 299 {
-		return nil, fmt.Errorf("agents: the fleet MCP server answered %d", code)
+		return nil, fmt.Errorf("agents: the surface MCP server answered %d", code)
 	}
 	var env struct {
 		Result json.RawMessage `json:"result"`
@@ -422,7 +422,7 @@ func ask(ctx context.Context, org, actor string, body []byte) (json.RawMessage, 
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(resp.Body(), &env); err != nil {
-		return nil, fmt.Errorf("agents: the fleet MCP server answered something that is not JSON-RPC: %w", err)
+		return nil, fmt.Errorf("agents: the surface MCP server answered something that is not JSON-RPC: %w", err)
 	}
 	if env.Error != nil {
 		return nil, errors.New(env.Error.Message)
@@ -430,8 +430,8 @@ func ask(ctx context.Context, org, actor string, body []byte) (json.RawMessage, 
 	return append(json.RawMessage(nil), env.Result...), nil
 }
 
-// socket resolves the fleet MCP server's socket, or says which of the two
-// failures it is. See [errNoFleet].
+// socket resolves the surface MCP server's socket, or says which of the two
+// failures it is. See [errNoSurface].
 //
 // It probes by CONNECTING, because the file does not answer the question: a
 // socket path outlives the process that bound it wherever the run directory is a
@@ -441,15 +441,15 @@ func socket() (string, error) {
 	path := zip.SocketPath(plane.HostApp)
 	up, err := plane.Listening(path)
 	if err != nil {
-		return "", fmt.Errorf("agents: the fleet MCP server's socket is unusable: %w", err)
+		return "", fmt.Errorf("agents: the surface MCP server's socket is unusable: %w", err)
 	}
 	if !up {
-		return "", fmt.Errorf("%w (%s)", errNoFleet, path)
+		return "", fmt.Errorf("%w (%s)", errNoSurface, path)
 	}
 	return path, nil
 }
 
-// pool is one pooled transport per ADDRESS, for the reason fleet keeps
+// pool is one pooled transport per ADDRESS, for the reason surface keeps
 // one: a transport holds a connection pool, so dialing per ask turns every tool
 // call into a fresh connect. Keyed by address rather than kept in a single var
 // because a test points the run directory somewhere else.
@@ -463,7 +463,7 @@ func transport(addr string) *zaphttp.Transport {
 	// The whole run's ceiling, not the library's 30s. A tools/list is a fan-out
 	// across every composed app and the first ask of a cold one pays that app's
 	// startup, so a transport that gave up sooner than the run does would report
-	// an outage for a fleet that was merely waking up.
+	// an outage for a surface that was merely waking up.
 	t.SetReadTimeout(toolRunBudget)
 	c, _ := pool.LoadOrStore(addr, t)
 	return c.(*zaphttp.Transport)

@@ -3,7 +3,7 @@ package main
 // Where a client signs in, stated once at the address the MCP server points to.
 //
 // The agent MCP server challenges a credential-less tools/call with a
-// WWW-Authenticate header naming manifest.ResourceMetadataPath (fleet/mcp.go).
+// WWW-Authenticate header naming manifest.ResourceMetadataPath (surface/mcp.go).
 // This is that document — RFC 9728, the protected-resource metadata — and it says
 // the two things an MCP client needs to run an OAuth flow on the caller's behalf:
 // which resource it is about, and which authorization server mints a bearer for

@@ -734,7 +734,7 @@ func graphCall(t *testing.T, app *zip.App, query string, head map[string]string)
 // graphQuery renders one op as the graph request that reaches it.
 //
 // The field is the op's OWN id — the same id the MCP tool carries, because both
-// are one registry entry projected twice — so a endpoint is added to the table below
+// are one registry entry projected twice — so an endpoint is added to the table below
 // without a second list of names to keep in step. Every Out in that table carries
 // `number`, which is the one selection this needs.
 func graphQuery(kind, field string, args map[string]any) string {

@@ -153,10 +153,10 @@ hanzo.id PKCE and 401s a machine. One endpoint per concern.
 
 **The tests.** `red_forge_test.go` calls `gate()` directly against a backend that
 answers 200 to anything — it proves the predicate and CANNOT see the chain, which
-is why it passed throughout the outage. `door_test.go` drives the real
+is why it passed throughout the outage. `endpoint_test.go` drives the real
 `Mount` route table against a runtime that routes: the tenant-free reads must
 return the RUNTIME's bytes anonymously, tenant reads must still be refused with
-the DOOR's own reason (the runtime's 401 would mean the request got through), and
+the ENDPOINT's own reason (the runtime's 401 would mean the request got through), and
 the four dead `/api/v1|v2` names must NOT be exempt. A fake more forgiving than
 production is not a test of production.
 
@@ -367,7 +367,7 @@ comments at compile time.
   a fresh node, and zip judges the node rather than the path. The org still reaches
   a typed op through every entry point, including the ones no route middleware runs
   on — `principal.ValidatedFrom` falls back to zip's own caller. Pinned by
-  `TestTypedOpsSeeTheirCallerThroughEveryDoor` (`scope_test.go`).
+  `TestTypedOpsSeeTheirCallerThroughEveryEndpoint` (`scope_test.go`).
 - The tenant is `principal.OrgFrom(ctx)` and the status probe's weaker gate is
   `principal.ValidatedFrom(ctx)` — the two facts `cloud.Bridge` parks — NEVER an
   `In` field. Platform-sudo-ness and the project scope do need the REQUEST (they

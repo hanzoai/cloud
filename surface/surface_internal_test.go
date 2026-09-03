@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package fleet
+package surface
 
 import (
 	"strings"
@@ -9,7 +9,7 @@ import (
 
 // The rule, against the names it was written for.
 //
-// Every name below is a REAL operation id from this fleet's own composed
+// Every name below is a REAL operation id from this surface's own composed
 // document (openapi.yaml) or from plugin/o11y/openapi.json, with its route
 // beside it, because a policy tested on names someone invented for the test is a
 // policy tested on nothing. The o11y ones are specifically the ops MEASURED
@@ -105,7 +105,7 @@ var survivors = []struct{ name, why string }{
 	{"post_deploy_applications_by_name_sync", "POST /v1/deploy/applications/{name}/sync"},
 	{"post_exec", "POST /v1/exec"},
 
-	// The fleet's path to the live internet. These names have to be checked
+	// The surface's path to the live internet. These names have to be checked
 	// against the rule rather than assumed past it: the rule reads the NAME, so
 	// whether a capability projects is a property of what its operation is
 	// CALLED. Both are mutating verbs over nouns that confer no authority.
@@ -196,7 +196,7 @@ func TestRefuse_IsVerbBlindAboutSecrets(t *testing.T) {
 // TestRefuse_ClassifiesNamesItHasNeverSeen is the property a hand-typed roster
 // of 36 op names cannot have, and the reason the rule is made of nouns.
 func TestRefuse_ClassifiesNamesItHasNeverSeen(t *testing.T) {
-	// Shapes that do not exist in this fleet today. If someone adds them
+	// Shapes that do not exist in this surface today. If someone adds them
 	// tomorrow, they are already classified.
 	for _, n := range []string{
 		"CreateOrganizationApiKey", "post_iam_users_by_id_impersonate",
@@ -227,7 +227,7 @@ func TestRank_PutsTheProductSurfaceInFrontOfTheConsole(t *testing.T) {
 	if chat != 0 {
 		t.Errorf("rank(post_v1_chat_completions) = %d, want 0 — chat leads the surface", chat)
 	}
-	console := rank("AgentCheckIn") // sorts FIRST alphabetically, fleet-wide
+	console := rank("AgentCheckIn") // sorts FIRST alphabetically, surface-wide
 	if console != len(productStems) {
 		t.Errorf("rank(AgentCheckIn) = %d — a declared PascalCase id carries no path and cannot match a stem", console)
 	}
@@ -250,7 +250,7 @@ func TestRank_PutsTheProductSurfaceInFrontOfTheConsole(t *testing.T) {
 // TestRank_TheProductSurfaceFitsATruncatingClient.
 //
 // Ordering only helps if the promoted set is SMALLER than the window. Measured
-// against the fleet's own document, the stems through `v1_exec` promote 126 ops
+// against the surface's own document, the stems through `v1_exec` promote 126 ops
 // — so a client that keeps 128 keeps chat, models, the agent loop, code, search,
 // git, deploy and exec. `projects` and `websearch` are last precisely
 // because they are the two that spill.
@@ -356,7 +356,7 @@ func TestRank_AFoldedAddressKeepsItsBucket(t *testing.T) {
 // The id there is the connector's. The token is exactly what it says, and the
 // MCP server projected it to every model as `get_connector_token` — a live OAuth
 // bearer for a customer's connector, one tools/call away, offered by the gate
-// whose whole job is to withhold it. Measured against the deployed fleet, it was
+// whose whole job is to withhold it. Measured against the deployed surface, it was
 // one of two ops carrying a secret noun that survived; the other is the counted
 // one this asserts still survives.
 //
@@ -379,7 +379,7 @@ func TestAParentIdDoesNotQualifyASecret(t *testing.T) {
 	}
 }
 
-// TestNoSecretNounSurvivesTheRealFleet judges the fleet that exists rather than
+// TestNoSecretNounSurvivesTheRealFleet judges the surface that exists rather than
 // names invented here, so an op written tomorrow is measured by the same rule.
 // The one admitted exception is named, not counted: a rule that allowed "some"
 // survivors would pass while the wrong one survived.
