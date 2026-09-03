@@ -158,4 +158,4 @@ func TestNoSecondMCPEndpointInSource(t *testing.T) {
 // registries, asked at the moment of asking, so a tool that is not an op of its
 // app cannot be on it. What replaces the gate is a test of the live mechanism,
 // against running subsystems, which goes red when a subsystem's tools go missing
-// or when two apps claim one name: surface/mcp_test.go.
+// or when two apps claim one name: client/mcp_test.go.

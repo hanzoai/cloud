@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
@@ -93,7 +93,7 @@ func router(t *testing.T, name string) {
 	// main.go is one `defer f()()` away from never serving the endpoint at all.
 	// The agent MCP server rides the same socket, over this host's own children —
 	// which is one lazy plugin here, and none of it is what this file tests.
-	serveWake(app, surface.Use(app, manifest.MCPPath, routed([]string{name}), locate(app)))
+	serveWake(app, client.Use(app, manifest.MCPPath, routed([]string{name}), locate(app)))
 	waitFor(t, zip.SocketPath(plane.HostApp))
 }
 

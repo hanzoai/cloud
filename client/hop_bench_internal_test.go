@@ -1,4 +1,4 @@
-package surface
+package client
 
 // What the co-resident short-circuit is worth, measured rather than asserted.
 //

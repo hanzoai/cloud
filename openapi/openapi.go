@@ -392,7 +392,7 @@ type Operation struct {
 	// `storage`/`list_s3_buckets`, and 157 operations across ten apps behind it.
 	// Marking the dispatchable subset here lets the catalog carry what a child
 	// ANSWERS TO rather than what it describes, which is what Op's own doc comment
-	// in surface/catalog.go has always claimed it holds.
+	// in client/catalog.go has always claimed it holds.
 	//
 	// An extension rather than a tag: the tag axis means PRODUCT, and a generator
 	// ignores an unknown `x-`. It is derived on every regeneration and never

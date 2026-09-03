@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package surface
+package client
 
 import (
 	"encoding/json"
@@ -50,7 +50,7 @@ import (
 //     same owner lookup and the same hop on both.
 //   - NO DESCRIPTOR REMEMBERED. Describe re-asks its owner, always. Names and
 //     prose come from the catalog for a subsystem that is not running (see
-//     surface/catalog.go) and SCHEMAS never do — a descriptor kept between requests
+//     client/catalog.go) and SCHEMAS never do — a descriptor kept between requests
 //     would be plugin/<app>/mcp.json again, and the way that one went stale is
 //     the way this one cannot: the gate runs over catalog entries and live ones
 //     alike, in the same loop, so an operation the rule has since refused is in
@@ -135,7 +135,7 @@ func group(all []named) []map[string]any {
 // subsystemTool is one app's whole operation set as a single MCP tool.
 //
 // The enum carries PUBLISHED names — `deploy_project`, not
-// `post_v1_projects_by_slug_deploy` (surface/verbs.go) — and beside the product
+// `post_v1_projects_by_slug_deploy` (client/verbs.go) — and beside the product
 // ones it carries a line of their own documentation, which is the half that
 // removes a round trip. A name says what an operation is called and a model can
 // still be wrong about what it does; `create_project_fork — Creates a project

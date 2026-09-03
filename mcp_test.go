@@ -34,7 +34,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
@@ -91,15 +91,15 @@ func endpoints(t *testing.T) (fromEdge, fromInside *zip.App) {
 	fromEdge = zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
 	fromInside = zip.New(zip.Config{AppName: "plane", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
 
-	d := surface.Use(fromEdge, manifest.MCPPath, []string{"websearch"},
+	d := client.Use(fromEdge, manifest.MCPPath, []string{"websearch"},
 		func(string) (string, string, error) { return edge, manifest.FrameworkMCPPath, nil })
 	// The MCP server lists from the build-time catalog and asks nothing, so a
 	// child this binary did not build publishes nothing and every route below is
-	// "unknown tool". Saying what it publishes is what surface.MCP.Catalog is for;
+	// "unknown tool". Saying what it publishes is what client.MCP.Catalog is for;
 	// the Doc is the sentence its own WithSummary carries, so what the MCP server
 	// lists and what the op says about itself cannot drift apart here.
-	d.Catalog = func(string) []surface.Op {
-		return []surface.Op{{ID: tenantOp, Doc: "what this op resolves about its caller"}}
+	d.Catalog = func(string) []client.Op {
+		return []client.Op{{ID: tenantOp, Doc: "what this op resolves about its caller"}}
 	}
 	d.Serve(fromInside, manifest.MCPPath,
 		func(string) (string, string, error) { return plane, manifest.MCPPath, nil })

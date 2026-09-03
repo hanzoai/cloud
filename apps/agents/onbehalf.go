@@ -9,7 +9,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/types"
 )
@@ -203,7 +203,7 @@ const builtinAgentInstructions = "" +
 	"Your tools are grouped one per subsystem, and a tool IS its subsystem's name. " +
 	"Each takes an `op` (choose from its enum) and an `input` object. The enum lists " +
 	"operation names only — to see what an operation accepts or returns, call `" +
-	surface.Describe + "` with that op name first, then call it. " +
+	client.Describe + "` with that op name first, then call it. " +
 	// Scoped to the questions it is actually true of. Unscoped — "you are answering
 	// about THIS organization's live cloud" — it read as a statement of what the
 	// whole conversation is about, which is the other half of why every reply came

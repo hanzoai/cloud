@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package surface
+package client
 
 import (
 	"encoding/json"
@@ -85,7 +85,7 @@ type MCP struct {
 	// PUBLISHED for an operation → the id its owner knows it by. It holds only the
 	// operations whose published name differs, it is rewritten by the same gather,
 	// and it is read at exactly two places — [MCP.lookup] and [MCP.describe]. See
-	// surface/verbs.go for why the name it undoes is not the name the gate judged.
+	// client/verbs.go for why the name it undoes is not the name the gate judged.
 	mu    sync.RWMutex
 	owner map[string]string
 	alias map[string]string
@@ -241,12 +241,12 @@ func (d *MCP) list(c *zip.Ctx, req message, at At) error {
 	tools, down, held := d.gather(c, at)
 	// ONE TOOL PER SUBSYSTEM, the operation carried in an argument. The flat
 	// projection was 1,189 tools in 977 KB, which no model holds and every client
-	// truncates. See surface/grouped.go.
+	// truncates. See client/grouped.go.
 	result := map[string]any{"tools": group(tools)}
 	meta := map[string]any{}
 	if held > 0 {
 		// The same obligation as Unavailable, for a different cause: a list
-		// shortened by POLICY must say so too. See surface/surface.go.
+		// shortened by POLICY must say so too. See client/surface.go.
 		meta[Refused] = map[string]any{"count": held, "rule": TheRule}
 	}
 	if len(down) > 0 {
@@ -374,7 +374,7 @@ type named struct {
 	app  string
 	name string
 	// as is the name the server PUBLISHES for this operation: its id read back as
-	// a verb on an object (surface/verbs.go), or the id itself when that reading
+	// a verb on an object (client/verbs.go), or the id itself when that reading
 	// would be ambiguous. Written by [offer], never by the child.
 	as   string
 	desc string
@@ -399,7 +399,7 @@ type named struct {
 // applied in list() instead would have been a suggestion.
 //
 // It returns the tools themselves rather than their bytes because every caller
-// needs the OWNER too: list() groups by it (surface/grouped.go) and describe()
+// needs the OWNER too: list() groups by it (client/grouped.go) and describe()
 // answers out of the same gated set.
 func (d *MCP) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 	var all []named
@@ -410,7 +410,7 @@ func (d *MCP) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 	// EVERY app is read from what it PUBLISHED, and none is asked. A tools/list is
 	// a question about names, and the names are known before anything runs — each
 	// app's binary wrote them from its own router at build time (see
-	// plugin/gen-surface-catalog and surface/catalog.go).
+	// plugin/gen-client-catalog and client/catalog.go).
 	//
 	// Asking a RUNNING subsystem used to be free enough to be worth the live
 	// answer, and that reasoning does not survive contact with the deployment. This
@@ -444,7 +444,7 @@ func (d *MCP) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 			continue
 		}
 		for _, t := range a.tools {
-			// The gate, before the routing table. See surface/surface.go.
+			// The gate, before the routing table. See client/surface.go.
 			if refuse(t.name) {
 				held++
 				continue
@@ -478,7 +478,7 @@ func (d *MCP) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 	// AFTER the gate and after the sort, because both read the CHILD's own name:
 	// [refuse] must judge the route it was given, and [rank] matches route stems.
 	// Naming is the last thing that happens to a surviving operation. See
-	// surface/verbs.go.
+	// client/verbs.go.
 	offer(all)
 	alias := make(map[string]string, len(all))
 	for _, t := range all {

@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
@@ -40,7 +40,7 @@ import (
 // MCPTools() is in-process — so an agent run inside `agents` could resolve its
 // declared tool names against nothing but its own registry, which in the split
 // surface holds what `agents` itself registered and no more. The thing that DOES
-// aggregate already exists and is already mounted: surface.MCP, at
+// aggregate already exists and is already mounted: client.MCP, at
 // api.hanzo.ai/v1/mcp. The only part it was missing was an address reachable
 // from inside.
 //
@@ -64,13 +64,13 @@ import (
 // logged where the socket is named, so the degradation is visible rather than
 // inferred — and it does not return until the socket ACCEPTS, so "listening" in the
 // log is a fact rather than an intention.
-func serveWake(app *zip.App, mcp *surface.MCP) {
+func serveWake(app *zip.App, mcp *client.MCP) {
 	host := zip.New(zip.Config{AppName: "plane", Logger: app.Logger()})
 
 	// The surface's agent MCP server, at its OWN address (manifest.MCPPath) on this
 	// socket. One name for one MCP server across both transports: over HTTP it is the
 	// edge's /v1/mcp, over ZAP it is the surface's own. Nothing here re-aggregates
-	// and nothing here filters — [surface.MCP.Serve] publishes the object main.go
+	// and nothing here filters — [client.MCP.Serve] publishes the object main.go
 	// already built.
 	//
 	// It forwards INSIDE, which is the whole of what this address adds. A caller

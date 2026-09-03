@@ -1,4 +1,4 @@
-package surface
+package client
 
 // graphql.go answers a GraphQL request against the WHOLE surface.
 //

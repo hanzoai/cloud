@@ -1,4 +1,4 @@
-package surface_test
+package client_test
 
 import (
 	"encoding/json"
@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/graph"
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/valyala/fasthttp"
@@ -90,7 +90,7 @@ func fromTree(app string) []byte {
 }
 
 // endpointTo builds the endpoint over one app's real document, pointed at an address.
-func endpointTo(t *testing.T, app, addr string) *surface.Graph {
+func endpointTo(t *testing.T, app, addr string) *client.Graph {
 	t.Helper()
 	subsets, err := openapi.Subsets([]string{app}, fromTree, func(string) string { return "" })
 	if err != nil {
@@ -100,7 +100,7 @@ func endpointTo(t *testing.T, app, addr string) *surface.Graph {
 	if err != nil {
 		t.Fatalf("compose: %v", err)
 	}
-	return surface.NewGraph(d, func(string) (string, string, error) { return addr, "/", nil })
+	return client.NewGraph(d, func(string) (string, string, error) { return addr, "/", nil })
 }
 
 // caller is the request whose headers ride to the child — the identity the host
@@ -113,11 +113,11 @@ func caller() *fasthttp.Request {
 	return r
 }
 
-func run(t *testing.T, g *surface.Graph, q string, vars map[string]any) surface.Response {
+func run(t *testing.T, g *client.Graph, q string, vars map[string]any) client.Response {
 	t.Helper()
 	from := caller()
 	defer fasthttp.ReleaseRequest(from)
-	return g.Run(surface.Request{Query: q, Variables: vars}, from)
+	return g.Run(client.Request{Query: q, Variables: vars}, from)
 }
 
 // ── what the endpoint sends ──────────────────────────────────────────────────

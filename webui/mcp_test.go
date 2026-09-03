@@ -136,7 +136,7 @@ func TestMCPEndpointAnswersMCP(t *testing.T) {
 // The original bug, still pinned: the framework default must never render the
 // console. What it is answered WITH has changed — this process's own MCP server,
 // not a redirect. The 308 belongs to a host that moved its MCP endpoint and is
-// registered by the same call that registers the target (surface.Use); the
+// registered by the same call that registers the target (client.Use); the
 // end-to-end host is pinned in cmd/cloud/mcp_test.go, where both halves are
 // composed. Here the rule is the one the terminal handler can actually keep on
 // its own.
@@ -238,7 +238,7 @@ func noRouteApp(t *testing.T) *zip.App {
 //
 // Measured on bin/kms: POST /mcp -> 308 Location /v1/mcp, and POST /v1/mcp -> 404.
 // The fleet asks every child at FrameworkMCPPath and reads any non-2xx as an
-// outage (surface/surface.go ask), so a child that redirects its own MCP route to an
+// outage (client/surface.go ask), so a child that redirects its own MCP route to an
 // address it does not serve drops out of the composed tool list AND is reported
 // down — for the crime of having no tools. An empty list is the honest answer and
 // it is a 200.

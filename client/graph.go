@@ -1,4 +1,4 @@
-package surface
+package client
 
 // graph.go mounts the surface's GraphQL address.
 //

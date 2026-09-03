@@ -33,7 +33,7 @@ package agents
 // answer; it is a fact about this process.
 //
 // The thing that CAN answer already exists, and it was already deployed: the
-// surface's composed agent MCP server (surface/mcp.go), which asks every app what it
+// surface's composed agent MCP server (client/mcp.go), which asks every app what it
 // serves right now, merges the union, and forwards a call to the app that listed
 // the name. It is what api.hanzo.ai/v1/mcp is. So there is one tool surface in
 // this surface and an agent reads THAT one — surface.go is the client, over the
@@ -220,7 +220,7 @@ func (registryTools) call(ctx context.Context, org, actor, name, args string) (s
 // name rather than looked up anywhere.
 //
 // The surface MCP server groups one tool per subsystem and carries the operation
-// names in its `op` enum (surface/grouped.go), and those names are spelled
+// names in its `op` enum (client/grouped.go), and those names are spelled
 // <method>_<subsystem>_<rest> — so the owner is a fact the name already states.
 //
 // THE METHOD IS WHAT SAYS THE NAME IS IN THAT SHAPE. Reading the second word

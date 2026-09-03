@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package surface_test
+package client_test
 
 // A subsystem with NO typed op is still ASKED, so it must still ANSWER.
 //
@@ -12,7 +12,7 @@ package surface_test
 // ⇒ no route). Nothing claimed POST /mcp in those processes, the ask fell through
 // to the console's terminal handler, and it answered the signpost that is right
 // only on the public endpoint: 308 → /v1/mcp, which inside a child is a 404. The
-// MCP server read the non-2xx as an outage (surface/surface.go, ask) and reported
+// MCP server read the non-2xx as an outage (client/surface.go, ask) and reported
 // thirty healthy subsystems as unreachable:
 //
 //	"exec answered 308 for /mcp"
@@ -42,7 +42,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/exec"
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/webui"
 )
@@ -130,19 +130,19 @@ func TestASubsystemWithNoTypedOpStillAnswersTheEndpoint(t *testing.T) {
 }
 
 // outages reads the MCP server's own outage list off the result's _meta.
-func outages(t *testing.T, res map[string]any) []surface.Outage {
+func outages(t *testing.T, res map[string]any) []client.Outage {
 	t.Helper()
 	meta, _ := res["_meta"].(map[string]any)
 	if meta == nil {
 		return nil
 	}
-	raw, err := json.Marshal(meta[surface.Unavailable])
+	raw, err := json.Marshal(meta[client.Unavailable])
 	if err != nil {
 		t.Fatal(err)
 	}
-	var out []surface.Outage
+	var out []client.Outage
 	if err := json.Unmarshal(raw, &out); err != nil {
-		t.Fatalf("%s is not a list of outages: %v — %s", surface.Unavailable, err, raw)
+		t.Fatalf("%s is not a list of outages: %v — %s", client.Unavailable, err, raw)
 	}
 	return out
 }

@@ -72,7 +72,7 @@ var pkgOf = map[string]string{
 var notApps = map[string]bool{
 	"smoke":             true,
 	"gen-app-cmds":      true,
-	"gen-surface-catalog": true,
+	"gen-client-catalog": true,
 	"gen-skills":        true,
 	"gen-mcp-catalog":   true,
 	"kmsreseal":         true,
