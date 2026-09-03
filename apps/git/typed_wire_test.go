@@ -1,9 +1,9 @@
 package git
 
 import (
-	"github.com/hanzoai/cloud"
 	"bytes"
 	"context"
+	"github.com/hanzoai/cloud"
 	"io"
 	"maps"
 	"net/http"
@@ -84,47 +84,7 @@ var untypedByDesign = map[string]string{
 	"GET /v1/git/{org}/{repo}/tree/{wildcard1}": "server-rendered text/html (the tree browser); a typed Out answers JSON.",
 	"GET /v1/git/{org}/{repo}/blob/{wildcard1}": "server-rendered text/html (the blob view); a typed Out answers JSON.",
 	"GET /v1/git/{org}/{repo}/commits":          "server-rendered text/html (the commit log); a typed Out answers JSON.",
-
-	// 4. The ZAP procedure adapters (zap.go). One fact, five addresses — see
-	// reasonZAP.
-	"POST /v1/git/zap/createRepo": reasonZAP,
-	"POST /v1/git/zap/listRepos":  reasonZAP,
-	"POST /v1/git/zap/getRepo":    reasonZAP,
-	"POST /v1/git/zap/deleteRepo": reasonZAP,
-	"POST /v1/git/zap/usage":      reasonZAP,
 }
-
-// reasonZAP is the fact the five ZAP procedure adapters share, and the recorded
-// version of it had EXPIRED twice over.
-//
-// It said a typed op's returned error renders `{status:<int>, code, error:<msg>}`
-// and that nothing lets one answer a 4xx with a body of its own. Neither holds at
-// the pinned zip: a refusal renders RFC 9457 problem-details — `{type, title,
-// status, detail, code}`, no `error` key at all (zip problem.go:39-77) — and
-// WithStatus is variadic over any status with StatusCoder picking one
-// (zip typed.go:154, 189), so the success envelope and a 400/404/409/500 carrying
-// {status:"error", msg} are both an ordinary typed Out today.
-//
-// What still holds is ORDER, and it is a fact no op can reach from inside itself.
-// op.invoke decodes the request body BEFORE the handler is entered (zip
-// typed.go:485-490) and answers an undecodable one with that problem document —
-// whose `status` member is a NUMBER. The bridge unmarshals every non-2xx body
-// into its own envelope, whose `status` is a STRING (zapface/dispatch.go:35-40),
-// so the unmarshal FAILS and the ZAP client is told `INVALID_RESPONSE —
-// non-envelope response (HTTP 400)` (dispatch.go:82-86) instead of the sentence
-// the handler wrote. Today that same body answers {status:"error", msg:"invalid
-// body"} and the bridge forwards the msg (dispatch.go:88-91).
-//
-// The 403 leg is NOT what holds them, and the old reason implied it did: dispatch
-// short-circuits 401/403 before it parses anything (dispatch.go:76-80).
-//
-// They shrink by client migration, not by typing: the shared /zap plane already
-// replays the typed /v1 ops frame-for-frame.
-const reasonZAP = "the bridge's envelope, and the order it is written in: op.invoke decodes the " +
-	"body before the handler (zip typed.go:485-490) and answers an undecodable one with a problem " +
-	"document whose `status` is a NUMBER, which zapface cannot unmarshal into an envelope whose " +
-	"`status` is a STRING — so the client is told INVALID_RESPONSE instead of the handler's " +
-	"sentence (zapface/dispatch.go:35-40,82-91)."
 
 // gitOps reads BOTH projections of the live router at their one shared address
 // form: what the document says is served, and which of those carry a typed
@@ -288,9 +248,6 @@ var declaredBodies = map[string]string{
 	// No /v1/git/webhook entry: it was retired to a 410 and reads nothing, so
 	// declaring a body would hand every SDK a payload parameter for a call that
 	// ignores it — the "fresh falsehood" this list exists to prevent.
-	"POST /v1/git/zap/createRepo":                          "application/json",
-	"POST /v1/git/zap/getRepo":                             "application/json",
-	"POST /v1/git/zap/deleteRepo":                          "application/json",
 	"POST /v1/git/{org}/{repo}/git-upload-pack":            "application/octet-stream",
 	"POST /v1/git/{org}/{repo}/git-receive-pack":           "application/octet-stream",
 	"POST /v1/git/{org}/{project}/{repo}/git-upload-pack":  "application/octet-stream",
@@ -437,9 +394,6 @@ var proseless = map[string]bool{
 	// derives its schema by REFLECTION, and Go drops comments at compile time, so
 	// zipdoc — which walks zip's TYPED registrations — can never reach a type that
 	// arrives this way.
-	"zapProcReq.name":        true,
-	"zapProcReq.project":     true,
-	"zapProcReq.description": true,
 }
 
 // TestEveryPublishedFieldIsDescribed closes the half of the surface the gates above

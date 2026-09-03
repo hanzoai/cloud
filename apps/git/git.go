@@ -403,10 +403,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// /v1/git, beside the JSON ops it renders (ui.go). Registered after them, so
 	// the literal leaves are matched ahead of :org/:repo.
 	uiRoutes(app, s)
-
-	// ZAP transport — the SAME control-plane core, reachable by browsers/services
-	// that speak ZAP instead of REST, over the shared /zap plane. See zap.go.
-	mountZAP(app, s)
 }
 
 // lifecycleOnce guards the ONE registration of git's lifecycle reactors into the
