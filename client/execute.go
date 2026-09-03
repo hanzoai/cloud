@@ -1,4 +1,4 @@
-package surface
+package client
 
 // execute.go runs a parsed request against the surface: one hop per root field, in
 // parallel, each to the app that owns the operation.

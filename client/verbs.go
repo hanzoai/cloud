@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package surface
+package client
 
 import (
 	"strings"
@@ -42,7 +42,7 @@ import (
 // After the gate, in the projection, and never before either.
 //
 // [refuse] reads a tool NAME to decide whether the surface will project it at all
-// (surface/surface.go), and it is the only gate there is. If a rename ran first, an
+// (client/surface.go), and it is the only gate there is. If a rename ran first, an
 // operation whose route says `post_v1_iam_users` would be offered up as something
 // whose words no longer trip clause 2 — a credential-minting operation projected
 // because it was renamed politely. So [MCP.gather] refuses the CHILD's own name,
@@ -51,7 +51,7 @@ import (
 // changed. surface/verbs_test.go asserts that over the surface's whole corpus.
 //
 // [rank] reads the same child name for the same reason — it matches route stems
-// (surface/surface.go, productStems), so it must see a route.
+// (client/surface.go, productStems), so it must see a route.
 //
 // # The presented name is a DECODING, exactly like the envelope
 //

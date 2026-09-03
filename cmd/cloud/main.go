@@ -45,7 +45,7 @@ import (
 
 	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/cloud/clientip"
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/datadir"
 	"github.com/hanzoai/cloud/internal/edge"
 	"github.com/hanzoai/cloud/internal/environ"
@@ -152,7 +152,7 @@ func run(addr, zapAddr string) error {
 	// build-time catalogues a host hands it. This host has neither: it registers
 	// no op, and the catalogues are deleted. What it has is CHILDREN, and the
 	// honest content of the surface's MCP server is what they serve RIGHT NOW — so
-	// the host asks them (surface.Use, below, after the mount loops have built the
+	// the host asks them (client.Use, below, after the mount loops have built the
 	// plugin table).
 	//
 	// The host is still the only process that can own it: a plugin's MCPTools() is
@@ -366,14 +366,14 @@ func run(addr, zapAddr string) error {
 	// its tool names against the same aggregated surface. serveWake publishes
 	// this same object on the host's internal socket, so there is one gather, one
 	// routing table and one curation rule for both directions.
-	mcp := surface.Use(app, manifest.MCPPath, routed(composed), locate(app))
+	mcp := client.Use(app, manifest.MCPPath, routed(composed), locate(app))
 
 	// LISTING WHAT THE FLEET SERVES MUST NOT START THE FLEET. Discovery asks a
 	// subsystem, and asking a lazy one starts it — so one tools/list started every
 	// subsystem this host composes, and the pod's resident cost became the size of
 	// the catalog rather than of the work. The MCP server asks the ones that are
 	// already running and reads the rest from what they published
-	// (surface/catalog.go); this is the half only the host can answer, because the
+	// (client/catalog.go); this is the half only the host can answer, because the
 	// plugin table is its.
 
 	// The bare /mcp needs no route here. webui's terminal handler answers it from
@@ -559,7 +559,7 @@ func mount(app *zip.App, a manifest.App, eager bool, absent map[string]string) e
 	// answer tools/list without running anything. That artifact was a second
 	// source for a fact the child already knows, and it was wrong: o11y's held 12
 	// tools while the o11y binary at the same commit served 365. The MCP server
-	// asks the child now (surface.Use), so there is nothing to hand over here.
+	// asks the child now (client.Use), so there is nothing to hand over here.
 	p.Start = startTimeout()
 
 	// zip v1.23 removed (*App).Add: Use is the ONE composition verb, and zip.Load
@@ -626,7 +626,7 @@ func routed(composed []string) []string {
 // remotely mounted app is never started, so Start has nothing to report about it
 // and would name it unavailable forever.
 
-func locate(app *zip.App) surface.At {
+func locate(app *zip.App) client.At {
 	remote := map[string]string{}
 	for _, a := range manifest.Apps {
 		if addr := a.Plugin().Addr; addr != "" {
@@ -651,7 +651,7 @@ func locate(app *zip.App) surface.At {
 // caller's identity survives into every app this host RUNS, and into a remote one
 // only as far as that app's own boundary lets it — which is the honest answer,
 // and the same one it has always given.
-func inside(app *zip.App) surface.At {
+func inside(app *zip.App) client.At {
 	edge := locate(app)
 	remote := map[string]bool{}
 	for _, a := range manifest.Apps {
@@ -867,7 +867,7 @@ func index(app *zip.App, composed []string) {
 // /v1/graphql, never /v1/graph: the second is the knowledge graph's own address,
 // assertions and neighbours, and the two mean different things by the word.
 func graphql(app *zip.App, composed []string) {
-	surface.UseGraph(app, openapi.GraphPath, subsets(composed), locate(app))
+	client.UseGraph(app, openapi.GraphPath, subsets(composed), locate(app))
 }
 
 // subsets is what this deployment publishes: each app's own document, read from

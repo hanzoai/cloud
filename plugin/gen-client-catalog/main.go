@@ -1,4 +1,4 @@
-// Command gen-surface-catalog writes what each subsystem serves, so the surface's
+// Command gen-client-catalog writes what each subsystem serves, so the surface's
 // agent MCP server can answer tools/list without a process per subsystem.
 //
 // THE SOURCE IS EACH APP'S OWN SPEC, plugin/<app>/openapi.json, which that app's
@@ -52,13 +52,13 @@ func main() {
 	}
 	specs, err := filepath.Glob(filepath.Join(root, "plugin", "*", "openapi.json"))
 	if err != nil || len(specs) == 0 {
-		fmt.Fprintf(os.Stderr, "gen-surface-catalog: no specs at %s/plugin/*/openapi.json (%v)\n", root, err)
+		fmt.Fprintf(os.Stderr, "gen-client-catalog: no specs at %s/plugin/*/openapi.json (%v)\n", root, err)
 		os.Exit(1)
 	}
 
 	published, err := contract(root)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "gen-surface-catalog: %v\n", err)
+		fmt.Fprintf(os.Stderr, "gen-client-catalog: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -67,7 +67,7 @@ func main() {
 		app := filepath.Base(filepath.Dir(path))
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "gen-surface-catalog: read %s: %v\n", path, err)
+			fmt.Fprintf(os.Stderr, "gen-client-catalog: read %s: %v\n", path, err)
 			os.Exit(1)
 		}
 		var doc struct {
@@ -81,7 +81,7 @@ func main() {
 			} `json:"paths"`
 		}
 		if err := json.Unmarshal(raw, &doc); err != nil {
-			fmt.Fprintf(os.Stderr, "gen-surface-catalog: parse %s: %v\n", path, err)
+			fmt.Fprintf(os.Stderr, "gen-client-catalog: parse %s: %v\n", path, err)
 			os.Exit(1)
 		}
 		seen := map[string]bool{}
@@ -136,13 +136,13 @@ func main() {
 
 	body, err := json.MarshalIndent(out, "", " ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "gen-surface-catalog: encode: %v\n", err)
+		fmt.Fprintf(os.Stderr, "gen-client-catalog: encode: %v\n", err)
 		os.Exit(1)
 	}
 	body = append(body, '\n')
-	dst := filepath.Join(root, "surface", "catalog.json")
+	dst := filepath.Join(root, "client", "catalog.json")
 	if err := os.WriteFile(dst, body, 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "gen-surface-catalog: write %s: %v\n", dst, err)
+		fmt.Fprintf(os.Stderr, "gen-client-catalog: write %s: %v\n", dst, err)
 		os.Exit(1)
 	}
 	n := 0

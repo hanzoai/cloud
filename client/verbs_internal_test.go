@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package surface
+package client
 
 import (
 	"encoding/json"
@@ -226,7 +226,7 @@ func TestTheGateStillJudgesTheROUTE(t *testing.T) {
 	}
 
 	t.Logf("MEASURED — over %d declared operations: %d refused, %d offered", len(held)+len(offered), len(held), len(offered))
-	t.Logf("  the gate's input is the child's own id, before naming; see surface/verbs.go.")
+	t.Logf("  the gate's input is the child's own id, before naming; see client/verbs.go.")
 	t.Logf("  first refusals, in order: %s", strings.Join(held[:min(6, len(held))], " "))
 }
 

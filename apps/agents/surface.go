@@ -5,9 +5,9 @@ package agents
 //
 // # Why this is not a new mechanism
 //
-// The surface already aggregates. surface.MCP asks every composed app what it
+// The surface already aggregates. client.MCP asks every composed app what it
 // serves right now, merges the answers, remembers which app listed which name,
-// and forwards a tools/call to that app (surface/mcp.go). It is what serves
+// and forwards a tools/call to that app (client/mcp.go). It is what serves
 // api.hanzo.ai/v1/mcp and what a Slack MCP client already talks to. Building a
 // tools_catalog/tools_call op pair on the tool plane would have been a SECOND
 // aggregation over the same children, with a second place for the curation rule
@@ -57,7 +57,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
@@ -88,7 +88,7 @@ var errNoSurface = errors.New("agents: no surface MCP server on this host")
 // server's tools/list answers only the first: it publishes one tool per
 // subsystem, whose `op` enum carries the operation names and no schemas, since
 // the flat list of this surface's operations was 977 KB that no model can hold and
-// every client truncates (surface/grouped.go). surface.Describe answers the second,
+// every client truncates (client/grouped.go). client.Describe answers the second,
 // one operation at a time, out of the same gathered set — so a declared name the
 // MCP server does not offer is simply absent, which is the same rule
 // registryTools follows: offering a tool that would be refused at dispatch
@@ -164,7 +164,7 @@ func (surfaceTools) catalog(ctx context.Context, org, actor string, want []strin
 		}
 	}
 	// ToolsAll offers the MCP server's tools AS THE MCP SERVER GROUPS THEM — one
-	// per subsystem, named for it, carrying an `op` enum, plus [surface.Describe] —
+	// per subsystem, named for it, carrying an `op` enum, plus [client.Describe] —
 	// and not the ops flattened back out.
 	//
 	// The grouping is the whole reason the surface is affordable: 1,189 flat tools
@@ -173,7 +173,7 @@ func (surfaceTools) catalog(ctx context.Context, org, actor string, want []strin
 	// MCP server just saved and blow the context before the question is read.
 	//
 	// It is also what the assistant's instructions describe — pick a subsystem,
-	// choose an op from its enum, call [surface.Describe] for a shape you do not know.
+	// choose an op from its enum, call [client.Describe] for a shape you do not know.
 	// The prose and the offer have to be the same surface or the model is being
 	// taught a protocol it cannot practise.
 	if all {
@@ -234,7 +234,7 @@ func opsOf(schema json.RawMessage) []string {
 }
 
 // describe fetches ONE operation's descriptor through the MCP server's own
-// surface.Describe, and reads the owning subsystem's bytes back out of it.
+// client.Describe, and reads the owning subsystem's bytes back out of it.
 //
 // What the client guarantees is that the model is offered exactly what it will
 // CALL, and op is that name: it came out of a subsystem tool's `op` enum a
@@ -244,7 +244,7 @@ func opsOf(schema json.RawMessage) []string {
 //
 // The descriptor's own `name` is NOT compared to op, and that is a change. The
 // MCP server publishes an operation as a verb on an object — `deploy_project`
-// for `post_v1_projects_by_slug_deploy` (surface/verbs.go) — while the descriptor
+// for `post_v1_projects_by_slug_deploy` (client/verbs.go) — while the descriptor
 // it hands back is the owning subsystem's, carried verbatim, so it still says
 // the id. Requiring the two to match would reject 1,730 of the surface's 2,229
 // operations for being correctly named.
@@ -253,7 +253,7 @@ func describe(ctx context.Context, org, actor, op string) (types.ToolDef, error)
 	if err != nil {
 		return types.ToolDef{}, err
 	}
-	body, err := toolCallBody(surface.Describe, string(args))
+	body, err := toolCallBody(client.Describe, string(args))
 	if err != nil {
 		return types.ToolDef{}, err
 	}
@@ -271,7 +271,7 @@ func describe(ctx context.Context, org, actor, op string) (types.ToolDef, error)
 		InputSchema json.RawMessage `json:"inputSchema"`
 	}
 	if err := json.Unmarshal([]byte(text), &d); err != nil || d.Name == "" || len(d.InputSchema) == 0 {
-		return types.ToolDef{}, fmt.Errorf("agents: %s did not answer %s's own descriptor", surface.Describe, op)
+		return types.ToolDef{}, fmt.Errorf("agents: %s did not answer %s's own descriptor", client.Describe, op)
 	}
 	return types.ToolDef{Name: op, Description: d.Description, Schema: d.InputSchema}, nil
 }

@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package surface_test
+package client_test
 
 // THE ASSISTANT COULD NOT CHECK THE WEATHER, and it was right not to try.
 //
@@ -25,7 +25,7 @@ package surface_test
 // reach.
 //
 // It asserts the OPERATIONS, not the tool count. The MCP server projects one tool per
-// subsystem and carries the operations in that tool's `op` enum (surface/grouped.go),
+// subsystem and carries the operations in that tool's `op` enum (client/grouped.go),
 // so a `websearch` tool existing is not the claim — `search_web` being
 // inside it is.
 
@@ -40,7 +40,7 @@ import (
 	"github.com/hanzoai/cloud/apps/crawl"
 	"github.com/hanzoai/cloud/apps/exec"
 	"github.com/hanzoai/cloud/apps/websearch"
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 )
 
 // reach is one capability the agent needs, and the operation that is its entry point.
@@ -88,8 +88,8 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 		// The enum carries the name the MCP server PUBLISHES for an operation, so that
 		// is what a model reads and that is what is asked for here. A DECLARED id
 		// (read_page, search_web, research_web) is published verbatim; only a
-		// route-derived one is rephrased. surface/verbs.go is why.
-		as := surface.Phrase(w.op)
+		// route-derived one is rephrased. client/verbs.go is why.
+		as := client.Phrase(w.op)
 		if !slices.Contains(offering, as) {
 			t.Errorf("%s (offered as %s) does NOT project — so the assistant still cannot %s.\n"+
 				"  the MCP server offers: %s", w.op, as, w.why, strings.Join(offering, " "))
@@ -100,7 +100,7 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 		// mapping a published name onto a REAL child's own descriptor — not a
 		// string this test computed twice.
 		desc := rpc(t, h, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"`+
-			surface.Describe+`","arguments":{"op":"`+as+`"}}}`)
+			client.Describe+`","arguments":{"op":"`+as+`"}}}`)
 		content, _ := desc["content"].([]any)
 		if len(content) == 0 {
 			t.Errorf("%s describes to nothing: %v", as, desc)
@@ -124,5 +124,5 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 // here. It has one home already: `survivors` and `refusals` in
 // surface_internal_test.go are where a name is checked against the rule, and the
 // three names above are in the survivors table. A second gate assertion would be
-// a second place the policy is stated, which is the thing surface/surface.go's own
+// a second place the policy is stated, which is the thing client/surface.go's own
 // note spends a page avoiding.

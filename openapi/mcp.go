@@ -2,7 +2,7 @@ package openapi
 
 // THE AGENT MCP SERVER'S PLACE IN THE DOCUMENT.
 //
-// POST /v1/mcp is served by the host (surface.Use), named by the manifest
+// POST /v1/mcp is served by the host (client.Use), named by the manifest
 // (manifest.MCPPath), and owned by no app — the fourth address beside the
 // document endpoint, its well-known alias and the command projection. Like them
 // it is projected rather than written down: [core] mounts a stub at the

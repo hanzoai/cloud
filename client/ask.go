@@ -1,7 +1,10 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-// Package surface is how the light host answers a question about a subsystem: it
-// ASKS the subsystem.
+// Package client is the host's client for every app it runs: one process per
+// API beside it, and this is how the host reaches them.
+//
+// It answers a question about a subsystem by ASKING the subsystem, over that
+// app's own unix socket, and composes the answers into one surface.
 //
 // The host links no subsystem (cmd/cloud), so it cannot read a registry it does
 // not hold. For a long time it read a COMMITTED PROJECTION instead —
@@ -42,7 +45,7 @@
 // could not reach is indistinguishable from one whose app serves nothing, and
 // those are the same defect the stale file was: the caller cannot tell. Every
 // caller here reports its failures by name — see [MCP] for the wire shape.
-package surface
+package client
 
 import (
 	"context"

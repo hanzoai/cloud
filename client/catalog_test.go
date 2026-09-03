@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package surface
+package client
 
 import (
 	"encoding/json"
@@ -23,7 +23,7 @@ import (
 // serves — the exact way the hand-kept catalogue this replaced went stale.
 //
 // The AUDIENCE is read off openapi.yaml and not off the subset, for the reason
-// gen-surface-catalog states: a subset's x-public is what an app could derive about
+// gen-client-catalog states: a subset's x-public is what an app could derive about
 // itself, and the stage (HIP-0139 §8) is a surface fact it cannot see. Asking the
 // subset here would demand of the catalog every beta operation the contract
 // leaves out.
@@ -43,7 +43,7 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 		var doc struct {
 			Paths map[string]map[string]struct {
 				OperationID string `json:"operationId"`
-				// x-tool, the same mark gen-surface-catalog reads. Both sides of
+				// x-tool, the same mark gen-client-catalog reads. Both sides of
 				// this comparison must apply it or the link is between two
 				// different questions: a document carries every ROUTE and the
 				// catalog carries what a child ANSWERS TO, so an unfiltered
@@ -80,7 +80,7 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 	for app, ids := range want {
 		got := Published(app)
 		if got == nil {
-			t.Errorf("%s publishes %d operations and the catalog carries none — run `go run ./plugin/gen-surface-catalog .`", app, len(ids))
+			t.Errorf("%s publishes %d operations and the catalog carries none — run `go run ./plugin/gen-client-catalog .`", app, len(ids))
 			continue
 		}
 		have := make([]string, len(got))
@@ -103,7 +103,7 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 }
 
 // contract is every operationId in the published contract, read off openapi.yaml
-// — the same set gen-surface-catalog reads, from the same file, because the two
+// — the same set gen-client-catalog reads, from the same file, because the two
 // must be asking one question. It is small enough to state twice and the second
 // statement is what makes this a check rather than a restatement of the
 // generator's own bookkeeping.

@@ -395,7 +395,7 @@ describe: ## Every app describes itself (one binary per app, all at once).
 documents: describe ## Write every generated document FROM SOURCE. Produces; renders no verdict.
 	@out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi OUT=$(ROOT)/private.yaml 2>&1) \
 	  || { echo "$$out"; echo "!! the compose refused; nothing was written"; exit 1; }
-	@cd $(ROOT) && GOWORK=off go run ./plugin/gen-surface-catalog . >/dev/null
+	@cd $(ROOT) && GOWORK=off go run ./plugin/gen-client-catalog . >/dev/null
 	@cd $(ROOT) && GOWORK=off go run ./plugin/gen-mcp-catalog . >/dev/null
 	@cd $(ROOT) && GOWORK=off go run ./plugin/gen-skills . >/dev/null
 
@@ -431,7 +431,7 @@ documents: describe ## Write every generated document FROM SOURCE. Produces; ren
 # would regenerate the whole fleet, judge one unrelated path, find it clean and
 # report the surface unchanged. cicd.yml already states the rule for the reviewer
 # one lane over — "a reviewer with a way past it is one an attacker reaches for".
-override DOCUMENTS := openapi.yaml private.yaml openapi/floor.json openapi/untyped.json openapi/closure.json surface/catalog.json plugin/ apps/skills/catalog/
+override DOCUMENTS := openapi.yaml private.yaml openapi/floor.json openapi/untyped.json openapi/closure.json client/catalog.json plugin/ apps/skills/catalog/
 
 paths: ## Print the generated-document paths, for a caller that has to name them outside make.
 	@echo $(DOCUMENTS)

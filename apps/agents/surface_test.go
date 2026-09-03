@@ -3,7 +3,7 @@ package agents
 // endpoint_test.go — the tool plane, over the wire it actually uses.
 //
 // Nothing is stubbed at the client under test. Every test here brings up real
-// subsystem apps on real ZAP sockets, composes the REAL surface.MCP over them,
+// subsystem apps on real ZAP sockets, composes the REAL client.MCP over them,
 // publishes it on the router's socket exactly as cmd/cloud/wake.go does, and
 // then drives surfaceTools — so what is asserted is what a deployed agent gets.
 //
@@ -22,7 +22,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
@@ -46,24 +46,24 @@ type echoOut struct {
 // build-time catalog and asks nothing, because one question about names was
 // costing a process per subsystem. These children are built here rather than by
 // the surface's generator, so nothing embeds their operations and the harness has
-// to state them — which is exactly the case surface.MCP.Catalog documents.
+// to state them — which is exactly the case client.MCP.Catalog documents.
 //
 // Written by subsystem, read by fleetEndpoint. Both run on the test's own goroutine
 // and the calls to subsystem are ARGUMENTS to fleetEndpoint, so they are complete
 // before the map is read; these tests do not run in parallel.
-var declared = map[string][]surface.Op{}
+var declared = map[string][]client.Op{}
 
 // subsystem starts one app serving the named ops on its own socket, the shape
 // cloud.Serve gives every plugin binary. Each op echoes its input AND the org it
 // was reached as, so a test can prove the run's tenant travelled the whole way.
 func subsystem(t *testing.T, name string, ops ...string) string {
 	t.Helper()
-	pub := make([]surface.Op, 0, len(ops))
+	pub := make([]client.Op, 0, len(ops))
 	for _, id := range ops {
 		// The same sentence WithSummary puts on the live op, so what the MCP
 		// server lists and what the child would have answered cannot drift
 		// apart here.
-		pub = append(pub, surface.Op{ID: id, Doc: "what " + name + " does at " + id})
+		pub = append(pub, client.Op{ID: id, Doc: "what " + name + " does at " + id})
 	}
 	declared[name] = pub
 	t.Cleanup(func() { delete(declared, name) })
@@ -107,11 +107,11 @@ func fleetEndpoint(t *testing.T, at map[string]string, inside map[string]string)
 		}
 		return sock, manifest.FrameworkMCPPath, nil
 	}
-	d := surface.Use(host, manifest.MCPPath, apps, edge)
+	d := client.Use(host, manifest.MCPPath, apps, edge)
 	// nil would mean the catalog THIS binary embeds, which is the real surface's —
 	// it does not carry these children, so the MCP server would list nothing for
 	// them and every assertion below would read as "the agent was offered 0".
-	d.Catalog = func(app string) []surface.Op { return declared[app] }
+	d.Catalog = func(app string) []client.Op { return declared[app] }
 
 	endpoint := zip.New(zip.Config{AppName: "plane", DisableStartupMessage: true})
 	d.Serve(endpoint, manifest.MCPPath, func(app string) (addr, path string, err error) {
@@ -204,7 +204,7 @@ func TestUnservedNamesAreNotOffered(t *testing.T) {
 
 // TestTheAgentInheritsTheEndpointsDenylist is the security bar, as a test.
 //
-// The curation rule lives in surface/surface.go and is applied inside gather,
+// The curation rule lives in client/surface.go and is applied inside gather,
 // where the routing table is written. An agent reaching the MCP server through
 // any other path would have seen a surface external MCP clients cannot — so this
 // asserts BOTH halves: the credential-minting op is not offered, and naming it
@@ -260,7 +260,7 @@ func guarded(t *testing.T, name, op string) (edge, plane string) {
 	// Publishing is a separate act from serving, and this child owes it for the
 	// same reason subsystem's do: the MCP server lists from the catalog and
 	// never asks.
-	declared[name] = []surface.Op{{ID: op, Doc: "what " + name + " does at " + op}}
+	declared[name] = []client.Op{{ID: op, Doc: "what " + name + " does at " + op}}
 	t.Cleanup(func() { delete(declared, name) })
 
 	app := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})

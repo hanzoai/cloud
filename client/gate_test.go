@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package surface_test
+package client_test
 
 // The gate, over the wire, with a child that really does serve the dangerous op.
 //
@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -90,13 +90,13 @@ func TestTheEndpointDoesNotProjectACredentialOpItsChildServes(t *testing.T) {
 	// in that spelling — and the dangerous half is asked in both, because a refused
 	// operation must not reappear under a friendlier name.
 	for _, n := range dangerous {
-		if got[n] || got[surface.Phrase(n)] {
+		if got[n] || got[client.Phrase(n)] {
 			t.Errorf("the MCP server PROJECTED %q — an agent can mint or read a credential with it", n)
 		}
 	}
 	for _, n := range useful {
-		if !got[surface.Phrase(n)] {
-			t.Errorf("the MCP server dropped %q (offered as %q) — the gate ate a product tool", n, surface.Phrase(n))
+		if !got[client.Phrase(n)] {
+			t.Errorf("the MCP server dropped %q (offered as %q) — the gate ate a product tool", n, client.Phrase(n))
 		}
 	}
 }
@@ -158,7 +158,7 @@ func TestTheProductSurfaceLeadsTheList(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("the MCP server listed nothing")
 	}
-	if got[0] != surface.Phrase("post_chat_completions") {
+	if got[0] != client.Phrase("post_chat_completions") {
 		t.Errorf("the first tool is %q; chat leads the product surface", got[0])
 	}
 	// Ranking reads the ROUTE and the enum carries the phrase, so a lookup names
@@ -166,11 +166,11 @@ func TestTheProductSurfaceLeadsTheList(t *testing.T) {
 	// server published it. That the two agree for every entry is the point.
 	at := func(id string) int {
 		for i, n := range got {
-			if n == surface.Phrase(id) {
+			if n == client.Phrase(id) {
 				return i
 			}
 		}
-		t.Fatalf("%q (offered as %q) is missing from %v", id, surface.Phrase(id), got)
+		t.Fatalf("%q (offered as %q) is missing from %v", id, client.Phrase(id), got)
 		return -1
 	}
 	for _, product := range []string{"post_chat_completions", "get_models", "post_code_ask"} {
@@ -203,15 +203,15 @@ func TestTheEndpointSAYSHowMuchItWithheld(t *testing.T) {
 	if !ok {
 		t.Fatalf("tools/list withheld %d tools and said nothing: %v", len(dangerous), res)
 	}
-	row, ok := meta[surface.Refused].(map[string]any)
+	row, ok := meta[client.Refused].(map[string]any)
 	if !ok {
-		t.Fatalf("_meta has no %q: %v", surface.Refused, meta)
+		t.Fatalf("_meta has no %q: %v", client.Refused, meta)
 	}
 	if n, _ := row["count"].(float64); int(n) != len(dangerous) {
-		t.Errorf("_meta[%q].count = %v, want %d", surface.Refused, row["count"], len(dangerous))
+		t.Errorf("_meta[%q].count = %v, want %d", client.Refused, row["count"], len(dangerous))
 	}
-	if rule, _ := row["rule"].(string); rule != surface.TheRule {
-		t.Errorf("_meta[%q].rule = %q; an operator who wonders where a tool went must be able to read why", surface.Refused, rule)
+	if rule, _ := row["rule"].(string); rule != client.TheRule {
+		t.Errorf("_meta[%q].rule = %q; an operator who wonders where a tool went must be able to read why", client.Refused, rule)
 	}
 }
 

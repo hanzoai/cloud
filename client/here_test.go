@@ -1,4 +1,4 @@
-package surface_test
+package client_test
 
 // A subsystem this process already serves is reached IN MEMORY, and that is what
 // this file proves — not by reading the code, but by making the dial impossible
@@ -22,7 +22,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 )
 
 // servingApp brings an app up on the canonical socket for name, which is what
@@ -56,7 +56,7 @@ func servingApp(t *testing.T, name string) *zip.App {
 
 // deadEnd is an At naming an address nothing serves. A hop that dials it fails;
 // that is the whole point.
-func deadEnd(t *testing.T) surface.At {
+func deadEnd(t *testing.T) client.At {
 	t.Helper()
 	dead := filepath.Join(t.TempDir(), "nothing-listens-here.sock")
 	return func(string) (string, string, error) { return dead, "/mcp", nil }
@@ -76,7 +76,7 @@ func TestACoResidentSubsystemIsReachedWithoutDialing(t *testing.T) {
 	req := toolsList()
 	defer fasthttp.ReleaseRequest(req)
 
-	ans := surface.Ask(context.Background(), deadEnd(t), []string{"probe"}, req)[0]
+	ans := client.Ask(context.Background(), deadEnd(t), []string{"probe"}, req)[0]
 	if ans.Err != nil {
 		t.Fatalf("a co-resident subsystem was dialed instead of called: %v", ans.Err)
 	}
@@ -103,7 +103,7 @@ func TestAPeerThisProcessDoesNotServeIsStillDialed(t *testing.T) {
 	req := toolsList()
 	defer fasthttp.ReleaseRequest(req)
 
-	ans := surface.Ask(context.Background(), deadEnd(t), []string{"absent"}, req)[0]
+	ans := client.Ask(context.Background(), deadEnd(t), []string{"absent"}, req)[0]
 	if ans.Err == nil {
 		t.Fatal("a peer this process does not serve must be dialed, and that dial must fail here")
 	}
@@ -121,7 +121,7 @@ func TestTheStatedCallerReachesTheInMemoryEndpoint(t *testing.T) {
 	defer fasthttp.ReleaseRequest(req)
 
 	ctx := zip.WithCaller(context.Background(), zip.Caller{Org: "acme", User: "u-1"})
-	ans := surface.Ask(ctx, deadEnd(t), []string{"probe"}, req)[0]
+	ans := client.Ask(ctx, deadEnd(t), []string{"probe"}, req)[0]
 	if ans.Err != nil {
 		t.Fatalf("stated caller did not reach the endpoint: %v", ans.Err)
 	}
@@ -141,7 +141,7 @@ func TestGraphReachesACoResidentSubsystemWithoutDialing(t *testing.T) {
 	req.Header.SetMethod("GET")
 	req.SetRequestURI("/v1/probe/ping")
 
-	resp, err := surface.ServeHere(app, req)
+	resp, err := client.ServeHere(app, req)
 	if err != nil {
 		t.Fatalf("serving in memory: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestTheInMemoryRouterIsTheSERVEDOne(t *testing.T) {
 	req.Header.SetMethod("GET")
 	req.SetRequestURI("/v1/probe/route-nobody-registered")
 
-	resp, err := surface.ServeHere(app, req)
+	resp, err := client.ServeHere(app, req)
 	if err != nil {
 		t.Fatalf("serving in memory: %v", err)
 	}

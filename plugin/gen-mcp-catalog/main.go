@@ -1,4 +1,4 @@
-// gen-mcp-catalog projects surface/catalog.json onto the surface an MCP client
+// gen-mcp-catalog projects client/catalog.json onto the surface an MCP client
 // needs to offer the surface without asking for it, and writes that projection to
 // every runtime that carries one.
 //
@@ -26,7 +26,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 )
 
 // entry is one subsystem as a client offers it.
@@ -52,7 +52,7 @@ func main() {
 		root = a
 	}
 
-	projected, ops, err := project(filepath.Join(root, "surface", "catalog.json"))
+	projected, ops, err := project(filepath.Join(root, "client", "catalog.json"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -65,7 +65,7 @@ func main() {
 	}
 	body = append(body, '\n')
 
-	mine := filepath.Join(root, "surface", "mcp.json")
+	mine := filepath.Join(root, "client", "mcp.json")
 
 	// A projection smaller than the one it replaces is refused, because a surface
 	// answering partially and a surface that lost capabilities look identical from
@@ -114,7 +114,7 @@ func project(path string) (map[string]entry, int, error) {
 		// SAME predicate decides here — never a second copy of the words.
 		ids := make([]string, 0, len(list))
 		for _, op := range list {
-			if surface.Withheld(op.ID) {
+			if client.Withheld(op.ID) {
 				continue
 			}
 			ids = append(ids, op.ID)

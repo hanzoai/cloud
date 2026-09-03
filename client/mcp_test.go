@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package surface_test
+package client_test
 
 // The MCP server, end to end, over the wire it actually uses.
 //
@@ -30,7 +30,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
@@ -104,7 +104,7 @@ func waitFor(t *testing.T, sock string) {
 func host(t *testing.T, apps []string, kids map[string]*child) *zip.App {
 	t.Helper()
 	h := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
-	d := surface.Use(h, "/v1/mcp", apps, func(app string) (addr, path string, err error) {
+	d := client.Use(h, "/v1/mcp", apps, func(app string) (addr, path string, err error) {
 		k := kids[app]
 		if k == nil {
 			return "", "", &net.AddrError{Err: "no instance running", Addr: app}
@@ -113,18 +113,18 @@ func host(t *testing.T, apps []string, kids map[string]*child) *zip.App {
 	})
 	// The MCP server lists what a subsystem PUBLISHED and asks nothing, so a
 	// fixture has to say what these children publish. They are real apps, so their
-	// own registries are the publication — the same value plugin/gen-surface-catalog
+	// own registries are the publication — the same value plugin/gen-client-catalog
 	// reads out of each app's openapi.json for the embedded catalog.
-	d.Catalog = func(app string) []surface.Op {
+	d.Catalog = func(app string) []client.Op {
 		k := kids[app]
 		if k == nil {
 			return nil
 		}
-		var ops []surface.Op
+		var ops []client.Op
 		for _, tl := range k.app.MCPTools() {
 			name, _ := tl["name"].(string)
 			desc, _ := tl["description"].(string)
-			ops = append(ops, surface.Op{ID: name, Doc: desc})
+			ops = append(ops, client.Op{ID: name, Doc: desc})
 		}
 		return ops
 	}
@@ -164,7 +164,7 @@ func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 // offered is every OPERATION the MCP server offers, in the order it offers them.
 //
 // The MCP server publishes one tool per subsystem and carries the operations in
-// that tool's `op` enum (surface/grouped.go), so the operations are read out of the
+// that tool's `op` enum (client/grouped.go), so the operations are read out of the
 // enums rather than off the tool names. That is the same question these tests
 // always asked — "what can be called through this MCP server" — put to the
 // surface that now answers it. describe has no enum and contributes nothing.
@@ -216,7 +216,7 @@ func unavailable(t *testing.T, h *zip.App) map[string]string {
 	t.Helper()
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 	meta, _ := res["_meta"].(map[string]any)
-	rows, _ := meta[surface.Unavailable].([]any)
+	rows, _ := meta[client.Unavailable].([]any)
 	out := map[string]string{}
 	for _, r := range rows {
 		m, _ := r.(map[string]any)

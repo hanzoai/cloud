@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package surface_test
+package client_test
 
 // A credential-less tools/call at the EDGE is told where to sign in; the same
 // call on the plane is not challenged, because a sibling on the surface's socket
@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
@@ -47,7 +47,7 @@ const callWithoutTool = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":
 
 func TestACredentiallessCallAtTheEdgeIsChallenged(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
-	surface.Use(app, manifest.MCPPath, nil, nowhere)
+	client.Use(app, manifest.MCPPath, nil, nowhere)
 
 	code, hdr, body := post(t, app, manifest.MCPPath, callWithoutTool, nil)
 	if code != http.StatusUnauthorized {
@@ -92,7 +92,7 @@ func TestACredentiallessCallAtTheEdgeIsChallenged(t *testing.T) {
 
 func TestThePlaneEndpointIsNeverChallenged(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
-	d := surface.Use(zip.New(zip.Config{DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}}), manifest.MCPPath, nil, nowhere)
+	d := client.Use(zip.New(zip.Config{DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}}), manifest.MCPPath, nil, nowhere)
 	d.Serve(app, manifest.MCPPath, nowhere)
 
 	code, _, body := post(t, app, manifest.MCPPath, callWithoutTool, nil)

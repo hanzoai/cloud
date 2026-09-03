@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package surface
+package client
 
 import (
 	"sort"
@@ -46,7 +46,7 @@ func Corpus(t *testing.T) []CorpusOp {
 		}
 	}
 	if len(out) == 0 {
-		t.Fatal("the catalog is empty: run `go run ./plugin/gen-surface-catalog .`")
+		t.Fatal("the catalog is empty: run `go run ./plugin/gen-client-catalog .`")
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].App != out[j].App {

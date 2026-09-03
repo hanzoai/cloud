@@ -44,7 +44,7 @@ import "strings"
 // to reach for a rename has been removed rather than resolved. HIP-0139 §2.2.
 
 // Plural is the ONE pluralisation rule in this repository, exported because it
-// has a second caller: surface/verbs.go turns an operation id into the phrase an
+// has a second caller: client/verbs.go turns an operation id into the phrase an
 // SDK method and a CLI verb read as, and a collection read at a singular address
 // needs the plural of that address's noun to say "list". Two copies of English
 // in one repo is two answers to one question, so there is one.

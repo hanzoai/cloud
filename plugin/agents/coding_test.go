@@ -13,7 +13,7 @@ package main
 //	            the input has no field either could arrive in
 //
 // Nothing here is a fixture at the client under test. The first two drive the
-// REAL surface.MCP over a child carrying the REAL registration [codingEndpoint], so
+// REAL client.MCP over a child carrying the REAL registration [codingEndpoint], so
 // deleting that registration fails them — which is the whole point, because the
 // magic-word path that used to reach the engine has been deleted and this is
 // now the only way in. A harness that rebuilt the route table by hand could
@@ -32,7 +32,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/surface"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
@@ -40,7 +40,7 @@ import (
 
 // tool is the name the fleet's MCP server publishes the coding op under. A model
 // never sees `post_agents_coding`: the MCP server renames a derived operation id
-// to the verb phrase it already contains (surface/verbs.go), and THIS is the
+// to the verb phrase it already contains (client/verbs.go), and THIS is the
 // string a tools/call carries.
 //
 // It was `create_coding` while the run answered at /v1/coding. The address folded
@@ -79,13 +79,13 @@ func agentsChild(t *testing.T) string {
 	return ""
 }
 
-// endpoint composes the real fleet MCP server over that child — surface.Use, the
+// endpoint composes the real fleet MCP server over that child — client.Use, the
 // same call cmd/cloud makes, with the same MCP path.
 func endpoint(t *testing.T) *zip.App {
 	t.Helper()
 	sock := agentsChild(t)
 	h := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
-	surface.Use(h, manifest.MCPPath, []string{"agents"}, func(app string) (addr, path string, err error) {
+	client.Use(h, manifest.MCPPath, []string{"agents"}, func(app string) (addr, path string, err error) {
 		if app != "agents" {
 			return "", "", &net.AddrError{Err: "no instance running", Addr: app}
 		}
@@ -123,7 +123,7 @@ func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 }
 
 // ops reads the operation names out of one subsystem tool's schema — the `op`
-// enum, which is where the grouped MCP server carries them (surface/grouped.go).
+// enum, which is where the grouped MCP server carries them (client/grouped.go).
 // This is the same read apps/agents/endpoint.go does to build a run's offer, so what
 // this asserts about is exactly what an agent is handed.
 func ops(t *testing.T, res map[string]any, subsystem string) []string {
@@ -186,10 +186,10 @@ func TestTheCodingToolIsOfferedToAnAgent(t *testing.T) {
 // could delete looked load-bearing.
 func TestTheDescriptionTellsAModelWhatItDoes(t *testing.T) {
 	res := rpc(t, endpoint(t),
-		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"`+surface.Describe+`","arguments":{"op":"`+tool+`"}}}`)
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"`+client.Describe+`","arguments":{"op":"`+tool+`"}}}`)
 	content, _ := res["content"].([]any)
 	if len(content) == 0 {
-		t.Fatalf("%s answered nothing for %s", surface.Describe, tool)
+		t.Fatalf("%s answered nothing for %s", client.Describe, tool)
 	}
 	first, _ := content[0].(map[string]any)
 	text, _ := first["text"].(string)
@@ -198,7 +198,7 @@ func TestTheDescriptionTellsAModelWhatItDoes(t *testing.T) {
 		InputSchema json.RawMessage `json:"inputSchema"`
 	}
 	if err := json.Unmarshal([]byte(text), &d); err != nil {
-		t.Fatalf("%s did not answer a descriptor: %q", surface.Describe, text)
+		t.Fatalf("%s did not answer a descriptor: %q", client.Describe, text)
 	}
 	// The words a model matches a coding request against. Not a style check: each
 	// is the noun or verb that makes this operation the answer to "change the code

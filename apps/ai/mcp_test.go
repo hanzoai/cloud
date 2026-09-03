@@ -9,7 +9,7 @@ package ai
 // the union. That composition is gone with the artifact: the fleet's MCP server
 // is no longer the concatenation of files this package can read, it is what the
 // subsystems answer when the host asks them, and the only honest place to test
-// that is against subsystems that are RUNNING (surface/mcp_test.go, which starts
+// that is against subsystems that are RUNNING (client/mcp_test.go, which starts
 // real children on real sockets and goes red on a short list).
 //
 // What remains here is what belongs here: ai's own op, on ai's own MCP server, and
