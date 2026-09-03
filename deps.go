@@ -15,7 +15,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/ha"
 	luxlog "github.com/luxfi/log"
 

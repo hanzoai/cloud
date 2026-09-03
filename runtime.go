@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // RuntimeProduct and RuntimeMeter address this price in commerce's meter authority
