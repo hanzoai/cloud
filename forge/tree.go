@@ -103,10 +103,10 @@ type Tree struct {
 // The read is made as THIS CLIENT'S ACTOR, so a repository the caller cannot see
 // resolves to nothing rather than to a commit they may not read.
 func (c *Client) Resolve(ctx context.Context, owner, repo, ref string) (string, error) {
-	if err := validOrg(owner); err != nil {
+	if err := validSegment(owner); err != nil {
 		return "", err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return "", fmt.Errorf("forge: repo: %w", err)
 	}
 	ref = strings.TrimSpace(ref)

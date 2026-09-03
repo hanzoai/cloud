@@ -80,10 +80,10 @@ const pushUser = "x-access-token"
 //
 // It is NOT a statement that the repository exists. [Client.Init] is.
 func (c *Client) Remote(owner, repo string) (Remote, error) {
-	if err := validOrg(owner); err != nil {
+	if err := validSegment(owner); err != nil {
 		return Remote{}, err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return Remote{}, fmt.Errorf("forge: repo: %w", err)
 	}
 	if c.token == "" {
@@ -117,10 +117,10 @@ func (c *Client) Remote(owner, repo string) (Remote, error) {
 // attribute a platform decision to them. The namespace is still not the caller's
 // to choose: owner reaches this from [Owner], a closed table.
 func (c *Client) Init(ctx context.Context, owner, repo, description string) error {
-	if err := validOrg(owner); err != nil {
+	if err := validSegment(owner); err != nil {
 		return err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return fmt.Errorf("forge: repo: %w", err)
 	}
 	err := c.Machine().send(ctx, sendOpts{
@@ -148,10 +148,10 @@ func (c *Client) Init(ctx context.Context, owner, repo, description string) erro
 // does not hold — so a caller sets this AFTER the branch has landed, which is
 // also the only moment it is a true statement.
 func (c *Client) Default(ctx context.Context, owner, repo, branch string) error {
-	if err := validOrg(owner); err != nil {
+	if err := validSegment(owner); err != nil {
 		return err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return fmt.Errorf("forge: repo: %w", err)
 	}
 	if strings.TrimSpace(branch) == "" {

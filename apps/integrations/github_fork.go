@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -57,7 +58,7 @@ type githubForkOut struct {
 // Example: {"repo":"widgets"}
 // Response: {"full_name":"acme/widgets","html_url":"https://github.com/acme/widgets","clone_url":"https://github.com/acme/widgets.git","default_branch":"main","existing":false}
 func (o ops) githubFork(ctx context.Context, in *githubForkReq) (*githubForkOut, error) {
-	org, err := authed(ctx, principalRequired)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +172,7 @@ const (
 // Example: {"q":"language:go raft","limit":5}
 // Response: {"repos":[{"full_name":"hashicorp/raft","stars":8000,"language":"Go"}],"count":1}
 func (o ops) githubSearch(ctx context.Context, in *githubSearchReq) (*githubSearchOut, error) {
-	org, err := authed(ctx, principalRequired)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/kms"
+	"github.com/hanzoai/namespace"
 )
 
 // defaultEnv mirrors the standalone's REST default: a secret whose CR omits
@@ -184,9 +185,15 @@ func BuildInventory(crs []cr) Inventory {
 		sc := c.Spec.Authentication.UniversalAuth.SecretsScope
 		cref := c.Spec.Authentication.UniversalAuth.CredentialsRef
 		org := strings.TrimSpace(sc.ProjectSlug)
-		if !validOrg(org) {
+		// The slug must be spelled as the estate spells it — Sanitize's fixed point.
+		// This REFUSES where kms.OrgPath folds, and the difference is which namespace
+		// owns the name: a KMS path is ours to derive, while a projectSlug names a
+		// source project some operator already created, so folding "acme/../evil"
+		// into "acme-evil-<hash>" would migrate a project that is not there and
+		// report success. The same reasoning makes forge.validSegment refuse.
+		if org == "" || namespace.Sanitize(org) != org {
 			inv.Malformed = append(inv.Malformed, Problem{c.Metadata.Namespace, c.Metadata.Name,
-				"invalid projectSlug (org)", fmt.Sprintf("%q", sc.ProjectSlug)})
+				"projectSlug is not a project name", fmt.Sprintf("%q", sc.ProjectSlug)})
 			continue
 		}
 		path := normPath(sc.SecretsPath)
@@ -290,21 +297,4 @@ func nonEmptyKeys(keys []string) []string {
 		}
 	}
 	return out
-}
-
-// validOrg accepts the same DNS-1123-ish org label cloud's /v1/kms guard enforces
-// (letters/digits/'-'/'_', ≤63 bytes). It is the tenant-isolation boundary folded
-// into the store path, so it is validated strictly.
-func validOrg(org string) bool {
-	if org == "" || len(org) > 63 {
-		return false
-	}
-	for _, r := range org {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
-		default:
-			return false
-		}
-	}
-	return true
 }

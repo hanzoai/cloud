@@ -62,10 +62,10 @@ func (c *Client) Writable(ctx context.Context, owner, repo string) (Repo, error)
 // exist yet both try to create it; one wins, and the loser wanted exactly what
 // the winner made.
 func (c *Client) Ensure(ctx context.Context, owner, repo, description string) (Repo, error) {
-	if err := validOrg(owner); err != nil {
+	if err := validSegment(owner); err != nil {
 		return Repo{}, err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return Repo{}, fmt.Errorf("forge: repo: %w", err)
 	}
 	got, err := c.Writable(ctx, owner, repo)
@@ -132,7 +132,7 @@ func (c *Client) EnsureOrg(ctx context.Context, name string) error {
 	if !c.machine {
 		return fmt.Errorf("forge: EnsureOrg is the machine identity's; %q may not create an org", c.actor)
 	}
-	if err := validOrg(name); err != nil {
+	if err := validSegment(name); err != nil {
 		return err
 	}
 	if _, err := c.get(ctx, "/orgs/"+url.PathEscape(name), nil, &struct{}{}); err == nil {
@@ -174,10 +174,10 @@ func (c *Client) EnsureOrg(ctx context.Context, name string) error {
 // platform's — a caller that wants the platform's authority asks for it with
 // [Client.Machine], in writing.
 func (c *Client) Delete(ctx context.Context, owner, repo string) error {
-	if err := validOrg(owner); err != nil {
+	if err := validSegment(owner); err != nil {
 		return err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return fmt.Errorf("forge: repo: %w", err)
 	}
 	path := "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo)
@@ -206,10 +206,10 @@ func (c *Client) Delete(ctx context.Context, owner, repo string) error {
 // it through the human's visibility would make a permissions change look like a
 // failed push.
 func (c *Client) Tip(ctx context.Context, owner, repo, branch string) (sha string, found bool, err error) {
-	if err := validOrg(owner); err != nil {
+	if err := validSegment(owner); err != nil {
 		return "", false, err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return "", false, fmt.Errorf("forge: repo: %w", err)
 	}
 	if strings.TrimSpace(branch) == "" {

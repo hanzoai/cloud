@@ -574,7 +574,7 @@ type Issue struct {
 // bounded staleness window on a read is not the mirrored copy this package
 // otherwise refuses.
 func (c *Client) Repos(ctx context.Context, org string) ([]Repo, error) {
-	if err := validOrg(org); err != nil {
+	if err := validSegment(org); err != nil {
 		return nil, err
 	}
 	// Ahead of the cache, so an unscoped client refuses rather than taking a
@@ -612,7 +612,7 @@ func (c *Client) Repos(ctx context.Context, org string) ([]Repo, error) {
 // state a tenant could arrange by minting projects. It is the caller's business
 // to say so out loud — the repositories past the ceiling are NOT audited.
 func (c *Client) Inventory(ctx context.Context, org string) (repos []Repo, whole bool, err error) {
-	if err := validOrg(org); err != nil {
+	if err := validSegment(org); err != nil {
 		return nil, false, err
 	}
 	if c.actor == "" && !c.machine {
@@ -770,10 +770,10 @@ func (c *Client) walkRepos(ctx context.Context, path string, first []Repo) (repo
 // the same as one that does not exist — which is the right answer for a named
 // board, and does not tell a caller whether a private repo is there.
 func (c *Client) Repo(ctx context.Context, org, name string) (Repo, error) {
-	if err := validOrg(org); err != nil {
+	if err := validSegment(org); err != nil {
 		return Repo{}, err
 	}
-	if err := validOrg(name); err != nil {
+	if err := validSegment(name); err != nil {
 		return Repo{}, fmt.Errorf("forge: repo: %w", err)
 	}
 	var r Repo
@@ -791,10 +791,10 @@ func (c *Client) Repo(ctx context.Context, org, name string) (Repo, error) {
 // same as one that does not exist — which is the right answer for a named row
 // and does not tell a caller whether a private one is there.
 func (c *Client) Issue(ctx context.Context, org, repo string, number int64) (Issue, error) {
-	if err := validOrg(org); err != nil {
+	if err := validSegment(org); err != nil {
 		return Issue{}, err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return Issue{}, fmt.Errorf("forge: issue: %w", err)
 	}
 	if number <= 0 {
@@ -825,7 +825,7 @@ func (c *Client) Issue(ctx context.Context, org, repo string, number int64) (Iss
 // boards that have no work on them yet. Blocking on it would trade a complete
 // answer for one nobody stays to see.
 func (c *Client) ReposWarm(ctx context.Context, org string) ([]Repo, bool) {
-	if validOrg(org) != nil || c.actor == "" {
+	if validSegment(org) != nil || c.actor == "" {
 		return nil, false
 	}
 	got, ok := c.repos.warm(ctx, c.key(org), c.fill(org))
@@ -881,7 +881,7 @@ type IssueFilter struct {
 // an N+1 walk: a column is a label, a card is one of these rows, and moving a
 // card is a relabel of the same row.
 func (c *Client) Issues(ctx context.Context, org string, f IssueFilter) ([]Issue, error) {
-	if err := validOrg(org); err != nil {
+	if err := validSegment(org); err != nil {
 		return nil, err
 	}
 	var all []Issue
@@ -1021,10 +1021,10 @@ type NewIssue struct {
 
 // CreateIssue opens an issue on org/repo as the actor.
 func (c *Client) CreateIssue(ctx context.Context, org, repo string, n NewIssue) (Issue, error) {
-	if err := validOrg(org); err != nil {
+	if err := validSegment(org); err != nil {
 		return Issue{}, err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return Issue{}, fmt.Errorf("forge: repo: %w", err)
 	}
 	if strings.TrimSpace(n.Title) == "" {
@@ -1060,10 +1060,10 @@ type IssuePatch struct {
 
 // PatchIssue edits an issue's fields as the actor.
 func (c *Client) PatchIssue(ctx context.Context, org, repo string, number int64, p IssuePatch) error {
-	if err := validOrg(org); err != nil {
+	if err := validSegment(org); err != nil {
 		return err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return fmt.Errorf("forge: repo: %w", err)
 	}
 	return c.send(ctx, sendOpts{
@@ -1077,10 +1077,10 @@ func (c *Client) PatchIssue(ctx context.Context, org, repo string, number int64,
 // columns: the column is a label, so moving it is a relabel and not an update to
 // a status column that a forge-side change could contradict.
 func (c *Client) SetLabels(ctx context.Context, org, repo string, number int64, labels []string) error {
-	if err := validOrg(org); err != nil {
+	if err := validSegment(org); err != nil {
 		return err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return fmt.Errorf("forge: repo: %w", err)
 	}
 	if labels == nil {
@@ -1104,22 +1104,28 @@ func isMissing(err error) bool {
 	return errors.Is(err, ErrNotFound) || errors.Is(err, ErrUnknownActor)
 }
 
-// validOrg refuses an org that is empty or not a forge path segment.
+// validSegment refuses a name that is empty or not a forge path segment. Owners
+// and repositories share it: both are one segment of the same URL.
 //
-// The org reaches this package from a validated principal, so a bad value is a
+// The name reaches this package from a validated principal, so a bad value is a
 // bug rather than an attack — but it is interpolated into a URL PATH, and a
 // value bearing "/" or ".." would address a different endpoint than the one the
 // call site wrote. Refusing here means no call site can be the place that
 // forgot.
-func validOrg(org string) error {
-	if strings.TrimSpace(org) == "" {
+//
+// It refuses rather than folds, unlike kms.OrgPath, and the difference is which
+// namespace owns the name: a KMS path is ours to derive, while a forge owner is a
+// name the forge already gave a repository, so folding it would address something
+// that is not there.
+func validSegment(name string) error {
+	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("%w: empty", ErrBadName)
 	}
-	if org != strings.TrimSpace(org) {
-		return fmt.Errorf("%w: %q has surrounding space", ErrBadName, org)
+	if name != strings.TrimSpace(name) {
+		return fmt.Errorf("%w: %q has surrounding space", ErrBadName, name)
 	}
-	if strings.ContainsAny(org, "/\\?#%") || strings.Contains(org, "..") {
-		return fmt.Errorf("%w: %q is not a path segment", ErrBadName, org)
+	if strings.ContainsAny(name, "/\\?#%") || strings.Contains(name, "..") {
+		return fmt.Errorf("%w: %q is not a path segment", ErrBadName, name)
 	}
 	return nil
 }

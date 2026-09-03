@@ -1,11 +1,11 @@
 package integrations
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"io"
 	"net/http"
 	"sort"
@@ -16,6 +16,7 @@ import (
 
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -310,7 +311,7 @@ type githubInstallationsOut struct {
 //
 // Response: {"installations":[{"login":"hanzoai","type":"Organization","connected":true,"htmlUrl":"https://github.com/hanzoai","grant":"all"}],"installUrl":"https://github.com/apps/hanzo/installations/new"}
 func (o ops) githubInstallations(ctx context.Context, _ *cloud.Unit) (*githubInstallationsOut, error) {
-	org, err := authed(ctx, principalRequired)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +427,7 @@ type githubClaimOut struct {
 //
 // Response: {"claimed":["hanzoai","luxfi"],"already":["zooai"]}
 func (o ops) githubClaim(ctx context.Context, in *githubClaimIn) (*githubClaimOut, error) {
-	org, err := authed(ctx, principalRequired)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -605,7 +606,7 @@ type githubReposOut struct {
 //
 // Response: {"repos":[{"name":"widgets","fullName":"acme/widgets","private":true,"defaultBranch":"main","imported":true,"syncStatus":"synced","lastSyncedAt":"2026-07-01T10:00:00Z","htmlUrl":"https://github.com/acme/widgets"}]}
 func (o ops) githubRepos(ctx context.Context, _ *cloud.Unit) (*githubReposOut, error) {
-	org, err := authed(ctx, principalRequired)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -741,7 +742,7 @@ func selectImports(granted []githubRepo, repos []string, all bool) ([]githubImpo
 // Example: {"repos":["widgets"]}
 // Response: {"queued":1,"repos":["widgets"]}
 func (o ops) githubImport(ctx context.Context, in *githubImportIn) (*githubImportOut, error) {
-	org, err := authed(ctx, principalRequired)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

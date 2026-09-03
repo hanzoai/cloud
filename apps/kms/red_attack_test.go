@@ -491,9 +491,7 @@ func TestVector3_AdminConfigPrecedence(t *testing.T) {
 // TestAdminHasNoCrossOrgReachOverHTTP: there is no longer an admin bypass to
 // scope, because there is no org in the URL to bypass with. A platform admin gets
 // its OWN org's secrets exactly like any other caller — cross-org access exists
-// only in-process, for the component that holds the master key. This replaces a
-// test that checked validOrg was still enforced for an admin naming :org; that
-// vector no longer exists to defend.
+// only in-process, for the component that holds the master key.
 func TestAdminHasNoCrossOrgReachOverHTTP(t *testing.T) {
 	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
 
@@ -521,7 +519,7 @@ func TestAdminEdge_NonAdminEmptyOrgDenied(t *testing.T) {
 	if r.StatusCode != 403 {
 		t.Fatalf("empty-principal GET = %d, want 403", r.StatusCode)
 	}
-	// Even targeting an org whose name is empty-ish is rejected by routing/validOrg.
+	// Even targeting an org whose name is empty-ish is rejected by routing.
 	t.Logf("empty principal denied (403) — cannot match any :org")
 }
 

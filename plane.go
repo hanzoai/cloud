@@ -77,7 +77,6 @@ func bindRuntimeDir() { plane.Bind() }
 // listening reports whether path has a LISTENER behind it.
 func listening(path string) (bool, error) { return plane.Listening(path) }
 
-
 // Ask is the whole client half: dial the app, invoke the op, close.
 //
 // Prefer the GENERATED client for the peer (plane/<app>) — it is this call with
@@ -360,7 +359,7 @@ func Tenant(ctx context.Context) (string, bool) {
 		return "", false
 	}
 	org := Who(ctx).Org
-	if org == "" || principal.OrgHasUnsafeRune(org) || len(org) > principal.MaxOrgLen {
+	if !principal.NamesOrg(org) {
 		return "", false
 	}
 	return org, true

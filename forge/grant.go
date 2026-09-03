@@ -120,10 +120,10 @@ const grantTitle = "hanzo-run-"
 // It is not a secret and is shown in the forge UI, so it should be the session
 // the run is for.
 func (c *Client) Grant(ctx context.Context, owner, repo, name string) (Grant, error) {
-	if err := validOrg(owner); err != nil {
+	if err := validSegment(owner); err != nil {
 		return Grant{}, err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return Grant{}, fmt.Errorf("forge: repo: %w", err)
 	}
 	if strings.TrimSpace(name) == "" {
@@ -212,10 +212,10 @@ func (c *Client) Grant(ctx context.Context, owner, repo, name string) (Grant, er
 // is not an error — a withdrawal is idempotent, and a run that already lost its
 // key must not fail trying to give it back twice.
 func (c *Client) Revoke(ctx context.Context, owner, repo string, id int64) error {
-	if err := validOrg(owner); err != nil {
+	if err := validSegment(owner); err != nil {
 		return err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return fmt.Errorf("forge: repo: %w", err)
 	}
 	if id <= 0 {
@@ -240,10 +240,10 @@ func (c *Client) Revoke(ctx context.Context, owner, repo string, id int64) error
 // are returned — a deploy key somebody added deliberately is not this function's
 // to report or to remove.
 func (c *Client) Grants(ctx context.Context, owner, repo string) ([]Grant, error) {
-	if err := validOrg(owner); err != nil {
+	if err := validSegment(owner); err != nil {
 		return nil, err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return nil, fmt.Errorf("forge: repo: %w", err)
 	}
 	var keys []struct {

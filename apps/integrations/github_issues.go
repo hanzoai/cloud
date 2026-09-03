@@ -1,10 +1,10 @@
 package integrations
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"strconv"
@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -237,7 +238,7 @@ const (
 // Example: {"state":"all"}
 // Response: {"repos":12,"issues":430,"created":410,"updated":20,"failed":0}
 func (o ops) githubIssuesBackfill(ctx context.Context, in *githubBackfillIn) (*githubBackfillResult, error) {
-	org, err := authed(ctx, principalRequired)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

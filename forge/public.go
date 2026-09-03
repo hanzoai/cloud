@@ -51,10 +51,10 @@ import (
 // by a stronger identity than the write would confirm something the writer could
 // not have done.
 func (c *Client) SetPublic(ctx context.Context, owner, repo string, public bool) error {
-	if err := validOrg(owner); err != nil {
+	if err := validSegment(owner); err != nil {
 		return err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return fmt.Errorf("forge: repo: %w", err)
 	}
 	private := !public

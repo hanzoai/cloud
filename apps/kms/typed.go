@@ -94,11 +94,15 @@ func (o ops) admit(ctx context.Context, need cloud.Scope) (string, error) {
 	if !need.Admits(cloud.AuthorityOf(c)) {
 		return "", need.Refusal()
 	}
-	org, _ := principal.OrgFrom(ctx)
-	// The org is the tenant boundary folded into the store path, so it is
-	// validated strictly: orgPath folds it into /orgs/{org} verbatim.
-	if !validOrg(org) {
-		return "", zip.ErrBadRequest("org must be a DNS-1123 label")
+	// principal.Acting is the ONE refusal: no principal, or a principal with no org
+	// scope, and it says which. Nothing re-asks afterwards, because an org that
+	// reaches here has already passed the boundary's OrgHasUnsafeRune — which is
+	// Sanitize's "" under another name — so OrgPath cannot answer "" for it. The
+	// version that dropped Acting's error and re-checked the org gave a 400 to a
+	// caller whose real problem was that it had no scope at all.
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return "", err
 	}
 	if !o.s.State.kms.Ready() {
 		return "", zip.Errorf(http.StatusServiceUnavailable, "%s", ErrMasterKeyMissing.Error())
@@ -362,7 +366,7 @@ func (o ops) listSecrets(ctx context.Context, in *kmsList) (*kmsSecrets, error) 
 	// Find, not List: the path is a subtree root here, so listing an org returns
 	// the org. List is exact-coordinate and stays that way for the credential
 	// broker, which must not have its scope widened by a listing change.
-	metas, err := o.s.State.kms.Find(orgPath(org, sub), env)
+	metas, err := o.s.State.kms.Find(OrgPath(org, sub), env)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "%v", err)
 	}
@@ -419,7 +423,7 @@ func (o ops) putSecret(ctx context.Context, in *kmsPut) (*kmsStored, error) {
 	if !ValidSubpath(in.Path) {
 		return nil, zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
 	}
-	if err := o.s.State.kms.Put(orgPath(org, in.Path), name, env, []byte(in.Value)); err != nil {
+	if err := o.s.State.kms.Put(OrgPath(org, in.Path), name, env, []byte(in.Value)); err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "%v", err)
 	}
 	return &kmsStored{Env: env, Name: name, Stored: true}, nil

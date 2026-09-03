@@ -1,11 +1,11 @@
 package integrations
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"strconv"
 	"strings"
 	"sync"
@@ -434,8 +434,8 @@ type userLink struct {
 }
 
 func putUserLink(s *cloud.Service[state], org, provider, extUser string, link userLink) error {
-	if !validOrg(org) {
-		return fmt.Errorf("channel: invalid org")
+	if kms.OrgPath(org) == "" {
+		return fmt.Errorf("channel: org names no store")
 	}
 	blob, err := json.Marshal(link)
 	if err != nil {
@@ -448,8 +448,8 @@ func putUserLink(s *cloud.Service[state], org, provider, extUser string, link us
 // error) when the user has not linked (no secret). Fails closed on invalid org /
 // KMS-down.
 func getUserLink(s *cloud.Service[state], org, provider, extUser string) (userLink, bool, error) {
-	if !validOrg(org) {
-		return userLink{}, false, fmt.Errorf("channel: invalid org")
+	if kms.OrgPath(org) == "" {
+		return userLink{}, false, fmt.Errorf("channel: org names no store")
 	}
 	if !kmsReady(s) {
 		return userLink{}, false, kms.ErrMasterKeyMissing

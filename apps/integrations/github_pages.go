@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -417,7 +418,7 @@ func rateLimited(status int, body []byte, hdr http.Header) (bool, string) {
 // the raw /builds handler resolve their target through the same three steps —
 // principal gate, repo-name grammar, grant lookup.
 func pagesTarget(ctx context.Context, repo string) (pagesRepo, error) {
-	org, err := authed(ctx, principalRequired)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return pagesRepo{}, err
 	}

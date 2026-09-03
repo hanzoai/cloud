@@ -282,7 +282,7 @@ func WithOrg(ctx context.Context, c *zip.Ctx) context.Context {
 // OrgHasUnsafeRune refuses. Empty is not "unsafe", it names nothing, and it is
 // how a caller says "keep my own tenant".
 func WithActing(ctx context.Context, org string) context.Context {
-	if org == "" || OrgHasUnsafeRune(org) || len(org) > MaxOrgLen {
+	if !NamesOrg(org) {
 		return ctx
 	}
 	return context.WithValue(ctx, orgKey{}, strings.Clone(org))
@@ -408,6 +408,21 @@ func refused(validated bool) error { return zip.ErrForbidden(sentence(validated)
 // The empty org is not "unsafe" — it names nothing, which callers already
 // handle — so it is excluded, exactly as it was when the loop lived here.
 func OrgHasUnsafeRune(s string) bool { return s != "" && namespace.Sanitize(s) == "" }
+
+// NamesOrg reports whether s can be an org at all: non-empty, bounded, and free of
+// the rune class no injective fold survives. It is the rule the identity boundary
+// applies before parking a scope, in its positive form.
+//
+// It is for an org that arrived as a VALUE — an in-process argument, a field of a
+// signed token, a row read back — where no boundary ran. An org taken from
+// Acting or OrgFrom has passed this already and must not be re-asked; that second
+// check is how a caller with no scope at all comes to be told its org is malformed.
+//
+// It answers whether the name DENOTES an org, never whether that org exists, and
+// never what path it keys. Deriving the path is kms.OrgPath's job, and it folds
+// where this refuses, because a name that survives a fold still keys a subtree of
+// its own while a name that folds to nothing keys none.
+func NamesOrg(s string) bool { return s != "" && !OrgHasUnsafeRune(s) && len(s) <= MaxOrgLen }
 
 func Acting(ctx context.Context) (string, error) {
 	if org, ok := OrgFrom(ctx); ok {

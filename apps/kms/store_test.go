@@ -12,8 +12,8 @@ import (
 // TestDBFor_TenantCannotSpellReservedPartition pins the defense-in-depth the red
 // team flagged: a tenant path literally spelling "/orgs/_platform/…" must never
 // be routed to the deployment's own partition. The facade is reachable ONLY by
-// the empty/non-"/orgs" route, and this holds even without validOrg having run
-// first. It is now true by KIND — the facade is the system namespace and a
+// the empty/non-"/orgs" route, and this holds whatever the org was called. It is
+// true by KIND — the facade is the system namespace and a
 // tenant is an org namespace — rather than by an argument about which runes a
 // slugger emits.
 func TestDBFor_TenantCannotSpellReservedPartition(t *testing.T) {

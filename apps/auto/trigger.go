@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/mint"
 )
 
@@ -71,7 +72,7 @@ func bodyDedupe(body []byte) string {
 // and starts nothing. A flow that was disabled or deleted since it subscribed is
 // skipped (the index is a fast lookup; the flow's live status is authoritative).
 func Deliver(ctx context.Context, org string, ev TriggerEvent) (started int, err error) {
-	if org == "" || !validOrg(org) {
+	if !principal.NamesOrg(org) {
 		return 0, ErrNoOrg
 	}
 	// Causation-depth guard: an event whose chain is already maxCausationDepth hops deep
