@@ -25,10 +25,10 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
-	"github.com/hanzoai/cloud/metering"
-	"github.com/hanzoai/cloud/s3admin"
 	"github.com/hanzoai/cloud/internal/fare"
 	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/metering"
+	"github.com/hanzoai/cloud/s3admin"
 	"github.com/zap-proto/zip"
 )
 
@@ -67,7 +67,7 @@ func newBilledService(t *testing.T, commerceURL string) *cloud.Service[state] {
 	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIATEST")
 	t.Setenv("S3_ADMIN_SECRET_KEY", "secrettest")
 	t.Setenv("S3_ADMIN_ENDPOINT", "127.0.0.1:1")
-	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-token", Org: "hanzo"})
+	m, err := metering.New(metering.Config{BaseURL: commerceURL, Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}

@@ -23,7 +23,7 @@ func planClient(t *testing.T, body string) *Client {
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
-	return New(srv.URL, "test-token")
+	return New(srv.URL)
 }
 
 // subsPeer serves commerce's finance.subs op on commerce's own socket — the way
@@ -212,7 +212,7 @@ func TestReadsCarryTheBareOrgSlugAsXOrgId(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	if _, err := New(srv.URL, "test-token").Ledger(context.Background(), "acme", 0); err != nil {
+	if _, err := New(srv.URL).Ledger(context.Background(), "acme", 0); err != nil {
 		t.Fatalf("Ledger: %v", err)
 	}
 	if gotOrg != "acme" {

@@ -28,8 +28,8 @@ import (
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/internal/planetest"
 
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
@@ -90,7 +90,7 @@ func (f *recCommerce) lastUsage() (string, plane.RecordIn) {
 // (so a caller-org assertion proves the per-call override), at the given env.
 func meterFor(t *testing.T, baseURL, env string, failOpen bool) *Meter {
 	t.Helper()
-	m, err := metering.New(metering.Config{BaseURL: baseURL, Token: "svc-token", Org: "hanzo", FailOpen: failOpen})
+	m, err := metering.New(metering.Config{BaseURL: baseURL, Org: "hanzo", FailOpen: failOpen})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
@@ -730,7 +730,7 @@ func TestRecord_OneActIsChargedOnceInEitherTopology(t *testing.T) {
 
 		// A BaseURL is what ENABLES the client; Record never reads it (only the
 		// balance gate does), so it is never dialled.
-		m, err := metering.New(metering.Config{BaseURL: "http://127.0.0.1:1", Token: "svc-token", Org: "hanzo"})
+		m, err := metering.New(metering.Config{BaseURL: "http://127.0.0.1:1", Org: "hanzo"})
 		if err != nil {
 			t.Fatalf("metering.New: %v", err)
 		}

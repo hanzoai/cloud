@@ -40,7 +40,7 @@ func callRoute(t *testing.T, app *zip.App, method, path, user, org string) (int,
 func TestLedgerTyped_ContractUnmoved(t *testing.T) {
 	ledgerPeer(t, "acme")
 	f := &noHopCommerce{}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 
 	status, hdr, body := callRoute(t, app, http.MethodGet, "/v1/billing/ledger?range=90d", "acme/dave", "acme")
 	if status != http.StatusOK {
@@ -80,7 +80,7 @@ func TestLedgerTyped_ContractUnmoved(t *testing.T) {
 // refusals: an absent identity is 403 (no org scope), and a deployment without the
 // linked-account plane is an honest 501 — never an empty breakdown.
 func TestUsageAccountsTyped_KeepsGates(t *testing.T) {
-	app := mountApp(t, "", "")
+	app := mountApp(t, "")
 	if status, _, _ := callRoute(t, app, http.MethodGet, "/v1/billing/usage/accounts", "", "victim"); status != http.StatusForbidden {
 		t.Fatalf("no principal: want 403, got %d", status)
 	}

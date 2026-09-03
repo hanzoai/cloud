@@ -32,8 +32,8 @@ import (
 	"github.com/luxfi/aml/pkg/anomaly"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/metering"
 	moneyplane "github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -479,7 +479,7 @@ func mountBilled(t *testing.T, books *ledger) *zip.App {
 	// The balance READ is HTTP and `books` answers it; the DEBIT crosses the plane and
 	// lands in books.record. Both halves of the money contract, one ledger.
 	planetest.ServeWith(t, books.record)
-	client, err := metering.New(metering.Config{BaseURL: "http://commerce.test", Token: "t", Org: brandA, HTTPClient: books})
+	client, err := metering.New(metering.Config{BaseURL: "http://commerce.test", Org: brandA, HTTPClient: books})
 	if err != nil {
 		t.Fatalf("metering client: %v", err)
 	}

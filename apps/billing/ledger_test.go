@@ -45,7 +45,7 @@ func (f *noHopCommerce) dialled() string {
 func TestLedger_SignedPostings(t *testing.T) {
 	ledgerPeer(t, "acme")
 	f := &noHopCommerce{}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 	code, body := call(t, app, http.MethodGet, "/v1/billing/ledger?range=90d", "acme/dave", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("ledger = %d (%s)", code, body)
@@ -81,7 +81,7 @@ func TestLedger_SignedPostings(t *testing.T) {
 func TestLedger_RangeExcludesOlderPostings(t *testing.T) {
 	ledgerPeer(t, "acme")
 	f := &noHopCommerce{}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 	code, body := call(t, app, http.MethodGet, "/v1/billing/ledger?range=30d", "acme/dave", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("ledger = %d (%s)", code, body)
@@ -105,7 +105,7 @@ func TestLedger_RangeExcludesOlderPostings(t *testing.T) {
 
 func TestLedger_NoPrincipal_401_NeverTouchesCommerce(t *testing.T) {
 	f := &noHopCommerce{}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 	// A forged X-Org-Id with NO validated principal (no X-User-Id) must be refused 401.
 	code, _ := call(t, app, http.MethodGet, "/v1/billing/ledger", "", "victim")
 	if code != http.StatusUnauthorized {
@@ -117,7 +117,7 @@ func TestLedger_NoPrincipal_401_NeverTouchesCommerce(t *testing.T) {
 }
 
 func TestLedger_CommerceUnconfigured_501(t *testing.T) {
-	app := mountApp(t, "", "") // no commerce base/token
+	app := mountApp(t, "") // no commerce base/token
 	code, _ := call(t, app, http.MethodGet, "/v1/billing/ledger", "acme/dave", "acme")
 	if code != http.StatusNotImplemented {
 		t.Fatalf("unconfigured: want 501, got %d", code)

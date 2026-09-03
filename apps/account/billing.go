@@ -29,14 +29,9 @@ package account
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"encoding/json"
 	"net/url"
 	"slices"
-	"strings"
-
-	"github.com/hanzoai/cloud/internal/environ"
-	"github.com/zap-proto/zip"
 )
 
 // billingSubjectKeys — every query/body param through which a commerce billing endpoint
@@ -91,28 +86,4 @@ func scopedBillingBody(raw []byte, subject string) []byte {
 		return raw
 	}
 	return out
-}
-
-// commerceServiceToken reads the admin S2S token from server-only env
-// (COMMERCE_SERVICE_TOKEN, sourced from KMS — never a browser value). It is no longer
-// forwarded anywhere from this package; it is only ever COMPARED against, to recognise a
-// trusted in-process caller. The one outbound use that remained was topup.go's HUSD
-// credit, and that went with the file. Packages that DO dial commerce with it read the
-// env themselves (apps/admin, apps/billing, apps/content, apps/metering).
-func commerceServiceToken() string { return environ.Or("COMMERCE_SERVICE_TOKEN", "") }
-
-// s2sBillingCall reports whether the request carries the verified COMMERCE_SERVICE_TOKEN
-// as its Bearer — a trusted IN-PROC service-to-service caller (the metering cap-gate's
-// authorize, the SuperAdmin cap-oversight Forward). Safety rests on the edge: the gateway
-// 401s a public Bearer that is not an IAM JWT / pk-|sk- API key (the 64-hex service
-// token is a JWT candidate that fails to parse), so an EXTERNAL client can never reach a
-// handler holding it — only in-proc commerce-transport dispatch does. Constant-time
-// compare; the token is never logged.
-func s2sBillingCall(c *zip.Ctx) bool {
-	token := commerceServiceToken()
-	if token == "" {
-		return false
-	}
-	bearer := strings.TrimSpace(strings.TrimPrefix(c.Header("Authorization"), "Bearer "))
-	return bearer != "" && subtle.ConstantTimeCompare([]byte(bearer), []byte(token)) == 1
 }

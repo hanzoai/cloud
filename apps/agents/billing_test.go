@@ -67,7 +67,7 @@ func waitForDebit(cond func() bool) bool { return planetest.Wait(cond) }
 // run path; scheduler tests drive tick() directly).
 func mountBilled(t *testing.T, commerceURL string, ai types.AIClient) *zip.App {
 	t.Helper()
-	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-tok", Org: "hanzo"})
+	m, err := metering.New(metering.Config{BaseURL: commerceURL, Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
@@ -257,7 +257,7 @@ func TestRunRequiresValidatedPrincipal(t *testing.T) {
 // the gate error and the fake AI is never called.
 func TestRunAgentGateFailClosedOnUnreachableCommerce(t *testing.T) {
 	// Point at a dead URL so Authorize errors (unknown balance -> fail-closed).
-	m, _ := metering.New(metering.Config{BaseURL: "http://127.0.0.1:1", Token: "t", Org: "hanzo", Timeout: 200 * time.Millisecond})
+	m, _ := metering.New(metering.Config{BaseURL: "http://127.0.0.1:1", Org: "hanzo", Timeout: 200 * time.Millisecond})
 	ai := &fakeAI{content: "must not run"}
 	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{stores: testStores(t), ai: ai, bill: cloud.NewMeter(cloud.Deps{Metering: m}, meterKind)}}
 	a := mk("acme", "x")

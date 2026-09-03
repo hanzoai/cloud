@@ -69,7 +69,7 @@ func TestBalance_ReadsFinanceLedgerNotCommerce(t *testing.T) {
 	publishFinance(t, fin)
 
 	f := &fakeCommerce{status: 200, body: `{"balance":1,"holds":0,"available":1}`}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 
 	code, body := call(t, app, http.MethodGet, "/v1/billing/balance", "maxpower/dave", "maxpower")
 	if code != 200 {
@@ -122,7 +122,7 @@ func TestBalance_SubjectIsTheGateSubject(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fin := &fakeFinance{wallets: map[string]int64{}}
 			publishFinance(t, fin)
-			app := mountApp(t, "", "")
+			app := mountApp(t, "")
 
 			req := httptest.NewRequest(http.MethodGet, "/v1/billing/balance", nil)
 			req.Header.Set("X-User-Id", tc.userID)
@@ -151,7 +151,7 @@ func TestBalance_SubjectIsTheGateSubject(t *testing.T) {
 // nor as a fabricated positive. It surfaces as an upstream failure.
 func TestBalance_UnreadableIsNotZero(t *testing.T) {
 	publishFinance(t, &fakeFinance{err: fmt.Errorf("ledger open failed")})
-	app := mountApp(t, "", "")
+	app := mountApp(t, "")
 
 	code, body := call(t, app, http.MethodGet, "/v1/billing/balance", "maxpower/dave", "maxpower")
 	if code != http.StatusBadGateway {
@@ -178,7 +178,7 @@ func TestBalance_UnreadableIsNotZero(t *testing.T) {
 func TestBalance_RequiresSignIn(t *testing.T) {
 	fin := &fakeFinance{wallets: map[string]int64{"hanzo|hanzo": 14953300}}
 	publishFinance(t, fin)
-	app := mountApp(t, "", "")
+	app := mountApp(t, "")
 
 	// No principal at all.
 	if code, _ := call(t, app, http.MethodGet, "/v1/billing/balance", "", ""); code != http.StatusUnauthorized {
@@ -203,7 +203,7 @@ func TestBalance_ScopedToCallerOrg(t *testing.T) {
 		"attacker|attacker": 5,
 	}}
 	publishFinance(t, fin)
-	app := mountApp(t, "", "")
+	app := mountApp(t, "")
 
 	// Attacker is validated in its OWN org and tries to name the victim's org/subject
 	// through every client-controlled channel the old proxy forwarded.
@@ -244,7 +244,7 @@ func TestBalance_ReportsTheAccountItRead(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fin := &fakeFinance{wallets: map[string]int64{want: 6875}}
 			publishFinance(t, fin)
-			app := mountApp(t, "", "")
+			app := mountApp(t, "")
 
 			req := httptest.NewRequest(http.MethodGet, "/v1/billing/balance", nil)
 			req.Header.Set("X-User-Id", tc.userID)

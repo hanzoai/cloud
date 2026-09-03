@@ -23,9 +23,7 @@
 //	GET  {BaseURL}/v1/billing/balance?user={user}&currency={cur}
 //	GET  {BaseURL}/v1/billing/tier?user={user}            (tier-aware)
 //
-// Auth is the commerce service token (admin-scoped S2S), sent as
-//
-//	Authorization: Bearer {Token}
+// # Auth is the commerce service token (admin-scoped S2S), sent as
 //
 // plus the tenant org as the X-Org-Id header. The token is a secret and
 // MUST be sourced from KMS (never plaintext); this package never reads it from
@@ -117,7 +115,6 @@ var ErrInsufficientBalance = errors.New("metering: insufficient balance")
 // out-of-funds insufficient_balance.
 var ErrSpendCapExceeded = errors.New("metering: spend cap exceeded")
 
-
 // Config configures a Client. Only BaseURL is conceptually required; an empty
 // BaseURL puts the client in "not configured" mode where Authorize allows and
 // Record is a no-op — matching the gateway's behavior when no billing URL is
@@ -127,10 +124,6 @@ type Config struct {
 	// "http://commerce.hanzo.svc.cluster.local:8001". No trailing /v1 — the
 	// client appends the canonical billing paths itself.
 	BaseURL string
-
-	// Token is the commerce service token (admin-scoped). MUST come from KMS;
-	// never hard-code or read from a file. Sent as "Authorization: Bearer".
-	Token string
 
 	// Org is the tenant org slug (e.g. "hanzo") sent as X-Org-Id so
 	// commerce resolves the right tenant namespace. Per-request Org on the
@@ -165,7 +158,6 @@ type Config struct {
 // Client meters usage to commerce. It is safe for concurrent use.
 type Client struct {
 	baseURL   string
-	token     string
 	org       string
 	tierAware bool
 	failOpen  bool
@@ -194,7 +186,6 @@ func New(cfg Config) (*Client, error) {
 
 	return &Client{
 		baseURL:   base,
-		token:     strings.TrimSpace(cfg.Token),
 		org:       strings.TrimSpace(cfg.Org),
 		tierAware: cfg.TierAware,
 		failOpen:  cfg.FailOpen,
@@ -906,9 +897,6 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, org string)
 }
 
 func (c *Client) do(req *http.Request, org string) ([]byte, error) {
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
 	if org != "" {
 		req.Header.Set(headerOrg, org)
 	}

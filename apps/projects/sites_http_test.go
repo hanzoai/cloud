@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/metering"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -64,7 +64,7 @@ func waitForDebit(cond func() bool) bool { return planetest.Wait(cond) }
 // proves the per-call override), and whatever S3 env the caller already set.
 func mountSites(t *testing.T, ai *fakeAI, commerceURL string) *zip.App {
 	t.Helper()
-	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-tok", Org: "hanzo", Timeout: time.Second})
+	m, err := metering.New(metering.Config{BaseURL: commerceURL, Org: "hanzo", Timeout: time.Second})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}

@@ -78,7 +78,7 @@ func capAdmin(ctx context.Context) error {
 	if !ok {
 		return zip.ErrForbidden("org admin required to change spend caps")
 	}
-	if principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c) || cloud.IsServiceToken(c) {
+	if principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c) {
 		return nil
 	}
 	return zip.ErrForbidden("org admin required to change spend caps")

@@ -39,8 +39,8 @@ import (
 	"github.com/hanzoai/commerce/models/subscription"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 )
@@ -50,9 +50,8 @@ var errUnconfigured = errors.New("commerce not configured")
 
 // Client reads the commerce billing plane.
 type Client struct {
-	base  string // e.g. http://commerce.hanzo.svc.cluster.local:8001
-	token string // admin S2S bearer (secret; never logged)
-	http  *http.Client
+	base string // e.g. http://commerce.hanzo.svc.cluster.local:8001
+	http *http.Client
 }
 
 // New builds a commerce client for base + admin S2S token. The HTTP client uses the
@@ -61,11 +60,10 @@ type Client struct {
 // instead DNS-resolve "commerce.inproc" and fail "no such host", silently breaking the
 // admin cost/finance god-view. For a split-deploy (a real commerce URL) it falls
 // through to plain HTTP unchanged.
-func New(base, token string) *Client {
+func New(base string) *Client {
 	return &Client{
-		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
-		token: strings.TrimSpace(token),
-		http:  transport.Client(15 * time.Second),
+		base: strings.TrimRight(strings.TrimSpace(base), "/"),
+		http: transport.Client(15 * time.Second),
 	}
 }
 
@@ -274,9 +272,6 @@ func (c *Client) Forward(ctx context.Context, method, path, subject string, body
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
 	if subject != "" {
 		req.Header.Set("X-Org-Id", subject)
 	}
@@ -303,9 +298,6 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, subject str
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
 	if subject != "" {
 		// Commerce's EdgeAuth trusts X-Org-Id ONLY after it verifies the bearer is the
 		// COMMERCE_SERVICE_TOKEN, then resolves the per-org billing namespace from it.

@@ -185,7 +185,7 @@ func TestSchedulerConcurrencyCap(t *testing.T) {
 // not just the HTTP handler (Red INFO-2).
 func TestSchedulerBillsScheduledRun(t *testing.T) {
 	bs := &billServer{available: 100000}
-	m, err := metering.New(metering.Config{BaseURL: bs.start(t), Token: "svc-tok", Org: "hanzo"})
+	m, err := metering.New(metering.Config{BaseURL: bs.start(t), Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestSchedulerBillsScheduledRun(t *testing.T) {
 // long-running agent can't burn free inference every minute.
 func TestSchedulerGatesUnfundedRun(t *testing.T) {
 	bs := &billServer{available: 0}
-	m, _ := metering.New(metering.Config{BaseURL: bs.start(t), Token: "t", Org: "hanzo"})
+	m, _ := metering.New(metering.Config{BaseURL: bs.start(t), Org: "hanzo"})
 	ai := &countingAI{}
 	s := &cloud.Service[state]{
 		Base: cloud.Base{Log: luxlog.New("test")},

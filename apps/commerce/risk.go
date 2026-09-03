@@ -949,10 +949,7 @@ func settlementOf(body []byte) (ref, receipt string) {
 // a request that reaches a credit endpoint naming no organisation is denied by the
 // privileged branch rather than screened against nobody.
 func payerOrg(c *zip.Ctx) string {
-	if org := principal.Ledger(c); org != "" {
-		return org
-	}
-	return serviceOrg(c)
+	return principal.Ledger(c)
 }
 
 // chargedOrg is the org the CHARGE IS WRITTEN UNDER — the commerce namespace the money
@@ -970,21 +967,8 @@ func payerOrg(c *zip.Ctx) string {
 //
 // Its fallback is the service token's, for [serviceOrg]'s reason.
 func chargedOrg(c *zip.Ctx) string {
-	if org, ok := principal.Org(c); ok {
-		return org
-	}
-	return serviceOrg(c)
-}
-
-// serviceOrg is the org a trusted COMMERCE_SERVICE_TOKEN named for itself — the one
-// lane admitted at these endpoints that carries no validated user, so neither principal
-// resolver answers for it. Both facts are the same org on that lane: a service token
-// names one organisation, charges in it and credits it, and cannot masquerade.
-func serviceOrg(c *zip.Ctx) string {
-	if cloud.IsServiceToken(c) {
-		return strings.TrimSpace(c.Org())
-	}
-	return ""
+	org, _ := principal.Org(c)
+	return org
 }
 
 // paymentSignals is what this gate SAW, in the scorer's own vocabulary.

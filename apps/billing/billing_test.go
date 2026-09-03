@@ -61,12 +61,11 @@ func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// mountApp mounts the billing surface against the fake commerce at base, with the
-// service token wired (unless token is ""). base "" leaves commerce unconfigured.
-func mountApp(t *testing.T, base, token string) *zip.App {
+// mountApp mounts the billing surface against the fake commerce at base. base ""
+// leaves commerce unconfigured.
+func mountApp(t *testing.T, base string) *zip.App {
 	t.Helper()
 	t.Setenv("CLOUD_COMMERCE_HTTP_URL", base)
-	t.Setenv("COMMERCE_SERVICE_TOKEN", token)
 	// The shared anti-forgery key this surface's writes verify against. A deployment
 	// takes it from KMS; the mount refuses without it (key_test.go).
 	t.Setenv(account.KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
@@ -103,7 +102,7 @@ func call(t *testing.T, app *zip.App, method, path, user, org string) (int, []by
 
 func TestUsage_ScopedToCallerOrg_PassesThroughVerbatim(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `{"user":"maxpower","count":1,"usage":[{"transactionId":"t1","amount":42,"metadata":{"model":"gpt-4o-mini"},"createdAt":"2026-07-01T00:00:00Z"}]}`}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 
 	code, body := call(t, app, http.MethodGet, "/v1/billing/usage", "maxpower/dave", "maxpower")
 	if code != 200 {
@@ -130,8 +129,10 @@ func TestUsage_ScopedToCallerOrg_PassesThroughVerbatim(t *testing.T) {
 	if got := f.gotQuery.Get("user"); got != "maxpower" {
 		t.Fatalf("commerce subject: want user=maxpower, got %q", got)
 	}
-	if f.gotAuth != "Bearer svc-token" {
-		t.Fatalf("commerce auth: want service token, got %q", f.gotAuth)
+	// No bearer crosses to commerce: the caller's identity rides the transport,
+	// which the root registers at boot, and there is no shared secret to send.
+	if f.gotAuth != "" {
+		t.Fatalf("commerce auth: want no bearer, got %q", f.gotAuth)
 	}
 	if f.gotPath != "/v1/billing/usage" {
 		t.Fatalf("commerce path: want /v1/billing/usage, got %q", f.gotPath)
@@ -140,7 +141,7 @@ func TestUsage_ScopedToCallerOrg_PassesThroughVerbatim(t *testing.T) {
 
 func TestUsage_ClientCannotWidenScope(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `{"usage":[]}`}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 
 	// A malicious client forges every subject key + a foreign org in the query.
 	code, _ := call(t, app, http.MethodGet,
@@ -166,7 +167,7 @@ func TestUsage_ClientCannotWidenScope(t *testing.T) {
 
 func TestUsage_PassthroughStartEnd(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `{"usage":[]}`}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 	code, _ := call(t, app, http.MethodGet, "/v1/billing/usage?start=2026-07-01&end=2026-07-03", "maxpower/dave", "maxpower")
 	if code != 200 {
 		t.Fatalf("want 200, got %d", code)
@@ -181,7 +182,7 @@ func TestUsage_PassthroughStartEnd(t *testing.T) {
 
 func TestBalance_ScopedAndCurrency(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `{"balance":2046200,"holds":0,"available":2046200}`}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 	code, body := call(t, app, http.MethodGet, "/v1/billing/balance?currency=usd", "maxpower/dave", "maxpower")
 	if code != 200 || string(body) != f.body {
 		t.Fatalf("balance: want 200 verbatim, got %d (%s)", code, body)
@@ -196,7 +197,7 @@ func TestBalance_ScopedAndCurrency(t *testing.T) {
 
 func TestUsage_NoValidatedPrincipal_401_NeverTouchesCommerce(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `{"usage":[]}`}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 	// A forged X-Org-Id with NO validated principal (no X-User-Id) must be refused
 	// as 401 — never admin-gated, never served — and commerce must never be reached.
 	code, _ := call(t, app, http.MethodGet, "/v1/billing/usage", "", "victim")
@@ -209,7 +210,7 @@ func TestUsage_NoValidatedPrincipal_401_NeverTouchesCommerce(t *testing.T) {
 }
 
 func TestUsage_CommerceUnconfigured_501(t *testing.T) {
-	app := mountApp(t, "", "") // no commerce base/token
+	app := mountApp(t, "") // no commerce base/token
 	code, _ := call(t, app, http.MethodGet, "/v1/billing/usage", "maxpower/dave", "maxpower")
 	if code != http.StatusNotImplemented {
 		t.Fatalf("unconfigured: want 501, got %d", code)
@@ -219,7 +220,7 @@ func TestUsage_CommerceUnconfigured_501(t *testing.T) {
 func TestUsage_CommerceStatusForwarded(t *testing.T) {
 	// A non-2xx from commerce (e.g. a real 500) is forwarded verbatim, not masked.
 	f := &fakeCommerce{status: http.StatusInternalServerError, body: `{"error":"boom"}`}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 	code, body := call(t, app, http.MethodGet, "/v1/billing/usage", "maxpower/dave", "maxpower")
 	if code != http.StatusInternalServerError || !strings.Contains(string(body), "boom") {
 		t.Fatalf("commerce status must pass through: got %d (%s)", code, body)

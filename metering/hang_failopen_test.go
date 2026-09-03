@@ -26,7 +26,7 @@ func TestAuthorizeVerdict_CapHang_FailsOpenFast(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Token: "t", Org: "hanzo"})
+	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Org: "hanzo"})
 
 	start := time.Now()
 	v, err := c.AuthorizeVerdict(context.Background(), metering.AuthInput{User: "hanzo", Org: "hanzo", AmountCents: 1})

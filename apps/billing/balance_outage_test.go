@@ -77,7 +77,6 @@ func brokenCommerce(t *testing.T) {
 // commerce proxy, whose answer is a different tenant's story: 501 when it is
 // unconfigured, and a WRONG 200 when it is configured, which is worse.
 func TestBalance_APlaneOutageIsNotASplitDeploy(t *testing.T) {
-	const token = "test-commerce-service-token"
 	noFinance(t) // the plugin process: finance.Current() is nil forever
 	planeDir(t)
 	brokenCommerce(t)
@@ -85,9 +84,9 @@ func TestBalance_APlaneOutageIsNotASplitDeploy(t *testing.T) {
 	// commerce IS configured here, so a silent fall-through returns a plausible 200
 	// with a balance that was never read. That is the shape this test exists to refuse.
 	f := &fakeCommerce{status: 200, body: `{"balance":999,"holds":0,"available":999}`}
-	app := mountApp(t, f.server(t).URL, token)
+	app := mountApp(t, f.server(t).URL)
 
-	code, body := s2sCall(t, app, "/v1/billing/balance", token, "hanzo")
+	code, body := userCall(t, app, "/v1/billing/balance", "u1", "hanzo")
 	if code == http.StatusOK {
 		t.Fatalf("a failed ledger read was answered 200 from the proxy: %s\n"+
 			"an outage was laundered into a split deploy, and the number returned is "+
@@ -109,14 +108,13 @@ func TestBalance_APlaneOutageIsNotASplitDeploy(t *testing.T) {
 // — the router's own word, from the manifest it owns, or the absence of any router at
 // all — and the configured S2S read must still serve it.
 func TestBalance_NoCommerceInTheFleetStillFallsBack(t *testing.T) {
-	const token = "test-commerce-service-token"
 	noFinance(t)
 	planeDir(t) // an empty run dir and no router: ErrNoPeer by construction
 
 	f := &fakeCommerce{status: 200, body: `{"balance":14953300,"holds":0,"available":14953300}`}
-	app := mountApp(t, f.server(t).URL, token)
+	app := mountApp(t, f.server(t).URL)
 
-	code, body := s2sCall(t, app, "/v1/billing/balance", token, "hanzo")
+	code, body := userCall(t, app, "/v1/billing/balance", "u1", "hanzo")
 	if code != http.StatusOK {
 		t.Fatalf("split deploy: want 200 from the configured commerce URL, got %d (%s)", code, body)
 	}

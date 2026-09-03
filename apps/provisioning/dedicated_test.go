@@ -334,7 +334,7 @@ func TestDedicated_BillsProvisionAndFootprintToOrg(t *testing.T) {
 	log := luxlog.New("module", "proddedbill")
 	t.Setenv("CLOUD_KMS_NODES", "")
 	t.Setenv("CLOUD_KMS_PASSPHRASE", "")
-	m, err := metering.New(metering.Config{BaseURL: bs.start(t), Token: "svc-token", Org: "hanzo"})
+	m, err := metering.New(metering.Config{BaseURL: bs.start(t), Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}

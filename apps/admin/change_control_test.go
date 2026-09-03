@@ -175,7 +175,7 @@ func seamApp(t *testing.T) *zip.App {
 	compose(app)
 	routes(app, &cloud.Service[core.State]{State: core.State{
 		IAM:       iam.New(""),
-		Commerce:  commerce.New("", "test-token"),
+		Commerce:  commerce.New(""),
 		Health:    health.New(""),
 		DO:        digitalocean.New(""),
 		WLTenants: map[string]bool{"maxpower": true},

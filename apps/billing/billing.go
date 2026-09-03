@@ -73,20 +73,18 @@ import (
 // typed god-view rollups (MRR/COGS/credits), whereas this forwards the customer's
 // OWN raw ledger + status verbatim.
 type commerceProxy struct {
-	base  string // e.g. http://commerce.hanzo.svc.cluster.local:8001
-	token string // admin S2S bearer (secret; never logged)
-	http  *http.Client
+	base string // e.g. http://commerce.hanzo.svc.cluster.local:8001
+	http *http.Client
 }
 
-func newCommerceProxy(base, token string) *commerceProxy {
+func newCommerceProxy(base string) *commerceProxy {
 	return &commerceProxy{
-		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
-		token: strings.TrimSpace(token),
-		http:  transport.Client(15 * time.Second),
+		base: strings.TrimRight(strings.TrimSpace(base), "/"),
+		http: transport.Client(15 * time.Second),
 	}
 }
 
-func (p *commerceProxy) configured() bool { return p != nil && p.base != "" && p.token != "" }
+func (p *commerceProxy) configured() bool { return p != nil && p.base != "" }
 
 // get performs one service-token commerce GET scoped to org and returns commerce's
 // raw body + status VERBATIM (a true passthrough — the caller forwards both). The
@@ -101,7 +99,6 @@ func (p *commerceProxy) get(ctx context.Context, path, org string, q url.Values)
 		return nil, 0, err
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.token)
 	// Commerce's EdgeAuth trusts X-Org-Id ONLY after it verifies the bearer is the
 	// COMMERCE_SERVICE_TOKEN, then resolves the per-org billing namespace from it.
 	req.Header.Set("X-Org-Id", org)
@@ -132,10 +129,11 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Use(app, deps, "billing", build, routes)
 }
 
-// build constructs the billing state: the commerce S2S proxy from its env
-// (COMMERCE_SERVICE_TOKEN is a KMS-sourced secret already on the cloud env).
+// build constructs the billing state: the commerce proxy from its env. The
+// caller's identity crosses to commerce on the transport, so there is no
+// credential here.
 func build(b cloud.Base) (state, error) {
-	cp := newCommerceProxy(transport.BaseURL(environ.Or("CLOUD_COMMERCE_HTTP_URL", "")), environ.Or("COMMERCE_SERVICE_TOKEN", ""))
+	cp := newCommerceProxy(transport.BaseURL(environ.Or("CLOUD_COMMERCE_HTTP_URL", "")))
 	b.Log.Info("billing surface mounted", "prefix", "/v1/billing", "commerce", cp.configured())
 	return state{commerce: cp}, nil
 }

@@ -61,7 +61,7 @@ func seamApp(t *testing.T, commerceURL string) (*zip.App, *int32) {
 	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIATEST")
 	t.Setenv("S3_ADMIN_SECRET_KEY", "secrettest")
 	t.Setenv("S3_ADMIN_ENDPOINT", srv.Listener.Addr().String())
-	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-token", Org: "hanzo"})
+	m, err := metering.New(metering.Config{BaseURL: commerceURL, Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}

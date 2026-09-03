@@ -116,10 +116,9 @@ func TestPinBillingSubject_PinsBodyForWrites(t *testing.T) {
 }
 
 // TestPinBillingSubject_RefusesUnvalidated — a forged X-Org-Id with NO validated
-// X-User-Id (and no service token) is refused before the read handler runs: no
+// X-User-Id is refused before the read handler runs: no
 // cross-tenant billing read is possible.
 func TestPinBillingSubject_RefusesUnvalidated(t *testing.T) {
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
 	app := pinApp(t)
 	code, _ := callH(t, app, http.MethodGet, "/probe?userId=victim",
 		map[string]string{"X-Org-Id": "victim"}, "")
@@ -127,35 +126,5 @@ func TestPinBillingSubject_RefusesUnvalidated(t *testing.T) {
 	// re-authenticates on 401. A forged X-Org-Id is not a credential.
 	if code != http.StatusUnauthorized {
 		t.Fatalf("unvalidated caller: want 401, got %d", code)
-	}
-}
-
-// TestPinBillingSubject_S2SForwardsVerbatim — the trusted in-proc S2S caller (verified
-// COMMERCE_SERVICE_TOKEN + its own X-Org-Id, no validated user) is admitted and its query
-// is left UNTOUCHED, so it can name its own subject (the cap-gate's authorize read).
-func TestPinBillingSubject_S2SForwardsVerbatim(t *testing.T) {
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
-	app := pinApp(t)
-	code, body := callH(t, app, http.MethodGet, "/probe?user=acme&status=open",
-		map[string]string{"Authorization": "Bearer svc-tok", "X-Org-Id": "acme"}, "")
-	if code != http.StatusOK {
-		t.Fatalf("S2S: want 200, got %d (%s)", code, body)
-	}
-	var got map[string]string
-	_ = json.Unmarshal(body, &got)
-	if got["user"] != "acme" || got["status"] != "open" {
-		t.Fatalf("S2S query must pass through verbatim, got %+v", got)
-	}
-}
-
-// TestPinBillingSubject_S2SNoOrgRefused — the service token with NO X-Org-Id has no org
-// to scope the privileged read and is refused (matches billingData's s2s org requirement).
-func TestPinBillingSubject_S2SNoOrgRefused(t *testing.T) {
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
-	app := pinApp(t)
-	code, _ := callH(t, app, http.MethodGet, "/probe",
-		map[string]string{"Authorization": "Bearer svc-tok"}, "")
-	if code != http.StatusForbidden {
-		t.Fatalf("S2S without X-Org-Id: want 403, got %d", code)
 	}
 }

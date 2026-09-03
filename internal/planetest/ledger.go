@@ -57,7 +57,7 @@ func Money(t *testing.T, available int64) *Ledger {
 // org gets the cross-tenant property for free.
 func (l *Ledger) Client(t *testing.T) *metering.Client {
 	t.Helper()
-	m, err := metering.New(metering.Config{BaseURL: l.URL, Token: "svc-token", Org: "hanzo"})
+	m, err := metering.New(metering.Config{BaseURL: l.URL, Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}

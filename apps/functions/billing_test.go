@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/zap-proto/zip"
 )
 
@@ -69,7 +69,7 @@ func (b *billServer) lastDebit() (string, []byte) { return b.peer.Org(), b.peer.
 func newBilledService(t *testing.T, commerceURL string) *cloud.Service[state] {
 	t.Setenv("CLOUD_ENV", "mainnet")
 	t.Helper()
-	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-token", Org: "hanzo"})
+	m, err := metering.New(metering.Config{BaseURL: commerceURL, Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}

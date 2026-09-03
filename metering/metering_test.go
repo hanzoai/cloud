@@ -62,9 +62,6 @@ func (f *fakeCommerce) handler() http.HandlerFunc {
 func newClient(t *testing.T, srv *httptest.Server, cfg metering.Config) *metering.Client {
 	t.Helper()
 	cfg.BaseURL = srv.URL
-	if cfg.Token == "" {
-		cfg.Token = "svc-token"
-	}
 	if cfg.Org == "" {
 		cfg.Org = "hanzo"
 	}
@@ -98,8 +95,8 @@ func TestAuthorize_Allows_WhenAvailablePositive(t *testing.T) {
 	if got := fc.query.Get("currency"); got != "usd" {
 		t.Errorf("currency query = %q, want usd", got)
 	}
-	if fc.auth != "Bearer svc-token" {
-		t.Errorf("auth = %q, want Bearer svc-token", fc.auth)
+	if fc.auth != "" {
+		t.Errorf("auth = %q, want no bearer — identity rides the transport, not a secret", fc.auth)
 	}
 	if fc.org != "hanzo" {
 		t.Errorf("X-Org-Id = %q, want hanzo", fc.org)
@@ -401,13 +398,9 @@ func TestConfigFromEnv_Disabled(t *testing.T) {
 	}
 }
 
-func TestConfigFromEnv_ReadsToken(t *testing.T) {
-	t.Setenv(metering.EnvToken, "kms-sourced-token")
+func TestConfigFromEnv_ReadsTierAware(t *testing.T) {
 	t.Setenv(metering.EnvTierAware, "true")
 	cfg := metering.ConfigFromEnv()
-	if cfg.Token != "kms-sourced-token" {
-		t.Errorf("token = %q", cfg.Token)
-	}
 	if !cfg.TierAware {
 		t.Error("METERING_TIER_AWARE=true should set TierAware")
 	}
@@ -466,8 +459,8 @@ func TestTier_ResolvesPlanName(t *testing.T) {
 	if got := fc.query.Get("user"); got != "hanzo/alice" {
 		t.Errorf("user query = %q, want hanzo/alice", got)
 	}
-	if fc.auth != "Bearer svc-token" {
-		t.Errorf("auth = %q, want Bearer svc-token", fc.auth)
+	if fc.auth != "" {
+		t.Errorf("auth = %q, want no bearer — identity rides the transport, not a secret", fc.auth)
 	}
 	if fc.org != "hanzo" {
 		t.Errorf("X-Org-Id = %q, want hanzo", fc.org)

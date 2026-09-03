@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/account"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/zap-proto/zip"
 )
 
@@ -70,8 +70,8 @@ func newGateApp(t *testing.T, m *metering.Client, handlerRan *atomic.Bool) *zip.
 func mustClient(t *testing.T, baseURL string, failOpen bool) *metering.Client {
 	t.Helper()
 	c, err := metering.New(metering.Config{
-		BaseURL:  baseURL,
-		Token:    "svc-token",
+		BaseURL: baseURL,
+
 		Org:      "hanzo",
 		FailOpen: failOpen,
 	})

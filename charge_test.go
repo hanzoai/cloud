@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/account"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -61,7 +61,7 @@ func newLedger(t *testing.T, available int64, block chan struct{}) *moneyLedger 
 
 func meterAt(t *testing.T, l *moneyLedger) *Meter {
 	t.Helper()
-	m, err := metering.New(metering.Config{BaseURL: l.url, Token: "svc", Org: "hanzo"})
+	m, err := metering.New(metering.Config{BaseURL: l.url, Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}

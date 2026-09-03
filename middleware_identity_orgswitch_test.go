@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/authz"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/zap-proto/zip"
 )
 
@@ -221,7 +221,7 @@ func TestUnresolvableOrgRefuses(t *testing.T) {
 func TestUnresolvableOrgRefuses_NoBrandSubstitute(t *testing.T) {
 	// A client configured with the brand org, exactly as build.go wires it.
 	fc := &fakeCommerce{balanceBody: `{"available":100000}`}
-	c, err := metering.New(metering.Config{BaseURL: fc.server(t).URL, Token: "svc", Org: "hanzo"})
+	c, err := metering.New(metering.Config{BaseURL: fc.server(t).URL, Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

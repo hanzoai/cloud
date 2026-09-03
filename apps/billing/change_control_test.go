@@ -84,7 +84,7 @@ func TestEveryChangeIsClassified(t *testing.T) {
 // The pair is what makes each row mean something. A refusal on its own would pass
 // against an operation that refuses everything, including one that does not exist.
 func TestEveryChangeAsksTheControl(t *testing.T) {
-	app := mountApp(t, "", "")
+	app := mountApp(t, "")
 	for addr, what := range changesSomething {
 		t.Run(addr, func(t *testing.T) {
 			method, path := split(addr)
@@ -118,7 +118,7 @@ func TestEveryChangeAsksTheControl(t *testing.T) {
 // before the input matters, and it does, because it reads the request's
 // credentials rather than the operation's In.
 func TestTheControlCoversTheCallPlane(t *testing.T) {
-	app := mountApp(t, "", "")
+	app := mountApp(t, "")
 	for _, id := range []string{"post_billing_topup", "post_billing_topup_token"} {
 		body := ""
 		forged := drivePlane(t, app, zip.CallPath+id, body, map[string]string{"Cookie": "session=v"})
@@ -151,7 +151,7 @@ func consumes(m string) bool {
 
 func registeredHere(t *testing.T) []string {
 	t.Helper()
-	app := mountApp(t, "", "")
+	app := mountApp(t, "")
 	doc, err := openapi.Spec(app, openapi.Info{Title: "billing", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
