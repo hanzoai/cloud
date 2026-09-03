@@ -4,6 +4,7 @@ import (
 	"embed"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // brands.go is the WHITE-LABEL tier of the blueprint resolution chain. A brand
@@ -22,9 +23,9 @@ import (
 //go:embed brands
 var brandFS embed.FS
 
-// brandBlueprints maps a lowercased brand name to its default blueprint. Built once at
-// init from the embedded brands/ directory.
-var brandBlueprints = mustBrands()
+// brandBlueprints maps a lowercased brand name to its default blueprint, built once on
+// FIRST USE from the embedded brands/ directory — for the reason defaultBlueprint is.
+var brandBlueprints = sync.OnceValue(mustBrands)
 
 func mustBrands() map[string]Blueprint {
 	m := map[string]Blueprint{}
@@ -53,7 +54,7 @@ func mustBrands() map[string]Blueprint {
 // false) when the brand ships none. Case-insensitive, whitespace-trimmed (deps.Brand
 // is operator config).
 func brandBlueprint(brand string) (Blueprint, bool) {
-	bp, ok := brandBlueprints[strings.ToLower(strings.TrimSpace(brand))]
+	bp, ok := brandBlueprints()[strings.ToLower(strings.TrimSpace(brand))]
 	return bp, ok
 }
 
@@ -64,7 +65,7 @@ func fixtureBlueprint(brand string) Blueprint {
 	if bp, ok := brandBlueprint(brand); ok {
 		return bp
 	}
-	return defaultBlueprint
+	return defaultBlueprint()
 }
 
 // brandCurriculum returns the brand's default journey as an engine Curriculum (the
@@ -81,8 +82,9 @@ func brandCurriculum(brand string) (Curriculum, bool) {
 // BrandCurriculums returns the sorted brand names that ship a default blueprint —
 // introspection for a catalog / link-guard test.
 func BrandCurriculums() []string {
-	out := make([]string, 0, len(brandBlueprints))
-	for b := range brandBlueprints {
+	brands := brandBlueprints()
+	out := make([]string, 0, len(brands))
+	for b := range brands {
 		out = append(out, b)
 	}
 	sort.Strings(out)

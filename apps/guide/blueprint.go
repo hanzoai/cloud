@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"sigs.k8s.io/yaml"
+	"sync"
 )
 
 // blueprint.go is the full Guide™ playbook SCHEMA — the superset the checklist engine
@@ -201,10 +202,19 @@ var baseBlueprintYAML []byte
 //	2 — the full Zen of Hanzo genome: the 64-principle spine + 888 modern + 114 heritage strategies
 const seedVersion = 2
 
-// defaultBlueprint is the embedded base blueprint, parsed once at init. A malformed or
-// invalid embed is a BUILD-TIME fault (panic at package init), never a runtime
-// surprise — the same discipline clients/automations uses for its catalog.
-var defaultBlueprint = mustBlueprint(baseBlueprintYAML)
+// defaultBlueprint is the embedded base blueprint, parsed once on FIRST USE.
+//
+// base.yaml is 1.2 MB of YAML — the 64-principle spine plus a thousand strategies —
+// and parsing it at package init put that cost in front of the listener of every
+// guide process, measured at 74 ms and the largest single init in the binary. The
+// steady-state boot does not need it: the seed row is already current, so Mount asks
+// two cheap questions of the store and writes nothing.
+//
+// Its validity is still a BUILD-TIME fault rather than a runtime surprise, but the
+// thing that establishes that is a TEST that parses it, not an init that reparses it
+// on every process start forever — TestTheEmbeddedBlueprintIsValid is where a
+// malformed embed now fails, which is before it ships rather than after.
+var defaultBlueprint = sync.OnceValue(func() Blueprint { return mustBlueprint(baseBlueprintYAML) })
 
 // clone returns a copy of b with INDEPENDENT Sections/Steps/Strategies/Templates/Principles
 // slices, so an in-place edit (patchIn writes items[i]) can never mutate a value the clone

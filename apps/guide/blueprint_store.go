@@ -119,6 +119,17 @@ func (s *BlueprintStore) columns(table string) (map[string]bool, error) {
 // Close closes the underlying database. Idempotent-safe via sql.DB.
 func (s *BlueprintStore) Close() error { return s.db.Close() }
 
+// docFunc produces the seed document, and it is a FUNCTION because producing one is
+// expensive and usually unnecessary. The embedded fixture is 1.2 MB of YAML to parse
+// and a JSON document to marshal, while the answer on a boot that already holds a
+// current seed is "write nothing" — decided by two indexed reads above. Passing the
+// bytes made every process pay for a document the common case discards; passing the
+// means of making them lets the store ask first.
+type docFunc func() ([]byte, error)
+
+// bytesDoc adapts a document already in hand, for a caller that has one.
+func bytesDoc(b []byte) docFunc { return func() ([]byte, error) { return b, nil } }
+
 // SeedAction is the outcome of a SeedOrUpgrade call (for logging / test assertions).
 type SeedAction string
 
@@ -140,7 +151,7 @@ const (
 //   - otherwise is a no-op (the seed is already at this generation).
 //
 // Idempotent: re-running with the same seedVersion over an already-current seed is SeedNone.
-func (s *BlueprintStore) SeedOrUpgrade(ctx context.Context, brand string, doc []byte, seedVersion int, now int64) (SeedAction, error) {
+func (s *BlueprintStore) SeedOrUpgrade(ctx context.Context, brand string, doc docFunc, seedVersion int, now int64) (SeedAction, error) {
 	// 1. An admin edit makes the brand off-limits to the seeder, forever.
 	var adminN int
 	if err := s.db.QueryRowContext(ctx,
@@ -159,11 +170,15 @@ func (s *BlueprintStore) SeedOrUpgrade(ctx context.Context, brand string, doc []
 		// Atomic insert-if-absent — no TOCTOU with a concurrent seeder (a second replica over
 		// a shared file): the WHERE NOT EXISTS lets exactly one writer win; the loser is a
 		// no-op, never a primary-key conflict.
+		body, err := doc()
+		if err != nil {
+			return SeedNone, err
+		}
 		res, err := s.db.ExecContext(ctx,
 			`INSERT INTO guide_blueprint (brand, version, doc, updated_at, source, seed_version)
 			 SELECT ?,1,?,?,'seed',?
 			 WHERE NOT EXISTS (SELECT 1 FROM guide_blueprint WHERE brand=?)`,
-			brand, string(doc), now, seedVersion, brand)
+			brand, body, now, seedVersion, brand)
 		if err != nil {
 			return SeedNone, fmt.Errorf("seed blueprint: %w", err)
 		}
@@ -177,9 +192,13 @@ func (s *BlueprintStore) SeedOrUpgrade(ctx context.Context, brand string, doc []
 	}
 	// 3. Unedited seed present → upgrade in place ONLY when the embedded generation is newer.
 	if seedVersion > int(stored.Int64) {
+		body, err := doc()
+		if err != nil {
+			return SeedNone, err
+		}
 		if _, err := s.db.ExecContext(ctx,
 			`UPDATE guide_blueprint SET doc=?, seed_version=?, updated_at=? WHERE brand=? AND source='seed'`,
-			string(doc), seedVersion, now, brand); err != nil {
+			body, seedVersion, now, brand); err != nil {
 			return SeedNone, fmt.Errorf("upgrade seed: %w", err)
 		}
 		return SeedUpgraded, nil

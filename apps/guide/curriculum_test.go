@@ -9,7 +9,7 @@ import (
 // playbook seed) parses and satisfies every invariant — the same check package init
 // enforces, made explicit — and that its enabled projection is the engine journey.
 func TestDefaultBlueprintValid(t *testing.T) {
-	b := defaultBlueprint
+	b := defaultBlueprint()
 	if b.Version != "1" {
 		t.Fatalf("base blueprint version want 1, got %q", b.Version)
 	}

@@ -100,7 +100,7 @@ func TestResolutionTiers(t *testing.T) {
 	// A store seeded with a DISTINCT brand blueprint under the base key.
 	bpStore := testBlueprintStore(t)
 	brandDoc, _ := json.Marshal(Blueprint{Version: "brand-v", Steps: []JourneyStep{{ID: "b1", Title: "B1"}}})
-	if _, err := bpStore.SeedOrUpgrade(ctx, "", brandDoc, seedVersion, 1); err != nil {
+	if _, err := bpStore.SeedOrUpgrade(ctx, "", bytesDoc(brandDoc), seedVersion, 1); err != nil {
 		t.Fatalf("seed brand: %v", err)
 	}
 	st := state{blueprints: bpStore, brand: "", defBlueprint: fixture}
@@ -132,7 +132,7 @@ func TestResolutionTiers(t *testing.T) {
 	off := false
 	disabledDoc, _ := json.Marshal(Blueprint{Version: "disabled-v", Enabled: &off, Steps: []JourneyStep{{ID: "x", Title: "X"}}})
 	dstore := testBlueprintStore(t)
-	if _, err := dstore.SeedOrUpgrade(ctx, "", disabledDoc, seedVersion, 1); err != nil {
+	if _, err := dstore.SeedOrUpgrade(ctx, "", bytesDoc(disabledDoc), seedVersion, 1); err != nil {
 		t.Fatalf("seed disabled: %v", err)
 	}
 	st4 := state{blueprints: dstore, brand: "", defBlueprint: fixture}
@@ -191,15 +191,15 @@ func TestSeedVersionAwareUpgrade(t *testing.T) {
 	newDoc, _ := json.Marshal(Blueprint{Version: "seed-v2", Steps: []JourneyStep{{ID: "a", Title: "A"}, {ID: "b", Title: "B"}}})
 
 	// Seed generation 1.
-	if act, err := store.SeedOrUpgrade(ctx, "", oldDoc, 1, 100); err != nil || act != SeedInserted {
+	if act, err := store.SeedOrUpgrade(ctx, "", bytesDoc(oldDoc), 1, 100); err != nil || act != SeedInserted {
 		t.Fatalf("first seed want SeedInserted, got %q err=%v", act, err)
 	}
 	// Re-seed at the SAME generation → no-op (idempotent redeploy).
-	if act, err := store.SeedOrUpgrade(ctx, "", oldDoc, 1, 101); err != nil || act != SeedNone {
+	if act, err := store.SeedOrUpgrade(ctx, "", bytesDoc(oldDoc), 1, 101); err != nil || act != SeedNone {
 		t.Fatalf("re-seed same generation want SeedNone, got %q err=%v", act, err)
 	}
 	// A NEWER generation over the UNEDITED seed → UPGRADE in place (still version 1).
-	if act, err := store.SeedOrUpgrade(ctx, "", newDoc, 2, 102); err != nil || act != SeedUpgraded {
+	if act, err := store.SeedOrUpgrade(ctx, "", bytesDoc(newDoc), 2, 102); err != nil || act != SeedUpgraded {
 		t.Fatalf("newer generation over unedited seed want SeedUpgraded, got %q err=%v", act, err)
 	}
 	doc, version, _, ok, err := store.LatestResolved(ctx, "")
@@ -212,10 +212,10 @@ func TestSeedVersionAwareUpgrade(t *testing.T) {
 		t.Fatalf("upgrade must replace the seed IN PLACE at version 1, got version=%d blueprint=%q", version, got.Version)
 	}
 	// Equal or older generation must NEVER regress the seed.
-	if act, err := store.SeedOrUpgrade(ctx, "", oldDoc, 2, 103); err != nil || act != SeedNone {
+	if act, err := store.SeedOrUpgrade(ctx, "", bytesDoc(oldDoc), 2, 103); err != nil || act != SeedNone {
 		t.Fatalf("equal generation want SeedNone, got %q err=%v", act, err)
 	}
-	if act, err := store.SeedOrUpgrade(ctx, "", oldDoc, 1, 104); err != nil || act != SeedNone {
+	if act, err := store.SeedOrUpgrade(ctx, "", bytesDoc(oldDoc), 1, 104); err != nil || act != SeedNone {
 		t.Fatalf("older generation must never downgrade, got %q err=%v", act, err)
 	}
 	// The upgrade keeps a SINGLE seed version (no history churn).
@@ -231,7 +231,7 @@ func TestSeedNeverClobbersAdminEdit(t *testing.T) {
 	ctx := context.Background()
 	store := testBlueprintStore(t)
 	seedDoc, _ := json.Marshal(Blueprint{Version: "seed-v1", Steps: []JourneyStep{{ID: "a", Title: "A"}}})
-	if act, err := store.SeedOrUpgrade(ctx, "", seedDoc, 1, 100); err != nil || act != SeedInserted {
+	if act, err := store.SeedOrUpgrade(ctx, "", bytesDoc(seedDoc), 1, 100); err != nil || act != SeedInserted {
 		t.Fatalf("seed want SeedInserted, got %q err=%v", act, err)
 	}
 	// An admin edits it → version 2, stamped source="admin".
@@ -241,10 +241,10 @@ func TestSeedNeverClobbersAdminEdit(t *testing.T) {
 	}
 	// A newer seed generation MUST NOT clobber the admin edit — even a far-future one.
 	newSeed, _ := json.Marshal(Blueprint{Version: "seed-v2", Steps: []JourneyStep{{ID: "a", Title: "A"}, {ID: "b", Title: "B"}}})
-	if act, err := store.SeedOrUpgrade(ctx, "", newSeed, 2, 102); err != nil || act != SeedNone {
+	if act, err := store.SeedOrUpgrade(ctx, "", bytesDoc(newSeed), 2, 102); err != nil || act != SeedNone {
 		t.Fatalf("v2 seed over an admin edit MUST be SeedNone (never clobber), got %q err=%v", act, err)
 	}
-	if act, err := store.SeedOrUpgrade(ctx, "", newSeed, 99, 103); err != nil || act != SeedNone {
+	if act, err := store.SeedOrUpgrade(ctx, "", bytesDoc(newSeed), 99, 103); err != nil || act != SeedNone {
 		t.Fatalf("any newer seed over an admin edit MUST be SeedNone, got %q err=%v", act, err)
 	}
 	// The admin edit is still authoritative + byte-intact.
@@ -282,7 +282,7 @@ func TestMigrateBackfillsLegacyAdminEdit(t *testing.T) {
 	}
 	// A newer seed generation must now leave the legacy admin edit untouched.
 	newSeed, _ := json.Marshal(Blueprint{Version: "seed-v9", Steps: []JourneyStep{{ID: "a", Title: "A"}}})
-	if act, err := store.SeedOrUpgrade(ctx, "", newSeed, 9, 3); err != nil || act != SeedNone {
+	if act, err := store.SeedOrUpgrade(ctx, "", bytesDoc(newSeed), 9, 3); err != nil || act != SeedNone {
 		t.Fatalf("legacy admin edit must be protected after backfill, got %q err=%v", act, err)
 	}
 	doc, version, _, _, _ := store.LatestResolved(ctx, "")
@@ -298,7 +298,7 @@ func TestMigrateBackfillsLegacyAdminEdit(t *testing.T) {
 // spine + the 1002-strategy corpus (888 modern + 114 heritage), and EVERY strategy files
 // under a real spine principle with NO duplicate id across the whole corpus.
 func TestAssembledSeedParsesAndValidates(t *testing.T) {
-	bp := defaultBlueprint // parsed + validated at package init
+	bp := defaultBlueprint() // parsed + validated on first use
 	if got := len(bp.Principles); got != 64 {
 		t.Fatalf("assembled seed principles want 64, got %d", got)
 	}
@@ -345,5 +345,27 @@ func TestAssembledSeedParsesAndValidates(t *testing.T) {
 	}
 	if modern != 888 || heritage != 114 {
 		t.Fatalf("corpus era split want modern=888 heritage=114, got modern=%d heritage=%d", modern, heritage)
+	}
+}
+
+// TestTheEmbeddedBlueprintIsValid is where a malformed embed fails now.
+//
+// Parsing base.yaml used to happen at package init, so a bad embed panicked every
+// process at boot — fail-fast, and paid for by 74 ms on every start forever. The
+// parse is lazy now, which moves that panic to the first request unless something
+// else establishes the property first. This is that something: the embed is a
+// BUILD-TIME artifact, so its validity is a question for the build, and a test is
+// what the build runs.
+//
+// It also covers the brand fixtures, which are the same argument one directory down.
+func TestTheEmbeddedBlueprintIsValid(t *testing.T) {
+	bp := defaultBlueprint()
+	if len(bp.Sections) == 0 {
+		t.Fatal("embedded base.yaml parsed to a blueprint with no sections")
+	}
+	for _, brand := range BrandCurriculums() {
+		if _, ok := brandBlueprints()[brand]; !ok {
+			t.Fatalf("brand %q is listed but its fixture did not parse", brand)
+		}
 	}
 }
