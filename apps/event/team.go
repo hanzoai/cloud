@@ -50,7 +50,6 @@ package event
 
 import (
 	"encoding/json"
-	"github.com/hanzoai/cloud/internal/environ"
 	"strings"
 	"time"
 
@@ -203,10 +202,14 @@ func anyString(v any) string {
 
 // ── the team session token as an ingest credential ───────────────────────────
 
-// teamSecretEnv is the HS256 session-signing key clients/team signs team tokens with.
-// ONE env var, ONE secret, read here the SAME way team.go reads it — this package
-// verifies what that one signs, it does not own a second key.
-const teamSecretEnv = "SERVER_SECRET"
+// teamSecretRef names the KMS entry holding the HS256 key clients/team signs team
+// tokens with — the SAME ref team.go resolves, so this package verifies what that
+// one signs and never holds a second key.
+const teamSecretRef = "SERVER_SECRET_REF"
+
+// teamKey is that key, resolved once by build. Package scope for the reason sink
+// is: verifyTeam runs on the request path, where there is no Base to ask.
+var teamKey string
 
 // teamSecret returns the signing key, or "" when there is none to trust. It refuses
 // the upstream public default literal for the same reason team.go's resolveSecret
@@ -214,11 +217,10 @@ const teamSecretEnv = "SERVER_SECRET"
 // write into a tenant it has no claim to. No secret ⇒ no team credential ⇒ the caller
 // takes the anonymous lane. Fail-closed, and the closed state is still useful.
 func teamSecret() string {
-	s := environ.Or(teamSecretEnv, "")
-	if s == "secret" {
+	if teamKey == "secret" {
 		return ""
 	}
-	return s
+	return teamKey
 }
 
 // teamTenant resolves a Hanzo Team space token to the org it names AND the

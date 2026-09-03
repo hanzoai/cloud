@@ -33,7 +33,7 @@ import (
 // endpoint that still reaches them.
 func postAnon(t *testing.T, app *zip.App, path, body string, hdr map[string]string) (int, []byte) {
 	t.Helper()
-	t.Setenv("SERVER_SECRET", "a-real-team-secret")
+	withKey(t, "a-real-team-secret")
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+teamToken(t, "acme", "a-real-team-secret",

@@ -27,9 +27,15 @@ func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
+	return mount(t, cloud.Deps{})
+}
+
+// mount is mountApp with the deps stated, for a test that needs a client behind one.
+func mount(t *testing.T, deps cloud.Deps) *zip.App {
+	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{}); err != nil {
+	if err := Use(app, deps); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	// A test process is not the fleet. Mount starts the event sink, and a sink that
