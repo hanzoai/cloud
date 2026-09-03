@@ -233,7 +233,7 @@ func mirrorToView(v MirrorTarget) mirrorTargetView {
 	return mirrorTargetView{ID: v.ID, Repo: v.Repo, Host: v.Host, URL: v.URL, CreatedAt: stamp.Unix(v.CreatedAt)}
 }
 
-// addMirror registers a downstream remote the repo's advanced refs are pushed to
+// addTarget registers a downstream remote the repo's advanced refs are pushed to
 // whenever a push lands here. Answers 201. The URL must be https to a host on the
 // mirror allowlist (github.com / gitlab.com): the same set the mirror credential
 // may be sent to, so a target can never capture the shared token or point the push
@@ -242,7 +242,7 @@ func mirrorToView(v MirrorTarget) mirrorTargetView {
 // repo; a second is a 409.
 //
 // Example: {"name": "widgets", "url": "https://github.com/acme/widgets.git"}
-func (o ops) addMirror(ctx context.Context, in *mirrorTargetReq) (*mirrorTargetView, error) {
+func (o ops) addTarget(ctx context.Context, in *mirrorTargetReq) (*mirrorTargetView, error) {
 	t, name, herr := o.scoped(ctx, in.Name)
 	if herr != nil {
 		return nil, herr
@@ -274,7 +274,7 @@ func (o ops) addMirror(ctx context.Context, in *mirrorTargetReq) (*mirrorTargetV
 	return &view, nil
 }
 
-// listMirrors returns a repo's outbound mirror targets — the downstream remotes
+// listTargets returns a repo's outbound mirror targets — the downstream remotes
 // the mirror reactor pushes to whenever a push lands here.
 //
 // Example: {"name": "widgets"}
@@ -282,7 +282,7 @@ func (o ops) addMirror(ctx context.Context, in *mirrorTargetReq) (*mirrorTargetV
 //	Response: {"data": [{"id": "mir_2d90", "repo": "widgets", "host": "github.com",
 //		"url": "https://github.com/acme/widgets.git",
 //		"createdAt": "2026-07-01T10:00:00Z"}]}
-func (o ops) listMirrors(ctx context.Context, in *repoRef) (*mirrorList, error) {
+func (o ops) listTargets(ctx context.Context, in *repoRef) (*mirrorList, error) {
 	t, name, err := o.scoped(ctx, in.Name)
 	if err != nil {
 		return nil, err
@@ -302,12 +302,12 @@ func (o ops) listMirrors(ctx context.Context, in *repoRef) (*mirrorList, error) 
 	return &mirrorList{Data: out}, nil
 }
 
-// deleteMirror removes one outbound mirror target; later pushes stop being
+// deleteTarget removes one outbound mirror target; later pushes stop being
 // forwarded to it. Answers 204 with no body. Nothing is done to the downstream
 // remote itself — only this repo's intent to push there is dropped.
 //
 // Example: {"name": "widgets", "id": "mir_2d90"}
-func (o ops) deleteMirror(ctx context.Context, in *childRef) (*cloud.Unit, error) {
+func (o ops) deleteTarget(ctx context.Context, in *childRef) (*cloud.Unit, error) {
 	t, name, err := o.scoped(ctx, in.Name)
 	if err != nil {
 		return nil, err

@@ -181,7 +181,7 @@ var voidOps = map[string]bool{
 	"DELETE /v1/git/repos/{name}":                    true,
 	"DELETE /v1/git/keys/{id}":                       true,
 	"DELETE /v1/git/repos/{name}/subscriptions/{id}": true,
-	"DELETE /v1/git/repos/{name}/mirrors/{id}":       true,
+	"DELETE /v1/git/repos/{name}/targets/{id}":       true,
 }
 
 // TestVoidOpsPublishTheStatusTheySend holds every typed op's DOCUMENTED success
@@ -340,8 +340,8 @@ func TestRefusedRoutesDeclareTheBodyTheyRead(t *testing.T) {
 var cliNameCollisions = map[string][]string{
 	"repos-delete": {
 		"DELETE /v1/git/repos/:name",
-		"DELETE /v1/git/repos/:name/mirrors/:id",
 		"DELETE /v1/git/repos/:name/subscriptions/:id",
+		"DELETE /v1/git/repos/:name/targets/:id",
 	},
 	"repos-get": {
 		"GET /v1/git/repos/:name",

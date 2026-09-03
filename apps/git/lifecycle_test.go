@@ -109,29 +109,29 @@ func TestMirrorTargetCRUDAndIsolation(t *testing.T) {
 	}
 
 	// Non-allowlisted host → 400 (fail-closed; token can never reach it).
-	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/mirrors", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/targets", "acme",
 		map[string]any{"url": "https://evil.example.com/acme/code.git"}); code != http.StatusBadRequest {
 		t.Fatalf("non-allowlisted target want 400, got %d", code)
 	}
 	// http (non-https) → 400.
-	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/mirrors", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/targets", "acme",
 		map[string]any{"url": "http://github.com/acme/code.git"}); code != http.StatusBadRequest {
 		t.Fatalf("http target want 400, got %d", code)
 	}
 	// The LOCAL git host is NOT a permitted outbound target (Red MED-1: internal
 	// SSRF + privileged-cred presentation) even though it IS an inbound source.
-	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/mirrors", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/targets", "acme",
 		map[string]any{"url": "https://git.hanzo.ai/v1/git/acme/code.git"}); code != http.StatusBadRequest {
 		t.Fatalf("local-host target want 400, got %d", code)
 	}
 	// host-vs-url mismatch → 400.
-	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/mirrors", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/targets", "acme",
 		map[string]any{"host": "gitlab.com", "url": "https://github.com/acme/code.git"}); code != http.StatusBadRequest {
 		t.Fatalf("host mismatch want 400, got %d", code)
 	}
 
 	// Valid GitLab target (allowlist now includes gitlab.com). Userinfo is stripped.
-	code, b := do(t, app, http.MethodPost, "/v1/git/repos/code/mirrors", "acme",
+	code, b := do(t, app, http.MethodPost, "/v1/git/repos/code/targets", "acme",
 		map[string]any{"url": "https://user:secret@gitlab.com/acme/code.git"})
 	if code != http.StatusCreated {
 		t.Fatalf("gitlab target want 201, got %d (%s)", code, b)
@@ -143,22 +143,22 @@ func TestMirrorTargetCRUDAndIsolation(t *testing.T) {
 	}
 
 	// GitHub target too.
-	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/mirrors", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/targets", "acme",
 		map[string]any{"url": "https://github.com/acme/code.git"}); code != http.StatusCreated {
 		t.Fatalf("github target want 201, got %d", code)
 	}
 	// Duplicate host → 409.
-	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/mirrors", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/targets", "acme",
 		map[string]any{"url": "https://gitlab.com/acme/other.git"}); code != http.StatusConflict {
 		t.Fatalf("duplicate host want 409, got %d", code)
 	}
 
 	// Cross-tenant cannot list acme's targets (repo 404).
-	if code, _ := do(t, app, http.MethodGet, "/v1/git/repos/code/mirrors", "beta", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/git/repos/code/targets", "beta", nil); code != http.StatusNotFound {
 		t.Fatalf("cross-tenant list want 404, got %d", code)
 	}
 	// Owner lists both.
-	code, b = do(t, app, http.MethodGet, "/v1/git/repos/code/mirrors", "acme", nil)
+	code, b = do(t, app, http.MethodGet, "/v1/git/repos/code/targets", "acme", nil)
 	var listed struct {
 		Data []mirrorTargetView `json:"data"`
 	}
@@ -167,10 +167,10 @@ func TestMirrorTargetCRUDAndIsolation(t *testing.T) {
 		t.Fatalf("owner should see 2 targets, got %d %+v", code, listed.Data)
 	}
 	// Delete + re-delete.
-	if code, _ := do(t, app, http.MethodDelete, "/v1/git/repos/code/mirrors/"+mir.ID, "acme", nil); code != http.StatusNoContent {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/git/repos/code/targets/"+mir.ID, "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("delete want 204, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodDelete, "/v1/git/repos/code/mirrors/"+mir.ID, "beta", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/git/repos/code/targets/"+mir.ID, "beta", nil); code != http.StatusNotFound {
 		t.Fatalf("cross-tenant delete want 404, got %d", code)
 	}
 }
