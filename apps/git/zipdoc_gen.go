@@ -23,14 +23,6 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/git DELETE /v1/git/repos/:name/mirrors/:id", zip.Doc{
-		Description: "Removes one outbound mirror target; later pushes stop being\nforwarded to it. Answers 204 with no body. Nothing is done to the downstream\nremote itself — only this repo's intent to push there is dropped.",
-		Fields: map[string]string{
-			"childRef.id":   "ID is the row to remove, from the :id path segment.",
-			"childRef.name": "Name is the repo, from the :name path segment.",
-		},
-		Example: json.RawMessage(`{"name":"widgets","id":"mir_2d90"}`),
-	})
 	zip.Describe("github.com/hanzoai/cloud/apps/git DELETE /v1/git/repos/:name/subscriptions/:id", zip.Doc{
 		Description: "Removes one Slack subscription from a repo; the notifier stops\nposting that repo's events to that channel. Answers 204 with no body. An id\nthat is not this repo's subscription is not found.",
 		Fields: map[string]string{
@@ -38,6 +30,14 @@ func init() {
 			"childRef.name": "Name is the repo, from the :name path segment.",
 		},
 		Example: json.RawMessage(`{"name":"widgets","id":"sub_7c2e"}`),
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git DELETE /v1/git/repos/:name/targets/:id", zip.Doc{
+		Description: "Removes one outbound mirror target; later pushes stop being\nforwarded to it. Answers 204 with no body. Nothing is done to the downstream\nremote itself — only this repo's intent to push there is dropped.",
+		Fields: map[string]string{
+			"childRef.id":   "ID is the row to remove, from the :id path segment.",
+			"childRef.name": "Name is the repo, from the :name path segment.",
+		},
+		Example: json.RawMessage(`{"name":"widgets","id":"mir_2d90"}`),
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/:org/:project/:repo/info/refs", zip.Doc{
 		Description: "Serves GET /info/refs — the ref-advertisement phase. The service is\nselected by the ?service= query param; both upload-pack (fetch) and\nreceive-pack (push) advertise here.",
@@ -151,20 +151,6 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"universe","ref":"main","glob":"charts/app/values/*/*.yaml"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/mirrors", zip.Doc{
-		Description: "Returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
-		Fields: map[string]string{
-			"mirrorList.data":            "Data holds the repo's outbound mirror targets.",
-			"mirrorTargetView.createdAt": "CreatedAt is RFC 3339 UTC.",
-			"mirrorTargetView.host":      "Host is the target's lowercased hostname, taken from URL and never the body.",
-			"mirrorTargetView.id":        "ID is the target's identifier (\"mir_…\"), the handle to remove it by.",
-			"mirrorTargetView.repo":      "Repo is the repo whose advanced refs are pushed downstream.",
-			"mirrorTargetView.url":       "URL is the canonical https remote, with any embedded credentials stripped.",
-			"repoRef.name":               "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
-		},
-		Example:  json.RawMessage(`{"name":"widgets"}`),
-		Response: json.RawMessage(`{"data":[{"id":"mir_2d90","repo":"widgets","host":"github.com","url":"https://github.com/acme/widgets.git","createdAt":"2026-07-01T10:00:00Z"}]}`),
-	})
 	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/pulls", zip.Doc{
 		Description: "Returns a repo's pull requests, newest number first — what is\nwaiting to be reviewed, and what has already landed. Narrow it with\n?state=open or ?state=merged; omit state for every proposal.",
 		Fields: map[string]string{
@@ -243,6 +229,20 @@ func init() {
 		},
 		Example:  json.RawMessage(`{"name":"widgets"}`),
 		Response: json.RawMessage(`{"data":[{"id":"sub_7c2e","repo":"widgets","channel":"#builds","events":["push.landed"],"createdAt":"2026-07-01T10:00:00Z"}]}`),
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/targets", zip.Doc{
+		Description: "Returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
+		Fields: map[string]string{
+			"mirrorList.data":            "Data holds the repo's outbound mirror targets.",
+			"mirrorTargetView.createdAt": "CreatedAt is RFC 3339 UTC.",
+			"mirrorTargetView.host":      "Host is the target's lowercased hostname, taken from URL and never the body.",
+			"mirrorTargetView.id":        "ID is the target's identifier (\"mir_…\"), the handle to remove it by.",
+			"mirrorTargetView.repo":      "Repo is the repo whose advanced refs are pushed downstream.",
+			"mirrorTargetView.url":       "URL is the canonical https remote, with any embedded credentials stripped.",
+			"repoRef.name":               "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
+		},
+		Example:  json.RawMessage(`{"name":"widgets"}`),
+		Response: json.RawMessage(`{"data":[{"id":"mir_2d90","repo":"widgets","host":"github.com","url":"https://github.com/acme/widgets.git","createdAt":"2026-07-01T10:00:00Z"}]}`),
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/tree", zip.Doc{
 		Description: "Lists the immediate children of one directory at one revision,\ndirectories before files. It does not recurse — walk down a level at a time.",
@@ -434,20 +434,6 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","source":"https://github.com/acme/widgets.git"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/repos/:name/mirrors", zip.Doc{
-		Description: "Registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409.",
-		Fields: map[string]string{
-			"mirrorTargetReq.host":       "Host is an optional assertion of the target's hostname. The authoritative\nhost is the one in URL; a value that disagrees with it is refused.",
-			"mirrorTargetReq.name":       "Name is the repo whose advanced refs are pushed downstream, from the :name\npath segment.",
-			"mirrorTargetReq.url":        "URL is the downstream https git remote. Must be https to an allowlisted\nhost (github.com / gitlab.com); any embedded credentials are stripped.\nRequired.",
-			"mirrorTargetView.createdAt": "CreatedAt is RFC 3339 UTC.",
-			"mirrorTargetView.host":      "Host is the target's lowercased hostname, taken from URL and never the body.",
-			"mirrorTargetView.id":        "ID is the target's identifier (\"mir_…\"), the handle to remove it by.",
-			"mirrorTargetView.repo":      "Repo is the repo whose advanced refs are pushed downstream.",
-			"mirrorTargetView.url":       "URL is the canonical https remote, with any embedded credentials stripped.",
-		},
-		Example: json.RawMessage(`{"name":"widgets","url":"https://github.com/acme/widgets.git"}`),
-	})
 	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/repos/:name/pulls", zip.Doc{
 		Description: "Proposes a branch for merging and returns it with its number. Answers\n201. Both branches must already exist — a proposal naming a branch nobody\npushed is a typo, not a plan — and base defaults to the repo's default branch.\n\nProposing the same head into the same base twice is a 409 while the first\nproposal is still open, so a retried agent run leaves ONE thing to review\nrather than a pile of identical ones. A repo outside the caller's scope is a\n404, exactly as reading it is.",
 		Fields: map[string]string{
@@ -520,6 +506,20 @@ func init() {
 			"subscriptionView.repo":      "Repo is the repo whose lifecycle events are delivered.",
 		},
 		Example: json.RawMessage(`{"name":"widgets","channel":"#builds","events":["push.landed"]}`),
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/repos/:name/targets", zip.Doc{
+		Description: "Registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409.",
+		Fields: map[string]string{
+			"mirrorTargetReq.host":       "Host is an optional assertion of the target's hostname. The authoritative\nhost is the one in URL; a value that disagrees with it is refused.",
+			"mirrorTargetReq.name":       "Name is the repo whose advanced refs are pushed downstream, from the :name\npath segment.",
+			"mirrorTargetReq.url":        "URL is the downstream https git remote. Must be https to an allowlisted\nhost (github.com / gitlab.com); any embedded credentials are stripped.\nRequired.",
+			"mirrorTargetView.createdAt": "CreatedAt is RFC 3339 UTC.",
+			"mirrorTargetView.host":      "Host is the target's lowercased hostname, taken from URL and never the body.",
+			"mirrorTargetView.id":        "ID is the target's identifier (\"mir_…\"), the handle to remove it by.",
+			"mirrorTargetView.repo":      "Repo is the repo whose advanced refs are pushed downstream.",
+			"mirrorTargetView.url":       "URL is the canonical https remote, with any embedded credentials stripped.",
+		},
+		Example: json.RawMessage(`{"name":"widgets","url":"https://github.com/acme/widgets.git"}`),
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/webhook", zip.Doc{
 		Description: "Answers every delivery 410 Gone, naming the endpoint that builds. It\nreads no body: there is nothing here to authenticate and nothing to parse.\n\n410, not 404: the address was real and its meaning moved, which is exactly the\ndistinction 410 carries. 404 would say \"no such route\" about a route this\nbinary still serves, and is indistinguishable here from the /api/v1 prefix\nmistake, since Hanzo Git serves /v1.",

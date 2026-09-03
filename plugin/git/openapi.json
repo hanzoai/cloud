@@ -618,140 +618,6 @@
         "x-tool": true
       }
     },
-    "/v1/git/repos/{name}/mirrors": {
-      "get": {
-        "operationId": "get_git_repos_by_name_mirrors",
-        "summary": "Returns a repo's outbound mirror targets — the downstream remotes the mirror reactor pushes to whenever a push lands here.",
-        "description": "Returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
-        "tags": [
-          "git"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "widgets"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "data": [
-                    {
-                      "createdAt": "2026-07-01T10:00:00Z",
-                      "host": "github.com",
-                      "id": "mir_2d90",
-                      "repo": "widgets",
-                      "url": "https://github.com/acme/widgets.git"
-                    }
-                  ]
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/mirrorList"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      },
-      "post": {
-        "operationId": "post_git_repos_by_name_mirrors",
-        "summary": "Registers a downstream remote the repo's advanced refs are pushed to whenever a push lands here.",
-        "description": "Registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409.",
-        "tags": [
-          "git"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "description": "Name is the repo whose advanced refs are pushed downstream, from the :name\npath segment.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "widgets"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "name": "widgets",
-                "url": "https://github.com/acme/widgets.git"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/mirrorTargetReq"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/mirrorTargetView"
-                }
-              }
-            },
-            "description": "created"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/git/repos/{name}/mirrors/{id}": {
-      "delete": {
-        "operationId": "delete_git_repos_by_name_mirrors_by_id",
-        "summary": "Removes one outbound mirror target; later pushes stop being forwarded to it.",
-        "description": "Removes one outbound mirror target; later pushes stop being\nforwarded to it. Answers 204 with no body. Nothing is done to the downstream\nremote itself — only this repo's intent to push there is dropped.",
-        "tags": [
-          "git"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "description": "Name is the repo, from the :name path segment.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "widgets"
-          },
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the row to remove, from the :id path segment.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "mir_2d90"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "no content"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
     "/v1/git/repos/{name}/pulls": {
       "get": {
         "operationId": "get_git_repos_by_name_pulls",
@@ -1244,6 +1110,140 @@
               "type": "string"
             },
             "example": "sub_7c2e"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/git/repos/{name}/targets": {
+      "get": {
+        "operationId": "get_git_repos_by_name_targets",
+        "summary": "Returns a repo's outbound mirror targets — the downstream remotes the mirror reactor pushes to whenever a push lands here.",
+        "description": "Returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "widgets"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "createdAt": "2026-07-01T10:00:00Z",
+                      "host": "github.com",
+                      "id": "mir_2d90",
+                      "repo": "widgets",
+                      "url": "https://github.com/acme/widgets.git"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/mirrorList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_git_repos_by_name_targets",
+        "summary": "Registers a downstream remote the repo's advanced refs are pushed to whenever a push lands here.",
+        "description": "Registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo whose advanced refs are pushed downstream, from the :name\npath segment.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "widgets"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "widgets",
+                "url": "https://github.com/acme/widgets.git"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/mirrorTargetReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mirrorTargetView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/git/repos/{name}/targets/{id}": {
+      "delete": {
+        "operationId": "delete_git_repos_by_name_targets_by_id",
+        "summary": "Removes one outbound mirror target; later pushes stop being forwarded to it.",
+        "description": "Removes one outbound mirror target; later pushes stop being\nforwarded to it. Answers 204 with no body. Nothing is done to the downstream\nremote itself — only this repo's intent to push there is dropped.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo, from the :name path segment.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "widgets"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the row to remove, from the :id path segment.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "mir_2d90"
           }
         ],
         "responses": {

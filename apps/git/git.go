@@ -347,9 +347,15 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Post(g, "/repos/:name/subscriptions", o.subscribe, zip.WithStatus(http.StatusCreated))
 	zip.Get(g, "/repos/:name/subscriptions", o.listSubscriptions)
 	zip.Delete(g, "/repos/:name/subscriptions/:id", o.unsubscribe)
-	zip.Post(g, "/repos/:name/mirrors", o.addMirror, zip.WithStatus(http.StatusCreated))
-	zip.Get(g, "/repos/:name/mirrors", o.listMirrors)
-	zip.Delete(g, "/repos/:name/mirrors/:id", o.deleteMirror)
+	// The repo's OUTBOUND mirror targets. Named for the noun rather than the verb
+	// because the verb is already taken one line up: POST /repos/:name/mirror
+	// mirrors this repo IN from a source, and these push it OUT to downstream
+	// remotes. Two opposite directions distinguished only by a trailing "s" is a
+	// name people call the wrong half of, and it read as a duplicate of the
+	// singular besides. MirrorTarget is what the rows have always been called.
+	zip.Post(g, "/repos/:name/targets", o.addTarget, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/repos/:name/targets", o.listTargets)
+	zip.Delete(g, "/repos/:name/targets/:id", o.deleteTarget)
 
 	// Pull requests (pulls.go): propose a branch, read what is waiting, merge it.
 	// The noun that closes the agent loop — a run pushes refs/heads/agent/<run>
