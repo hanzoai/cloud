@@ -11,16 +11,18 @@ import (
 )
 
 // The Hanzo DNS control plane (hanzoai/dns, plugin/hanzodns) — the plane this
-// surface was written against, and the one a deployment gets when it names none.
+// surface serves from.
 //
 // Its API IS this surface's contract: the addresses under /v1/dns are the plane's
-// own addresses, so every operation here is the SAME call the caller made, issued
-// upstream under the caller's own identity. That is why this adapter declares Relay:
-// an address the four operations do not name is still an address the plane has.
+// own addresses, so every request here is the SAME call the caller made, issued
+// upstream under the caller's own identity. That is the whole of the relationship,
+// and it is why there is one send and not an operation per address — an interface
+// over it would have five identical implementations of one call.
 //
-// A SECOND plane is a second file next to this one — not a change to this one, to
-// provider.go, or to the route.
-func init() { register("hanzo", func() Provider { return newHanzoPlane() }) }
+// A SECOND plane is send's base and auth as a VALUE — where the request goes and
+// what it carries — because that is the only thing two planes can differ on while
+// both answering this contract. A plane speaking a different wire shape is not a
+// second backing for this surface at all; it is a different surface.
 
 // endpoint is the in-cluster DNS control-plane API — the operator's DNSConnector
 // default (the API listens on :8443). Used when HANZO_DNS_URL is unset so a standard
@@ -59,23 +61,6 @@ func newHanzoPlane() *hanzoPlane {
 		},
 	}
 }
-
-func (h *hanzoPlane) ID() string { return "hanzo" }
-
-// The four operations, and the plane's own addresses beyond them, are ONE call:
-// this plane's API is this surface's contract, so what the caller asked for is what
-// goes upstream.
-func (h *hanzoPlane) ListZones(ctx context.Context, c Call) (Answer, error) { return h.send(ctx, c) }
-func (h *hanzoPlane) ListRecords(ctx context.Context, c Call) (Answer, error) {
-	return h.send(ctx, c)
-}
-func (h *hanzoPlane) UpsertRecord(ctx context.Context, c Call) (Answer, error) {
-	return h.send(ctx, c)
-}
-func (h *hanzoPlane) DeleteRecord(ctx context.Context, c Call) (Answer, error) {
-	return h.send(ctx, c)
-}
-func (h *hanzoPlane) Relay(ctx context.Context, c Call) (Answer, error) { return h.send(ctx, c) }
 
 // send issues one call to the plane and returns its answer verbatim: its status code,
 // its Content-Type, and its Location on a redirect it never follows.
