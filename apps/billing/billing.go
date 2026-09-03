@@ -64,11 +64,10 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// commerceProxy is a thin service-to-service reader for the commerce billing
-// surface. It authenticates with the admin-scoped COMMERCE_SERVICE_TOKEN (a
-// KMS-sourced secret already on the cloud env — never hard-coded) and scopes every
-// read to ONE org via the trusted X-Org-Id S2S selector, which commerce's EdgeAuth
-// honors only after it verifies the bearer is the service token. It is deliberately
+// commerceProxy is a thin reader for the commerce billing surface. It scopes
+// every read to ONE org via X-Org-Id and carries no credential of its own: the
+// platform's identity crosses to commerce on the transport, which the root
+// registers at boot. It is deliberately
 // separate from the admin commerceClient (apps/admin/commerce/commerce.go): admin decodes
 // typed god-view rollups (MRR/COGS/credits), whereas this forwards the customer's
 // OWN raw ledger + status verbatim.
@@ -86,7 +85,7 @@ func newCommerceProxy(base string) *commerceProxy {
 
 func (p *commerceProxy) configured() bool { return p != nil && p.base != "" }
 
-// get performs one service-token commerce GET scoped to org and returns commerce's
+// get performs one commerce GET scoped to org and returns commerce's
 // raw body + status VERBATIM (a true passthrough — the caller forwards both). The
 // org rides X-Org-Id, the S2S org selector commerce keys the per-org wallet under.
 func (p *commerceProxy) get(ctx context.Context, path, org string, q url.Values) ([]byte, int, error) {
@@ -99,8 +98,8 @@ func (p *commerceProxy) get(ctx context.Context, path, org string, q url.Values)
 		return nil, 0, err
 	}
 	req.Header.Set("Accept", "application/json")
-	// Commerce's EdgeAuth trusts X-Org-Id ONLY after it verifies the bearer is the
-	// COMMERCE_SERVICE_TOKEN, then resolves the per-org billing namespace from it.
+	// Commerce resolves the per-org billing namespace from X-Org-Id, trusting it
+	// because the transport carried the platform's identity across the hop.
 	req.Header.Set("X-Org-Id", org)
 	resp, err := p.http.Do(req)
 	if err != nil {
@@ -233,9 +232,7 @@ func init() {
 			"equals `balance`: the gate's reservations live in its own pod and are never posted, "+
 			"so the settled balance IS the spendable one.\n\n"+
 			"The ledger is the caller's own org, taken from the VALIDATED IAM owner claim and "+
-			"never from a client header. No validated principal is 401 — with one exception, the "+
-			"trusted in-process service token the AI gate itself presents, which reads the "+
-			"gateway-pinned org and nothing it could name. A balance that cannot be READ is 502, "+
+			"never from a client header. No validated principal is 401. A balance that cannot be READ is 502, "+
 			"never 0: unknown is not broke.")
 
 	openapi.Describe("/v1/billing/usage", http.MethodGet,
@@ -280,11 +277,9 @@ var billingSubjectKeys = []string{"user", "userId", "customerId"}
 // resolution was working perfectly (the request log carried org=hanzo AND the refusal).
 // One rule, one place: a handler cannot admit a caller its own helper then denies.
 //
-// Scope is unchanged by this. The token is compared constant-time against the
-// configured COMMERCE_SERVICE_TOKEN by the predicate apps/account already owns
-// (cloud.IsServiceToken), and the org comes from X-Org-Id — which the gateway strips
-// from every client request — never from a caller-supplied field. It grants no user, no
-// admin and no roles, so it is a READ resolution only: the money WRITE
+// Scope is unchanged by this. The org is the validated principal's — never a
+// caller-supplied field — and readerOrg grants no user, no admin and no roles,
+// so it is a READ resolution only: the money WRITE
 // (createPaymentMethod) and the user-scoped breakdown (usageAccounts, which needs
 // c.User()) keep asking principal.Org and refuse it.
 func readerOrg(c *zip.Ctx) (string, bool) { return cloud.ReaderOrg(c) }
@@ -297,7 +292,7 @@ func readerOrg(c *zip.Ctx) (string, bool) { return cloud.ReaderOrg(c) }
 func proxy(s *cloud.Service[state], c *zip.Ctx, commercePath string, passthrough ...string) error {
 	org, ok := readerOrg(c)
 	if !ok {
-		// No validated principal, no trusted service token, no org. This is a
+		// No validated principal, no org. This is a
 		// customer's OWN billing — never admin-gate it — so an absent identity is a
 		// true "not signed in" (401), not a 403 "not authorized for this surface".
 		return zip.ErrUnauthorized("sign in to view billing")
@@ -413,9 +408,8 @@ func balance(s *cloud.Service[state], c *zip.Ctx) error {
 	// readerOrg admits the TRUSTED S2S caller as well as a session. ai's prepaid gate
 	// reads this endpoint to decide whether to admit a paid request, and once ai became
 	// its own plugin PROCESS it stopped seeing build.go's in-process balanceReader hook
-	// — a process-local func var cannot cross a process boundary — so it falls back to
-	// the HTTP path documented as the split-deploy fallback. That request carries
-	// COMMERCE_SERVICE_TOKEN, not a user session, so principal.Org alone is empty.
+	// — a process-local func var cannot cross a process boundary — so it reads over
+	// the plane, stating its org, and the answer below is what it gets.
 	//
 	// The gate is fail-CLOSED (a balance it cannot verify must never degrade to free
 	// inference), so a 401 here denies EVERY paid call fleet-wide:

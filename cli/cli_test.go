@@ -166,68 +166,19 @@ func TestPlatformTokenFallsBackToIAM(t *testing.T) {
 	}
 }
 
-func TestBuildTokenPrecedence(t *testing.T) {
-	sandbox(t)
-	e := resolve(&Config{}, &Credentials{BuildToken: "creds"}, globalFlags{})
-	if got := e.buildToken(""); got != "creds" {
-		t.Fatalf("creds build token: %q", got)
-	}
-	t.Setenv("HANZO_BUILD_TOKEN", "env")
-	if got := e.buildToken(""); got != "env" {
-		t.Fatalf("build-token env beats the credential store: %q", got)
-	}
-	if got := e.buildToken("flag"); got != "flag" {
-		t.Fatalf("flag wins: %q", got)
-	}
-}
-
 // A build is attributed to the organization its credential carries, so the CLI
-// presents one that names an organization. A deployment's shared service secret
-// names none, and an environment holding it does not make it this caller's
-// identity — the IAM login is what `hanzo build` sends.
-func TestBuildTokenIgnoresDeploymentSecret(t *testing.T) {
+// presents the IAM login and nothing else. There is no build token to prefer.
+func TestBuildTokenIsTheIAMLogin(t *testing.T) {
 	sandbox(t)
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "shared-machine-token")
 	e := resolve(&Config{}, &Credentials{AccessToken: "iam-jwt"}, globalFlags{})
-	if got := e.buildToken(""); got != "iam-jwt" {
+	if got := e.buildToken(); got != "iam-jwt" {
 		t.Fatalf("build must present the IAM identity, got %q", got)
 	}
 	// With no identity at all it resolves empty, so the caller surfaces
 	// "run `hanzo login`" rather than sending a credential that names no org.
 	e = resolve(&Config{}, &Credentials{}, globalFlags{})
-	if got := e.buildToken(""); got != "" {
+	if got := e.buildToken(); got != "" {
 		t.Fatalf("no login should resolve empty, got %q", got)
-	}
-}
-
-// TestBuildTokenFallsBackToIAM is the UNIFY-INFRA contract: after a plain
-// `hanzo login` (no --build-token), the IAM access token is the FINAL fallback,
-// so `hanzo build` authorizes off the one identity. An explicit build token
-// (creds/env/flag) still wins — the IAM token is the LAST resort, never an
-// override of a purpose-minted machine token.
-func TestBuildTokenFallsBackToIAM(t *testing.T) {
-	sandbox(t)
-	// Only an IAM login: no build token anywhere ⇒ the IAM access token is sent.
-	e := resolve(&Config{}, &Credentials{AccessToken: "iam-jwt"}, globalFlags{})
-	if got := e.buildToken(""); got != "iam-jwt" {
-		t.Fatalf("IAM access token should be the final build-token fallback: %q", got)
-	}
-	// A dedicated build token still beats the IAM token (precedence preserved).
-	e = resolve(&Config{}, &Credentials{AccessToken: "iam-jwt", BuildToken: "creds"}, globalFlags{})
-	if got := e.buildToken(""); got != "creds" {
-		t.Fatalf("dedicated build token must beat the IAM fallback: %q", got)
-	}
-	// HANZO_TOKEN (the env form of the IAM token) is also honored via accessToken().
-	e = resolve(&Config{}, &Credentials{}, globalFlags{})
-	t.Setenv("HANZO_TOKEN", "iam-env")
-	if got := e.buildToken(""); got != "iam-env" {
-		t.Fatalf("HANZO_TOKEN should back the build-token fallback: %q", got)
-	}
-	// No login at all ⇒ empty, so the caller can surface "run `hanzo login`".
-	t.Setenv("HANZO_TOKEN", "")
-	e = resolve(&Config{}, &Credentials{}, globalFlags{})
-	if got := e.buildToken(""); got != "" {
-		t.Fatalf("no token and no login should resolve empty: %q", got)
 	}
 }
 

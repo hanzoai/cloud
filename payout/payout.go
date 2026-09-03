@@ -12,7 +12,7 @@
 // # It used to ask over HTTP, and it never once got an answer
 //
 // This was an *http.Client aimed at GET /v1/billing/usage/rollup, sent through the
-// commerce transport with the admin service token. That transport does not reach a
+// commerce transport. That transport does not reach a
 // network when commerce is co-resident: it dispatches the request back into this
 // binary's own router BY PATH, and /v1/billing/usage/rollup is registered nowhere
 // here — commerce's own api.Route() bundle is behind //go:build cloud and is never

@@ -3,7 +3,7 @@
 // a trusted in-process service caller.
 //
 // The forwarder is gone (see the package doc). It answered GET|POST /v1/billing/<path>
-// by re-dialing commerce with the admin COMMERCE_SERVICE_TOKEN — a credential that
+// by re-dialing commerce as the platform — an authority that
 // satisfies commerce's MayMintMoney, so ANY subpath reaching commerce executed with
 // PLATFORM authority rather than the caller's. Forwarding WAS authorization, bounded
 // only by a hand-maintained per-method allowlist, and every endpoint on that allowlist

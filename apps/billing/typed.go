@@ -52,16 +52,12 @@ func payer(ctx context.Context) (org, subject string, err error) {
 	if !ok {
 		// A TRUSTED SERVICE names its tenant instead of carrying a session, and
 		// readerOrg is where that rule lives — the same one `balance` reads by, for
-		// the same reason. Every app is its own child PROCESS, so ai cannot see an
-		// in-process reader hook and asks over HTTP with COMMERCE_SERVICE_TOKEN;
-		// that request has no session, so OrgFrom alone is empty and the read was
-		// refused. balance already resolved this and the copy here did not follow,
-		// which is precisely the drift the comment on readerOrg warns about.
+		// the same reason: one resolver, so the two cannot drift, which is precisely
+		// what the comment on readerOrg warns about.
 		//
-		// It is not a widening: readerOrg admits a validated principal first and a
-		// service token ONLY when it names an org, and the subject stays
-		// server-resolved below — a caller still cannot ask about somebody else's
-		// wallet by putting a name in the body.
+		// It is not a widening: readerOrg admits a validated principal and nothing
+		// else, and the subject stays server-resolved below — a caller still cannot
+		// ask about somebody else's wallet by putting a name in the body.
 		org, ok = readerOrg(c)
 	}
 	if !ok {

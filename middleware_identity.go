@@ -465,16 +465,12 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 		// plane gates on a validated principal anyway). Restore only the client org
 		// for the Phase-1 data path (see residual note above).
 		//
-		// THE TRUSTED IN-PROC SERVICE CALLER arrives here too, and this line is the
-		// whole of what it needs. `ai` is its own PROCESS, so it cannot see build.go's
-		// in-process balanceReader and falls back to HTTP against /v1/billing/balance
-		// bearing COMMERCE_SERVICE_TOKEN; apps/billing trusts that token
-		// (account.IsServiceToken) but takes the org from X-Org-Id, which the strip
-		// loop above deleted. That token is not a JWT, so validatedPrincipal is nil for
-		// it and this restore runs unconditionally — which is why a second,
-		// token-predicated copy of it above was dead code and is gone. Restoring the
-		// org grants NO authority: no user, no admin, no roles, and the org itself is
-		// still refused if it bears an unsafe rune.
+		// An opaque bearer that is not a JWT arrives here too; validatedPrincipal is
+		// nil for it and this restore runs unconditionally. Restoring the org grants
+		// NO authority: no user, no admin, no roles, and the org itself is still
+		// refused if it bears an unsafe rune. (A shared service token used to ride
+		// this path from the ai process; it reads over the plane now, and the token
+		// is gone.)
 		if cliOrg != "" {
 			req.Header.Set(authz.HeaderOrg, cliOrg)
 		}

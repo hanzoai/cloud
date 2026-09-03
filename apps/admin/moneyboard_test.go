@@ -6,8 +6,8 @@ import (
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/apps/admin/customer"
 	"github.com/hanzoai/cloud/apps/admin/finance"
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/admin/revenue"
+	"github.com/hanzoai/cloud/money"
 )
 
 // TestFoldGrants_SplitsBucketsAndTallies proves the two money buckets are kept apart

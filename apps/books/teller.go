@@ -23,11 +23,11 @@ package books
 // skipped until they post.
 
 import (
-	"github.com/hanzoai/cloud/types"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/types"
 	"io"
 	"net/http"
 	"net/url"
@@ -62,7 +62,6 @@ const (
 	tellerMaxPages     = 100
 	tellerMaxRespBytes = 8 << 20 // 8 MiB ceiling on a single Teller response body
 )
-
 
 // tellerConn is the Teller connector. Its three clients (kms, doer, base) default to
 // production values and are overridden only in tests — the zero value newTeller() returns is

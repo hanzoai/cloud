@@ -211,8 +211,8 @@ func (s *state) syncLedger(ctx context.Context, org string, sandbox bool) (int, 
 // ledgerReader reads one org's money movements from the process that owns the
 // ledger, over the internal plane.
 //
-// It used to be an S2S HTTP read — GET /v1/billing/transactions with the
-// admin-scoped COMMERCE_SERVICE_TOKEN — sent through the commerce transport.
+// It used to be an HTTP read — GET /v1/billing/transactions — sent through the
+// commerce transport.
 // That transport does not reach a network when commerce is co-resident: it
 // dispatches the request back into THIS binary's own router by path, and
 // /v1/billing/transactions is registered nowhere here (commerce's own

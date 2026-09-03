@@ -44,8 +44,6 @@ type tenantProbe struct{}
 // plainly, and the identity boundary exists because of it. So "the edge would have
 // stripped it" is not what makes a header trustworthy here. This is.
 func TestOnARequestOnlyAVouchedOrgResolvesATenant(t *testing.T) {
-	const token = "test-commerce-service-token"
-	t.Setenv("COMMERCE_SERVICE_TOKEN", token)
 
 	app := zip.New(zip.Config{Logger: luxlog.New("callerorg"), DisableStartupMessage: true})
 	app.Use(zip.H(cloud.Bridge()))
@@ -79,20 +77,15 @@ func TestOnARequestOnlyAVouchedOrgResolvesATenant(t *testing.T) {
 		org     string
 		refused bool // no tenant resolved
 	}{
-		// The service path, and it must stay open. `ai` is its own PROCESS, so it
-		// cannot reach an in-process reader and asks over HTTP bearing the token and
-		// no session. A tenant it cannot resolve is a tier it cannot read, and the
-		// safe default for an unreadable tier is the lowest one — so refusing here
-		// is not visible as a refusal, only as everyone being on the free tier.
-		{"a trusted service naming its org", token, "hanzo", false},
-		// Nobody stands behind the org, so there is no tenant to resolve.
+		// Nobody stands behind the org, so there is no tenant to resolve. There
+		// used to be one bearer that did — a shared service token naming its org —
+		// for the ai process reading over HTTP from its own process. It reads over
+		// the plane now, where it states its org and the second resolver admits it
+		// (TestOffARequestTheStatedOrgIsTheTenant); on a request an opaque bearer
+		// vouches for nothing, whatever it names.
 		{"no credential at all, client names the org", "", "other-org", true},
-		{"a wrong token", "not-the-token", "other-org", true},
-		// One byte short. The compare is constant-time and whole-value, so a prefix
-		// is as wrong as a random string.
-		{"a near-miss token", token[:len(token)-1], "other-org", true},
-		// Vouched for, but names nobody. There is no default tenant to fall back on.
-		{"a valid token naming no org", token, "", true},
+		{"an opaque bearer naming an org", "not-an-identity", "other-org", true},
+		{"an opaque bearer naming no org", "not-an-identity", "", true},
 	} {
 		for _, path := range []string{"/caller", "/paying"} {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -129,7 +122,6 @@ func TestOnARequestOnlyAVouchedOrgResolvesATenant(t *testing.T) {
 // something the caller needs told, and telling them would be telling them which
 // endpoint they reached.
 func TestOffARequestTheStatedOrgIsTheTenant(t *testing.T) {
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "test-commerce-service-token")
 
 	for _, tc := range []struct {
 		what     string

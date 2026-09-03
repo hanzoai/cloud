@@ -356,7 +356,7 @@ type payment struct {
 //
 // IT IS FALSE FOR EVERY CALLER THAT PAYS FOR ITSELF, which is what makes refusing on it
 // safe at an endpoint. [principal] answers ONE string for both names for an ordinary
-// member, for a trusted service token ([serviceOrg] answers both), and for a SuperAdmin
+// member, and for a SuperAdmin
 // at home (Owner == Org) — and answers "" for both where the payer does not resolve at
 // all. The only identity the two names can differ for is a SuperAdmin acting inside
 // another organisation.
@@ -405,7 +405,7 @@ func riskGate(lg luxlog.Logger) screen { return screen{lg: lg, receipt: receiptO
 // WHERE IT SITS IS STILL PART OF WHAT IT IS. On the browser endpoint the chain ahead of
 // this handler ends in PinBillingSubject, which is what makes the subject it judges
 // the subject the charge will credit: that middleware refuses every caller who is
-// neither a validated customer nor the trusted service token, and pins the credited
+// not a validated customer, and pins the credited
 // subject to the caller's own. A screen ahead of it would judge a value a later
 // middleware could still change, which is a control on a value rather than on an act.
 //
@@ -935,11 +935,8 @@ func settlementOf(body []byte) (ref, receipt string) {
 //
 //	a validated customer — principal.Ledger, the SELECTED org that pays. It is
 //	the same key the balance read and the spend gate use.
-//	the trusted service token — a verified COMMERCE_SERVICE_TOKEN naming its own
-//	org. It carries no validated user, so there is no ledger to resolve and the
-//	org it named is the one being credited.
 //
-// The typed endpoint admits the first lane only — it has no service-token branch, and
+// The typed endpoint admits the same lane, and
 // its handler resolves the same validated tenant off the context (payments.go
 // orgOf) — so ONE resolver answers for both addresses. That is the point: an
 // accrual is only a bound if both endpoints key it the same way, and a second resolver
@@ -964,8 +961,6 @@ func payerOrg(c *zip.Ctx) string {
 // Reading the receipt out of the payer's org therefore looked in the admin's books for
 // a row commerce had written in the customer's, found nothing, and refused a charge
 // that had already cleared — a card taken and a balance that could never be credited.
-//
-// Its fallback is the service token's, for [serviceOrg]'s reason.
 func chargedOrg(c *zip.Ctx) string {
 	org, _ := principal.Org(c)
 	return org

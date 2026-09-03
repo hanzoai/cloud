@@ -23,12 +23,10 @@
 //	GET  {BaseURL}/v1/billing/balance?user={user}&currency={cur}
 //	GET  {BaseURL}/v1/billing/tier?user={user}            (tier-aware)
 //
-// # Auth is the commerce service token (admin-scoped S2S), sent as
-//
-// plus the tenant org as the X-Org-Id header. The token is a secret and
-// MUST be sourced from KMS (never plaintext); this package never reads it from
-// disk — the caller supplies it (typically from an env var the operator wires
-// from a KMS-backed secret, e.g. COMMERCE_SERVICE_TOKEN).
+// # Auth: none of this package's. The tenant org rides X-Org-Id, and the
+// caller's identity crosses the in-process commerce transport, which the root
+// registers at boot (transport.SetIdentity). There is no bearer to configure:
+// a shared COMMERCE_SERVICE_TOKEN used to be sent here, and it is gone.
 //
 // When a co-resident finance ledger is published, Authorize's balance read and Record's
 // usage debit resolve it DIRECTLY (a typed in-proc call, no HTTP); otherwise the balance
@@ -73,10 +71,8 @@ const (
 )
 
 // Header carrying the tenant org slug for commerce namespace resolution.
-// Commerce's service-token auth reads the org from X-Org-Id
-// (commerce/middleware/accesstoken.go TokenRequired: c.GetHeader("X-Org-Id"));
-// without it commerce falls back to COMMERCE_SERVICE_ORG, then "hanzo" — which
-// would silently debit the wrong tenant.
+// Commerce reads the org from X-Org-Id; without it commerce falls back to
+// "hanzo" — which would silently debit the wrong tenant.
 const headerOrg = "X-Org-Id"
 
 // capAuthorizeTimeout HARD-bounds the per-scope spend-cap check. The cap is a POLICY
@@ -97,7 +93,7 @@ const peerTimeout = 10 * time.Second
 // cap without this leaf package taking a logger dependency. nil = no-op.
 var OnCapError func(error)
 
-// headerTest opts a service-token call into commerce's TEST ledger
+// headerTest opts a call into commerce's TEST ledger
 // (org.Live=false): balances and debits hit the sandbox books, not real money.
 // See commerce/middleware/accesstoken.go (c.GetHeader("X-Hanzo-Test")). Sent
 // only when Config.Test is true — production metering omits it and stays live.
@@ -580,9 +576,9 @@ func (c *Client) Balance(ctx context.Context, subject, org, currency string) (in
 // read the embedded ai module's per-tier SKU gate consumes (via
 // aiobject.SetTierReader) INSTEAD of an authed self-call to the cloud edge: the edge
 // 401/403s a service call to /v1/billing/*, so the ai module's own HTTP path always
-// returned "" in-cluster and the gate failed OPEN. This rides the SAME transport and
-// service token the metering gate already bills over, so it reaches commerce's OWN
-// service-token middleware (which reads the tenant from X-Org-Id), never the cloud edge.
+// returned "" in-cluster and the gate failed OPEN. This rides the SAME transport the
+// metering gate already bills over, so it reaches commerce's OWN middleware (which
+// reads the tenant from X-Org-Id), never the cloud edge.
 //
 // Empty subject or a not-configured client returns ("", nil): the gate treats an
 // unknown tier as ALLOW (fail-safe), so a commerce hiccup never locks out a paying

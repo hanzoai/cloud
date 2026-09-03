@@ -7,23 +7,20 @@ import (
 	"testing"
 )
 
-// `ai` is its own PROCESS, so it cannot see the in-process balanceReader and falls back
-// to HTTP against /v1/billing/balance bearing COMMERCE_SERVICE_TOKEN. apps/billing
-// trusts that token but reads the org from X-Org-Id — which SanitizeIdentity deletes
-// from every ingress. The org was therefore empty, billing answered 401 "sign in to
-// view billing", and because the balance gate is fail-CLOSED that denied EVERY paid
-// completion fleet-wide (chat, copilot, documents → 503 balance_unavailable) on a pod
-// whose commerce subsystem was healthy.
+// A client's own org survives sanitization for the data path — and NOTHING else
+// does. This was learned the expensive way: an opaque bearer's X-Org-Id was once
+// stripped along with the identity headers, billing answered 401 "sign in to view
+// billing", and because the balance gate is fail-CLOSED that denied EVERY paid
+// completion fleet-wide on a pod whose commerce subsystem was healthy.
 //
-// The trusted in-proc caller's org must survive — and NOTHING else may.
+// The org must survive — and NOTHING else may.
 //
 // This asserts the BOUNDARY, not a copy of it. The version it replaces re-implemented
-// the token compare in the test file and asserted the copy, so it passed whatever the
+// the bearer compare in the test file and asserted the copy, so it passed whatever the
 // middleware did — it could not have caught the sanitizer dropping the org, which is
 // the one thing it was written to catch.
-func TestTrustedServiceTokenKeepsItsOrgAndGainsNoAuthority(t *testing.T) {
+func TestAnOpaqueBearerKeepsItsOrgAndGainsNoAuthority(t *testing.T) {
 	const tok = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	t.Setenv("COMMERCE_SERVICE_TOKEN", tok)
 
 	app, got := newIdentityApp(t, nil)
 	probe(t, app, func(r *http.Request) {
@@ -37,7 +34,7 @@ func TestTrustedServiceTokenKeepsItsOrgAndGainsNoAuthority(t *testing.T) {
 	}
 	// Surviving is not a grant: no user, no admin, no org-admin.
 	if got.user != "" {
-		t.Errorf("a service token minted a user: %q", got.user)
+		t.Errorf("an opaque bearer minted a user: %q", got.user)
 	}
 	if got.admin || got.orgAdmin {
 		t.Errorf("a service token gained admin authority (admin=%v orgAdmin=%v)", got.admin, got.orgAdmin)
@@ -64,7 +61,6 @@ func TestClientOrgIsNotAnIdentity(t *testing.T) {
 // the boundary ever sees it — the invisible rune is the one that reaches here.
 func TestOrgWithAnUnsafeRuneIsRefused(t *testing.T) {
 	const tok = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	t.Setenv("COMMERCE_SERVICE_TOKEN", tok)
 
 	app, got := newIdentityApp(t, nil)
 	probe(t, app, func(r *http.Request) {

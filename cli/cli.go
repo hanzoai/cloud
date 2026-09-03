@@ -112,8 +112,8 @@ type Config struct {
 
 // Credentials holds secret material, ~/.hanzo/credentials.json, mode 0600.
 // AccessToken/RefreshToken are the IAM user identity (from `hanzo login`);
-// PlatformToken/BuildToken are the machine-to-machine tokens the platform
-// REST control plane requires (it cannot validate IAM user tokens).
+// PlatformToken is the machine-to-machine token the platform REST control plane
+// requires (it cannot validate IAM user tokens).
 type Credentials struct {
 	AccessToken   string `json:"access_token,omitempty"`
 	RefreshToken  string `json:"refresh_token,omitempty"`
@@ -122,7 +122,6 @@ type Credentials struct {
 	Subject       string `json:"subject,omitempty"`
 	Owner         string `json:"owner,omitempty"` // org slug from the token
 	PlatformToken string `json:"platform_token,omitempty"`
-	BuildToken    string `json:"build_token,omitempty"`
 }
 
 // hanzoDir is ~/.hanzo, created 0700 if missing. Overridable with HANZO_HOME
@@ -463,20 +462,11 @@ func (e *Env) platformToken(flagVal string) string {
 }
 
 // buildToken resolves the bearer `hanzo build` sends to the platform build
-// enqueue (/v1/platform/runner). The organization a build is attributed to is
-// read off this credential, so every source here is one that carries an
-// identity: a purpose-minted build token when the caller names one, and
-// otherwise the IAM login — which is why `hanzo build` needs no separate
-// --build-token. A deployment's own service secrets are left to the deployment;
-// they name no organization, so they cannot say who a build belongs to.
-func (e *Env) buildToken(flagVal string) string {
-	return cmp.Or(
-		flagVal,
-		os.Getenv("HANZO_BUILD_TOKEN"),
-		e.creds.BuildToken,
-		e.accessToken(), // IAM login is the one identity that authorizes builds
-	)
-}
+// enqueue (/v1/platform/runner): the IAM login, and nothing else. The
+// organization a build is attributed to is read off that identity. There used to
+// be a purpose-minted build token ahead of it — a shared secret the runner
+// compared — and it is gone on both sides.
+func (e *Env) buildToken() string { return e.accessToken() }
 
 // requireOrg returns the resolved org or a clear error telling the user how to
 // set it.

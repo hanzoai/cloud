@@ -17,15 +17,15 @@
 // The billing and store DATA are not among them, and the difference is the whole
 // lesson. They were ported as two catch-all forwarders — GET|POST /v1/billing/* and
 // full-CRUD /v1/commerce/*, mounted last (order 122), re-serving families other apps
-// already own by re-dialing them over HTTP with the admin COMMERCE_SERVICE_TOKEN. That
-// token satisfies commerce's MayMintMoney, so forwarding WAS authorization and the only
+// already own by re-dialing them over HTTP as the platform. That
+// authority satisfies commerce's MayMintMoney, so forwarding WAS authorization and the only
 // thing standing between a signed-in member and the mint routes was a hand-maintained
 // allowlist. They are gone. Every endpoint either forwarded is served natively — by
 // billing (order 121) or by the co-resident commerce embed (order 100) — at a prefix the
 // manifest names DEEPER than the bare stem, so each already won the route and the
 // forwarder saw none of them. What survives here is the part that was never the proxy:
 // the subject-pinning those native routes apply themselves (billing_coresident.go's
-// PinBillingSubject) and the S2S token check they gate on (billing.go's IsServiceToken).
+// PinBillingSubject).
 //
 // SURFACE — one prefix, /v1/account, and the segment after it names the thing (every
 // route requires a VALIDATED principal — a gateway-minted, IAM-verified X-User-Id; a

@@ -353,12 +353,11 @@ type BuildJob struct {
 	Index      string `json:"index,omitempty"`
 }
 
-// EnqueueBuild enqueues a native build. buildToken is resolved by the caller (IAM
-// login is the final fallback; a dedicated build token wins when present).
-func (p *Platform) EnqueueBuild(ctx context.Context, req BuildReq, buildToken string) (*BuildJob, error) {
-	if buildToken == "" {
-		return nil, fmt.Errorf("not authenticated: run `hanzo login` (an IAM login now authorizes builds; HANZO_BUILD_TOKEN / --build-token still works for machine automation)")
+// EnqueueBuild enqueues a native build as the caller's IAM identity.
+func (p *Platform) EnqueueBuild(ctx context.Context, req BuildReq, token string) (*BuildJob, error) {
+	if token == "" {
+		return nil, fmt.Errorf("not authenticated: run `hanzo login` (an IAM login authorizes builds)")
 	}
 	out := &BuildJob{}
-	return out, p.do(ctx, http.MethodPost, "/v1/platform/runner", buildToken, req, out)
+	return out, p.do(ctx, http.MethodPost, "/v1/platform/runner", token, req, out)
 }

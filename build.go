@@ -242,7 +242,7 @@ func boolStr(b bool, t, f string) string {
 // installTierReader installs the embedded ai module's per-tier SKU gate reader so it
 // resolves the caller's commerce subscription tier through the SAME co-resident
 // commerce client the metering gate bills over — in-process (the commerce transport) when
-// commerce is folded in, S2S HTTP with the service token otherwise — NEVER an authed
+// commerce is folded in, HTTP to a standalone otherwise — NEVER an authed
 // self-call to the cloud edge. That self-call is the toothless-gate bug: the edge
 // 401/403s a service call to /v1/billing/*, so the ai module's own HTTP lookup always
 // returned "" in-cluster and every tier-gated SKU failed OPEN. This mirrors

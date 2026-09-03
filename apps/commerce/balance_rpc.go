@@ -38,16 +38,12 @@ import (
 // and neither can be mistaken for the other, which matters here because commerce
 // is reached in both shapes.
 //
-// COMMERCE ADDS EXACTLY ONE ADMISSION, on top rather than instead. Every app is
-// its own PROCESS, so `ai` cannot reach an in-process reader and asks over HTTP
-// bearing COMMERCE_SERVICE_TOKEN and no session. A service has no validated
-// principal to resolve — that is what being a service means here — so the base
-// rule refuses it and cloud.ReaderOrg is what admits it: the token is checked
-// against the request, and only then is the org it names taken.
-//
-// Composed this way the addition is visible AS an addition. Restating the base
-// rule alongside it would make two tenant decisions in one package, and two
-// copies of one rule is two rules the day they disagree.
+// On a request, cloud.ReaderOrg is the same rule in request form: the
+// validated principal's org, or nothing. It used to admit one more caller — a
+// service bearing a shared COMMERCE_SERVICE_TOKEN and naming its tenant in
+// X-Org-Id, for the ai process reading over HTTP — and that arm is gone with
+// the token; a service reads over the plane, where it states its org and the
+// first branch admits it.
 func callerOrg(ctx context.Context, op string) (string, error) {
 	if org, ok := cloud.Tenant(ctx); ok {
 		return org, nil

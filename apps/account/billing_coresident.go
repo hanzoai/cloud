@@ -41,9 +41,9 @@ import (
 // Three cases, mirroring billingData exactly:
 //   - Browser customer (a validated principal with an org): OVERWRITE the subject keys
 //     with the caller's own subject and drop ?org. The client cannot widen scope.
-//   - Trusted in-proc S2S (the verified COMMERCE_SERVICE_TOKEN bearer, carrying its own
-//     X-Org-Id): pass the query through VERBATIM — it legitimately names its own subject,
-//     scoped by the EdgeAuth-controlled org.
+//   - Anyone else: 401. There used to be a trusted in-proc caller here, a shared
+//     service token naming its own org and subject; it is gone, and a service
+//     reads over the plane instead.
 //   - Neither: refuse. A bearer-less request with a forged X-Org-Id has no validated
 //     principal and is fail-closed here, before the read handler runs.
 //

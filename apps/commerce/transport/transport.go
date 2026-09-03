@@ -16,9 +16,9 @@
 // One package would close that loop into an import cycle.
 //
 // HOW. commerce.Use registers the embedded commerce http.Handler here via
-// SetHandler once, at boot. A subsystem builds its S2S HTTP request EXACTLY as
-// before (same path, same `Authorization: Bearer <COMMERCE_SERVICE_TOKEN>`, same
-// server-pinned `X-Org-Id`) and sends it through Transport(): when the handler is
+// SetHandler once, at boot. A subsystem builds its HTTP request EXACTLY as
+// before (same path, same server-pinned `X-Org-Id`; the identity is added here,
+// by the carrier the root registers) and sends it through Transport(): when the handler is
 // co-resident the request is dispatched to it in-process (httptest recorder — no
 // socket, no network, no serialization change); when it is NOT (commerce staged /
 // split-deploy) the request falls back to plain HTTP to its URL — the pre-#111
