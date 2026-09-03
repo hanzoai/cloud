@@ -117,12 +117,14 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 // brand. Returns how many brands were seeded or upgraded (a no-op redeploy returns 0).
 func seedBlueprints(ctx context.Context, store *BlueprintStore) (int, error) {
 	now := time.Now().Unix()
-	seed := func(brand string, bp Blueprint) (SeedAction, error) {
-		doc, err := json.Marshal(bp)
-		if err != nil {
-			return SeedNone, fmt.Errorf("marshal %q seed: %w", brand, err)
-		}
-		return store.SeedOrUpgrade(ctx, brand, doc, seedVersion, now)
+	seed := func(brand string, bp func() Blueprint) (SeedAction, error) {
+		return store.SeedOrUpgrade(ctx, brand, func() ([]byte, error) {
+			doc, err := json.Marshal(bp())
+			if err != nil {
+				return nil, fmt.Errorf("marshal %q seed: %w", brand, err)
+			}
+			return doc, nil
+		}, seedVersion, now)
 	}
 	count := 0
 	if act, err := seed("", defaultBlueprint); err != nil {
@@ -131,8 +133,7 @@ func seedBlueprints(ctx context.Context, store *BlueprintStore) (int, error) {
 		count++
 	}
 	for _, brand := range BrandCurriculums() {
-		bp, _ := brandBlueprint(brand)
-		if act, err := seed(brand, bp); err != nil {
+		if act, err := seed(brand, func() Blueprint { bp, _ := brandBlueprint(brand); return bp }); err != nil {
 			return count, err
 		} else if act != SeedNone {
 			count++
