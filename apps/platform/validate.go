@@ -50,7 +50,7 @@ var defaultGitProviderHosts = []string{"github.com", "gitlab.com", "bitbucket.or
 // apexes) for a self-hosted git provider, else the built-in set applies.
 var gitProviderHosts = resolveGitHosts()
 
-// selfGitHost is the cloud's OWN embedded-git apex (deps.Domain). The cloud
+// selfGitHost is the cloud's OWN embedded-git apex (cloud.Domain()). The cloud
 // serves its repos there (clients/git), so its own clone URLs are ALWAYS a
 // trusted build source and git-push-to-deploy works with no extra config. Set
 // once at platform Mount; an orthogonal trust from the external-provider

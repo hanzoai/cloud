@@ -223,7 +223,8 @@ func harness(t *testing.T) (*zip.App, *fakeRegistry, *fakePkg) {
 
 	app := zip.New(zip.Config{Logger: luxlog.New("registrytest"), DisableStartupMessage: true})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	return app, f, p
@@ -587,7 +588,8 @@ func TestStatusIsAnHonestLens(t *testing.T) {
 	compose(down)
 	t.Setenv("REGISTRY_UPSTREAM", "http://127.0.0.1:1")
 	t.Setenv("REGISTRY_PKG", "http://127.0.0.1:1")
-	if err := Use(down, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(down, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	status, body = do(t, down, http.MethodGet, "/v1/registry/status", "u1", "acme", "")

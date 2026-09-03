@@ -29,7 +29,9 @@ func mountApp(t *testing.T) *zip.App {
 	// reads off its context. The composer installs it once at the root in
 	// production (serve.go); this test composes the same way.
 	app.Use(cloud.Bridge())
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_DOMAIN", "api.hanzo.test")
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

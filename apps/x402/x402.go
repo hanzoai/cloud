@@ -159,10 +159,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil || luxlog.Default() == nil {
 		return errUse("nil app or logger")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return errUse("empty DataDir")
 	}
-	st, err := openStore(deps.DataDir)
+	st, err := openStore(cloud.DataDir())
 	if err != nil {
 		return errUse("open store: " + err.Error())
 	}

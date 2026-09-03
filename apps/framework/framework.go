@@ -71,7 +71,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("framework.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("framework.Use:  empty DataDir")
 	}
 	log := luxlog.Default().New("subsystem", "framework")
@@ -83,7 +83,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	base := cloud.NewBase(deps, "framework")
 	engines := cloud.NewOrgStore(base, "framework", func(db *sql.DB) (*engine.Engine, error) {
 		return engine.Open(engine.Config{
-			Dir:    deps.DataDir,
+			Dir:    cloud.DataDir(),
 			OpenDB: func(string) (*sql.DB, error) { return db, nil },
 			Logger: log,
 		})
@@ -155,7 +155,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	zip.Post(g, "/:doctype/:name/submit", o.submitDocument)
 	zip.Post(g, "/:doctype/:name/cancel", o.cancelDocument)
 
-	log.Info("framework mounted", "brand", deps.Brand)
+	log.Info("framework mounted", "brand", cloud.Brand())
 	return nil
 }
 

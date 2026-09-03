@@ -87,10 +87,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("marketplace.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("marketplace.Use:  empty DataDir")
 	}
-	store, err := Open(deps.DataDir)
+	store, err := Open(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("marketplace.Use:  open store: %w", err)
 	}
@@ -130,7 +130,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	zip.Post(za, "/v1/marketplace/install", o.install)
 	zip.Post(za, "/v1/marketplace/uninstall", o.uninstall)
 
-	s.Log.Info("marketplace mounted", "prefix", "/v1/marketplace", "brand", deps.Brand)
+	s.Log.Info("marketplace mounted", "prefix", "/v1/marketplace", "brand", cloud.Brand())
 	return nil
 }
 

@@ -484,14 +484,14 @@ type state struct {
 // degrades every switch to env/default and the HTTP surface reports it — never an
 // error at boot.
 func Use(app cloud.Router, deps cloud.Deps) error {
-	if deps.DataDir == "" {
-		return fmt.Errorf("flags.Use:  empty deps.DataDir")
+	if cloud.DataDir() == "" {
+		return fmt.Errorf("flags.Use:  empty cloud.DataDir()")
 	}
 	b := cloud.NewBase(deps, "flags")
 	log := b.Log
 	c := &Client{
 		stores:     cloud.NewOrgStore[*Store](b, "flags", openStore),
-		distinctID: environ.Or("FLAGS_PLATFORM_DISTINCT_ID", "hanzo-platform:"+cmp.Or(strings.TrimSpace(deps.Brand), "hanzo")),
+		distinctID: environ.Or("FLAGS_PLATFORM_DISTINCT_ID", "hanzo-platform:"+cmp.Or(strings.TrimSpace(cloud.Brand()), "hanzo")),
 		ttl:        ttlFromEnv(),
 	}
 	mounted = c

@@ -113,7 +113,9 @@ func TestPushToForgeEnqueuesBuild(t *testing.T) {
 	//    port so it never collides with :2222.
 	t.Setenv("GIT_SSH_ADDR", "127.0.0.1:0")
 	gitApp := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := gitforge.Use(gitApp, cloud.Deps{DataDir: t.TempDir(), Domain: gitHost}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_DOMAIN", gitHost)
+	if err := gitforge.Use(gitApp, cloud.Deps{}); err != nil {
 		t.Fatalf("git.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = gitforge.Shutdown() })

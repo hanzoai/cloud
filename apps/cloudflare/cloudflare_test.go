@@ -113,7 +113,8 @@ func harness(t *testing.T, tokens map[string]string, rec *capture, resultFor fun
 	t.Cleanup(func() { tokenFor = prev })
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	return app

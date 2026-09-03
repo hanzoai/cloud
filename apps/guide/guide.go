@@ -65,7 +65,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("guide.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("guide.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "guide")
@@ -75,7 +75,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// idempotently: the embedded fixtures (base + each brand) are seeded-if-absent, so
 	// a redeploy never clobbers a SuperAdmin's live edits. After seeding the DB is
 	// authoritative; the embedded fixture is only the seed source + fail-safe fallback.
-	blueprints, err := openBlueprintStore(deps.DataDir)
+	blueprints, err := openBlueprintStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("guide.Use:  open blueprint store: %w", err)
 	}
@@ -88,8 +88,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{
 		stores:       stores,
 		blueprints:   blueprints,
-		brand:        deps.Brand,
-		defBlueprint: fixtureBlueprint(deps.Brand),
+		brand:        cloud.Brand(),
+		defBlueprint: fixtureBlueprint(cloud.Brand()),
 		signals:      boundSignals, // installed by the composition root before Mount; zero value honest-degrades
 		ai:           deps.AI,
 		model:        cloud.DefaultModel,
@@ -102,7 +102,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}, s.State.signals)
 	mounted = s
 	routes(app, s)
-	s.Log.Info("guide mounted", "brand", deps.Brand,
+	s.Log.Info("guide mounted", "brand", cloud.Brand(),
 		"principles", len(s.State.defBlueprint.Principles),
 		"steps", len(s.State.defBlueprint.Steps), "strategies", len(s.State.defBlueprint.Strategies),
 		"version", s.State.defBlueprint.Version, "seedVersion", seedVersion, "seededOrUpgraded", seeded)

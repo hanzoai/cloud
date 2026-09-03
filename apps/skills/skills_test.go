@@ -26,7 +26,8 @@ import (
 func newApp(t *testing.T, deploymentBrand string) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{})
-	if err := Use(app, cloud.Deps{Brand: deploymentBrand}); err != nil {
+	t.Setenv("CLOUD_BRAND", deploymentBrand)
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	return app

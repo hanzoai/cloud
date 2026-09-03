@@ -33,13 +33,15 @@ import (
 // zero, and zero-cost is how five of them got here.
 var depsFieldRationale = map[string]string{
 	// --- process identity: true at exec, unchanged for the process lifetime ---
-	"Brand": "WHOSE deployment this process is — one brand per binary, fixed at exec, and half of every tenant-scoped key; a per-request brand is resolved from the Host separately (brand.ForHostOK) and is a different fact",
+	//
+	// Brand, Env, Domain and DataDir left this map with the fields. They were the
+	// clearest case it exists to catch: a value the process cannot fail to obtain
+	// is not a dependency. Each is resolved where it is read now — cloud.Brand,
+	// cloud.Env, cloud.Domain, cloud.DataDir — and a resolver cannot be empty the
+	// way a field can.
 	"Version": "the build this binary IS, stamped as X-Api-Version so a rollout can be verified from outside; " +
 		"a link-time fact the process cannot look up",
-	"Env":       "which of the 3 envs this process runs in (mainnet|testnet|devnet), an attribution label stamped on metered usage; never a gate — every env bills against its own ledger",
-	"Domain":    "the deployment's OWN public API host, needed to build absolute URLs back to itself; it is the HOST and never the apex — anything needing the apex calls brand.Apex",
 	"IAMIssuer": "the trust root: which IAM's signing keys validate a JWT. A boot fact, and one a subsystem must be handed because verifying identity precedes every store it could read it from",
-	"DataDir":   "the on-disk root every per-org store opens beneath; resolved before config because the stores it roots open before config is read",
 
 	// --- roots that must exist before any store opens ---
 	"MasterKey": "the 32-byte at-rest KEK, decoded once so subsystems that seal their own stores do not each provision a key",

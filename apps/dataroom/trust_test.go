@@ -102,7 +102,9 @@ func mountTrust(t *testing.T) (*zip.App, *memVFS) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	vfs := newMemVFS()
-	if err := useWith(app, cloud.Deps{DataDir: t.TempDir(), Domain: "api.example.test"}, vfs); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_DOMAIN", "api.example.test")
+	if err := useWith(app, cloud.Deps{}, vfs); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { mounted = nil })

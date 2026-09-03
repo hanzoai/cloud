@@ -105,7 +105,8 @@ func newMarket(t *testing.T, sellerOrg string, offered ...string) *market {
 
 	app := zip.New(zip.Config{Logger: log})
 	compose(app)
-	deps := cloud.Deps{KMS: kmsClient, DataDir: dir, Metering: meter}
+	t.Setenv("CLOUD_DATA_DIR", dir)
+	deps := cloud.Deps{KMS: kmsClient, Metering: meter}
 
 	// Mount order is the composition root's: the composer installs cloud.Bridge
 	// app-wide and fiber runs middleware in REGISTRATION order, so it must be

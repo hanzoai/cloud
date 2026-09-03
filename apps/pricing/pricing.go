@@ -123,10 +123,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// degradation of a security control. So an empty DataDir is a hard boot error
 	// (prod sets CLOUD_DATA_DIR), never a silent downgrade. provisioning already
 	// requires DataDir, so the unified binary always provides one.
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("pricing.Use:  empty DataDir — the catalog enablement overlay requires a persistent data dir (set CLOUD_DATA_DIR); refusing to boot with a non-persistent overlay that would re-expose admin-hidden models on restart")
 	}
-	cstore, err := openCatalog(deps.DataDir)
+	cstore, err := openCatalog(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("pricing.Use:  open catalog overlay: %w", err)
 	}
@@ -238,7 +238,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		"overlay_db", "catalog", // the subsystem; build.go already logs the data dir
 		"express", false,
 		"goja", true,
-		"brand", deps.Brand,
+		"brand", cloud.Brand(),
 	)
 	return nil
 }

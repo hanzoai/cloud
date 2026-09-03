@@ -72,7 +72,9 @@ func mountZapApp(t *testing.T) (base string, stop func()) {
 		return c.Continue()
 	}))
 
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_DOMAIN", "api.hanzo.test")
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	// The shared ZAP-over-WebSocket plane — the SAME one serve.go mounts. It

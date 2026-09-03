@@ -100,12 +100,8 @@ func BuildDeps(cfg *Config) Deps {
 	)
 
 	deps := Deps{
-		Brand:     cfg.Brand,
 		Version:   cfg.Version,
-		Env:       cfg.Env,
-		Domain:    cfg.Domain,
 		IAMIssuer: cfg.IAMIssuer,
-		DataDir:   cfg.DataDir,
 		MasterKey: masterKeyBytes(cfg),
 	}
 
@@ -1180,7 +1176,7 @@ func UseMetrics(app Router, deps Deps) error {
 		return fmt.Errorf("metrics: router is not a zip app")
 	}
 	if err := metrics.Use(a, metrics.Deps{
-		Logger: luxlog.Default(), DataDir: deps.DataDir, Brand: deps.Brand,
+		Logger: luxlog.Default(), DataDir: DataDir(), Brand: Brand(),
 		Org: principal.Org,
 	}); err != nil {
 		return err

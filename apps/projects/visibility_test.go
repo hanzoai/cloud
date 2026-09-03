@@ -518,8 +518,9 @@ func mountShared(t *testing.T) (*zip.App, *forgery, *scribe) {
 	t.Setenv("CLOUD_FORGE_HOST", f.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	if err := Use(app, cloud.Deps{
-		DataDir: t.TempDir(), KMS: vault{token: f.token},
+		KMS: vault{token: f.token},
 	}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
@@ -1169,11 +1170,12 @@ func TestAForgeOutageDoesNotFailAProjectWrite(t *testing.T) {
 // A deployment with no KMS — and so no forge credential — publishes nothing, and
 // a project write still succeeds. Nothing is created, so nothing is exposed.
 func TestNoCredentialPublishesNothing(t *testing.T) {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	f := newForgery(t)
 	t.Setenv("CLOUD_FORGE_HOST", f.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -1412,9 +1414,10 @@ func TestTheAuditRetriesUntilItLands(t *testing.T) {
 // A deployment with no KMS can never read a forge credential, so the audit says
 // so once and stops rather than retrying against a permanent condition.
 func TestTheAuditStopsWithoutACredential(t *testing.T) {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -1630,9 +1633,10 @@ func TestMountStartsTheBootAudit(t *testing.T) {
 	f.mu.Unlock()
 
 	t.Setenv("CLOUD_FORGE_HOST", f.URL)
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), KMS: vault{token: f.token}}); err != nil {
+	if err := Use(app, cloud.Deps{KMS: vault{token: f.token}}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

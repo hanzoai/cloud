@@ -204,8 +204,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	s.Log.Info("s3 subsystem mounted",
 		"prefix", "/v1/s3",
 		"presign", s.State.admin.PresignConfigured(),
-		"brand", deps.Brand,
-		"env", deps.Env,
+		"brand", cloud.Brand(),
+		"env", cloud.Env(),
 	)
 	return nil
 }

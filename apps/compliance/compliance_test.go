@@ -55,6 +55,7 @@ func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 // mount brings compliance up on a bare app with a real audit recorder, and
 // returns the app + the recorder for assertions. The provider defaults to Manual.
 func mount(t *testing.T) (*zip.App, *audit.Recorder) {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	t.Helper()
 	// A dir of its own per test, so concurrent tests never share a database.
 	rec, err := audit.Open(t.TempDir(), "audit", nil)
@@ -63,7 +64,7 @@ func mount(t *testing.T) (*zip.App, *audit.Recorder) {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), Audit: rec}); err != nil {
+	if err := Use(app, cloud.Deps{Audit: rec}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(); _ = rec.Close() })
@@ -182,9 +183,10 @@ func mountWithWebhook(t *testing.T, secret string) *zip.App {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	deps := cloud.Deps{
-		DataDir: t.TempDir(), Audit: rec,
-		KMS: fakeKMS{ref: "kms://idv-webhook", secret: []byte(secret)},
+		Audit: rec,
+		KMS:   fakeKMS{ref: "kms://idv-webhook", secret: []byte(secret)},
 	}
 	if err := Use(app, deps); err != nil {
 		t.Fatalf("Use:  %v", err)

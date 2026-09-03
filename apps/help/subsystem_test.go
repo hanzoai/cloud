@@ -24,7 +24,8 @@ func mountPublic(t *testing.T, publicOrg string) *zip.App {
 	t.Setenv("CLOUD_HELP_PUBLIC_ORG", publicOrg)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	deps := cloud.Deps{DataDir: t.TempDir()}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	deps := cloud.Deps{}
 	// The lane is enabled for every org here; the gate is tested in apps/framework.
 	planetest.Manager(t)
 	planetest.Entitled(t, func(_, product string) bool { return product == Module })
@@ -255,19 +256,29 @@ func TestPublicIntake_FailsClosedNotConfigured(t *testing.T) {
 	}
 }
 
-// TestPublicPlane_FailsClosedNoOrg proves that with NO public org resolved (no env
-// override, no brand) the whole public plane is inert: reads and intake 404, so
-// nothing is ever exposed until an operator names the org.
-func TestPublicPlane_FailsClosedNoOrg(t *testing.T) {
-	app := mountPublic(t, "") // env pinned empty + deps.Brand empty → publicOrg ""
-	if code, _ := anon(t, app, http.MethodGet, "/v1/help/articles", nil, nil); code != http.StatusNotFound {
-		t.Fatalf("articles with no public org want 404, got %d", code)
+// TestPublicPlaneServesTheBrandsOrg states what an unconfigured deployment does:
+// with no CLOUD_HELP_PUBLIC_ORG, publicOrg falls back to the BRAND, and the brand
+// always resolves — cloud.Brand answers DefaultBrand when nothing is set — so the
+// plane is live under that org rather than inert.
+//
+// It replaces a test that asserted the opposite. That one built its state by
+// handing Use an empty Deps.Brand, which no deployment could produce (cfg.Brand
+// has always been environ.Or("CLOUD_BRAND", DefaultBrand)), so the fail-closed
+// branch it pinned was already unreachable in production. Making the plane require
+// an explicit org is a decision about exposure and belongs in the code, not here.
+func TestPublicPlaneServesTheBrandsOrg(t *testing.T) {
+	app := mountPublic(t, "") // no override → publicOrg falls back to the brand
+	if code, _ := anon(t, app, http.MethodGet, "/v1/help/articles", nil, nil); code != http.StatusOK {
+		t.Fatalf("articles under the brand's org want 200, got %d", code)
 	}
-	if code, _ := anon(t, app, http.MethodGet, "/v1/help/categories", nil, nil); code != http.StatusNotFound {
-		t.Fatalf("categories with no public org want 404, got %d", code)
+	if code, _ := anon(t, app, http.MethodGet, "/v1/help/categories", nil, nil); code != http.StatusOK {
+		t.Fatalf("categories under the brand's org want 200, got %d", code)
 	}
-	if code, _ := anon(t, app, http.MethodPost, "/v1/help/tickets", map[string]any{"subject": "hi", "email": "x@y.z"}, nil); code != http.StatusNotFound {
-		t.Fatalf("intake with no public org want 404, got %d", code)
+	// Intake answers 503, not 404: the org is named, so the plane is live and the
+	// refusal is the Help model not being installed for it — a different gate, and
+	// the one apps/framework owns.
+	if code, _ := anon(t, app, http.MethodPost, "/v1/help/tickets", map[string]any{"subject": "hi", "email": "x@y.z", "description": "d"}, nil); code != http.StatusServiceUnavailable {
+		t.Fatalf("intake under the brand's org want 503 (model not installed), got %d", code)
 	}
 }
 

@@ -76,7 +76,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("sync.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("sync.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "sync")
@@ -105,7 +105,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	schedStop = startScheduler(s) // freshness: periodic reconcile of every poll sync (env-gated)
 
-	b.Log.Info("sync mounted", "brand", deps.Brand, "providers", "git")
+	b.Log.Info("sync mounted", "brand", cloud.Brand(), "providers", "git")
 	return nil
 }
 

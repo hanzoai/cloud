@@ -65,9 +65,9 @@ func mountAt(t *testing.T, forgeURL string, b time.Duration) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	sharedKey(t)
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	if err := Use(app, cloud.Deps{
-		DataDir: t.TempDir(),
-		KMS:     kmsStub{token: "forge-machine-token"},
+		KMS: kmsStub{token: "forge-machine-token"},
 	}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}

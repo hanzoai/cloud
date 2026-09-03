@@ -105,10 +105,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("taxonomy.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("taxonomy.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("taxonomy.Use:  open taxonomy store: %w", err)
 	}
@@ -123,7 +123,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, s)
 
-	log.Info("taxonomy surface mounted", "prefix", "/v1/taxonomy", "seeded", seeded, "brand", deps.Brand)
+	log.Info("taxonomy surface mounted", "prefix", "/v1/taxonomy", "seeded", seeded, "brand", cloud.Brand())
 	return nil
 }
 

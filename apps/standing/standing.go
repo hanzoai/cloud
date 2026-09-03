@@ -14,9 +14,9 @@
 package standing
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"strconv"
 	"time"
 
@@ -221,7 +221,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// was not explicitly told to. Promoting this to the customer contract is a
 	// separate, deliberate act.
 	zip.Post(cloud.ZipApp(app), "/v1/standing/upkeep", o.upkeep)
-	log.Info("standing surface mounted", "prefix", "/v1/standing", "brand", deps.Brand)
+	log.Info("standing surface mounted", "prefix", "/v1/standing", "brand", cloud.Brand())
 	return nil
 }
 

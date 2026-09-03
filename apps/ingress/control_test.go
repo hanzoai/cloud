@@ -33,7 +33,8 @@ func mountControl(t *testing.T) *zip.App {
 	t.Setenv("CLOUD_INGRESS_EDGE_ENABLED", "")
 	app := zip.New(zip.Config{Logger: luxlog.NewNoOpLogger()})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(t.Context()) })

@@ -51,10 +51,10 @@
 package affiliate
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"maps"
 	"net/http"
 	"sort"
@@ -271,10 +271,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("affiliate.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("affiliate.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("affiliate.Use:  open store: %w", err)
 	}
@@ -1576,7 +1576,7 @@ func linkBase(deps cloud.Deps) string {
 	if v := environ.Or("REFERRAL_LINK_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
-	switch strings.ToLower(strings.TrimSpace(deps.Brand)) {
+	switch strings.ToLower(strings.TrimSpace(cloud.Brand())) {
 	case "lux":
 		return "https://lux.network"
 	case "zoo":

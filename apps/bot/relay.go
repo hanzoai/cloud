@@ -124,7 +124,7 @@ func mountRelay(app cloud.Router, deps cloud.Deps) error {
 	// The tenant-actionable surface is native and typed elsewhere: /v1/bot/runs is the
 	// run control plane (run.go). This face is ops, and it stays a relay.
 	app.All("/v1/bot/runtime/*", s.proxy)
-	s.log.Info("bot relay surface mounted", "target", s.target, "brand", deps.Brand)
+	s.log.Info("bot relay surface mounted", "target", s.target, "brand", cloud.Brand())
 	return nil
 }
 

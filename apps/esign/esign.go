@@ -80,19 +80,19 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 // Mount wires the /v1/esign/* surface onto app per HIP-0106. Constructs the value
 // directly (cloud.NewBase) — this subsystem keeps a package global for the Shutdown
-// hook and opens a per-tenant goja host + PKI signer from deps.DataDir.
+// hook and opens a per-tenant goja host + PKI signer from cloud.DataDir().
 func useWith(app cloud.Router, deps cloud.Deps, s3 cloud.VFSClient) error {
 	if app == nil {
 		return fmt.Errorf("esign.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("esign.Use:  empty DataDir")
 	}
 	// Carry the pre-rename data directory over before anything opens a store
 	// under the new name. Failing here aborts the boot on purpose: serving an
 	// empty document store while signed documents sit orphaned under the old
 	// name would look like data loss to every tenant.
-	if err := migrateDataDir(deps.DataDir, luxlog.Default()); err != nil {
+	if err := migrateDataDir(cloud.DataDir(), luxlog.Default()); err != nil {
 		return fmt.Errorf("esign.Use:  %w", err)
 	}
 
@@ -134,7 +134,7 @@ func open(deps cloud.Deps, s3 cloud.VFSClient) (*cloud.Service[state], error) {
 		luxlog.Default().Error("no object store — PDF byte storage unavailable; serving /v1/esign/health only")
 		return nil, nil
 	}
-	sg, err := newSigner(deps.DataDir, deps.Env)
+	sg, err := newSigner(cloud.DataDir(), cloud.Env())
 	if err != nil {
 		return nil, fmt.Errorf("esign.Use:  signer: %w", err)
 	}
@@ -146,14 +146,14 @@ func open(deps cloud.Deps, s3 cloud.VFSClient) (*cloud.Service[state], error) {
 		Name:    "esign",
 		Bundle:  bundle,
 		Schema:  schema,
-		DataDir: deps.DataDir,
+		DataDir: cloud.DataDir(),
 		Blob:    s3, // PDF bytes go to object storage via __blob, not SQLite
 		HostFns: map[string]any{"__pdf": sg.pdfHostObject()},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("esign.Use:  goja NewBase host: %w", err)
 	}
-	index, err := openTokenIndex(deps.DataDir)
+	index, err := openTokenIndex(cloud.DataDir())
 	if err != nil {
 		_ = host.Close()
 		luxlog.Default().Error("esign token index failed — serving /v1/esign/health only", "err", err)
@@ -162,8 +162,8 @@ func open(deps cloud.Deps, s3 cloud.VFSClient) (*cloud.Service[state], error) {
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "esign"), State: state{host: host, index: index}}
 	s.Log.Info("esign mounted in-process (goja + per-tenant Base)",
 		"prefix", "/v1/esign",
-		"brand", deps.Brand,
-		"env", deps.Env,
+		"brand", cloud.Brand(),
+		"env", cloud.Env(),
 		"signer_cn", sg.cert.Subject.CommonName,
 	)
 	return s, nil

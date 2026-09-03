@@ -306,8 +306,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// and commerce also writes orgs/ + base/ — sharing the root would collide two
 	// apps on the same SQLite files and corrupt them.
 	dataDir := "/var/lib/cloud/commerce"
-	if deps.DataDir != "" {
-		dataDir = filepath.Join(deps.DataDir, "commerce")
+	if cloud.DataDir() != "" {
+		dataDir = filepath.Join(cloud.DataDir(), "commerce")
 	}
 
 	embedded, err := commercemod.Embed(context.Background(), commercemod.EmbedConfig{
@@ -547,8 +547,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	lg.Info("commerce embedded natively (hanzoai/commerce module on the shared zip app)",
 		"data_dir", dataDir,
-		"brand", deps.Brand,
-		"env", deps.Env,
+		"brand", cloud.Brand(),
+		"env", cloud.Env(),
 	)
 	return nil
 }

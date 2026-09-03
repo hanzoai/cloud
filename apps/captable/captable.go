@@ -60,12 +60,12 @@ var mounted *cloud.Service[state]
 
 // Mount wires the /v1/captable/* surface onto app per HIP-0106. Constructs the
 // value directly (cloud.NewBase) — this subsystem keeps a package global for the
-// Shutdown hook and opens a per-tenant goja host from deps.DataDir.
+// Shutdown hook and opens a per-tenant goja host from cloud.DataDir().
 func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("captable.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("captable.Use:  empty DataDir")
 	}
 
@@ -77,7 +77,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		Name:    "captable",
 		Bundle:  bundle,
 		Schema:  schema,
-		DataDir: deps.DataDir,
+		DataDir: cloud.DataDir(),
 		OnOpen:  seedCompany,
 	})
 	if err != nil {
@@ -90,8 +90,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	s.Log.Info("captable mounted in-process (goja + per-tenant Base)",
 		"prefix", "/v1/captable",
 		"version", hcaptable.Version,
-		"brand", deps.Brand,
-		"env", deps.Env,
+		"brand", cloud.Brand(),
+		"env", cloud.Env(),
 	)
 	return nil
 }

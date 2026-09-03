@@ -65,7 +65,9 @@ func mount(t *testing.T) *zip.App {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -613,7 +615,9 @@ func TestAnOverrideCannotFillTheVolumeEveryOrgSharesOn(t *testing.T) {
 // that are about what a row COSTS rather than about who may write one.
 func store(t *testing.T, org string) *overrides {
 	t.Helper()
-	deps := cloud.Deps{DataDir: t.TempDir(), Brand: "hanzo"}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	deps := cloud.Deps{}
 	st := cloud.NewOrgStore[*overrides](cloud.NewBase(deps, subsystem), subsystem, openOverrides)
 	t.Cleanup(func() { _ = st.CloseAll() })
 	ns, err := cloud.OrgNamespace(org, "")

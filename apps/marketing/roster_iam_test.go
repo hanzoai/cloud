@@ -73,9 +73,8 @@ func TestRosterReadsTheRealEmbeddedIAM(t *testing.T) {
 
 	app := zip.New(zip.Config{Logger: luxlog.NewNoOpLogger()})
 	compose(app)
-	if err := iamclient.Use(app, cloud.Deps{
-		DataDir: dir,
-	}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", dir)
+	if err := iamclient.Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("mount iam: %v", err)
 	}
 	db := iamclient.DB()

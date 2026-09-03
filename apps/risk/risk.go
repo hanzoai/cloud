@@ -114,7 +114,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// and cannot be TOLD one settled leaves the pace and fan-out rules reading an
 	// empty history for every self-serve organisation — see [planeObserve].
 	exposeObserve()
-	s.Log.Info("risk model plane mounted", "brand", deps.Brand, "env", deps.Env, "plane", s.State.plane != nil)
+	s.Log.Info("risk model plane mounted", "brand", cloud.Brand(), "env", cloud.Env(), "plane", s.State.plane != nil)
 	return nil
 }
 

@@ -62,10 +62,10 @@
 package node
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"sort"
 	"strings"
@@ -165,7 +165,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	running.cancel, running.done = cancel, done
 	running.mu.Unlock()
 
-	base.Log.Info("node plane mounted", "brand", deps.Brand, "allow", len(mode.Allow), "deny", len(mode.Deny))
+	base.Log.Info("node plane mounted", "brand", cloud.Brand(), "allow", len(mode.Allow), "deny", len(mode.Deny))
 	return nil
 }
 

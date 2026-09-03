@@ -78,7 +78,9 @@ func newApp(t *testing.T) *testEnv {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	dataDir := t.TempDir()
-	deps := cloud.Deps{DataDir: dataDir, Domain: "api.hanzo.ai"}
+	t.Setenv("CLOUD_DATA_DIR", dataDir)
+	t.Setenv("CLOUD_DOMAIN", "api.hanzo.ai")
+	deps := cloud.Deps{}
 	if err := Use(app, deps); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}

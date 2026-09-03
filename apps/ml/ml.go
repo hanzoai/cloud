@@ -48,10 +48,10 @@
 package ml
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"os"
@@ -185,7 +185,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	s.State.fleet = fleet.New(deps.KMS, s.Log)
 
 	mount(s, app)
-	s.Log.Info("ml surface mounted", "k8s", s.State.dyn != nil, "brand", deps.Brand, "env", deps.Env)
+	s.Log.Info("ml surface mounted", "k8s", s.State.dyn != nil, "brand", cloud.Brand(), "env", cloud.Env())
 	return nil
 }
 

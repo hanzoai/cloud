@@ -1,9 +1,9 @@
 package treasury
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/hex"
+	"github.com/hanzoai/cloud/internal/environ"
 	"strconv"
 	"strings"
 	"sync"
@@ -72,7 +72,7 @@ func newAnchorer(deps cloud.Deps, log luxlog.Logger) *anchorer {
 		contract:  environ.Or("TREASURY_ANCHOR_CONTRACT", ""),
 		signerRef: environ.Or("TREASURY_ANCHOR_SIGNER_KMS_REF", ""),
 		kms:       deps.KMS,
-		dataDir:   deps.DataDir,
+		dataDir:   cloud.DataDir(),
 		log:       log,
 	}
 	a.last = a.loadRecord()

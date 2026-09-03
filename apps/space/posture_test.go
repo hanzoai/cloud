@@ -82,7 +82,8 @@ func TestUnconfiguredFailsClosedUnderItsOwnName(t *testing.T) {
 	t.Setenv("S3_ADMIN_ACCESS_KEY", "")
 	t.Setenv("S3_ADMIN_SECRET_KEY", "")
 	t.Setenv(feeEnv, "0")
-	app := mountWith(t, cloud.Deps{Env: "mainnet"})
+	t.Setenv("CLOUD_ENV", "mainnet")
+	app := mountWith(t, cloud.Deps{})
 
 	for _, a := range addresses {
 		code, body := send(t, app, a.method, a.path, "acme", a.body)

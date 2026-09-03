@@ -385,7 +385,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// must build its command tree before login) — see openapi.Use.
 	openapi.Use(app,
 		openapi.Info{
-			Title:   deps.Brand + " cloud API",
+			Title:   Brand() + " cloud API",
 			Version: deps.Version,
 			Description: "Generated from the live router at request time — every operation " +
 				"below is a route this process actually serves. Tagged by product: the first " +

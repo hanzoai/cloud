@@ -154,8 +154,8 @@ func mountConversation(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("agent.Use:  router is not a zip app — the typed op registry is unreachable")
 	}
 	_, err := hz.MountAt(zapp, chat, hz.Deps{
-		DataDir: deps.DataDir,
-		Brand:   deps.Brand,
+		DataDir: cloud.DataDir(),
+		Brand:   cloud.Brand(),
 		Model:   cloud.DefaultModel,
 		Principal: func(c *zip.Ctx) (hz.Principal, bool) {
 			p, ok := tools.PrincipalFrom(c)

@@ -77,7 +77,8 @@ func mountBilled(t *testing.T, commerceURL string, ai types.AIClient) *zip.App {
 	// retry/failover tests exercise the real escalation path with no fixture to
 	// set; it never fires for a run whose model answers (or fails
 	// non-transiently), so the other billed tests are unaffected.
-	deps := cloud.Deps{DataDir: t.TempDir(), AI: ai, Metering: m}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	deps := cloud.Deps{AI: ai, Metering: m}
 	if err := Use(app, deps); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}

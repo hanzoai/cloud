@@ -64,8 +64,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("webhook.Use:  nil app")
 	}
-	if deps.DataDir == "" {
-		return fmt.Errorf("webhook.Use:  empty deps.DataDir")
+	if cloud.DataDir() == "" {
+		return fmt.Errorf("webhook.Use:  empty cloud.DataDir()")
 	}
 	b := cloud.NewBase(deps, "webhook")
 	stores := cloud.NewOrgStore[*store](b, "webhooks", openStore)

@@ -102,7 +102,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("campaign.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("campaign.Use:  empty DataDir")
 	}
 	// A typed op is a route PLUS a registry entry, and the registry lives on the
@@ -113,7 +113,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("campaign.Use:  router is not a zip app, so the typed ops have no registry")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("campaign.Use:  open store: %w", err)
 	}
@@ -123,7 +123,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, zapp, s)
 
-	b.Log.Info("campaign mounted", "brand", deps.Brand, "channels", registeredKinds())
+	b.Log.Info("campaign mounted", "brand", cloud.Brand(), "channels", registeredKinds())
 	return nil
 }
 

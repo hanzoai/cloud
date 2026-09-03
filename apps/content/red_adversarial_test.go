@@ -164,7 +164,8 @@ func TestRed_AssetSuccessChargesCallerExactFeeOnce(t *testing.T) {
 	t.Setenv("CONTENT_STUDIO_URL", studio.URL)
 	meter := newRedMeter(t, 100000) // funded
 
-	app := mountWith(t, cloud.Deps{Metering: meter.client, Env: "testnet"})
+	t.Setenv("CLOUD_ENV", "testnet")
+	app := mountWith(t, cloud.Deps{Metering: meter.client})
 	install(t, app, org)
 
 	code, b := req(t, app, http.MethodPost, "/v1/content/generate", org, map[string]any{

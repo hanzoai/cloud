@@ -233,10 +233,12 @@ func mountKB(t *testing.T) *zip.App {
 	// The lane is enabled for every org here; the gate is tested in apps/framework.
 	planetest.Manager(t)
 	planetest.Entitled(t, func(_, product string) bool { return product == Module })
-	if err := framework.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := framework.Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("framework.Use:  %v", err)
 	}
-	if err := Use(app, cloud.Deps{Domain: "api.test"}); err != nil {
+	t.Setenv("CLOUD_DOMAIN", "api.test")
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("kb.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = framework.Shutdown() })

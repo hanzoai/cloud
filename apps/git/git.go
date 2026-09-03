@@ -43,10 +43,10 @@
 package git
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -198,10 +198,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if cloud.ZipApp(app) == nil {
 		return fmt.Errorf("git.Use:  router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("git.Use:  empty DataDir")
 	}
-	gitRoot := filepath.Join(deps.DataDir, "git")
+	gitRoot := filepath.Join(cloud.DataDir(), "git")
 	st, err := newStorage(gitRoot)
 	if err != nil {
 		return fmt.Errorf("git.Use:  open storage: %w", err)
@@ -216,9 +216,9 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{
 		stores:  cloud.NewOrgStore(b, "git", openStore),
 		storage: st,
-		dataDir: deps.DataDir,
-		sshHost: gitSSHHost(deps.Domain),
-		gitHost: defaultSSHHost(deps.Domain),
+		dataDir: cloud.DataDir(),
+		sshHost: gitSSHHost(cloud.Domain()),
+		gitHost: defaultSSHHost(cloud.Domain()),
 		keys:    keys,
 		cache:   newCache(),
 	}}
@@ -269,7 +269,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("git.Use:  start ssh: %w", err)
 	}
 
-	b.Log.Info("git mounted", "brand", deps.Brand, "storage", "osfs", "root", gitRoot,
+	b.Log.Info("git mounted", "brand", cloud.Brand(), "storage", "osfs", "root", gitRoot,
 		"sshHost", s.State.sshHost, "sshAddr", sshSrv.addr(), "zap", "/zap")
 	return nil
 }

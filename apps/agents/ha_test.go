@@ -14,7 +14,8 @@ import (
 // writer — which is the whole reason the ownership gate has anything to decide.
 func replica(t *testing.T, p *twopod.Pod, ai *countingAI, seed ...Agent) *scheduler {
 	t.Helper()
-	b := cloud.NewBase(cloud.Deps{DataDir: p.Dir, Durable: p.Durable, Peers: true}, "agents")
+	t.Setenv("CLOUD_DATA_DIR", p.Dir)
+	b := cloud.NewBase(cloud.Deps{Durable: p.Durable, Peers: true}, "agents")
 	b.Log = luxlog.NewNoOpLogger()
 	stores := cloud.NewOrgStore(b, "agents", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })

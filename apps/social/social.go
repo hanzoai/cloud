@@ -127,10 +127,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("social.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("social.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("social.Use:  open store: %w", err)
 	}
@@ -149,7 +149,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, s)
 
-	b.Log.Info("social mounted", "brand", deps.Brand)
+	b.Log.Info("social mounted", "brand", cloud.Brand())
 	return nil
 }
 

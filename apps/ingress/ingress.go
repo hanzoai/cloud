@@ -93,13 +93,13 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("ingress.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("ingress.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "ingress")
 	log := b.Log
 
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("ingress.Use:  open store: %w", err)
 	}
@@ -108,7 +108,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	ecfg := edgeConfig{
 		httpAddr:  environ.Or("CLOUD_INGRESS_HTTP_ADDR", ":80"),
 		httpsAddr: environ.Or("CLOUD_INGRESS_HTTPS_ADDR", ":443"),
-		cacheDir:  filepath.Join(deps.DataDir, "ingress", "acme"),
+		cacheDir:  filepath.Join(cloud.DataDir(), "ingress", "acme"),
 		email:     environ.Or("CLOUD_INGRESS_ACME_EMAIL", ""),
 		staging:   boolEnv("CLOUD_INGRESS_ACME_STAGING"),
 	}

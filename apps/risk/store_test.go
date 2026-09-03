@@ -312,7 +312,9 @@ func key(t *testing.T, brandID, org string) tenant {
 // build two planes over the SAME directory and prove a restart carries state.
 func baseAt(t *testing.T, dir string) cloud.Base {
 	t.Helper()
-	return cloud.NewBase(cloud.Deps{Brand: brandA, DataDir: dir}, "risk")
+	t.Setenv("CLOUD_BRAND", brandA)
+	t.Setenv("CLOUD_DATA_DIR", dir)
+	return cloud.NewBase(cloud.Deps{}, "risk")
 }
 
 // free is the money client as a PLANE test sees it: every bound is granted and

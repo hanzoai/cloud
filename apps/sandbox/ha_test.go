@@ -35,7 +35,8 @@ func replica(t *testing.T, p *twopod.Pod) *Service {
 	// The two facts that make a replica a replica: its own volume, and its own
 	// durability over the shared object store. Peers says what a fleet is — more
 	// than one writer — which is the whole reason the gate has anything to decide.
-	b := cloud.NewBase(cloud.Deps{DataDir: p.Dir, Durable: p.Durable, Peers: true}, "sandbox")
+	t.Setenv("CLOUD_DATA_DIR", p.Dir)
+	b := cloud.NewBase(cloud.Deps{Durable: p.Durable, Peers: true}, "sandbox")
 	b.Log = luxlog.NewNoOpLogger()
 	stores := cloud.NewOrgStore(b, "sandbox", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })

@@ -26,7 +26,8 @@ func mount(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	compose(app)
-	deps := cloud.Deps{DataDir: t.TempDir()}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	deps := cloud.Deps{}
 	if err := index.Use(app, deps); err != nil {
 		t.Fatalf("index.Use:  %v", err)
 	}

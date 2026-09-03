@@ -37,9 +37,10 @@ func engineAt(t *testing.T) *atomic.Int32 {
 
 // billed builds a knowledge service metered against l.
 func billed(t *testing.T, l *planetest.Ledger) *cloud.Service[state] {
+	t.Setenv("CLOUD_ENV", "mainnet")
 	t.Helper()
 	return &cloud.Service[state]{
-		Base: cloud.NewBase(cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, "knowledge"),
+		Base: cloud.NewBase(cloud.Deps{Metering: l.Client(t)}, "knowledge"),
 	}
 }
 

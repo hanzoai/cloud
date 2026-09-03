@@ -32,7 +32,8 @@ import (
 // meterOn binds the process-wide meter at a ledger for one test.
 func meterOn(t *testing.T, l *planetest.Ledger) {
 	t.Helper()
-	bindMeter(cloud.NewMeter(cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, "websearch"))
+	t.Setenv("CLOUD_ENV", "mainnet")
+	bindMeter(cloud.NewMeter(cloud.Deps{Metering: l.Client(t)}, "websearch"))
 	t.Cleanup(func() { bindMeter(nil) })
 }
 
@@ -195,7 +196,8 @@ func TestSearXNGEndpointBillsTheCaller(t *testing.T) {
 	t.Setenv(account.KeyEnv, testCSRFKey)
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	app.Use(cloud.Bridge())
-	if err := Use(app, cloud.Deps{Metering: l.Client(t), Env: "mainnet"}); err != nil {
+	t.Setenv("CLOUD_ENV", "mainnet")
+	if err := Use(app, cloud.Deps{Metering: l.Client(t)}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { bindMeter(nil) })

@@ -35,7 +35,8 @@ func newApp(t *testing.T, extra func(*zip.App)) *zip.App {
 	if extra != nil {
 		extra(app)
 	}
-	deps := cloud.Deps{DataDir: t.TempDir()}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	deps := cloud.Deps{}
 	if err := Use(app, deps); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}

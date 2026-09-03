@@ -120,10 +120,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("platform.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "platform")
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("platform.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("platform.Use:  open store: %w", err)
 	}
@@ -140,7 +140,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "platform"),
-		State: state{store: store, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS, deps.IAMIssuer, deps.Brand),
+		State: state{store: store, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS, deps.IAMIssuer, cloud.Brand()),
 			sitesHost: environ.Or("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
 	// The project source is the CANONICAL IAM: the iam peer over the plane when
 	// the deployment names a separate one (IAM_URL), the embedded store when this
@@ -185,7 +185,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// The cloud's own embedded-git apex is a trusted build source (clients/git
 	// serves repos at this host), so a self-hosted-git app builds with no env.
 	//
-	// The APEX, not deps.Domain verbatim. deps.Domain is this deployment's own
+	// The APEX, not cloud.Domain() verbatim. cloud.Domain() is this deployment's own
 	// host — "api.hanzo.ai" — and the forge is "git.hanzo.ai": a SIBLING, not a
 	// child. hostAllowed matches selfGitHost or a subdomain OF it, so handing it
 	// the API host made the self-hosted-git allowance unreachable: every native
@@ -194,12 +194,12 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// ("hanzo.ai") admits every sibling the deployment owns — git., ci., cd. —
 	// for hanzo.ai, lux.network, zoo.network and any white-label domain alike,
 	// with no list to maintain per brand.
-	selfGitHost = brand.Apex(deps.Domain)
+	selfGitHost = brand.Apex(cloud.Domain())
 
 	// The forge, by the same reasoning and from the ONE derivation of it. It is
 	// what makes an application's github.com RepoURL and a delivery's git.hanzo.ai
 	// clone URL the same repository while the migration runs (normRepo).
-	forgeHost = forge.Host(deps.Domain)
+	forgeHost = forge.Host(cloud.Domain())
 
 	// git-push-to-deploy: a push landed on the embedded git server (clients/git)
 	// triggers a build for every app tracking that repo+branch. Inverted so git
@@ -243,7 +243,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	log.Info("platform control plane mounted",
-		"prefix", "/v1/platform", "k8s", k.dyn != nil, "brand", deps.Brand, "env", deps.Env)
+		"prefix", "/v1/platform", "k8s", k.dyn != nil, "brand", cloud.Brand(), "env", cloud.Env())
 	return nil
 }
 

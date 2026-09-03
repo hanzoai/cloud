@@ -63,9 +63,9 @@
 package base
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -216,7 +216,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		log.Info("base embed disabled; /v1/base + /v1/waitlist off (set CLOUD_BASE_EMBED=1 to enable)")
 		return nil
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("base.Use:  empty DataDir")
 	}
 
@@ -237,7 +237,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		}
 	}
 
-	root := filepath.Join(deps.DataDir, "base")
+	root := filepath.Join(cloud.DataDir(), "base")
 
 	// LANE 1 — platform waitlist app (public /v1/waitlist/*). Raw because it
 	// relays the embedded Base engine's own bytes verbatim — the routes, shapes
@@ -286,7 +286,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	log.Info("base app embedded",
 		"waitlist", "/v1/waitlist/*", "hosting", "/v1/base/*",
-		"prefix", environ.Or("BASE_API_PREFIX", ""), "brand", deps.Brand, "env", deps.Env)
+		"prefix", environ.Or("BASE_API_PREFIX", ""), "brand", cloud.Brand(), "env", cloud.Env())
 	return nil
 }
 

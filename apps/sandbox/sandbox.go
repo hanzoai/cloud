@@ -240,7 +240,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("sandbox.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("sandbox.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "sandbox")
@@ -393,7 +393,7 @@ func New(deps cloud.Deps) (*Service, error) {
 	if luxlog.Default() == nil {
 		return nil, fmt.Errorf("sandbox.New: nil luxlog.Default()")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return nil, fmt.Errorf("sandbox.New: empty DataDir")
 	}
 	b := cloud.NewBase(deps, "sandbox")

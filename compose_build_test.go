@@ -78,13 +78,14 @@ var composed = []struct {
 // which is what zen did, silently, for as long as its grant read the routing
 // table instead of its own spec.
 func TestSubsystemComposesThroughMountAll(t *testing.T) {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	for _, c := range composed {
 		t.Run(c.name, func(t *testing.T) {
 			app := newApp()
 			err := cloud.UseAll(app,
 				[]cloud.Plugin{{Name: c.name, Use: c.mount, Prefixes: c.prefixes, Global: c.global}},
 				&cloud.Config{Enable: []string{c.name}},
-				cloud.Deps{DataDir: t.TempDir()})
+				cloud.Deps{})
 			if err != nil {
 				t.Fatalf("UseAll(%s): %v", c.name, err)
 			}
@@ -101,10 +102,11 @@ func TestSubsystemComposesThroughMountAll(t *testing.T) {
 // here — every test in those packages panicked out of app.Test, because Test
 // calls prepare, which builds.
 func TestSubsystemComposesOnABareApp(t *testing.T) {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	for _, c := range composed {
 		t.Run(c.name, func(t *testing.T) {
 			app := newApp()
-			if err := c.mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+			if err := c.mount(app, cloud.Deps{}); err != nil {
 				t.Fatalf("Use(%s): %v", c.name, err)
 			}
 			if err := app.Build(); err != nil {
@@ -181,11 +183,12 @@ func TestUseIsTheVerbThatComposesBothWays(t *testing.T) {
 // ai's greedy All("/v1/*") would sit behind the route it exists to gate — so the
 // stand-in catch-all here is registered after zen mounts, exactly as ai's is.
 func TestZenClaimGatesTheCoresidentHost(t *testing.T) {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	app := newApp()
 	if err := cloud.UseAll(app,
 		[]cloud.Plugin{{Name: "zen", Use: zen.Use, Prefixes: manifest.GrantFor("zen")}},
 		&cloud.Config{Enable: []string{"zen"}},
-		cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		cloud.Deps{}); err != nil {
 		t.Fatalf("UseAll(zen): %v", err)
 	}
 	// ai's position: the greedy catch-all, registered after zen as in plugin/ai.

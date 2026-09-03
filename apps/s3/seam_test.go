@@ -67,7 +67,8 @@ func seamApp(t *testing.T, commerceURL string) (*zip.App, *int32) {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("seam"), DisableStartupMessage: true})
 	app.Use(cloud.Bridge())
-	if err := Use(app, cloud.Deps{Metering: m, Env: "mainnet"}); err != nil {
+	t.Setenv("CLOUD_ENV", "mainnet")
+	if err := Use(app, cloud.Deps{Metering: m}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	return app, &reached
@@ -316,7 +317,8 @@ func TestACookieAloneCannotSpend(t *testing.T) {
 func TestTheTokenTheControlAsksForIsAccepted(t *testing.T) {
 	bs := &billServer{available: 100000}
 	app, _ := seamApp(t, bs.start(t))
-	if err := account.Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	if err := account.Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use: %v", err)
 	}
 

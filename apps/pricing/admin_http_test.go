@@ -94,7 +94,9 @@ func TestCatalog_ServesBothRouteShapes(t *testing.T) {
 func TestAdminCatalog_HTTP(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	deps := cloud.Deps{Brand: "hanzo", DataDir: t.TempDir()}
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	deps := cloud.Deps{}
 	if err := Use(app, deps); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
@@ -264,7 +266,9 @@ func rootFreeContains(body []byte, id string) bool {
 func TestMount_EmptyDataDir_FailsClosed(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	defer func() { _ = Shutdown(context.Background()) }()
-	if err := Use(app, cloud.Deps{Brand: "hanzo", DataDir: ""}); err == nil {
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	t.Setenv("CLOUD_DATA_DIR", "")
+	if err := Use(app, cloud.Deps{}); err == nil {
 		t.Fatal("Mount with empty DataDir must fail closed (got nil error)")
 	}
 }
@@ -283,7 +287,9 @@ func TestMount_EmptyDataDir_FailsClosed(t *testing.T) {
 func TestTheURLOutranksABodyID(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{Brand: "hanzo", DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	defer func() { _ = Shutdown(context.Background()) }()

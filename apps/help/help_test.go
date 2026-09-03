@@ -180,7 +180,8 @@ func mount(t *testing.T) *zip.App {
 	// The lane is enabled for every org here; the gate is tested in apps/framework.
 	planetest.Manager(t)
 	planetest.Entitled(t, func(_, product string) bool { return product == Module })
-	if err := framework.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := framework.Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("mount framework: %v", err)
 	}
 	t.Cleanup(func() { _ = framework.Shutdown() })

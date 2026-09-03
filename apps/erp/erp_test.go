@@ -403,7 +403,8 @@ func mountAs(t *testing.T, roles func(org, user string) []string) *zip.App {
 	planetest.Entitled(t, func(_, product string) bool { return product == Module })
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := framework.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := framework.Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("mount framework: %v", err)
 	}
 	t.Cleanup(func() { _ = framework.Shutdown() })

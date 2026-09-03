@@ -16,7 +16,8 @@ import (
 // answered in production while /v1/search/health and /v1/search/version 404'd.
 func TestMountedRoutesAreReachable(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

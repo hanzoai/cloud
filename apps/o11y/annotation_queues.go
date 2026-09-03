@@ -1,9 +1,9 @@
 package o11y
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"net/http"
 	"regexp"
 	"strings"
@@ -75,10 +75,10 @@ var annQueues *annService
 // wildcard. A store-open failure fails the mount (a broken data plane must not
 // silently serve empty queues).
 func mountAnnotationQueues(a *zip.App, deps cloud.Deps) error {
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("o11y.mountAnnotationQueues: empty DataDir")
 	}
-	store, err := openAnnStore(deps.DataDir)
+	store, err := openAnnStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("o11y.mountAnnotationQueues: open store: %w", err)
 	}

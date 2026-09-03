@@ -50,11 +50,13 @@ func mount(t *testing.T) *zip.App {
 	t.Setenv("CLOUD_PUBSUB_STORE_DIR", t.TempDir())
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	if err := pubsub.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := pubsub.Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("pubsub.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = pubsub.Shutdown(context.Background()) })
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	return app
@@ -234,7 +236,8 @@ func TestRidesThePlaneFromItsOwnBinary(t *testing.T) {
 	t.Setenv("CLOUD_PUBSUB_PORT", "") // and no server of its own to fall back on
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = pubsub.Shutdown(context.Background()) })
@@ -286,7 +289,8 @@ func TestBusUnreachableFailsClosed(t *testing.T) {
 	t.Setenv("CLOUD_PUBSUB_URL", "nats://127.0.0.1:1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v — mounting must not depend on the plane being up", err)
 	}
 	t.Cleanup(func() { _ = pubsub.Shutdown(context.Background()) })
@@ -377,7 +381,8 @@ func TestEveryRouteIsTypedAndDescribed(t *testing.T) {
 func TestMessagingIsNotThisApps(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	for _, path := range []string{"/v1/pubsub/publish", "/v1/pubsub/request", "/v1/kv/publish/x/y"} {

@@ -24,7 +24,9 @@ import (
 // driven without a network and without an HTTP surface.
 func plant(t *testing.T, get download) *cloud.Service[state] {
 	t.Helper()
-	deps := cloud.Deps{DataDir: t.TempDir(), Brand: "hanzo"}
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	deps := cloud.Deps{}
 	base := cloud.NewBase(deps, subsystem)
 	own := cloud.NewOrgStore[*overrides](base, subsystem, openOverrides)
 	s := &cloud.Service[state]{

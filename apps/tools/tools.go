@@ -47,26 +47,26 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("tools.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("tools.Use:  empty DataDir")
 	}
-	activation, err := OpenActivationStore(deps.DataDir)
+	activation, err := OpenActivationStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("tools.Use:  open activation store: %w", err)
 	}
-	servers, err := OpenMCPServerStore(deps.DataDir)
+	servers, err := OpenMCPServerStore(cloud.DataDir())
 	if err != nil {
 		_ = activation.Close()
 		return fmt.Errorf("tools.Use:  open mcp-server store: %w", err)
 	}
-	authored, err := OpenAuthoredStore(deps.DataDir)
+	authored, err := OpenAuthoredStore(cloud.DataDir())
 	if err != nil {
 		_ = activation.Close()
 		_ = servers.Close()
 		return fmt.Errorf("tools.Use:  open authored-plugin store: %w", err)
 	}
 
-	skills, err := OpenSkillStore(deps.DataDir)
+	skills, err := OpenSkillStore(cloud.DataDir())
 	if err != nil {
 		_ = activation.Close()
 		_ = servers.Close()
@@ -74,7 +74,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("tools.Use:  open skill store: %w", err)
 	}
 
-	catalog, err := OpenCatalogStore(deps.DataDir)
+	catalog, err := OpenCatalogStore(cloud.DataDir())
 	if err != nil {
 		_ = activation.Close()
 		_ = servers.Close()
@@ -105,7 +105,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	serveSkills()
 
 	routes(app, s)
-	b.Log.Info("tools plane mounted", "prefix", "/v1/tools", "brand", deps.Brand, "kms", deps.KMS != nil)
+	b.Log.Info("tools plane mounted", "prefix", "/v1/tools", "brand", cloud.Brand(), "kms", deps.KMS != nil)
 	return nil
 }
 

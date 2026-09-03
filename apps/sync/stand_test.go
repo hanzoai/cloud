@@ -393,8 +393,10 @@ func mountForge(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_DOMAIN", "api.hanzo.ai")
 	if err := Use(app, cloud.Deps{
-		DataDir: t.TempDir(), KMS: vault{}, Domain: "api.hanzo.ai",
+		KMS: vault{},
 	}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}

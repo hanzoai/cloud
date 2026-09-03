@@ -46,11 +46,12 @@ func (f *fabric) configured() bool { return true }
 
 // billedShare mounts the surface over f, metered against l.
 func billedShare(t *testing.T, l *planetest.Ledger, f *fabric) *zip.App {
+	t.Setenv("CLOUD_ENV", "mainnet")
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	s := &cloud.Service[state]{
-		Base:  cloud.NewBase(cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, "share"),
+		Base:  cloud.NewBase(cloud.Deps{Metering: l.Client(t)}, "share"),
 		State: state{cl: f},
 	}
 	routes(app, s)

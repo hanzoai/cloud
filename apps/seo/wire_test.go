@@ -131,7 +131,9 @@ func wire(t *testing.T, v vault) (*zip.App, *upstream) {
 		luxlog.SetDefault(luxlog.New("seotest"))
 	}
 	u := vendorStub(t)
-	b := cloud.NewBase(cloud.Deps{Brand: "hanzo", Env: "devnet", KMS: v}, "seo")
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	t.Setenv("CLOUD_ENV", "devnet")
+	b := cloud.NewBase(cloud.Deps{KMS: v}, "seo")
 	st, err := build(b)
 	if err != nil {
 		t.Fatalf("build: %v", err)

@@ -131,10 +131,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("auto.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("auto.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("auto.Use:  open store: %w", err)
 	}
@@ -171,7 +171,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// and through that registry every action is a tool on the fleet's one agent MCP server.
 	tools.Register(connectorToolProvider{})
 
-	b.Log.Info("auto mounted", "connectors", catalog.ConnectorCount, "runtime", len(registry), "brand", deps.Brand)
+	b.Log.Info("auto mounted", "connectors", catalog.ConnectorCount, "runtime", len(registry), "brand", cloud.Brand())
 
 	// Native single-connector execution (HIP-0126): POST /v1/auto/connectors/:id/run,
 	// the in-process goja runner paired with the connector catalogue above. It mounts one

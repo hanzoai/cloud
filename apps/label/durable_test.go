@@ -107,7 +107,9 @@ func soleMembership(t *testing.T, id string) *org.Membership {
 // about a warehouse.
 func wireDurable(t *testing.T, dur *org.Durability, w *recorder) (*zip.App, *cloud.Service[*state]) {
 	t.Helper()
-	s, err := build(cloud.Deps{DataDir: t.TempDir(), Brand: "hanzo", Durable: dur})
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	t.Setenv("CLOUD_BRAND", "hanzo")
+	s, err := build(cloud.Deps{Durable: dur})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

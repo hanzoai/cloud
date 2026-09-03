@@ -131,7 +131,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("skills.Use:  %w", err)
 	}
-	h := &handler{fsys: sub, brands: map[string]bool{}, fallback: deps.Brand}
+	h := &handler{fsys: sub, brands: map[string]bool{}, fallback: cloud.Brand()}
 	entries, err := fs.ReadDir(sub, ".")
 	if err != nil {
 		return fmt.Errorf("skills.Use:  read catalog: %w", err)

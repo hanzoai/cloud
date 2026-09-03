@@ -32,7 +32,8 @@ func mountStack(t *testing.T) *zip.App {
 	// reads off its context. The composer installs it once at the root in
 	// production (serve.go); this stack composes the same way.
 	app.Use(cloud.Bridge())
-	deps := cloud.Deps{DataDir: dir}
+	t.Setenv("CLOUD_DATA_DIR", dir)
+	deps := cloud.Deps{}
 	if err := flags.Use(app, deps); err != nil {
 		t.Fatalf("flags mount: %v", err)
 	}

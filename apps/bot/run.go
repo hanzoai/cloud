@@ -56,10 +56,10 @@
 package bot
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"net/url"
 	"strings"
@@ -212,7 +212,7 @@ func mountRunPlane(app cloud.Router, deps cloud.Deps) error {
 		State: executor{gateway: gatewayBase(), runtime: wire{}},
 	}
 	mountRuns(app, s)
-	s.Log.Info("run plane mounted", "gateway", s.State.gateway, "brand", deps.Brand)
+	s.Log.Info("run plane mounted", "gateway", s.State.gateway, "brand", cloud.Brand())
 	return nil
 }
 

@@ -90,10 +90,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("world.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "world")
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("world.Use:  empty DataDir")
 	}
-	store, err := openPipelineStore(deps.DataDir)
+	store, err := openPipelineStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("world.Use:  open pipeline store: %w", err)
 	}
@@ -168,7 +168,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// init (openapi.Describe), so the SDKs and the spec-derived CLI still carry it.
 	zapp.Get("/v1/world/stream", s.stream)
 
-	log.Info("world surface mounted", "brand", deps.Brand,
+	log.Info("world surface mounted", "brand", cloud.Brand(),
 		"ai", s.ai != nil, "kms", s.kms != nil, "allowlisted_hosts", len(s.rssAllow))
 	return nil
 }

@@ -95,10 +95,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("entitlement.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "entitlement")
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("entitlement.Use:  empty DataDir")
 	}
-	store, err := openStore(deps.DataDir)
+	store, err := openStore(cloud.DataDir())
 	if err != nil {
 		return fmt.Errorf("entitlement.Use:  open store: %w", err)
 	}
@@ -107,7 +107,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	routes(app, s)
 	exposeHolds()
 
-	log.Info("entitlements surface mounted", "prefix", orgs, "brand", deps.Brand, "commerce", deps.Commerce != nil)
+	log.Info("entitlements surface mounted", "prefix", orgs, "brand", cloud.Brand(), "commerce", deps.Commerce != nil)
 	return nil
 }
 

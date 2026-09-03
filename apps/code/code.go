@@ -80,12 +80,12 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("code.Use:  nil app")
 	}
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("code.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "code")
 	s := &service{
-		dataDir: deps.DataDir,
+		dataDir: cloud.DataDir(),
 		embed:   newEmbedder(deps.Embed, ""),           // embeddings ride the read-only (pk-) embed credential
 		synth:   newSynth(deps.AI, cloud.DefaultModel), // synthesis is chat completion → M2M
 		log:     b.Log,
@@ -100,7 +100,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	s.log.Info("code surface mounted (native)",
-		"brand", deps.Brand, "semantic", s.embed.Enabled(), "synth", s.synth.Enabled())
+		"brand", cloud.Brand(), "semantic", s.embed.Enabled(), "synth", s.synth.Enabled())
 	return nil
 }
 

@@ -230,7 +230,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// split console.hanzo.ai runs. The browser sees one origin either way, so
 	// nothing about the requests that arrive here changes.
 
-	luxlog.Default().New("subsystem", "tasks").Info("tasks HTTP+UI surface mounted (shared in-process engine)", "brand", deps.Brand)
+	luxlog.Default().New("subsystem", "tasks").Info("tasks HTTP+UI surface mounted (shared in-process engine)", "brand", cloud.Brand())
 
 	// Platform cron is a FACET of tasks, not its own subsystem: it mounts NO routes,
 	// only registers durable schedules on the SAME shared engine (cloud.EmbeddedTasks)

@@ -29,6 +29,7 @@ package cloud
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/datadir"
 	"os"
 	"path/filepath"
 
@@ -94,8 +95,21 @@ func SpecConfig() (*Config, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	// The dir is stated in the ENVIRONMENT, not just on the Config, because that is
+	// where the subsystems read it: cloud.DataDir is the one resolver, and a field
+	// carrying a second answer is a second answer. The cleanup restores whatever was
+	// there, so a caller with its own root keeps it.
+	prev, had := os.LookupEnv(datadir.EnvVar)
+	_ = os.Setenv(datadir.EnvVar, dir)
 	return &Config{Brand: DefaultBrand, Domain: "api.hanzo.ai", DataDir: dir},
-		func() { os.RemoveAll(dir) }, nil
+		func() {
+			if had {
+				_ = os.Setenv(datadir.EnvVar, prev)
+			} else {
+				_ = os.Unsetenv(datadir.EnvVar)
+			}
+			os.RemoveAll(dir)
+		}, nil
 }
 
 // Describe writes app's projection into dir: the OpenAPI document, from the one

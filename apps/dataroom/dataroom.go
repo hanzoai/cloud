@@ -119,7 +119,7 @@ func useWith(app cloud.Router, deps cloud.Deps, s3 cloud.VFSClient) error {
 	// degrade paths return before the Service value exists). NewBase derives the
 	// same "subsystem"=dataroom child for the mounted service below.
 	log := luxlog.Default().New("subsystem", "dataroom")
-	if deps.DataDir == "" {
+	if cloud.DataDir() == "" {
 		return fmt.Errorf("dataroom.Use:  empty DataDir")
 	}
 
@@ -154,14 +154,14 @@ func useWith(app cloud.Router, deps cloud.Deps, s3 cloud.VFSClient) error {
 		Name:    "dataroom",
 		Bundle:  bundle,
 		Schema:  schema,
-		DataDir: deps.DataDir,
+		DataDir: cloud.DataDir(),
 		HostFns: bcryptHostFns(), // __bcrypt.hash/verify — link passwords hashed in Go
 	})
 	if err != nil {
 		log.Error("dataroom bundle failed to load — serving health-only (cloud stays up)", "err", err)
 		return nil
 	}
-	index, err := openLinkIndex(deps.DataDir)
+	index, err := openLinkIndex(cloud.DataDir())
 	if err != nil {
 		log.Error("dataroom link index failed — serving health-only (cloud stays up)", "err", err)
 		return nil
@@ -172,13 +172,13 @@ func useWith(app cloud.Router, deps cloud.Deps, s3 cloud.VFSClient) error {
 	}
 
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "dataroom"), State: state{
-		host: host, index: index, blob: s3, domain: "https://" + deps.Domain,
+		host: host, index: index, blob: s3, domain: "https://" + cloud.Domain(),
 	}}
 	mounted = s
 	routes(app, s)
 
 	log.Info("dataroom mounted in-process (goja + per-tenant Base)",
-		"prefix", "/v1/dataroom", "brand", deps.Brand, "env", deps.Env)
+		"prefix", "/v1/dataroom", "brand", cloud.Brand(), "env", cloud.Env())
 	return nil
 }
 
