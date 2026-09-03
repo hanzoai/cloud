@@ -51,7 +51,7 @@ func TestCatalogAuthorizeCarriesNoSecret(t *testing.T) {
 		t.Skip("linkedin not registered")
 	}
 	raw, err := p.Authorize(OAuthConfig{ClientID: "cid", ClientSecret: "sekrit"},
-		"https://api.hanzo.ai/v1/integrations/linkedin/callback", "STATE-1")
+		"https://api.hanzo.ai/v1/integration/linkedin/callback", "STATE-1")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}

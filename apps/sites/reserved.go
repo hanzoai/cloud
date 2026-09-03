@@ -41,7 +41,7 @@ var baseReserved = func() map[string]bool {
 		"stg",
 		// infrastructure / app hosts
 		//
-		// The three that are also STATIC SEGMENTS under /v1/projects — sites, edge,
+		// The three that are also STATIC SEGMENTS under /v1/project — sites, edge,
 		// tags — have a second job here. A static segment beats its param sibling on
 		// this router, so a project slugged `edge` would be addressed by the edge
 		// route instead of by itself; reserving the label means no such row can be

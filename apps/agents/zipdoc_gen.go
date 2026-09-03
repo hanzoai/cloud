@@ -9,14 +9,14 @@ import (
 )
 
 func init() {
-	zip.Describe("github.com/hanzoai/cloud/apps/agents DELETE /v1/agents/:ref", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents DELETE /v1/agent/:ref", zip.Doc{
 		Description: "Removes an agent and every run recorded against it. Answers 204.",
 		Fields: map[string]string{
 			"agentRef.ref": "Ref is the agent's public id (the agent_… handle create and list return) or\nits org-unique name, from the path. Either resolves the same agent.",
 		},
 		Example: json.RawMessage(`{"ref":"helper"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents DELETE /v1/agents/targets/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents DELETE /v1/agent/targets/:id", zip.Doc{
 		Description: "Deregisters one machine. Only its owner, or an org admin, may\nremove it; an unknown id, a cross-org id and a machine owned by someone else\nall answer the same not-found, so a probe learns nothing about what exists.",
 		Fields: map[string]string{
 			"targetDeleted.deleted": "Deleted is true when the target was removed.",
@@ -25,7 +25,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"tgt_1"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent", zip.Doc{
 		Description: "Returns every agent defined in the caller's org, each with the\nnumber of runs recorded against it.",
 		Fields: map[string]string{
 			"agentList.agents":           "Agents is the org's agents, each carrying its recorded run count.",
@@ -46,7 +46,7 @@ func init() {
 			"agentView.updatedAt":        "UpdatedAt is the last time any field above was written, same format. It moves\non an update to the DEFINITION and never on a run, so a busy agent nobody has\nedited keeps an old one.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/:ref", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/:ref", zip.Doc{
 		Description: "Returns one agent with its system prompt and its 20 most recent runs.\nThe ref is the agent's public id or its org-unique name — a created agent is\nimmediately gettable by whatever create handed back.",
 		Fields: map[string]string{
 			"agentDetail.instructions":      "Instructions is the agent's system prompt, verbatim, up to 32 KiB. It is the\none field the list read withholds, because it is the agent's whole behaviour\nand a page of them would be a page of prompts.",
@@ -84,7 +84,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"ref":"helper"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/:ref/runs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/:ref/runs", zip.Doc{
 		Description: "Returns one agent's execution history, newest first — each run's\ninput, its output or its error, and how long it took. Every row is a run that\nactually happened.",
 		Fields: map[string]string{
 			"agentRunView.actor":            "Actor is the \"org/sub\" identity the run was executed and billed AS. Empty\nmeans there was no PERSON — a schedule or a service token — which is a\ndifferent fact from \"we do not know\", and the difference is what an audit\nasks about.",
@@ -107,7 +107,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"ref":"helper","limit":20}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/activity", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/activity", zip.Doc{
 		Description: "Serves the org-wide recent-activity feed. Events are REAL: each\nrecorded run is an invoked (ok) or failed (error) event; each agent's own\ncreate/update timestamps are created/updated events. Merged, newest first,\ncapped. Nothing is invented — an org with no agents and no runs gets [].",
 		Fields: map[string]string{
 			"activityFeed.activity": "Activity is the merged run/create/update events, newest first, capped at 50.",
@@ -118,7 +118,7 @@ func init() {
 			"activityView.message":  "Message is the line to render, already bounded: \"Invoked <model>\" for a run\nthat worked, the run's own error truncated to 200 characters for one that did\nnot (or \"Run failed\" when it said nothing), and a fixed phrase for the two\nagent events. Nothing here is invented — every event is a row that exists.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/builds", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/builds", zip.Doc{
 		Description: "Returns the public index of every published build, most recently\nupdated first, so a gallery can link straight to the story behind each product.\nPUBLIC, no tenancy: publishing is the author's act, and only published root\nsessions appear here.",
 		Fields: map[string]string{
 			"buildList.builds":       "Builds is every published build, most recently updated first.",
@@ -135,8 +135,8 @@ func init() {
 			"buildsQuery.limit":      "Limit caps the page. Absent, zero or over 500 reads as 100.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/builds/:org/:project", zip.Doc{
-		Description: "Returns the readable build of one product: the agent session that\nproduced it, turn by turn — the prompts, the reasoning, the commits each turn\nproduced — plus the exact `git log` that re-derives every commit binding from\ngit itself, so nothing here has to be taken on trust.\n\nPUBLIC, no tenancy: it answers only for a session its author explicitly\npublished, which is what makes it safe to be anonymous. An unpublished session\nis invisible here no matter who asks; its owner reads it through the org-scoped\n/v1/agents/sessions routes, which need a validated principal.",
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/builds/:org/:project", zip.Doc{
+		Description: "Returns the readable build of one product: the agent session that\nproduced it, turn by turn — the prompts, the reasoning, the commits each turn\nproduced — plus the exact `git log` that re-derives every commit binding from\ngit itself, so nothing here has to be taken on trust.\n\nPUBLIC, no tenancy: it answers only for a session its author explicitly\npublished, which is what makes it safe to be anonymous. An unpublished session\nis invisible here no matter who asks; its owner reads it through the org-scoped\n/v1/agent/sessions routes, which need a validated principal.",
 		Fields: map[string]string{
 			"buildRef.org":        "Org is the org that published the build, from the path.",
 			"buildRef.project":    "Project is the product's slug, from the path.",
@@ -162,7 +162,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"org":"hanzo","project":"landing"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/metrics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/metrics", zip.Doc{
 		Description: "Serves the invocations-over-time histogram for the org's Agents\ndashboard. Every point is a REAL count of recorded runs in that time bucket —\none series line per agent that ran in the window. The Resource Usage rollup is\nall-null because this store meters no CPU/memory/storage/cost; the console\nrenders those as \"—\" rather than a fabricated figure. No runs => empty series\n(an honest \"not connected / no activity yet\"), never a synthesized trend.",
 		Fields: map[string]string{
 			"metricsQuery.range":           "Range is the window to bucket: 24H, 7D or 30D. Anything else reads as 30D.",
@@ -180,7 +180,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"range":"7D"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/runs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/runs", zip.Doc{
 		Description: "Returns the org's agent runs across EVERY agent, newest first —\nwhat ran here, for whom, on which model, how long it took, and why it failed.\n\nIt is the feed the per-agent history could not be: an operator asking \"what is\nthis tenant's agent plane doing\" does not start out knowing an agent ref, and\nanswering by listing the agents and then paging each one's history is N+1 round\ntrips to reconstruct one ordering the database already has (RunsSince, ordered\nby created_at over the org index).\n\nThe org is the CALLER's, resolved from identity by tenantStore — never a\nparameter. There is deliberately no org field on orgRunsQuery to forge: run\nhistory is the tenant's own record, and the only tenant this can answer for is\nthe one asking.",
 		Fields: map[string]string{
 			"agentRunView.actor":            "Actor is the \"org/sub\" identity the run was executed and billed AS. Empty\nmeans there was no PERSON — a schedule or a service token — which is a\ndifferent fact from \"we do not know\", and the difference is what an audit\nasks about.",
@@ -203,7 +203,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"limit":20,"status":"error"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/sessions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/sessions", zip.Doc{
 		Description: "Returns the caller org's live sessions, newest first — each with\nits event count, its direct-child count and a one-line preview of its latest\nevent. With no filter it returns ROOT sessions only, so a dashboard shows one\nrow per flow rather than one per subagent; ?root= or ?parent= descends.",
 		Fields: map[string]string{
 			"lastEventView.actor":         "Actor is who produced the turn, defaulted to the calling principal when the\nwriter named nobody.",
@@ -254,7 +254,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"status":"running","limit":20}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/sessions/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/sessions/:id", zip.Doc{
 		Description: "Returns one session with its direct child sessions and its 50 most\nrecent events, oldest of those first.",
 		Fields: map[string]string{
 			"eventView.actor":             "Actor is who produced the turn. A write that names nobody takes the calling\nprincipal, so this is rarely empty in practice.",
@@ -308,7 +308,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"sess_1"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/sessions/:id/control", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/sessions/:id/control", zip.Doc{
 		Description: "Returns the steering commands (pause/resume/stop/message)\nrecorded against the caller's own session that are newer than the cursor,\noldest first, with the cursor to poll from next. It is how a locally started\n`hanzo code` session — which is not task-backed, so nothing forwards its\ncommands to an execution engine — consumes what the dashboard posted. Read-only\nand bounded at 200 per poll, so a steady poll is cheap and an applied command is\nnever redelivered.",
 		Fields: map[string]string{
 			"controlCommandView.command": "Command is what was asked, from a closed four: pause, resume, stop, message.\nIt is an INTENT — the poller decides what to do about it, and the session's\nstatus changes only when the poller reports back that it did.",
@@ -322,7 +322,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"sess_1","after":12}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/sessions/:id/progress", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/sessions/:id/progress", zip.Doc{
 		Description: "Returns how far along one run is: the share of its goal that\nis done, whether it is running, blocked or finished, and a line saying what it\nis doing right now.\n\nIt is a MODEL ESTIMATE read off the run's own transcript, not a measurement —\n`estimated` says so on every answer, and a run whose progress cannot be told\nreports phase \"unknown\" with no percentage rather than a zero it does not\nmean. A session that has already finished answers from its own status instead,\nand is marked not estimated.\n\nThe list and detail reads carry the same value; this address is the one that\nWAITS. Where the stored estimate has gone stale it is remade before answering,\nso a human deciding whether to step into a run gets a current reading rather\nthan the last poll's — which costs one small completion, charged to the same\nwallet the session already names, at most once every thirty seconds per run.",
 		Fields: map[string]string{
 			"sessionProgress.activity":  "Activity is the one line saying what the run is doing right now (\"running\nthe reaper's tests\"), up to 120 characters, in the model's words. Empty\nwhen nothing has estimated it yet.",
@@ -334,7 +334,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"sess_1"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/sessions/:id/tree", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/sessions/:id/tree", zip.Doc{
 		Description: "Returns the subagent-flow graph rooted at this session: the session,\nits children, their children, each node carrying its own event count. One\nindexed read pulls the whole flow (every node of a flow shares a root id), so\nthe shape is assembled in memory rather than by walking the store per node.",
 		Fields: map[string]string{
 			"lastEventView.actor":         "Actor is who produced the turn, defaulted to the calling principal when the\nwriter named nobody.",
@@ -381,10 +381,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"sess_1"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/sessions/stream", zip.Doc{
-		Description: "Is GET /v1/agents/sessions/stream — a Server-Sent Events feed of\nlive session + event updates for the caller's org. Optional ?root=<id> scopes\nthe feed to one subagent tree. Org-scoped (fail-closed): a subscriber only ever\nreceives its own tenant's updates because the bus filters on org.\n\nThis handler streams over BOTH the plain HTTP listener and the ZAP machine\ntransport with no transport-specific code (zip SendStreamWriter is transport-\nagnostic). Everything the stream loop needs is captured BEFORE SendStreamWriter\nso the loop never touches the request Ctx after the handler returns (fasthttp\nrecycles it) — client-gone is detected by a flush error, bounded by a 25s\nheartbeat.",
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/sessions/stream", zip.Doc{
+		Description: "Is GET /v1/agent/sessions/stream — a Server-Sent Events feed of\nlive session + event updates for the caller's org. Optional ?root=<id> scopes\nthe feed to one subagent tree. Org-scoped (fail-closed): a subscriber only ever\nreceives its own tenant's updates because the bus filters on org.\n\nThis handler streams over BOTH the plain HTTP listener and the ZAP machine\ntransport with no transport-specific code (zip SendStreamWriter is transport-\nagnostic). Everything the stream loop needs is captured BEFORE SendStreamWriter\nso the loop never touches the request Ctx after the handler returns (fasthttp\nrecycles it) — client-gone is detected by a flush error, bounded by a 25s\nheartbeat.",
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/targets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/targets", zip.Doc{
 		Description: "Returns every machine registered to the caller's org, newest\nfirst, each with its live session load.",
 		Fields: map[string]string{
 			"GPU.memory":           "VRAM bytes, 0 = unknown",
@@ -418,7 +418,7 @@ func init() {
 			"targetView.updatedAt": "UpdatedAt is the last write to the row, same format — which for a beating\nmachine is its last heartbeat, since a heartbeat IS a write.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agents/targets/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents GET /v1/agent/targets/:id", zip.Doc{
 		Description: "Returns one registered machine, with its live session load.",
 		Fields: map[string]string{
 			"GPU.memory":           "VRAM bytes, 0 = unknown",
@@ -453,7 +453,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"tgt_1"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents PATCH /v1/agents/:ref", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents PATCH /v1/agent/:ref", zip.Doc{
 		Description: "Changes an agent in place. Every field is optional; a field the\nrequest omits keeps its stored value. The resulting mode+schedule are\nre-validated together, so a partial update can never leave a long-running\nagent without the cron the scheduler needs to fire it, and a transition INTO\nlong-running counts against the per-org cap on scheduled agents.",
 		Fields: map[string]string{
 			"agentView.avatar":               "Avatar is an image the agent is drawn as — a link to one, or the bytes\ninline as a data URL, up to 96 KiB. Emoji is the one glyph a caller picked\nwhen they had no image. At most one is ever set; neither means the agent is\ndrawn as its initial, the same way a person with no photo is. Both are\niam/pkg/schema's Mark, so a face means the same thing on an agent as it\ndoes on a person or an org.\nAvatar is the agent's picture: an image URL, or the image itself inline as a\ndata URL up to 96 KiB. Empty when the agent has no image.",
@@ -485,7 +485,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"ref":"helper","instructions":"be terse and cite sources"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents PATCH /v1/agents/sessions/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents PATCH /v1/agent/sessions/:id", zip.Doc{
 		Description: "Updates a session's surface-owned truth: its status, its title,\nthe run-target it is dispatched to, and the product it built plus whether that\nbuild's story is public. A FINISHED session stays finished — reopening a\ndone/error run would fabricate liveness — and publishing is refused unless the\nsession names the project it built, because the public build route is keyed on\n(org, project).",
 		Fields: map[string]string{
 			"lastEventView.actor":         "Actor is who produced the turn, defaulted to the calling principal when the\nwriter named nobody.",
@@ -537,7 +537,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"sess_1","status":"done"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents PATCH /v1/agents/targets/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents PATCH /v1/agent/targets/:id", zip.Doc{
 		Description: "Updates one machine in place. Every field is optional; a field the\nrequest omits is left alone. A metrics patch IS a heartbeat — the server stamps\nits own clock, so a client can neither forge nor backdate staleness.",
 		Fields: map[string]string{
 			"GPU.memory":             "VRAM bytes, 0 = unknown",
@@ -614,7 +614,7 @@ func init() {
 			"SessionMatchIn.subject": "Subject is the revoking user, unqualified. The answering side qualifies it.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agent", zip.Doc{
 		Description: "Defines an agent in the caller's org: a model, a system prompt\n(instructions) and a set of tool names. The name must be unique in the org and\nmatch ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. An omitted model takes the\ndeployment's configured default; a named one is checked against the gateway's\nserved catalog, so a model this deployment never serves is refused here rather\nthan failing at run time. A long-running agent must carry a 5-field cron\nschedule (the scheduler would otherwise never fire it) and counts against a\nper-org cap on scheduled agents.",
 		Fields: map[string]string{
 			"agentView.avatar":               "Avatar is an image the agent is drawn as — a link to one, or the bytes\ninline as a data URL, up to 96 KiB. Emoji is the one glyph a caller picked\nwhen they had no image. At most one is ever set; neither means the agent is\ndrawn as its initial, the same way a person with no photo is. Both are\niam/pkg/schema's Mark, so a face means the same thing on an agent as it\ndoes on a person or an org.\nAvatar is the agent's picture: an image URL, or the image itself inline as a\ndata URL up to 96 KiB. Empty when the agent has no image.",
@@ -646,10 +646,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"helper","model":"enso-flash","instructions":"be terse"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agents/:ref/run", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agent/:ref/run", zip.Doc{
 		Description: "Executes the agent: it composes the agent's instructions with the caller\ninput and runs a real chat completion via the in-process AI client, then\nrecords the run. Every returned run reflects an execution that actually\nhappened — an inference failure is recorded and returned as an error run, not\nhidden and not fabricated.",
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agents/sessions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agent/sessions", zip.Doc{
 		Description: "Opens a live agent session in the caller's org — the row every\nsurface (the CLI's outer agent, hanzo.bot, the console, chat) hangs its\nactivity off. A session with a parentSessionId becomes a subagent of that\nsession and inherits its root, so one flow is one tree; without one it is\nitself a root. Registering with a terminal status records a session that has\nalready finished.",
 		Fields: map[string]string{
 			"lastEventView.actor":         "Actor is who produced the turn, defaulted to the calling principal when the\nwriter named nobody.",
@@ -710,7 +710,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"agent":"hanzo-dev","title":"ship the landing page","host":"gpu-01"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agents/sessions/:id/events", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agent/sessions/:id/events", zip.Doc{
 		Description: "Records one turn of a session's transcript and answers 201 with it.\n\nA `progress` turn additionally MOVES THE SESSION'S PROGRESS, marked as the run's\nown word rather than an estimate, and pushes the updated session onto the live\nstream — so a board's bar follows the run without polling and without a second\nwrite path. See progress.go.\n\nTHE TURN IS SCANNED BEFORE IT IS STORED. The same engine the code-security\nsurface runs reads the payload at this boundary, and a credential in it refuses\nthe append with 422 rather than redacting it — a redacted transcript is one\nthat still had the secret in it once, and this way the author learns which\nvalue to rotate. The refusal carries every finding: the rule, the severity, the\nline, a MASKED preview and the fingerprint. The secret is never in the answer.",
 		Fields: map[string]string{
 			"eventIn.actor":       "Actor is who produced the turn. Empty takes the validated caller, which is\nwhat an agent writing its own transcript wants; naming one is for a surface\nrecording on somebody else's behalf.",
@@ -726,7 +726,7 @@ func init() {
 			"eventView.sessionId": "SessionID is the session this turn belongs to. Carried on every event so a\nstream frame stands alone — a subscriber watching a whole tree gets turns from\nseveral sessions down one connection.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agents/sessions/:id/message", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agent/sessions/:id/message", zip.Doc{
 		Description: "Sends a steering message to a running session — the endpoint a\nhuman or another agent interrupts through. It requires a `message` or a\n`payload`; the other three commands do not.",
 		Fields: map[string]string{
 			"controlIn.id":            "ID is the session to steer, from the path.",
@@ -744,7 +744,7 @@ func init() {
 			"eventView.sessionId":     "SessionID is the session this turn belongs to. Carried on every event so a\nstream frame stands alone — a subscriber watching a whole tree gets turns from\nseveral sessions down one connection.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agents/sessions/:id/pause", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agent/sessions/:id/pause", zip.Doc{
 		Description: "Asks a running session to pause. Recorded durably, and forwarded\nto the durable-execution engine when the session is task-backed.",
 		Fields: map[string]string{
 			"controlIn.id":            "ID is the session to steer, from the path.",
@@ -762,7 +762,7 @@ func init() {
 			"eventView.sessionId":     "SessionID is the session this turn belongs to. Carried on every event so a\nstream frame stands alone — a subscriber watching a whole tree gets turns from\nseveral sessions down one connection.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agents/sessions/:id/resume", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agent/sessions/:id/resume", zip.Doc{
 		Description: "Asks a paused session to continue, on the same terms as a pause.",
 		Fields: map[string]string{
 			"controlIn.id":            "ID is the session to steer, from the path.",
@@ -780,7 +780,7 @@ func init() {
 			"eventView.sessionId":     "SessionID is the session this turn belongs to. Carried on every event so a\nstream frame stands alone — a subscriber watching a whole tree gets turns from\nseveral sessions down one connection.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agents/sessions/:id/stop", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agent/sessions/:id/stop", zip.Doc{
 		Description: "Ends a running session. `message` is recorded as the cancellation\nreason, which is what a later reader of the transcript sees.\n\nSTOPPING IS NOT DELETING: the session, its transcript and anything it produced\nstay readable. A session that has already finished is 409 rather than a second\nstop.",
 		Fields: map[string]string{
 			"controlIn.id":            "ID is the session to steer, from the path.",
@@ -798,7 +798,7 @@ func init() {
 			"eventView.sessionId":     "SessionID is the session this turn belongs to. Carried on every event so a\nstream frame stands alone — a subscriber watching a whole tree gets turns from\nseveral sessions down one connection.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agents/targets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agent/targets", zip.Doc{
 		Description: "Registers a machine as an agent target, or re-links one that is\nalready registered. Re-linking is idempotent and keyed on org+host+owner, so a\nmachine that reconnects refreshes its own row rather than piling up duplicates;\nit answers 200, while a first registration answers 201.",
 		Fields: map[string]string{
 			"GPU.memory":           "VRAM bytes, 0 = unknown",
@@ -839,7 +839,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"label":"workshop","kind":"gpu","host":"gpu-01"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agents/targets/:id/claim", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agent/targets/:id/claim", zip.Doc{
 		Description: "ClaimRoutedRun is the machine's long poll for work: it authenticates the\ndaemon, stamps the liveness the dispatch gate reads (the poll IS the proof a\nrunner is listening), and waits up to 25 seconds for the next run addressed to\nTHIS machine. It answers the run when one arrives and 204 with no body when the\nwindow elapses, on which the daemon re-polls immediately.\n\nTWO independent proofs are required and both fail closed to the same 403: the\ncaller must own this machine (or be an org admin) AND present its claim key in\nX-Target-Key. A run offered to one machine is unreachable from another's claim.",
 		Fields: map[string]string{
 			"routedRunOut.base":           "Base is the branch to start FROM. Empty means the repository's default —\nresolve it on the machine, since the machine is the one holding the clone.",
@@ -854,7 +854,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"tgt_1"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agents/targets/:id/key", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agent/targets/:id/key", zip.Doc{
 		Description: "Mints (or rotates) the claim key a `hanzo code --serve`\ndaemon presents to claim work for this machine, and returns it ONCE: only its\nSHA-256 hash is stored. Rotating supersedes any prior daemon, so only the\nmachine's owner — or an org admin — may call it; every other caller gets the\nsame not-found an unknown id gets, and learns nothing about what exists.",
 		Fields: map[string]string{
 			"claimKeyOut.claimKey": "ClaimKey is the capability itself. It is returned ONCE and never again — only\nits SHA-256 hash is stored — so a daemon that loses it mints a new one.",
@@ -863,7 +863,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"tgt_1"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agents/targets/:id/runs/:runId/report", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/agents POST /v1/agent/targets/:id/runs/:runId/report", zip.Doc{
 		Description: "Completes a claimed run: it delivers the terminal result to the\nrun's durable owner, which is what lets that workflow finish. Scoped to (org,\ntarget, run) and claim-key authenticated, so a machine can only ever report a\nrun it legitimately holds. Idempotent — a report for an unknown or\nalready-finished run answers delivered:false rather than failing, because the\nsession's terminal state was already set by the machine's own stream.",
 		Fields: map[string]string{
 			"reportOut.delivered":   "Delivered is true when a waiting durable owner received this result. False\nmeans there was none to deliver to — an unknown or already-finished run — which\nis a clean no-op, not an error.",

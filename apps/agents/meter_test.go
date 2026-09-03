@@ -368,7 +368,7 @@ func TestLeavingResidencyBillsTheTail(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
 	ctx := context.Background()
 
-	if code, body := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "watcher", "model": "m", "executionMode": "long-running",
 			"schedule": "*/5 * * * *"}); code != http.StatusCreated {
 		t.Fatalf("create long-running: %d (%s)", code, body)
@@ -381,7 +381,7 @@ func TestLeavingResidencyBillsTheTail(t *testing.T) {
 		t.Fatalf("stamp: %v", err)
 	}
 
-	if code, body := do(t, app, http.MethodPatch, "/v1/agents/watcher", "acme",
+	if code, body := do(t, app, http.MethodPatch, "/v1/agent/watcher", "acme",
 		map[string]any{"executionMode": "one-shot"}); code != http.StatusOK {
 		t.Fatalf("patch to one-shot: %d (%s)", code, body)
 	}
@@ -412,7 +412,7 @@ func TestCloseResidencyTakesTheTailOnceAndOnlyOnce(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
 	ctx := context.Background()
 
-	if code, body := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "watcher", "model": "m", "executionMode": "long-running",
 			"schedule": "*/5 * * * *"}); code != http.StatusCreated {
 		t.Fatalf("create long-running: %d (%s)", code, body)

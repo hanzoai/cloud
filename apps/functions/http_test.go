@@ -60,19 +60,19 @@ func TestHTTPTenantGateAndIsolation(t *testing.T) {
 	app := mountApp(t)
 
 	// No org header → the org() gate refuses (403), never leaks an empty list.
-	if code, _ := do(t, app, http.MethodGet, "/v1/functions", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/function", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org list want 403, got %d", code)
 	}
 
 	// maxpower creates a function.
-	code, _ := do(t, app, http.MethodPost, "/v1/functions", "maxpower",
+	code, _ := do(t, app, http.MethodPost, "/v1/function", "maxpower",
 		map[string]any{"name": "resize", "runtime": "python", "code": "print('hi')"})
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
 
 	// maxpower sees it; the list shape is {functions:[...]}.
-	code, body := do(t, app, http.MethodGet, "/v1/functions", "maxpower", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/function", "maxpower", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d", code)
 	}
@@ -85,12 +85,12 @@ func TestHTTPTenantGateAndIsolation(t *testing.T) {
 	if len(listed.Functions) != 1 || listed.Functions[0].Name != "resize" {
 		t.Fatalf("maxpower should see [resize], got %+v", listed.Functions)
 	}
-	if listed.Functions[0].Endpoint != "/v1/functions/resize/invoke" {
+	if listed.Functions[0].Endpoint != "/v1/function/resize/invoke" {
 		t.Fatalf("endpoint should be the invoke URL, got %q", listed.Functions[0].Endpoint)
 	}
 
 	// acme (different org) must NOT see maxpower's function.
-	code, body = do(t, app, http.MethodGet, "/v1/functions", "acme", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/function", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("acme list want 200, got %d", code)
 	}
@@ -100,15 +100,15 @@ func TestHTTPTenantGateAndIsolation(t *testing.T) {
 	}
 
 	// acme cannot GET or DELETE maxpower's function — it is not found for acme.
-	if code, _ := do(t, app, http.MethodGet, "/v1/functions/resize", "acme", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/function/resize", "acme", nil); code != http.StatusNotFound {
 		t.Fatalf("acme GET maxpower fn want 404, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodDelete, "/v1/functions/resize", "acme", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/function/resize", "acme", nil); code != http.StatusNotFound {
 		t.Fatalf("acme DELETE maxpower fn want 404, got %d", code)
 	}
 
 	// maxpower's function survived acme's delete attempt.
-	if code, _ := do(t, app, http.MethodGet, "/v1/functions/resize", "maxpower", nil); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodGet, "/v1/function/resize", "maxpower", nil); code != http.StatusOK {
 		t.Fatalf("maxpower fn must survive, got %d", code)
 	}
 }
@@ -117,9 +117,9 @@ func TestHTTPTenantGateAndIsolation(t *testing.T) {
 // sandbox isn't configured — it returns 503 (no CODE_EXEC_UPSTREAM in tests).
 func TestHTTPInvokeFailsClosed(t *testing.T) {
 	app := mountApp(t)
-	do(t, app, http.MethodPost, "/v1/functions", "maxpower",
+	do(t, app, http.MethodPost, "/v1/function", "maxpower",
 		map[string]any{"name": "job", "runtime": "python", "code": "print(1)"})
-	code, body := do(t, app, http.MethodPost, "/v1/functions/job/invoke", "maxpower", map[string]any{"input": "x"})
+	code, body := do(t, app, http.MethodPost, "/v1/function/job/invoke", "maxpower", map[string]any{"input": "x"})
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("invoke with no sandbox want 503, got %d (%s)", code, body)
 	}
@@ -128,7 +128,7 @@ func TestHTTPInvokeFailsClosed(t *testing.T) {
 // TestHTTPStaticRoutesNotShadowed proves /metrics is not captured by :name.
 func TestHTTPStaticRoutesNotShadowed(t *testing.T) {
 	app := mountApp(t)
-	code, body := do(t, app, http.MethodGet, "/v1/functions/metrics", "maxpower", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/function/metrics", "maxpower", nil)
 	if code != http.StatusOK {
 		t.Fatalf("metrics want 200, got %d", code)
 	}

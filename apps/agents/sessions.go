@@ -14,20 +14,20 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// This file mounts the LIVE agent-session control plane under /v1/agents/sessions
+// This file mounts the LIVE agent-session control plane under /v1/agent/sessions
 // — the canonical registry every surface (the @hanzo/dev CLI outer agent,
 // hanzo.bot, console, chat, app) hangs off. It is the VIEW + control + ZAP-stream
 // layer over durable execution; the durable run itself is a hanzoai/tasks
 // workflow (see sessions_tasks.go), never a bespoke scheduler here.
 //
-//	POST   /v1/agents/sessions              register a session (opt parentSessionId) -> Session
-//	GET    /v1/agents/sessions              list live sessions (filter root/parent/status) -> {sessions:[...]}
-//	GET    /v1/agents/sessions/stream       SSE feed of session+event updates (rides ZAP)
-//	GET    /v1/agents/sessions/:id          detail + direct children + recent events -> SessionDetail
-//	PATCH  /v1/agents/sessions/:id          update status/title -> Session
-//	GET    /v1/agents/sessions/:id/tree     the full subagent-flow graph -> TreeNode
-//	POST   /v1/agents/sessions/:id/events   append an event (message/tool-call/spawn/log/progress) -> Event
-//	POST   /v1/agents/sessions/:id/{pause,resume,stop,message}  control command -> {command,event,forwarded}
+//	POST   /v1/agent/sessions              register a session (opt parentSessionId) -> Session
+//	GET    /v1/agent/sessions              list live sessions (filter root/parent/status) -> {sessions:[...]}
+//	GET    /v1/agent/sessions/stream       SSE feed of session+event updates (rides ZAP)
+//	GET    /v1/agent/sessions/:id          detail + direct children + recent events -> SessionDetail
+//	PATCH  /v1/agent/sessions/:id          update status/title -> Session
+//	GET    /v1/agent/sessions/:id/tree     the full subagent-flow graph -> TreeNode
+//	POST   /v1/agent/sessions/:id/events   append an event (message/tool-call/spawn/log/progress) -> Event
+//	POST   /v1/agent/sessions/:id/{pause,resume,stop,message}  control command -> {command,event,forwarded}
 //
 // Every route is org-scoped through principal.Org (a validated principal AND
 // a non-empty org), so cross-tenant reads/writes/control are refused fail-closed.
@@ -329,7 +329,7 @@ func toEventView(e Event) eventView {
 }
 
 // mountSessions registers the sessions routes. It MUST be called before the
-// /v1/agents/:name wildcard (Fiber matches in registration order, so a bare
+// /v1/agent/:name wildcard (Fiber matches in registration order, so a bare
 // :name would otherwise capture "sessions"). Within the block, the static
 // /stream route precedes the /:id param for the same reason.
 //
@@ -338,7 +338,7 @@ func toEventView(e Event) eventView {
 // identity every projection keys on.
 func mountSessions(s *cloud.Service[state], app cloud.Router) {
 	o := sessionOps{s: s}
-	g := app.Group("/v1/agents")
+	g := app.Group("/v1/agent")
 	zip.Post(g, "/sessions", o.register, zip.WithStatus(http.StatusCreated))
 	zip.Get(g, "/sessions", o.list)
 	// UNTYPED, and it cannot be otherwise: the stream is an open Server-Sent
@@ -386,7 +386,7 @@ func mountSessions(s *cloud.Service[state], app cloud.Router) {
 // rules; each statement leads with what its OWN command asks for and then states
 // the rules once, because a reader meets exactly one of these at a time.
 func init() {
-	openapi.Describe("/v1/agents/sessions/stream", http.MethodGet,
+	openapi.Describe("/v1/agent/sessions/stream", http.MethodGet,
 		"Live session and event updates for the caller's org, as Server-Sent Events.",
 		"Holds the connection open as text/event-stream and pushes a frame each time the org's "+
 			"registry moves: an `event: session` frame carrying the same session shape the list and "+
@@ -404,7 +404,7 @@ func init() {
 			"comment every 25 seconds holds the connection open through proxies and is how a "+
 			"departed client is noticed.")
 
-	openapi.Describe("/v1/agents/sessions/:id/events", http.MethodPost,
+	openapi.Describe("/v1/agent/sessions/:id/events", http.MethodPost,
 		"Append one turn to a session's ordered log.",
 		"Records a message, tool-call, spawn, log, status or control turn against the session and "+
 			"answers 201 with the stored event, including the monotonic `seq` the store assigned — "+
@@ -422,20 +422,20 @@ func init() {
 			"detected value itself appears nowhere in that body, because it was never stored. That "+
 			"in-band findings array is the reason this operation cannot be typed.")
 
-	openapi.Describe("/v1/agents/sessions/:id/pause", http.MethodPost,
+	openapi.Describe("/v1/agent/sessions/:id/pause", http.MethodPost,
 		"Ask a running session to pause.",
 		"Records `pause` as a durable control event on the session and answers 200 with "+
 			"{command, event, forwarded} — the stored event carries the `seq` that orders it "+
 			"against every other turn. "+controlRules)
 
-	openapi.Describe("/v1/agents/sessions/:id/resume", http.MethodPost,
+	openapi.Describe("/v1/agent/sessions/:id/resume", http.MethodPost,
 		"Ask a paused session to carry on.",
 		"Records `resume` as a durable control event on the session and answers 200 with "+
 			"{command, event, forwarded}. The session is NOT required to be paused first: the "+
 			"only status this refuses is a finished one, because the live status is the running "+
 			"surface's to report rather than this endpoint's to enforce. "+controlRules)
 
-	openapi.Describe("/v1/agents/sessions/:id/stop", http.MethodPost,
+	openapi.Describe("/v1/agent/sessions/:id/stop", http.MethodPost,
 		"Ask a session to stop for good.",
 		"Records `stop` as a durable control event on the session and answers 200 with "+
 			"{command, event, forwarded}. Stop is the one command that CANCELS a task-backed "+
@@ -444,7 +444,7 @@ func init() {
 			"with the request's `message` recorded as the cancellation reason (a default stands in "+
 			"when none is given). "+controlRules)
 
-	openapi.Describe("/v1/agents/sessions/:id/message", http.MethodPost,
+	openapi.Describe("/v1/agent/sessions/:id/message", http.MethodPost,
 		"Send text into a running session.",
 		"Records `message` as a durable control event carrying the caller's text and answers 200 "+
 			"with {command, event, forwarded} — this is how a dashboard steers an agent mid-run. "+
@@ -1062,7 +1062,7 @@ func (o sessionOps) patch(ctx context.Context, in *patchSessionIn) (*sessionView
 	if body.Published != nil {
 		// Publishing is the author's act and it is what makes the PUBLIC build
 		// route answer at all, so it is refused unless the session names the
-		// product it built — /v1/agents/builds is keyed on (org, project).
+		// product it built — /v1/agent/builds is keyed on (org, project).
 		if *body.Published && x.Project == "" {
 			return nil, zip.ErrBadRequest("published requires a project — a build with no product is not a story anyone can open")
 		}
@@ -1153,7 +1153,7 @@ func signalPayload(b controlReq) []byte {
 	return nil
 }
 
-// ---- run integration (#5): a /v1/agents/:name/run opens a root session ----
+// ---- run integration (#5): a /v1/agent/:name/run opens a root session ----
 
 // openRunSession records a completed agent run as a ROOT session so every run is
 // visible in the same registry the @hanzo/dev outer-agent flows use. Best-effort:

@@ -122,7 +122,7 @@ func req(t *testing.T, app *zip.App, method, path, org string, body any) httpRes
 // the callback is exercised with a genuine state (not a hand-forged one).
 func connectSlack(t *testing.T, app *zip.App, org, code string) httpResult {
 	t.Helper()
-	res := req(t, app, http.MethodPost, "/v1/integrations/slack/connect", org, nil)
+	res := req(t, app, http.MethodPost, "/v1/integration/slack/connect", org, nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("connect want 200, got %d (%s)", res.Code, res.Body)
 	}
@@ -141,7 +141,7 @@ func connectSlack(t *testing.T, app *zip.App, org, code string) httpResult {
 		t.Fatal("authorizeUrl missing state")
 	}
 	return req(t, app, http.MethodGet,
-		"/v1/integrations/slack/callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(state), "", nil)
+		"/v1/integration/slack/callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(state), "", nil)
 }
 
 func slackConfiguredEnv(t *testing.T) {
@@ -154,11 +154,11 @@ func TestIntegrationsListShape(t *testing.T) {
 	app := newApp(t, newKMS(t))
 
 	// No principal → 403 (status is per-org, an org is required).
-	if r := req(t, app, http.MethodGet, "/v1/integrations", "", nil); r.Code != http.StatusForbidden {
+	if r := req(t, app, http.MethodGet, "/v1/integration", "", nil); r.Code != http.StatusForbidden {
 		t.Fatalf("no-principal list want 403, got %d", r.Code)
 	}
 
-	r := req(t, app, http.MethodGet, "/v1/integrations", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration", "acme", nil)
 	if r.Code != http.StatusOK {
 		t.Fatalf("list want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -188,7 +188,7 @@ func TestIntegrationsListShape(t *testing.T) {
 	}
 
 	// Unknown provider id → 404.
-	if r := req(t, app, http.MethodGet, "/v1/integrations/nope", "acme", nil); r.Code != http.StatusNotFound {
+	if r := req(t, app, http.MethodGet, "/v1/integration/nope", "acme", nil); r.Code != http.StatusNotFound {
 		t.Fatalf("unknown provider want 404, got %d", r.Code)
 	}
 }
@@ -196,7 +196,7 @@ func TestIntegrationsListShape(t *testing.T) {
 func TestIntegrationsConnectUnconfigured503(t *testing.T) {
 	// github has no creds → connect is an honest 503, never a dead-end.
 	app := newApp(t, newKMS(t))
-	if r := req(t, app, http.MethodPost, "/v1/integrations/github/connect", "acme", nil); r.Code != http.StatusServiceUnavailable {
+	if r := req(t, app, http.MethodPost, "/v1/integration/github/connect", "acme", nil); r.Code != http.StatusServiceUnavailable {
 		t.Fatalf("connect unconfigured want 503, got %d (%s)", r.Code, r.Body)
 	}
 }
@@ -204,7 +204,7 @@ func TestIntegrationsConnectUnconfigured503(t *testing.T) {
 func TestIntegrationsConnectNoPrincipal403(t *testing.T) {
 	slackConfiguredEnv(t)
 	app := newApp(t, newKMS(t))
-	if r := req(t, app, http.MethodPost, "/v1/integrations/slack/connect", "", nil); r.Code != http.StatusForbidden {
+	if r := req(t, app, http.MethodPost, "/v1/integration/slack/connect", "", nil); r.Code != http.StatusForbidden {
 		t.Fatalf("connect no-principal want 403, got %d", r.Code)
 	}
 }
@@ -214,7 +214,7 @@ func TestIntegrationsConnectKMSNotReady503(t *testing.T) {
 	// Mount with NO KMS client → secret custody is impossible → connect 503,
 	// never a plaintext fallback.
 	app := newApp(t, nil)
-	if r := req(t, app, http.MethodPost, "/v1/integrations/slack/connect", "acme", nil); r.Code != http.StatusServiceUnavailable {
+	if r := req(t, app, http.MethodPost, "/v1/integration/slack/connect", "acme", nil); r.Code != http.StatusServiceUnavailable {
 		t.Fatalf("connect with KMS down want 503, got %d (%s)", r.Code, r.Body)
 	}
 }
@@ -226,7 +226,7 @@ func TestIntegrationsConnectKMSNotReady503(t *testing.T) {
 func TestIntegrationsConnectNeedsAnOrg(t *testing.T) {
 	slackConfiguredEnv(t)
 	app := newApp(t, newKMS(t))
-	if r := req(t, app, http.MethodPost, "/v1/integrations/slack/connect", "  ", nil); r.Code != http.StatusForbidden {
+	if r := req(t, app, http.MethodPost, "/v1/integration/slack/connect", "  ", nil); r.Code != http.StatusForbidden {
 		t.Fatalf("connect with no org scope want 403, got %d (%s)", r.Code, r.Body)
 	}
 }
@@ -275,7 +275,7 @@ func TestIntegrationsCallbackHappyPath(t *testing.T) {
 	}
 
 	// The card now shows connected + the account label.
-	r := req(t, app, http.MethodGet, "/v1/integrations", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration", "acme", nil)
 	var out struct {
 		Providers []providerView `json:"providers"`
 	}
@@ -299,7 +299,7 @@ func TestIntegrationsCallbackReplayRejected(t *testing.T) {
 	stubSlackAPI(t)
 	app := newApp(t, newKMS(t))
 
-	res := req(t, app, http.MethodPost, "/v1/integrations/slack/connect", "acme", nil)
+	res := req(t, app, http.MethodPost, "/v1/integration/slack/connect", "acme", nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("connect: %d", res.Code)
 	}
@@ -309,7 +309,7 @@ func TestIntegrationsCallbackReplayRejected(t *testing.T) {
 	_ = json.Unmarshal(res.Body, &out)
 	u, _ := url.Parse(out.AuthorizeURL)
 	state := u.Query().Get("state")
-	cbPath := "/v1/integrations/slack/callback?code=goodcode&state=" + url.QueryEscape(state)
+	cbPath := "/v1/integration/slack/callback?code=goodcode&state=" + url.QueryEscape(state)
 
 	// First callback with a valid, single-use state succeeds.
 	if r := req(t, app, http.MethodGet, cbPath, "", nil); r.Code != http.StatusFound || !strings.Contains(r.Location, "connected=slack") {
@@ -328,7 +328,7 @@ func TestIntegrationsCallbackTamperedStateRejected(t *testing.T) {
 	stubSlackAPI(t)
 	app := newApp(t, newKMS(t))
 	// A forged state never verifies → failure redirect, NEVER an exchange.
-	r := req(t, app, http.MethodGet, "/v1/integrations/slack/callback?code=goodcode&state=forged.deadbeef", "", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration/slack/callback?code=goodcode&state=forged.deadbeef", "", nil)
 	if r.Code != http.StatusFound || !strings.Contains(r.Location, "error=slack") {
 		t.Fatalf("tampered state want failure 302, got %d %q", r.Code, r.Location)
 	}
@@ -351,7 +351,7 @@ func TestIntegrationsDisconnect(t *testing.T) {
 		t.Fatalf("precondition: token must exist: %v", err)
 	}
 
-	r := req(t, app, http.MethodPost, "/v1/integrations/slack/disconnect", "acme", nil)
+	r := req(t, app, http.MethodPost, "/v1/integration/slack/disconnect", "acme", nil)
 	if r.Code != http.StatusOK {
 		t.Fatalf("disconnect want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -372,7 +372,7 @@ func TestIntegrationsDisconnect(t *testing.T) {
 		t.Fatal("connection row must be gone after disconnect")
 	}
 	// Idempotent.
-	if r := req(t, app, http.MethodPost, "/v1/integrations/slack/disconnect", "acme", nil); r.Code != http.StatusOK {
+	if r := req(t, app, http.MethodPost, "/v1/integration/slack/disconnect", "acme", nil); r.Code != http.StatusOK {
 		t.Fatalf("second disconnect want 200, got %d", r.Code)
 	}
 }
@@ -388,7 +388,7 @@ func TestIntegrationsOrgIsolation(t *testing.T) {
 	}
 
 	// globex sees slack NOT connected.
-	r := req(t, app, http.MethodGet, "/v1/integrations", "globex", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration", "globex", nil)
 	var out struct {
 		Providers []providerView `json:"providers"`
 	}
@@ -524,7 +524,7 @@ func TestIntegrationsDisconnectNoPrincipal403(t *testing.T) {
 	}
 	// Forge: X-Org-Id present but NO validated principal (org == "" sends no headers;
 	// send the header directly to simulate the bearer-less restore path).
-	rq := httptest.NewRequest(http.MethodPost, "/v1/integrations/slack/disconnect", nil)
+	rq := httptest.NewRequest(http.MethodPost, "/v1/integration/slack/disconnect", nil)
 	rq.Header.Set("X-Org-Id", "acme") // forged org, no X-User-Id
 	resp, err := app.Test(rq)
 	if err != nil {
@@ -570,7 +570,7 @@ func TestIntegrationsGithubCallbackFailsClosed(t *testing.T) {
 		t.Fatalf("sign: %v", err)
 	}
 	r := req(t, app, http.MethodGet,
-		"/v1/integrations/github/callback?code=inst_123&state="+url.QueryEscape(state), "", nil)
+		"/v1/integration/github/callback?code=inst_123&state="+url.QueryEscape(state), "", nil)
 	if r.Code != http.StatusFound || !strings.Contains(r.Location, "error=github") {
 		t.Fatalf("github scaffold callback must fail closed, got %d %q", r.Code, r.Location)
 	}
@@ -586,7 +586,7 @@ func TestIntegrationsCallbackOversizedCodeRejected(t *testing.T) {
 	stubSlackAPI(t)
 	app := newApp(t, newKMS(t))
 
-	res := req(t, app, http.MethodPost, "/v1/integrations/slack/connect", "acme", nil)
+	res := req(t, app, http.MethodPost, "/v1/integration/slack/connect", "acme", nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("connect: %d", res.Code)
 	}
@@ -602,7 +602,7 @@ func TestIntegrationsCallbackOversizedCodeRejected(t *testing.T) {
 	// transport) and trips the explicit maxCodeLen guard.
 	huge := strings.Repeat("x", maxCodeLen+64)
 	cb := req(t, app, http.MethodGet,
-		"/v1/integrations/slack/callback?code="+huge+"&state="+url.QueryEscape(state), "", nil)
+		"/v1/integration/slack/callback?code="+huge+"&state="+url.QueryEscape(state), "", nil)
 	if cb.Code != http.StatusFound || !strings.Contains(cb.Location, "error=slack") {
 		t.Fatalf("oversized code must fail closed, got %d %q", cb.Code, cb.Location)
 	}

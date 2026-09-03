@@ -21,23 +21,23 @@ import "testing"
 // plugin/<app>/main.go with the composition root; a change to one of those is now a
 // one-line diff in that app's own file, where it is reviewed in context.
 var frozen = []string{
-	"pubsub", "kv", "kafka", "amqp", "mq", "skills", "flags", "kms", "metrics",
+	"pubsub", "kv", "kafka", "amqp", "mq", "skills", "flag", "kms", "metrics",
 	"ingress", "account", "iam", "base", "o11y", "authz",
 	"commerce", "licensing", "plan", "pricing", "s3", "space", "provisioning",
-	"billing", "allowance", "platform", "projects",
-	"dns", "domain", "prompt", "agents", "link", "wallet",
-	"x402", "deploy", "functions", "todo", "template", "blueprint",
+	"billing", "allowance", "platform", "project",
+	"dns", "domain", "prompt", "agent", "link", "wallet",
+	"x402", "deploy", "function", "todo", "template", "blueprint",
 	"framework", "knowledge", "graph", "help", "content", "webhook",
 	"ml", "label", "reference", "risk", "dataset", "usage", "leaderboard", "marketing", "ad",
 	"campaign", "validator", "social", "standing", "event", "ci", "git", "sync",
 	"visor", "captable", "code", "lsp", "network", "share",
-	"dataroom", "explorer", "market", "security", "integrations", "destination", "cloudflare",
+	"dataroom", "explorer", "market", "security", "integration", "destination", "cloudflare",
 	"sbom", "team", "meet", "settings", "pref", "notify",
-	"channels", "gateway", "entitlement", "exec", "sandbox", "websearch", "crawl", "seo",
+	"channel", "gateway", "entitlement", "exec", "sandbox", "websearch", "crawl", "seo",
 	"index", "catalog", "taxonomy", "world", "web3", "bot", "node", "author",
 	"audit", "affiliate", "esign", "search", "eval",
 	"benchmark", "research", "experiment", "books", "treasury", "admin",
-	"admission", "tasks", "tel", "auto", "flow", "engine", "registry", "tools", "marketplace", "referral",
+	"admission", "task", "tel", "auto", "flow", "engine", "registry", "tool", "marketplace", "referral",
 	// `agent` is GONE from this sequence on purpose: it was a second app beside
 	// `agents`, one concept with two plugins and a pair of names differing by an
 	// `s`. Its surface (/v1/agent and its presets/conversations) is mounted by

@@ -93,11 +93,11 @@ func TestRunGatesUnfundedOrg(t *testing.T) {
 	bs := &billServer{available: 0}
 	app := mountBilled(t, bs.start(t), &fakeAI{content: "should not run"})
 
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
-	code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"})
+	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusPaymentRequired {
 		t.Fatalf("unfunded run want 402, got %d (%s)", code, body)
 	}
@@ -114,9 +114,9 @@ func TestRunGatesUnderfundedOrg(t *testing.T) {
 	bs := &billServer{available: 1} // 1 cent, fee is 100 cents
 	app := mountBilled(t, bs.start(t), &fakeAI{content: "should not run"})
 
-	do(t, app, http.MethodPost, "/v1/agents", "acme",
+	do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "a", "model": "m", "instructions": "x"})
-	code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"})
+	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusPaymentRequired {
 		t.Fatalf("underfunded (1c < 100c fee) run want 402, got %d (%s)", code, body)
 	}
@@ -132,9 +132,9 @@ func TestRunDebitsCallerOrg(t *testing.T) {
 	bs := &billServer{available: 100000}
 	app := mountBilled(t, bs.start(t), &fakeAI{content: "the answer"})
 
-	do(t, app, http.MethodPost, "/v1/agents", "acme",
+	do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"})
-	code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"})
+	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("funded run want 200, got %d (%s)", code, body)
 	}
@@ -177,14 +177,14 @@ func TestRunByReturnedIDMetersOnce(t *testing.T) {
 	bs := &billServer{available: 100000}
 	app := mountBilled(t, bs.start(t), &fakeAI{content: "the answer"})
 
-	_, body := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	_, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"})
 	var created agentView
 	if err := json.Unmarshal(body, &created); err != nil || created.ID == "" {
 		t.Fatalf("create must return an id, got %s (err %v)", body, err)
 	}
 
-	code, rbody := do(t, app, http.MethodPost, "/v1/agents/"+created.ID+"/run", "acme", map[string]any{"input": "hi"})
+	code, rbody := do(t, app, http.MethodPost, "/v1/agent/"+created.ID+"/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("run by returned id want 200, got %d (%s)", code, rbody)
 	}
@@ -211,9 +211,9 @@ func TestFailedRunNotBilled(t *testing.T) {
 	bs := &billServer{available: 100000}
 	app := mountBilled(t, bs.start(t), &fakeAI{err: errTest})
 
-	do(t, app, http.MethodPost, "/v1/agents", "acme",
+	do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "a", "model": "m", "instructions": "x"})
-	code, _ := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"})
+	code, _ := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusBadGateway {
 		t.Fatalf("errored run want 502, got %d", code)
 	}
@@ -232,12 +232,12 @@ func TestRunRequiresValidatedPrincipal(t *testing.T) {
 	app := mountBilled(t, bs.start(t), &fakeAI{content: "must not run"})
 
 	// create is allowed with X-User-Id (via do()).
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "a", "model": "m", "instructions": "x"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
 	// A raw run request carrying ONLY X-Org-Id (no X-User-Id) must be 403.
-	req := httptest.NewRequest(http.MethodPost, "/v1/agents/a/run", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/agent/a/run", nil)
 	req.Header.Set("X-Org-Id", "acme") // forged/unvalidated org, no principal
 	resp, err := app.Test(req, deadline)
 	if err != nil {

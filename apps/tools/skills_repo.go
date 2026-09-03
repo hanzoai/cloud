@@ -15,7 +15,7 @@ import (
 // skills_repo.go — an org's skills are the SKILL.md files in its repositories.
 //
 // The brand's catalogue is generated and embedded; an org's own skills are rows
-// in the skill store, written through POST /v1/tools/skills. That leaves a team
+// in the skill store, written through POST /v1/tool/skills. That leaves a team
 // that keeps its skills in a repository — reviewed, versioned, one pull request
 // per change — copying them across by hand. Hanzo Git reads
 // `.agents/skills/<name>/SKILL.md` from a default-branch push and hands the set
@@ -67,7 +67,7 @@ func planeSkills(ctx context.Context, in *plane.SkillsIn) (*plane.Skills, error)
 
 // skillFromFile reads one repository file as a skill. The name is the directory
 // the file sits in, under skillsDir, and must be one lowercase path segment as
-// POST /v1/tools/skills requires; the description is the frontmatter's, which
+// POST /v1/tool/skills requires; the description is the frontmatter's, which
 // the brand's generator writes as a JSON string and a person writes bare. The
 // content is the whole file, frontmatter included, as the agent will read it.
 func skillFromFile(p, content string) (Skill, bool) {

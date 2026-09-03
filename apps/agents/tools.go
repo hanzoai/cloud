@@ -164,7 +164,7 @@ type toolPlane interface {
 var runTools toolPlane = surfaceTools{}
 
 // registryTools is the tool plane read IN THIS PROCESS: tools.Default(), the same
-// registry POST /v1/tools/call dispatches through, with the same activation gate,
+// registry POST /v1/tool/call dispatches through, with the same activation gate,
 // the same source precedence and the same x402 settlement. It is the whole answer
 // where the tool plane is co-resident, and it is honest where it is not — the
 // registry simply offers nothing.

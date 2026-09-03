@@ -40,7 +40,7 @@ func exposeBoard() {
 }
 
 // board answers the switchboard through this app's own [Board], so the plane and
-// /v1/flags render one value. A second projection here would be a second answer to
+// /v1/flag render one value. A second projection here would be a second answer to
 // "what is in force", and the two would disagree the day a default moves.
 func board(ctx context.Context, _ *plane.Unit) (*plane.FlagBoard, error) {
 	if cloud.Who(ctx).Org == "" {

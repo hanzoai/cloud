@@ -25,14 +25,14 @@ func TestOrgKeyInjectiveNoFold(t *testing.T) {
 	}
 	for _, p := range pairs {
 		a, b := p[0], p[1]
-		if code, body := do(t, app, http.MethodPost, "/v1/projects", a, map[string]any{"name": "own"}); code != http.StatusCreated {
+		if code, body := do(t, app, http.MethodPost, "/v1/project", a, map[string]any{"name": "own"}); code != http.StatusCreated {
 			t.Fatalf("org %q create: %d %s", a, code, body)
 		}
-		if code, body := do(t, app, http.MethodPost, "/v1/projects", b, map[string]any{"name": "own"}); code != http.StatusCreated {
+		if code, body := do(t, app, http.MethodPost, "/v1/project", b, map[string]any{"name": "own"}); code != http.StatusCreated {
 			t.Fatalf("org %q create (fold twin): %d %s", b, code, body)
 		}
 		// b must see ONLY its own project — never a's (no shared namespace).
-		code, body := do(t, app, http.MethodGet, "/v1/projects", b, nil)
+		code, body := do(t, app, http.MethodGet, "/v1/project", b, nil)
 		if code != http.StatusOK {
 			t.Fatalf("org %q list: %d %s", b, code, body)
 		}
@@ -44,10 +44,10 @@ func TestOrgKeyInjectiveNoFold(t *testing.T) {
 			t.Fatalf("fold leak: org %q sees %d projects (want its own 1): %+v", b, len(list), list)
 		}
 		// a's slug is org-scoped: deleting "own" under b must NOT touch a's "own".
-		if code, body := do(t, app, http.MethodDelete, "/v1/projects/own", b, nil); code != http.StatusNoContent {
+		if code, body := do(t, app, http.MethodDelete, "/v1/project/own", b, nil); code != http.StatusNoContent {
 			t.Fatalf("org %q delete own: %d %s", b, code, body)
 		}
-		if code, _ := do(t, app, http.MethodGet, "/v1/projects/own", a, nil); code != http.StatusOK {
+		if code, _ := do(t, app, http.MethodGet, "/v1/project/own", a, nil); code != http.StatusOK {
 			t.Fatalf("org %q project was deleted by its fold-twin %q — NOT isolated", a, b)
 		}
 	}
@@ -56,7 +56,7 @@ func TestOrgKeyInjectiveNoFold(t *testing.T) {
 	// let an owner escape its sitePrefix segment. `do` sets a validated principal
 	// (X-User-Id), so this exercises the orgPathSafe refusal, not the anonymous path.
 	for _, bad := range []string{"a/b", "..", "../x", "a\\b"} {
-		if code, body := do(t, app, http.MethodGet, "/v1/projects", bad, nil); code != http.StatusForbidden {
+		if code, body := do(t, app, http.MethodGet, "/v1/project", bad, nil); code != http.StatusForbidden {
 			t.Fatalf("path-hostile org %q must be 403, got %d %s", bad, code, body)
 		}
 	}
@@ -73,16 +73,16 @@ func TestPlainProjectGitDeployStampsBucket(t *testing.T) {
 	app := mountApp(t)
 
 	// Create a plain project, then link a repo (makes it a git-buildable site).
-	if code, b := do(t, app, http.MethodPost, "/v1/projects", "acme", map[string]any{"name": "myblog"}); code != http.StatusCreated {
+	if code, b := do(t, app, http.MethodPost, "/v1/project", "acme", map[string]any{"name": "myblog"}); code != http.StatusCreated {
 		t.Fatalf("create: %d %s", code, b)
 	}
-	if code, b := do(t, app, http.MethodPatch, "/v1/projects/myblog", "acme", map[string]any{"repo": map[string]any{"url": "https://github.com/acme/myblog"}}); code != http.StatusOK {
+	if code, b := do(t, app, http.MethodPatch, "/v1/project/myblog", "acme", map[string]any{"repo": map[string]any{"url": "https://github.com/acme/myblog"}}); code != http.StatusOK {
 		t.Fatalf("link repo: %d %s", code, b)
 	}
 
 	// Open a deployment → 202 queued deployment. This used to be the same address
 	// as the archive upload, chosen by Content-Type; it is its own typed op now.
-	code, b := do(t, app, http.MethodPost, "/v1/projects/myblog/deployments", "acme", map[string]any{})
+	code, b := do(t, app, http.MethodPost, "/v1/project/myblog/deployments", "acme", map[string]any{})
 	if code != http.StatusAccepted {
 		t.Fatalf("start deployment must be 202, got %d %s", code, b)
 	}
@@ -95,13 +95,13 @@ func TestPlainProjectGitDeployStampsBucket(t *testing.T) {
 	}
 
 	// CI completion flips it live.
-	if code, b := do(t, app, http.MethodPost, "/v1/projects/myblog/deployments/"+dep.ID+"/complete", "acme", map[string]any{"status": "live"}); code != http.StatusOK {
+	if code, b := do(t, app, http.MethodPost, "/v1/project/myblog/deployments/"+dep.ID+"/complete", "acme", map[string]any{"status": "live"}); code != http.StatusOK {
 		t.Fatalf("complete must be 200, got %d %s", code, b)
 	}
 
 	// The project is now live AND carries a non-empty bucket. Without it,
 	// siteResolver.Resolve returns Site.Bucket="" and the live site 404s.
-	code, b = do(t, app, http.MethodGet, "/v1/projects/myblog", "acme", nil)
+	code, b = do(t, app, http.MethodGet, "/v1/project/myblog", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("get after deploy: %d %s", code, b)
 	}

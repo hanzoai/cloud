@@ -120,7 +120,7 @@ func pushPayload(t *testing.T, inst int64, repo, ref string) []byte {
 // non-empty; org, when non-empty, sets a (would-be-spoofed) X-Org-Id header.
 func webhookPost(t *testing.T, app *zip.App, event, sig, org string, payload []byte) httpResult {
 	t.Helper()
-	rq := httptest.NewRequest(http.MethodPost, "/v1/integrations/github/webhook", bytes.NewReader(payload))
+	rq := httptest.NewRequest(http.MethodPost, "/v1/integration/github/webhook", bytes.NewReader(payload))
 	rq.Header.Set("Content-Type", "application/json")
 	rq.Header.Set("X-GitHub-Event", event)
 	if sig != "" {
@@ -279,7 +279,7 @@ func TestImportHandlerGrantScopedBackground(t *testing.T) {
 	_ = mounted.State.store.Upsert(context.Background(), Connection{Org: "acme", Provider: "github", ExternalID: "333"})
 
 	// Import ONLY alpha.
-	r := req(t, app, http.MethodPost, "/v1/integrations/github/repos/import", "acme", map[string]any{"repos": []string{"alpha"}})
+	r := req(t, app, http.MethodPost, "/v1/integration/github/repos/import", "acme", map[string]any{"repos": []string{"alpha"}})
 	if r.Code != http.StatusAccepted {
 		t.Fatalf("import want 202, got %d (%s)", r.Code, r.Body)
 	}
@@ -294,7 +294,7 @@ func TestImportHandlerGrantScopedBackground(t *testing.T) {
 	}
 
 	// A repo NOT granted to the installation is refused (400) — no arbitrary import.
-	if r := req(t, app, http.MethodPost, "/v1/integrations/github/repos/import", "acme", map[string]any{"repos": []string{"not-granted"}}); r.Code != http.StatusBadRequest {
+	if r := req(t, app, http.MethodPost, "/v1/integration/github/repos/import", "acme", map[string]any{"repos": []string{"not-granted"}}); r.Code != http.StatusBadRequest {
 		t.Fatalf("importing an ungranted repo want 400, got %d (%s)", r.Code, r.Body)
 	}
 }

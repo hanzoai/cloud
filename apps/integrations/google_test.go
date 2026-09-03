@@ -30,7 +30,7 @@ func TestGoogleRegisteredProvider(t *testing.T) {
 // refresh token), the requested scopes, and the state.
 func TestGoogleAuthorizeURL(t *testing.T) {
 	creds := OAuthConfig{ClientID: "cid.apps.googleusercontent.com"}
-	raw, err := googleAuthorize(creds, "https://api.hanzo.ai/v1/integrations/google/callback", "st8")
+	raw, err := googleAuthorize(creds, "https://api.hanzo.ai/v1/integration/google/callback", "st8")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestGoogleExchange(t *testing.T) {
 	defer func() { googleTokenURL, googleUserinfoURL = oldT, oldU }()
 
 	creds := OAuthConfig{ClientID: "cid", ClientSecret: "secret"}
-	res, err := googleExchange(context.Background(), creds, "https://api.hanzo.ai/v1/integrations/google/callback", "authcode")
+	res, err := googleExchange(context.Background(), creds, "https://api.hanzo.ai/v1/integration/google/callback", "authcode")
 	if err != nil {
 		t.Fatalf("exchange: %v", err)
 	}

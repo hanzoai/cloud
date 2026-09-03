@@ -3,7 +3,7 @@
 //
 // The fleet is already visible, just never in one place: Visor's machines
 // (/v1/visor/machines), the BYO workers that dialed in (/v1/visor/fleet/workers), the BYO
-// clusters (/v1/visor/clusters) and the agent run-targets (/v1/agents/targets) each
+// clusters (/v1/visor/clusters) and the agent run-targets (/v1/agent/targets) each
 // answer for their own plane. This unions them behind the tenant's ONE question —
 // "what compute do I have, and how hot is it?" — and overlays the utilization
 // series (clients/samples) that no source used to keep.
@@ -45,7 +45,7 @@ import (
 // COUNT plus the representative model — the same shape the sample row carries
 // (gpus UInt8 + gpu_model String), so the board and the series describe a machine
 // the same way. Full per-accelerator detail stays on each source's own face
-// (/v1/agents/targets, /v1/visor/fleet/workers); the board summarizes.
+// (/v1/agent/targets, /v1/visor/fleet/workers); the board summarizes.
 type fleetSpec struct {
 	// OS is the operating system the unit runs: linux, darwin or windows. Empty
 	// when the source does not report one — a cluster row does not.
@@ -96,7 +96,7 @@ type fleetUnit struct {
 	// Source is the plane this row came from: "agent" (a linked run-target), "byo"
 	// (a worker or cluster the org dialed in) or "visor" (a machine Hanzo
 	// provisioned). It is half the row's identity, and it says which face owns the
-	// unit — /v1/agents/targets, /v1/visor/fleet/workers, /v1/visor/machines.
+	// unit — /v1/agent/targets, /v1/visor/fleet/workers, /v1/visor/machines.
 	Source string `json:"source"`
 	// Unit is the SOURCE's own id for this unit — a run-target id, a BYO worker id,
 	// a Visor machine name — so a row links straight back to the face that owns it.

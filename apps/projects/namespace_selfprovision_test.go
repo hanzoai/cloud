@@ -46,7 +46,7 @@ func TestRedGoneNeverMintsTheNamespace(t *testing.T) {
 	// create path is allowed to. Only what the DELETE does is on trial.
 	mark := redSeenLen(f)
 
-	if code, body := do(t, app, http.MethodDelete, "/v1/projects/board", "acme", nil); code != http.StatusNoContent {
+	if code, body := do(t, app, http.MethodDelete, "/v1/project/board", "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("delete want 204, got %d (%s)", code, body)
 	}
 	drained(t, s)

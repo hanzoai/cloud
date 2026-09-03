@@ -37,7 +37,7 @@ var newOAuthConnectors = []struct {
 
 // TestNewKeyConnectorsWellFormed asserts every new key connector satisfies Mount's
 // user-scope contract: Verify present, api_key custody + category set, and NO org-plane
-// fields — so boot cannot panic and /v1/integrations/connectors derives method "token".
+// fields — so boot cannot panic and /v1/integration/connectors derives method "token".
 func TestNewKeyConnectorsWellFormed(t *testing.T) {
 	for _, id := range newKeyConnectors {
 		p, ok := registry[id]
@@ -110,7 +110,7 @@ var keyWireCases = []struct {
 	{"zendesk", "ZENDESK_API_BASE", "/api/v2/users/me.json", "me@co.com/token:" + sentinel, "acme", basicRaw, ""},
 	{"pipedrive", "PIPEDRIVE_API_BASE", "/v1/users/me", sentinel + "PIPE", "", headerAt, "x-api-token"},
 	{"intercom", "INTERCOM_API_BASE", "/me", sentinel + "INTER", "", bearer, ""},
-	{"reamaze", "REAMAZE_API_BASE", "/api/v1/channels", "me@co.com:" + sentinel, "acme", basicRaw, ""},
+	{"reamaze", "REAMAZE_API_BASE", "/api/v1/channel", "me@co.com:" + sentinel, "acme", basicRaw, ""},
 	{"optimizely", "OPTIMIZELY_API_BASE", "/v2/projects", sentinel + "OPTI", "", bearer, ""},
 	{"amplitude", "AMPLITUDE_API_BASE", "/api/2/annotations", "apikey:" + sentinel, "", basicRaw, ""},
 	{"mixpanel", "MIXPANEL_API_BASE", "/api/app/projects/PROJ42/schemas", "sauser:" + sentinel, "PROJ42", basicRaw, ""},

@@ -28,7 +28,7 @@ func opsUnderTest(t *testing.T) (served map[string]bool, typed map[string]string
 	if err != nil {
 		t.Fatalf("typed registry: %v", err)
 	}
-	ours := func(p string) bool { return strings.HasPrefix(p, "/v1/functions") }
+	ours := func(p string) bool { return strings.HasPrefix(p, "/v1/function") }
 	served, typed = map[string]bool{}, map[string]string{}
 	for path, item := range doc.Paths {
 		if !ours(path) {

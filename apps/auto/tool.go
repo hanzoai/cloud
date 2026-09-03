@@ -5,7 +5,7 @@ package auto
 //
 // There is no MCP server here. Every connector action is published into the unified
 // registry by connectorToolProvider (automations.go's tools.Register), which is
-// where discovery (GET /v1/tools) and dispatch (POST /v1/tools/call) read it — and
+// where discovery (GET /v1/tool) and dispatch (POST /v1/tool/call) read it — and
 // through that registry it reaches the fleet's ONE agent MCP server. A second JSON-RPC
 // envelope at /v1/auto/mcp used to serve the same catalogue from the same
 // registry with its own schema derivation; it was a duplicate projection of one

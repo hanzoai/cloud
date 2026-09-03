@@ -32,7 +32,7 @@ type Assignment struct {
 // Assign evaluates one (org, project) flag for one subject and returns its
 // deterministic assignment. This is THE assignment client: subject -> variant is a
 // pure function of (key, subject, definition) via the same engineEvaluate the
-// /v1/flags surface runs — no second bucketing engine, no assignment store.
+// /v1/flag surface runs — no second bucketing engine, no assignment store.
 // personProps is the optional PostHog person_properties bag the flag's targeting
 // groups read (nil when the experiment targets everyone). Fails CLOSED: an
 // unconfigured engine returns an error, never a fabricated variant.

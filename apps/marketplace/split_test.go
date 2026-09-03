@@ -392,7 +392,7 @@ func (f *fleet) kill(role string) {
 // it.
 func (f *fleet) call(org, tool, proof string) (int, []byte, http.Header) {
 	f.t.Helper()
-	hr := httptest.NewRequest(http.MethodPost, "/v1/tools/call", strings.NewReader(`{"name":"`+tool+`"}`))
+	hr := httptest.NewRequest(http.MethodPost, "/v1/tool/call", strings.NewReader(`{"name":"`+tool+`"}`))
 	hr.Header.Set("Content-Type", "application/json")
 	hr.Header.Set("X-Org-Id", org)
 	hr.Header.Set("X-User-Id", "u_"+org)

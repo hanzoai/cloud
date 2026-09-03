@@ -66,7 +66,7 @@ func (m *gitlabMock) serve(t *testing.T) *httptest.Server {
 // and the KMS-sealed token under test are the ones production writes.
 func connectGitLab(t *testing.T, app *zip.App, org string) {
 	t.Helper()
-	res := req(t, app, http.MethodPost, "/v1/integrations/gitlab/connect", org, nil)
+	res := req(t, app, http.MethodPost, "/v1/integration/gitlab/connect", org, nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("connect want 200, got %d (%s)", res.Code, res.Body)
 	}
@@ -85,7 +85,7 @@ func connectGitLab(t *testing.T, app *zip.App, org string) {
 		t.Fatalf("authorizeUrl carried no state: %s", out.AuthorizeURL)
 	}
 	cb := req(t, app, http.MethodGet,
-		"/v1/integrations/gitlab/callback?code=authcode&state="+url.QueryEscape(state), "", nil)
+		"/v1/integration/gitlab/callback?code=authcode&state="+url.QueryEscape(state), "", nil)
 	if cb.Code/100 != 3 {
 		t.Fatalf("callback want a 302 back to the console, got %d (%s)", cb.Code, cb.Body)
 	}
@@ -112,11 +112,11 @@ func project(name, ns, visibility string) map[string]any {
 func TestGitLabProjectsNeedsConnection(t *testing.T) {
 	gitlabConfiguredEnv(t)
 	app := newApp(t, newKMS(t))
-	if r := req(t, app, http.MethodGet, "/v1/integrations/gitlab/projects", "acme", nil); r.Code != http.StatusNotFound {
+	if r := req(t, app, http.MethodGet, "/v1/integration/gitlab/projects", "acme", nil); r.Code != http.StatusNotFound {
 		t.Fatalf("unconnected want 404, got %d (%s)", r.Code, r.Body)
 	}
 	// And no principal is 403 — the projects belong to an org, so an org is required.
-	if r := req(t, app, http.MethodGet, "/v1/integrations/gitlab/projects", "", nil); r.Code != http.StatusForbidden {
+	if r := req(t, app, http.MethodGet, "/v1/integration/gitlab/projects", "", nil); r.Code != http.StatusForbidden {
 		t.Fatalf("no-principal want 403, got %d", r.Code)
 	}
 }
@@ -134,7 +134,7 @@ func TestGitLabProjectsListsTheConnection(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectGitLab(t, app, "acme")
 
-	r := req(t, app, http.MethodGet, "/v1/integrations/gitlab/projects", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration/gitlab/projects", "acme", nil)
 	if r.Code != http.StatusOK {
 		t.Fatalf("projects want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -178,7 +178,7 @@ func TestGitLabProjectsStopsOnAShortPage(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectGitLab(t, app, "acme")
 
-	if r := req(t, app, http.MethodGet, "/v1/integrations/gitlab/projects", "acme", nil); r.Code != http.StatusOK {
+	if r := req(t, app, http.MethodGet, "/v1/integration/gitlab/projects", "acme", nil); r.Code != http.StatusOK {
 		t.Fatalf("projects want 200, got %d (%s)", r.Code, r.Body)
 	}
 	if len(m.requests) != 1 {
@@ -196,7 +196,7 @@ func TestGitLabProjectsRevokedToken(t *testing.T) {
 	connectGitLab(t, app, "acme")
 	m.status = http.StatusUnauthorized
 
-	r := req(t, app, http.MethodGet, "/v1/integrations/gitlab/projects", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration/gitlab/projects", "acme", nil)
 	if r.Code != http.StatusUnauthorized {
 		t.Fatalf("revoked want 401, got %d (%s)", r.Code, r.Body)
 	}
@@ -214,7 +214,7 @@ func TestGitLabProjectsIsOrgScoped(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectGitLab(t, app, "acme")
 
-	if r := req(t, app, http.MethodGet, "/v1/integrations/gitlab/projects", "beta", nil); r.Code != http.StatusNotFound {
+	if r := req(t, app, http.MethodGet, "/v1/integration/gitlab/projects", "beta", nil); r.Code != http.StatusNotFound {
 		t.Fatalf("another org want 404, got %d (%s)", r.Code, r.Body)
 	}
 }

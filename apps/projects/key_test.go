@@ -23,7 +23,7 @@ func storeAt(t *testing.T) *Store {
 
 // TestCreateMintsKey: setProjectDefaults is the ONE place every create path applies
 // wired-by-default settings, so minting there is what makes a key unforgettable —
-// POST /v1/projects, /v1/projects/fork and /v1/projects/sites all funnel through it.
+// POST /v1/project, /v1/project/fork and /v1/project/sites all funnel through it.
 func TestCreateMintsKey(t *testing.T) {
 	var p Project
 	p.Org, p.Slug = "acme", "shop"

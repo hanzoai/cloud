@@ -2,7 +2,7 @@ package integrations
 
 // commerce.go completes the payments & fulfillment connectors an online store runs
 // on, alongside payments.go (Stripe/PayPal/Square) and messaging.go. Customer-held
-// keys on the per-user /v1/integrations/connectors plane, verified live. Three fit the status-only
+// keys on the per-user /v1/integration/connectors plane, verified live. Three fit the status-only
 // keyVerify mechanism; Authorize.Net answers 200 for a bad credential (the decision
 // is in the body), so it keeps a bespoke Verify over the shared verifyPost transport.
 //

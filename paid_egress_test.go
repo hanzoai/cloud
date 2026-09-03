@@ -286,7 +286,7 @@ var freeOfVendor = map[string]string{
 	// one above rather than a repeat of it. The renderer arrived with
 	// apps/projects/shot.go, whose every function is UNEXPORTED: capture is
 	// reachable only from shotOf, and shotOf is registered exactly once, at
-	// apps/projects/projects.go's `GET /v1/projects/:slug/shot`, by projects'
+	// apps/projects/projects.go's `GET /v1/project/:slug/shot`, by projects'
 	// own Mount. Neither of these two calls projects.Use, so there is no way
 	// into the renderer from either — not a nil client this time, but no
 	// callable symbol at all.

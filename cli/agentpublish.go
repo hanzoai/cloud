@@ -9,7 +9,7 @@ package cli
 // It reads a REAL session log — the harness's own JSONL, never a summary someone
 // wrote afterwards — pairs each turn with the commit it produced AS RECORDED IN
 // GIT, refuses locally if any turn carries a credential, and posts the result to
-// /v1/agents/sessions. A fabricated transcript would be worthless the moment
+// /v1/agent/sessions. A fabricated transcript would be worthless the moment
 // anyone diffed it against the commits, so the only thing this ships is the log
 // that actually happened.
 //
@@ -150,7 +150,7 @@ func newAgentPublishCmd(envOf func() *Env) *cobra.Command {
 			var sess struct {
 				ID string `json:"id"`
 			}
-			if err := cloudCall(ctx, e, "POST", "/v1/agents/sessions", map[string]any{
+			if err := cloudCall(ctx, e, "POST", "/v1/agent/sessions", map[string]any{
 				"agent": agentLabel, "title": title, "project": project,
 				"repo": originURL(ctx, repoDir), "cwd": repoDir,
 				"provider": "claude", "status": "done", "published": !private,
@@ -161,13 +161,13 @@ func newAgentPublishCmd(envOf func() *Env) *cobra.Command {
 				body, _ := json.Marshal(map[string]any{
 					"text": t.Text, "commit": t.Commit, "subject": t.Subject, "model": t.Model,
 				})
-				if err := cloudCall(ctx, e, "POST", "/v1/agents/sessions/"+sess.ID+"/events",
+				if err := cloudCall(ctx, e, "POST", "/v1/agent/sessions/"+sess.ID+"/events",
 					map[string]any{"kind": "message", "actor": t.Role,
 						"payload": json.RawMessage(body)}, nil); err != nil {
 					return fmt.Errorf("turn %d: %w", i+1, err)
 				}
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "published %s → %s/v1/agents/builds/<org>/%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), "published %s → %s/v1/agent/builds/<org>/%s\n",
 				sess.ID, e.CloudURL, project)
 			return nil
 		},

@@ -40,14 +40,14 @@ func TestHTTPCreateModelValidation(t *testing.T) {
 	app := mountAppModel(t, ai)
 
 	// A model this gateway never serves → a clean 400 at create (was a run-time 502).
-	code, body := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "bad", "model": "claude-sonnet-4-5"})
 	if code != http.StatusBadRequest {
 		t.Fatalf("non-catalog model want 400, got %d (%s)", code, body)
 	}
 
 	// A catalog model is accepted.
-	if code, body := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "good", "model": "zen-flash"}); code != http.StatusCreated {
 		t.Fatalf("catalog model want 201, got %d (%s)", code, body)
 	}
@@ -57,7 +57,7 @@ func TestHTTPCreateModelValidation(t *testing.T) {
 	// deployment knob that used to supply it (CLOUD_AI_DEFAULT_MODEL) is gone, so
 	// "the default is an upstream name" is now unrepresentable rather than merely
 	// defended against.
-	code, body = do(t, app, http.MethodPost, "/v1/agents", "acme",
+	code, body = do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "defaulted", "instructions": "be terse"})
 	if code != http.StatusCreated {
 		t.Fatalf("omitted model want 201 (defaulted), got %d (%s)", code, body)
@@ -68,17 +68,17 @@ func TestHTTPCreateModelValidation(t *testing.T) {
 		t.Fatalf("omitted model must store the Hanzo default %q, got %q", cloud.DefaultModel, created.Model)
 	}
 	// The defaulted agent runs (its stored default model is a real catalog model).
-	if code, body := do(t, app, http.MethodPost, "/v1/agents/defaulted/run", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/agent/defaulted/run", "acme",
 		map[string]any{"input": "hi"}); code != http.StatusOK {
 		t.Fatalf("defaulted agent run want 200, got %d (%s)", code, body)
 	}
 
 	// PATCH is guarded identically: a non-catalog model → 400; a catalog model → 200.
-	if code, body := do(t, app, http.MethodPatch, "/v1/agents/good", "acme",
+	if code, body := do(t, app, http.MethodPatch, "/v1/agent/good", "acme",
 		map[string]any{"model": "gpt-9-imaginary"}); code != http.StatusBadRequest {
 		t.Fatalf("update to non-catalog model want 400, got %d (%s)", code, body)
 	}
-	if code, body := do(t, app, http.MethodPatch, "/v1/agents/good", "acme",
+	if code, body := do(t, app, http.MethodPatch, "/v1/agent/good", "acme",
 		map[string]any{"model": "deepseek-v4-flash"}); code != http.StatusOK {
 		t.Fatalf("update to catalog model want 200, got %d (%s)", code, body)
 	}
@@ -91,7 +91,7 @@ func TestHTTPCreateModelValidation(t *testing.T) {
 func TestCreateModelValidationFailsOpen(t *testing.T) {
 	// fakeAI (from agents_test.go) implements ChatCompletion only — NOT ModelLister.
 	app := mountApp(t, &fakeAI{content: "ok"})
-	if code, body := do(t, app, http.MethodPost, "/v1/agents", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "any", "model": "some-unlisted-model"}); code != http.StatusCreated {
 		t.Fatalf("non-lister AI must skip validation (fail-open), want 201, got %d (%s)", code, body)
 	}

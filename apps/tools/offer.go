@@ -18,14 +18,14 @@ import (
 // agents and functions, and the tools on the external MCP servers it enabled are
 // ROWS: they exist because of WHO is asking, so no projection can hold them and
 // no answer can be shared between callers. Before this they were reachable only
-// THROUGH a tool — POST /v1/tools/call, one entry-point tool standing in front of
+// THROUGH a tool — POST /v1/tool/call, one entry-point tool standing in front of
 // every tenant capability — which is a second registry wearing a different hat.
 // Now they are tools, on the same MCP server, in the same list.
 //
 // It adds NO policy. Tools is the registry's own per-principal listing and Call
 // is literally callTool, so activation, source precedence, the x402 price gate,
 // the metered unit and the audit record are the ones the REST route already
-// enforces. A tool that is refused at POST /v1/tools/call is refused here, for
+// enforces. A tool that is refused at POST /v1/tool/call is refused here, for
 // the same reason, with the same words. One plane, one policy, two endpoints onto
 // it.
 //

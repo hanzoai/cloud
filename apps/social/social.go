@@ -4,7 +4,7 @@
 // YouTube, Threads) and the posts it publishes or schedules to them.
 //
 // Two entities. An account is a connected channel (the hanzoai/social stack's
-// "integration": GET /public/v1/integrations), and a post is content published or
+// "integration": GET /public/v1/integration), and a post is content published or
 // scheduled to a channel (POST /public/v1/posts {type:now|schedule, date, …}).
 // Scheduling is not a third entity — it is a post with Status=="scheduled"
 // carrying a future ScheduleAt.

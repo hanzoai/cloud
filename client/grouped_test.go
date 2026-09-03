@@ -341,7 +341,7 @@ func routed(t *testing.T, name string, routes ...string) *child {
 // would still fail here, because the third assertion is that the handler was
 // actually reached and got its argument.
 func TestACallByThePUBLISHEDNameReachesTheSameHandler(t *testing.T) {
-	kid := routed(t, "projects", "/v1/projects/:slug/deploy", "/v1/projects")
+	kid := routed(t, "projects", "/v1/project/:slug/deploy", "/v1/project")
 	h := host(t, []string{"projects"}, map[string]*child{"projects": kid})
 
 	// The child really derives those ids — otherwise this proves nothing.
@@ -576,7 +576,7 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 // sees can be a tools/call naming an operation it has never gathered, spelled
 // the way it published it an hour ago.
 func TestAColdEndpointDispatchesAPublishedNameOnTheFirstCall(t *testing.T) {
-	kid := routed(t, "projects", "/v1/projects/:slug/deploy")
+	kid := routed(t, "projects", "/v1/project/:slug/deploy")
 	h := host(t, []string{"projects"}, map[string]*child{"projects": kid})
 
 	// No tools/list first. This is the MCP server's first request.

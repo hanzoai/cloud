@@ -160,7 +160,7 @@ type Config struct {
 
 	// MarkdownDefaultPrefixes lists path prefixes whose successful JSON
 	// responses default to markdown (zap-proto/md) when the caller expresses no
-	// format preference — the agent-facing endpoints (e.g. /v1/code/, /v1/agents/).
+	// format preference — the agent-facing endpoints (e.g. /v1/code/, /v1/agent/).
 	// A caller always keeps the override: ?format=json or Accept: application/json
 	// forces JSON even here, and JSON stays the default everywhere else. Empty ==
 	// JSON everywhere unless explicitly negotiated. Env CLOUD_MARKDOWN_DEFAULT_PREFIXES
@@ -305,7 +305,7 @@ func LoadConfig() *Config {
 		ListenAddr: environ.Or("CLOUD_LISTEN", ":8080"),
 		// LOOPBACK BY DEFAULT, and the reason is what sits behind these two ports.
 		// The ZAP listener serves the IDENTICAL route surface as HTTP over plaintext
-		// TCP — including /v1/functions/{name}/invoke, which is arbitrary process
+		// TCP — including /v1/function/{name}/invoke, which is arbitrary process
 		// execution. A bare ":9653" binds every interface, so on a laptop that port
 		// is open to the LAN with no credential; it has been reached that way, from
 		// another host on the same subnet, unauthenticated.

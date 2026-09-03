@@ -470,7 +470,7 @@ func TestThePublicContractIsTheCustomerSurface(t *testing.T) {
 	// The customer products a shrink would be worst in. Their ROOT is enough:
 	// every one of these is a product a customer holds a key for.
 	for _, root := range []string{"/v1/billing/balance", "/v1/git/repos", "/v1/iam/users", "/v1/kms/secrets",
-		"/v1/chat/completions", "/v1/models", "/v1/projects", "/v1/commerce/product", "/v1/o11y/logs"} {
+		"/v1/chat/completions", "/v1/models", "/v1/project", "/v1/commerce/product", "/v1/o11y/logs"} {
 		if _, in := d.Paths[root]; !in {
 			// Not every spelling above is guaranteed to exist forever; report the
 			// absence and let the reader judge against the internal document.
@@ -486,7 +486,7 @@ func TestThePublicContractDropsWhatIsOutsideTheRule(t *testing.T) {
 	d := committed(t, publicPath)
 	for _, path := range []string{
 		"/health", "/", "/.well-known/openapi.json",
-		"/v1/admin/orgs", "/v1/tasks/{wildcard1}",
+		"/v1/admin/orgs", "/v1/task/{wildcard1}",
 	} {
 		if _, published := d.Paths[path]; published {
 			t.Errorf("%s reached the public contract", path)

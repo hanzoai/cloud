@@ -2,7 +2,7 @@
 # Every struct and method below is derived from one op's In and Out, and
 # every offset from the layout the op-call plane encodes against.
 
-package functions
+package function
 
 struct definition {
     Name        text       @0
@@ -96,12 +96,12 @@ struct usage {
     CostCents i64         @16
 }
 
-interface functions {
+interface function {
     # Removes one of the caller org's functions and answers 204.
     # A name this org does not hold is 404 — never a silent success — and a name
     # belonging to another tenant is the same 404, because the delete is predicated on
     # the validated org.
-    delete_functions_by_name(req: fnRef)
+    delete_function_by_name(req: fnRef)
     # Is every serverless function the caller's org has published, each with its
     # real 7-day rollup.
     # A row carries the function's runtime, resource limits, deployment target and its
@@ -109,30 +109,30 @@ interface functions {
     # are ABSENT rather than zero when the function has not run in the window, so a
     # console renders "—" instead of a fabricated 0.
     # Requires a validated principal; the listing is scoped to its org.
-    get_functions() returns (rep: fnList)
+    get_function() returns (rep: fnList)
     # Is one function with everything a detail page needs in one round-trip: its
     # definition, its 7-day rollup, its trigger, its twenty most recent invocations
     # and the NAMES of the secrets it mounts.
     # Secret values are never read or returned. A name the caller's org does not hold
     # is 404, which is also what another tenant's function looks like from here.
-    get_functions_by_name(req: fnRef) returns (rep: functionDetail)
+    get_function_by_name(req: fnRef) returns (rep: functionDetail)
     # Is one function's past runs, newest first — each with its status,
     # HTTP code, method, time and duration.
     # These are real recorded rows, not a projection: an invocation appears here only
     # once it actually ran. Requires a validated principal; the read is scoped to its
     # org.
-    get_functions_by_name_invocations(req: invocationPage) returns (rep: invocationList)
+    get_function_by_name_invocations(req: invocationPage) returns (rep: invocationList)
     # Is the output of a function's most recent run — its error text when that
     # run failed, else what it printed.
     # It is the LAST run only, and it is empty when the function has never run. There
     # is no log retention behind this beyond the recorded invocation itself.
-    get_functions_by_name_logs(req: fnRef) returns (rep: logLines)
+    get_function_by_name_logs(req: fnRef) returns (rep: logLines)
     # Is what is live right now — each function's current record IS its
     # live deployment, so this is the deployment inventory.
     # There is no deployment history behind it: a function has one record, and
     # publishing replaces it. The 7-day rollup is deliberately absent here, because
     # this read is about what is deployed rather than about how it has performed.
-    get_functions_deployments() returns (rep: fnList)
+    get_function_deployments() returns (rep: fnList)
     # Is the org's serverless dashboard over a window: a per-function
     # invocation costLine and how those invocations ended.
     # Every point is a REAL count of rows that fell in that bucket — nothing is
@@ -141,16 +141,16 @@ interface functions {
     # costCents is null and stays null: there is no per-invocation cost source to read,
     # and reporting a number computed some other way would be a guess presented as a
     # measurement. Requires a validated principal; the read is scoped to its org.
-    get_functions_metrics(req: metricsQuery) returns (rep: usage)
+    get_function_metrics(req: metricsQuery) returns (rep: usage)
     # Is the NAMES of the secrets the caller org's functions mount.
     # Values are NEVER read or returned — this surface knows which names a function
     # asks for and nothing about what is behind them, which is what makes it safe to
     # list at all. One row per distinct (namespace, name).
-    get_functions_secrets() returns (rep: secretList)
+    get_function_secrets() returns (rep: secretList)
     # Is what calls the caller org's functions — one row per function.
     # Every function has exactly one trigger today, its HTTP invoke endpoint, so this
     # is the function list read as "how is each of these reached".
-    get_functions_triggers() returns (rep: triggerList)
+    get_function_triggers() returns (rep: triggerList)
     # Publishes a serverless function under the caller's org and answers 201
     # with it.
     # The name is the key and is claimed once; the names that would shadow a
@@ -161,7 +161,7 @@ interface functions {
     # 30-second default, and an omitted memory limit becomes 256Mi. target=fleet runs
     # on the org's own GPU fleet and supports runtime=python only.
     # Requires a validated principal; the function is owned by that principal's org.
-    post_functions(req: definition) returns (rep: functionView)
+    post_function(req: definition) returns (rep: functionView)
     # Runs a function and records a REAL invocation.
     # The answer is the invocation record whatever happened to it: 200 when the org's
     # code ran clean, 502 when it ran and failed, 503 when this deployment has no
@@ -179,7 +179,7 @@ interface functions {
     # When the sandbox is not configured on this deployment, a non-fleet function
     # fails closed before anything is recorded — no execution and no fabricated
     # output. Scoped to the caller's org; requires a validated principal.
-    post_functions_by_name_invoke(req: invokeReq) returns (rep: invocationView)
+    post_function_by_name_invoke(req: invokeReq) returns (rep: invocationView)
 }
 
 # ---------------------------------------------------------------------

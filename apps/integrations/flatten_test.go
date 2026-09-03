@@ -90,7 +90,7 @@ func TestGithubWebhookAddress(t *testing.T) {
 	p := pushPayload(t, 111, "widgets", "refs/heads/main")
 	// webhookPost targets the live path; a bad signature resolving to 401 proves it.
 	if r := webhookPost(t, app, "push", "sha256=deadbeef", "", p); r.Code != http.StatusUnauthorized {
-		t.Fatalf("/v1/integrations/github/webhook must resolve (bad-sig 401), got %d (%s)", r.Code, r.Body)
+		t.Fatalf("/v1/integration/github/webhook must resolve (bad-sig 401), got %d (%s)", r.Code, r.Body)
 	}
 	// The addresses it left: /v1/connector/github/webhook was the one word in the
 	// estate for "an integration" that was not "integrations", and /v1/github-webhook

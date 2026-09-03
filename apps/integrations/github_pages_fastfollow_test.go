@@ -31,7 +31,7 @@ func TestPagesGrantCache_CollapsesBurst(t *testing.T) {
 	connectOrg(t, "acme", "777", "acme-gh")
 
 	for i := range 6 {
-		if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusOK {
+		if r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusOK {
 			t.Fatalf("call %d want 200, got %d (%s)", i, r.Code, r.Body)
 		}
 	}
@@ -51,10 +51,10 @@ func TestPagesGrantCache_PerInstallationKeyed(t *testing.T) {
 	connectOrg(t, "beta", "888", "beta-gh")
 
 	for range 3 {
-		req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil)
+		req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "acme", nil)
 	}
 	for range 3 {
-		req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "beta", nil)
+		req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "beta", nil)
 	}
 	if n := m.grantFetches(); n != 2 {
 		t.Fatalf("two installations must enumerate exactly twice (one per installation id), got %d", n)
@@ -148,7 +148,7 @@ func TestPagesRateLimitSurfacedAs429(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "acme", nil)
 	if r.Code != http.StatusTooManyRequests {
 		t.Fatalf("rate-limit 403 must surface as 429, got %d (%s)", r.Code, r.Body)
 	}
@@ -178,7 +178,7 @@ func TestPagesPermission403StaysReauthorize(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "acme", nil)
 	if r.Code != http.StatusForbidden {
 		t.Fatalf("permission 403 must stay 403, got %d (%s)", r.Code, r.Body)
 	}

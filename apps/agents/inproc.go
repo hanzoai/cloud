@@ -10,7 +10,7 @@ import (
 	"github.com/hanzoai/cloud/internal/mint"
 )
 
-// inproc.go is the IN-PROCESS twin of the /v1/agents/sessions control plane
+// inproc.go is the IN-PROCESS twin of the /v1/agent/sessions control plane
 // (sessions.go): the same store + live ZAP bus, entered directly by another
 // in-process cloud subsystem that has ALREADY resolved its tenant server-side —
 // exactly as RunOnBehalf is the in-process twin of the /run handler. The coding

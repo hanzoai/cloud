@@ -246,7 +246,7 @@ var tokenIsAQuantity = set(
 // They qualify only when they FOLLOW, and that asymmetry is the whole point.
 // Read on either side, `id` matched the parent identifier of a REST subresource:
 //
-//	GET /v1/integrations/connectors/{id}/token   →  get | connectors | by | id | token
+//	GET /v1/integration/connectors/{id}/token   →  get | connectors | by | id | token
 //
 // The id there is the CONNECTOR's. The token is exactly what the word says, and
 // the gate whose one job is to withhold bearer secrets projected it to every
@@ -261,7 +261,7 @@ var tokenIsAnAsset = set("id", "ids", "symbol", "supply", "balance")
 var keyOfAStore = set(
 	"kv", "bucket", "buckets", "namespace", "namespaces",
 	"value", "values", "map", "cache", "store", "listing", "listings",
-	"project", "projects", "def", "defs", "definition", "definitions",
+	"project", "project", "def", "defs", "definition", "definitions",
 	"attribute", "attributes", "field", "fields", "label", "labels",
 	"tag", "tags", "index", "indexes", "column", "columns", "dimension",
 	"partition", "shard", "prefix", "sort", "group", "primary", "foreign",
@@ -345,14 +345,14 @@ var productStems = []string{
 	"rerank",      //
 	"models",      // what can it call
 	"agent",       // the agent loop: conversations, presets
-	"agents",      // …sessions, runs, targets, and the run in a sandbox
+	     // …sessions, runs, targets, and the run in a sandbox
 	"code",        // code intelligence: ask, context, index, search
 	"lsp",         // …and the live language server beside it
 	"search",      //
 	"git",         // source control
 	"deploy",      // ship it
 	"exec",        // run it
-	"projects",    // …and the things shipped
+	"project",    // …and the things shipped
 	"websearch",   //
 }
 

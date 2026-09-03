@@ -107,7 +107,7 @@ func linearIssueData() map[string]any {
 
 func linearPost(t *testing.T, app *zip.App, sig, org string, payload []byte) httpResult {
 	t.Helper()
-	rq := httptest.NewRequest(http.MethodPost, "/v1/integrations/linear/webhook", bytes.NewReader(payload))
+	rq := httptest.NewRequest(http.MethodPost, "/v1/integration/linear/webhook", bytes.NewReader(payload))
 	rq.Header.Set("Content-Type", "application/json")
 	rq.Header.Set("Linear-Delivery", "d-"+linearSign("delivery", payload)[:8])
 	if sig != "" {

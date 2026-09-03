@@ -41,7 +41,7 @@ func TestEnabled_EmptyListMountsEverything(t *testing.T) {
 
 // The listeners that are not the public one bind loopback unless someone says
 // otherwise. Behind :9653 is the ZAP transport, which serves the IDENTICAL route
-// surface as HTTP in plaintext — /v1/functions/{name}/invoke included, and that
+// surface as HTTP in plaintext — /v1/function/{name}/invoke included, and that
 // is arbitrary process execution. A bare ":9653" binds every interface, so an
 // unconfigured process on a laptop offers it to the LAN with no credential; it
 // has been reached that way from another host on the same subnet.
@@ -60,7 +60,7 @@ func TestListenDefaults_AreLoopbackExceptTheEdge(t *testing.T) {
 	cfg := cloud.LoadConfig()
 
 	if got := cfg.ZAPListenAddr; got != "127.0.0.1:9653" {
-		t.Errorf("ZAP listener defaults to %q, want 127.0.0.1:9653 — a bare :9653 offers /v1/functions/{name}/invoke to the LAN", got)
+		t.Errorf("ZAP listener defaults to %q, want 127.0.0.1:9653 — a bare :9653 offers /v1/function/{name}/invoke to the LAN", got)
 	}
 	if got := cfg.HealthListenAddr; got != "127.0.0.1:9090" {
 		t.Errorf("health listener defaults to %q, want 127.0.0.1:9090", got)

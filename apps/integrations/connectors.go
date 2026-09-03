@@ -1,5 +1,5 @@
-// connectors.go is the per-USER connector plane — /v1/integrations/connectors,
-// under the org-scoped /v1/integrations surface. Same package, same registry,
+// connectors.go is the per-USER connector plane — /v1/integration/connectors,
+// under the org-scoped /v1/integration surface. Same package, same registry,
 // same store file, same KMS client; only the custody key differs
 // (org,user,provider,label → userPath). Two AUDIENCES of one capability over one
 // integrations.db, so they share one name: this plane answered at a top-level
@@ -7,14 +7,14 @@
 //
 // Surface (registered by connectorRoutes, called last from routes()):
 //
-//	GET    /v1/integrations/connectors                                  this user's connectors     -> {connectors:[...]}
-//	GET    /v1/integrations/connectors/providers                        user-scoped provider cards -> {providers:[...]}
-//	GET    /v1/integrations/connectors/:id/token                        custodied access token     -> {token,...}
-//	POST   /v1/integrations/connectors/:provider/device                 begin device sign-in       -> {flow,userCode,...}
-//	POST   /v1/integrations/connectors/:provider/device/:flow/poll      poll device sign-in        -> {status,...}
-//	POST   /v1/integrations/connectors/:provider/credential             token / oauth-bundle intake-> {connected,connector}
-//	POST   /v1/integrations/connectors/:id/refresh                      force a token rotation     -> {refreshed,connector}
-//	DELETE /v1/integrations/connectors/:id                              forget + delete secrets    -> {disconnected:true}
+//	GET    /v1/integration/connectors                                  this user's connectors     -> {connectors:[...]}
+//	GET    /v1/integration/connectors/providers                        user-scoped provider cards -> {providers:[...]}
+//	GET    /v1/integration/connectors/:id/token                        custodied access token     -> {token,...}
+//	POST   /v1/integration/connectors/:provider/device                 begin device sign-in       -> {flow,userCode,...}
+//	POST   /v1/integration/connectors/:provider/device/:flow/poll      poll device sign-in        -> {status,...}
+//	POST   /v1/integration/connectors/:provider/credential             token / oauth-bundle intake-> {connected,connector}
+//	POST   /v1/integration/connectors/:id/refresh                      force a token rotation     -> {refreshed,connector}
+//	DELETE /v1/integration/connectors/:id                              forget + delete secrets    -> {disconnected:true}
 //
 // TENANTING. Every read/write is bound org=? AND user=? — the (org,user) pair
 // from caller() IS the row key, so another user's connector id is simply "no
@@ -54,14 +54,14 @@ func connectorRoutes(app cloud.Router, zapp *zip.App, o ops) {
 	// second install on a node with no routes under it (the ops register on zapp
 	// at absolute paths), which is what zip refuses to compose.
 
-	zip.Get(zapp, "/v1/integrations/connectors", o.connectors)
-	zip.Get(zapp, "/v1/integrations/connectors/providers", o.connectorProviders)
-	zip.Get(zapp, "/v1/integrations/connectors/:id/token", o.tokenConn)
-	zip.Post(zapp, "/v1/integrations/connectors/:provider/device", o.startDevice)
-	zip.Post(zapp, "/v1/integrations/connectors/:provider/device/:flow/poll", o.pollDevice)
-	zip.Post(zapp, "/v1/integrations/connectors/:provider/credential", o.credential)
-	zip.Post(zapp, "/v1/integrations/connectors/:id/refresh", o.refreshConn)
-	zip.Delete(zapp, "/v1/integrations/connectors/:id", o.dropConn)
+	zip.Get(zapp, "/v1/integration/connectors", o.connectors)
+	zip.Get(zapp, "/v1/integration/connectors/providers", o.connectorProviders)
+	zip.Get(zapp, "/v1/integration/connectors/:id/token", o.tokenConn)
+	zip.Post(zapp, "/v1/integration/connectors/:provider/device", o.startDevice)
+	zip.Post(zapp, "/v1/integration/connectors/:provider/device/:flow/poll", o.pollDevice)
+	zip.Post(zapp, "/v1/integration/connectors/:provider/credential", o.credential)
+	zip.Post(zapp, "/v1/integration/connectors/:id/refresh", o.refreshConn)
+	zip.Delete(zapp, "/v1/integration/connectors/:id", o.dropConn)
 }
 
 // ── inputs ─────────────────────────────────────────────────────────────────────

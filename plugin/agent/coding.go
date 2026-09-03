@@ -2,7 +2,7 @@ package main
 
 // coding.go is where the coding engine gets its endpoint. One typed op:
 //
-//	POST /v1/agents/coding
+//	POST /v1/agent/coding
 //
 // Every surface arrives through it. An HTTP client posts to it; a model calls it
 // as `create_agent_coding` because the fleet's MCP server projects the same
@@ -130,7 +130,7 @@ func shutdownAgents(ctx context.Context) error {
 // the route by hand would stay green through exactly the mutation that matters,
 // and this op's reachability is now the only way a chat turn gets to a sandbox.
 func codingEndpoint(app *zip.App) {
-	zip.Post[plane.CodingStartIn, plane.CodingStarted](app, "/v1/agents/coding", startCoding,
+	zip.Post[plane.CodingStartIn, plane.CodingStarted](app, "/v1/agent/coding", startCoding,
 		zip.WithStatus(http.StatusAccepted),
 		zip.WithSummary("Start one autonomous coding run against a repo in the caller's org"))
 }
@@ -146,7 +146,7 @@ func codingEndpoint(app *zip.App) {
 // better from the session stream.
 //
 // The handle is a session id, and that is deliberate: the session is already the
-// run's durable record and its live stream (/v1/agents/sessions/{id}/stream), so
+// run's durable record and its live stream (/v1/agent/sessions/{id}/stream), so
 // this op does not grow a progress endpoint, a status endpoint or a cancel
 // endpoint of its own. One way to watch a run, whoever started it.
 //

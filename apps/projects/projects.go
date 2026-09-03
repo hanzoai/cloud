@@ -6,7 +6,7 @@
 //
 // Why it exists: hanzo.app (the builder) and console.hanzo.ai (the Projects
 // module) must show the SAME projects for the same org. They do, because both
-// call this one /v1/projects surface through the gateway, which mints the
+// call this one /v1/project surface through the gateway, which mints the
 // org (X-Org-Id) from the validated IAM JWT (HIP-0111). There is no second
 // copy of project state anywhere — this SQLite-backed store is the source of
 // truth; the builder keeps only per-project working state (chat, draft files)
@@ -15,33 +15,33 @@
 // Surface (all org-scoped; see CONTRACT.md — the published shape console
 // consumes):
 //
-//	POST   /v1/projects                      create
-//	GET    /v1/projects                      list (org)
-//	GET    /v1/projects/:slug                get
-//	PATCH  /v1/projects/:slug                update
-//	DELETE /v1/projects/:slug                delete (+ purge S3 site)
-//	POST   /v1/projects/:slug/deploy         deploy (tar body | git json)
-//	POST   /v1/projects/:slug/purge          purge the edge cache-tag (no redeploy)
-//	GET    /v1/projects/edge                 the edge: provider, reach, cache policy
-//	GET    /v1/projects/:slug/deployments    deploy history
-//	GET    /v1/projects/:slug/deployments/:id one deployment
-//	POST   /v1/projects/:slug/deployments/:id/complete  CI completion hook
+//	POST   /v1/project                      create
+//	GET    /v1/project                      list (org)
+//	GET    /v1/project/:slug                get
+//	PATCH  /v1/project/:slug                update
+//	DELETE /v1/project/:slug                delete (+ purge S3 site)
+//	POST   /v1/project/:slug/deploy         deploy (tar body | git json)
+//	POST   /v1/project/:slug/purge          purge the edge cache-tag (no redeploy)
+//	GET    /v1/project/edge                 the edge: provider, reach, cache policy
+//	GET    /v1/project/:slug/deployments    deploy history
+//	GET    /v1/project/:slug/deployments/:id one deployment
+//	POST   /v1/project/:slug/deployments/:id/complete  CI completion hook
 //
 // Sites (the surface-agnostic deploy_site capability, shared with agents):
 //
-//	POST   /v1/projects/sites                generate a responsive site from a brief + deploy
-//	POST   /v1/projects/sites/deploy         deploy a raw file manifest (the deploy_site tool)
-//	GET    /v1/projects/sites                list the org's live sites
-//	GET    /v1/projects/sites/:slug          one live site
+//	POST   /v1/project/sites                generate a responsive site from a brief + deploy
+//	POST   /v1/project/sites/deploy         deploy a raw file manifest (the deploy_site tool)
+//	GET    /v1/project/sites                list the org's live sites
+//	GET    /v1/project/sites/:slug          one live site
 //
 // Releases (the server-side promote — see release.go):
 //
-//	POST   /v1/projects/:slug/publish                      promote a build output + go live
-//	POST   /v1/projects/:slug/releases                     promote only (no flip)
-//	GET    /v1/projects/:slug/releases                     rollback menu, newest first
-//	POST   /v1/projects/:slug/releases/:release/activate   flip the pointer (go live / roll back)
+//	POST   /v1/project/:slug/publish                      promote a build output + go live
+//	POST   /v1/project/:slug/releases                     promote only (no flip)
+//	GET    /v1/project/:slug/releases                     rollback menu, newest first
+//	POST   /v1/project/:slug/releases/:release/activate   flip the pointer (go live / roll back)
 //
-// The browser half — GET /v1/projects/tags, the public pk-keyed pixel config —
+// The browser half — GET /v1/project/tags, the public pk-keyed pixel config —
 // is served from tags.go, here because this process owns the store it reads.
 //
 // Deploy pipeline: a deploy uploads the built static site to OUR S3
@@ -102,7 +102,7 @@ type state struct {
 	// system resolver. Tests inject a fake so verification is deterministic.
 	resolver fqdn.Resolver
 	// ai generates static sites from a natural-language brief for
-	// POST /v1/projects/sites. It is the SAME shared inference client the agents
+	// POST /v1/project/sites. It is the SAME shared inference client the agents
 	// surface uses (deps.AI) and may be nil when no gateway is configured —
 	// buildSite then answers 503 honestly.
 	ai cloud.AIClient
@@ -404,7 +404,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, s)
 
-	// The public per-site tag endpoint (GET /v1/projects/tags), served by THIS process
+	// The public per-site tag endpoint (GET /v1/project/tags), served by THIS process
 	// because it reads THIS process's project store in-process — the same reason the key/site/scope
 	// resolvers above are registered here rather than reached across the plane.
 	mountTags(app, s)
@@ -480,7 +480,7 @@ func init() {
 		"reason the other path exists: an oversized POST is refused by the server BEFORE any " +
 		"handler runs and surfaces as an opaque `400 Error when parsing request` that reads like a " +
 		"malformed payload rather than a size cap. A site too large for one archive opens a " +
-		"deployment with `POST /v1/projects/{slug}/deployments` instead and writes its files straight " +
+		"deployment with `POST /v1/project/{slug}/deployments` instead and writes its files straight " +
 		"to storage against the scoped grant that answers with — no body limit, and no bytes " +
 		"through this API at all.\n\n" +
 		"Billing is fail-closed and fails FIRST: the hosting gate runs before anything is parsed " +
@@ -503,13 +503,13 @@ func init() {
 	// Register states the two facts the router cannot: the body is BYTES
 	// (openapi.Binary — the declaration no Go struct can make) and the answer is a
 	// deployment.
-	openapi.Register("/v1/projects/:slug/deploy", http.MethodPost, openapi.Binary{}, projectsDeployment{})
-	openapi.Describe("/v1/projects/:slug/deploy", http.MethodPost,
+	openapi.Register("/v1/project/:slug/deploy", http.MethodPost, openapi.Binary{}, projectsDeployment{})
+	openapi.Describe("/v1/project/:slug/deploy", http.MethodPost,
 		"Upload a built site as one archive and serve it", archiveProse)
 
 	// The shot is untyped for the same reason deploy is — it answers image bytes
 	// — so its sentence comes from here rather than from a typed op.
-	openapi.Describe("/v1/projects/:slug/shot", http.MethodGet,
+	openapi.Describe("/v1/project/:slug/shot", http.MethodGet,
 		"Get a PNG of the project's live site",
 		"Returns a screenshot of what this project currently serves, as image/png. The capture is "+
 			"keyed by the deployment, so a redeploy invalidates it by construction rather than by "+
@@ -520,14 +520,14 @@ func init() {
 }
 
 // routes registers the projects surface as TYPED ops, all of it under
-// /v1/projects.
+// /v1/project.
 //
 // IT USED TO BE THREE SURFACES. The same handlers answered at /v1/sites and at
 // /v1/platform/sites, which is one capability wearing three addresses: three
 // operationIds, three SDK methods and three CLI commands for one row in one
 // store, and a client that learned any one of them had learned a name the other
 // two contradict. HIP-0139 §3.1 gives a capability one prefix and §7 closes the
-// misfiled pair by folding it, so the sites nouns that had no /v1/projects twin
+// misfiled pair by folding it, so the sites nouns that had no /v1/project twin
 // moved here and the ones that were byte-identical to a twin were deleted rather
 // than given a third spelling. /v1/platform belongs to the platform app and is
 // gone from this file entirely.
@@ -547,20 +547,20 @@ func init() {
 // confinement the per-prefix installs used to spell out by hand.
 //
 // The ops themselves are declared on the *zip.App with FULL paths rather than on
-// a group: a group leaf of "" would publish "/v1/projects/" — a different path in
+// a group: a group leaf of "" would publish "/v1/project/" — a different path in
 // the document than the one this surface has always served.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
 	app.Use(cloud.DenyEnvelope())
 	r := cloud.ZipApp(app)
 
-	zip.Post(r, "/v1/projects", o.create, zip.WithStatus(http.StatusCreated))
-	zip.Post(r, "/v1/projects/fork", o.fork, zip.WithStatus(http.StatusCreated))
-	zip.Get(r, "/v1/projects", o.list)
+	zip.Post(r, "/v1/project", o.create, zip.WithStatus(http.StatusCreated))
+	zip.Post(r, "/v1/project/fork", o.fork, zip.WithStatus(http.StatusCreated))
+	zip.Get(r, "/v1/project", o.list)
 
 	// SITES, the surface-agnostic deploy_site capability shared with agents, and a
-	// COLLECTION rather than a prefix: /v1/projects/sites builds a responsive static
-	// site from a brief, /v1/projects/sites/deploy is the raw file-manifest deploy,
+	// COLLECTION rather than a prefix: /v1/project/sites builds a responsive static
+	// site from a brief, /v1/project/sites/deploy is the raw file-manifest deploy,
 	// and both funnel through the SAME publishSite core as the archive path below —
 	// one deploy pipeline, one host binding, one metering. It reads as a second
 	// collection beside the projects list because that is what it is: the same rows,
@@ -569,15 +569,15 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	//
 	// `sites` is a RESERVED label (apps/sites reserved.go), so no project can hold
 	// that slug and this static segment can never shadow one.
-	zip.Post(r, "/v1/projects/sites", o.buildSite)
-	zip.Post(r, "/v1/projects/sites/deploy", o.deploySite)
-	zip.Get(r, "/v1/projects/sites", o.listSites)
+	zip.Post(r, "/v1/project/sites", o.buildSite)
+	zip.Post(r, "/v1/project/sites/deploy", o.deploySite)
+	zip.Get(r, "/v1/project/sites", o.listSites)
 	// One site, by slug. Every sub-resource under a site answered — deployments,
 	// releases, publish — and the site itself did not, so the one call a client
 	// makes to ask "is it live yet?" returned 404 for a LIVE site exactly as for
 	// one that never existed. A CI lane watching for its own publish waited
 	// forever on a success it had already achieved.
-	zip.Get(r, "/v1/projects/sites/:slug", o.getSite)
+	zip.Get(r, "/v1/project/sites/:slug", o.getSite)
 
 	// THE EDGE. It reports on the network in front of every published site — which
 	// provider, whether it can act, what it caches and for how long. It is here
@@ -585,11 +585,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// question would be a deployment for a noun, and `edge` names a POSITION, not a
 	// product, so it gets no prefix of its own (LLM.md). `edge` is reserved for the
 	// same reason `sites` is.
-	zip.Get(r, "/v1/projects/edge", o.edge, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
+	zip.Get(r, "/v1/project/edge", o.edge, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 
-	zip.Get(r, "/v1/projects/:slug", o.get)
-	zip.Patch(r, "/v1/projects/:slug", o.update)
-	zip.Delete(r, "/v1/projects/:slug", o.del, zip.WithStatus(http.StatusNoContent))
+	zip.Get(r, "/v1/project/:slug", o.get)
+	zip.Patch(r, "/v1/project/:slug", o.update)
+	zip.Delete(r, "/v1/project/:slug", o.del, zip.WithStatus(http.StatusNoContent))
 
 	// UNTYPED BY DESIGN — and by BYTES alone, now that it is one operation. The
 	// request body is a zip or tar(.gz) of the built site, raw or as a multipart
@@ -598,12 +598,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// response ARE declared (openapi.Register + openapi.Binary, see init above), so
 	// it publishes a shape rather than a bare address; what it still cannot have is
 	// zip's own registry — prose lifted per field, an MCP tool and a CLI command.
-	app.Post("/v1/projects/:slug/deploy", cloud.Handle(s, deploy))
+	app.Post("/v1/project/:slug/deploy", cloud.Handle(s, deploy))
 
 	// UNTYPED for the same reason deploy is: it answers image bytes. A typed op
 	// declares one JSON Out, and describing a PNG as one is a schema that lies
 	// about what comes back.
-	app.Get("/v1/projects/:slug/shot", cloud.Handle(s, shotOf))
+	app.Get("/v1/project/:slug/shot", cloud.Handle(s, shotOf))
 
 	// Starring is PUT/DELETE rather than POST/POST because it is a STATE, not an
 	// event: "this project is starred for me" is either true or it is not, and
@@ -616,10 +616,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// nobody calls — and the store, the migration and the tests all went live
 	// behind a route that did not exist. The 404 was the only symptom, and only
 	// if you went looking for it.
-	zip.Put(r, "/v1/projects/:slug/star", o.star)
-	zip.Delete(r, "/v1/projects/:slug/star", o.unstar)
+	zip.Put(r, "/v1/project/:slug/star", o.star)
+	zip.Delete(r, "/v1/project/:slug/star", o.unstar)
 
-	zip.Post(r, "/v1/projects/:slug/purge", o.purge)
+	zip.Post(r, "/v1/project/:slug/purge", o.purge)
 
 	// The deployment lifecycle, in the order it runs: open one and take the scoped
 	// write grant, then complete it. startDeployment is the typed half that used to
@@ -627,14 +627,14 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Content-Type — two operations at one address, which is exactly why neither
 	// could be typed. POST on the collection that already lists them: the verb is
 	// the method, the noun is the resource, and nothing new had to be named.
-	zip.Post(r, "/v1/projects/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
-	zip.Get(r, "/v1/projects/:slug/deployments", o.listDeployments)
-	zip.Get(r, "/v1/projects/:slug/deployments/:id", o.getDeployment)
-	zip.Post(r, "/v1/projects/:slug/deployments/:id/complete", o.completeDeployment)
-	zip.Get(r, "/v1/projects/:slug/domains", o.listDomains)
-	zip.Post(r, "/v1/projects/:slug/domains", o.bindDomains)
-	zip.Post(r, "/v1/projects/:slug/domains/:host/verify", o.verifyDomain)
-	zip.Delete(r, "/v1/projects/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
+	zip.Post(r, "/v1/project/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
+	zip.Get(r, "/v1/project/:slug/deployments", o.listDeployments)
+	zip.Get(r, "/v1/project/:slug/deployments/:id", o.getDeployment)
+	zip.Post(r, "/v1/project/:slug/deployments/:id/complete", o.completeDeployment)
+	zip.Get(r, "/v1/project/:slug/domains", o.listDomains)
+	zip.Post(r, "/v1/project/:slug/domains", o.bindDomains)
+	zip.Post(r, "/v1/project/:slug/domains/:host/verify", o.verifyDomain)
+	zip.Delete(r, "/v1/project/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
 
 	// Releases — how content GETS to a site's serving prefix (release.go). The
 	// builder's build output already lives in OUR object store, so publishing is a
@@ -644,12 +644,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// separable for a staged rollout, and activate doubles as the free rollback.
 	//
 	// They lived only under /v1/sites while deployments lived only under
-	// /v1/projects, which made a CI client straddle two nouns to ship one site.
+	// /v1/project, which made a CI client straddle two nouns to ship one site.
 	// The whole lifecycle now answers under one — open, write, complete, publish.
-	zip.Post(r, "/v1/projects/:slug/publish", o.publishSiteRelease)
-	zip.Post(r, "/v1/projects/:slug/releases", o.createRelease, zip.WithStatus(http.StatusCreated))
-	zip.Get(r, "/v1/projects/:slug/releases", o.listReleases)
-	zip.Post(r, "/v1/projects/:slug/releases/:release/activate", o.activateRelease)
+	zip.Post(r, "/v1/project/:slug/publish", o.publishSiteRelease)
+	zip.Post(r, "/v1/project/:slug/releases", o.createRelease, zip.WithStatus(http.StatusCreated))
+	zip.Get(r, "/v1/project/:slug/releases", o.listReleases)
+	zip.Post(r, "/v1/project/:slug/releases/:release/activate", o.activateRelease)
 }
 
 // ---- handlers ----
@@ -733,7 +733,7 @@ func (o ops) create(ctx context.Context, in *projectsCreate) (*projectsProject, 
 }
 
 // createProject is the ONE path that validates a projectsCreate and persists a
-// Project. Both POST /v1/projects and POST /v1/projects/fork funnel through here,
+// Project. Both POST /v1/project and POST /v1/project/fork funnel through here,
 // so slug/framework validation, ID minting, and conflict mapping live in exactly
 // one place. Its caller answers 201 with the project it returns.
 func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body projectsCreate) (*projectsProject, error) {
@@ -784,8 +784,8 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body project
 	if p.RepoBranch == "" && p.RepoURL != "" {
 		p.RepoBranch = "main"
 	}
-	// The ONE place every create path (POST /v1/projects, /v1/projects/fork,
-	// /v1/projects/sites) applies the wired-by-default subsystems: analytics ON
+	// The ONE place every create path (POST /v1/project, /v1/project/fork,
+	// /v1/project/sites) applies the wired-by-default subsystems: analytics ON
 	// unless the caller opted out, and the project's Base data-space namespace.
 	// Pure, so the defaults are set deterministically before persist.
 	if err := setProjectDefaults(&p, body.Analytics); err != nil {

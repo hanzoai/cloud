@@ -17,17 +17,17 @@
   ],
   "tags": [
     {
-      "name": "flags"
+      "name": "flag"
     }
   ],
   "paths": {
-    "/v1/flags": {
+    "/v1/flag": {
       "post": {
-        "operationId": "post_flags",
+        "operationId": "post_flag",
         "summary": "Evaluate runs the caller's flag definitions for one identity and returns the flag verdict: which flags are on (or which variant), their payloads, and whether any definition failed to compute.",
         "description": "Evaluate runs the caller's flag definitions for one identity and returns the\nflag verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
         "tags": [
-          "flags"
+          "flag"
         ],
         "requestBody": {
           "content": {
@@ -71,13 +71,13 @@
         "x-tool": true
       }
     },
-    "/v1/flags/activity": {
+    "/v1/flag/activity": {
       "get": {
-        "operationId": "get_flags_activity",
+        "operationId": "get_flag_activity",
         "summary": "Returns the caller's flag change log newest-first: every create, update and delete, with the actor and the time.",
         "description": "Returns the caller's flag change log newest-first: every\ncreate, update and delete, with the actor and the time.",
         "tags": [
-          "flags"
+          "flag"
         ],
         "parameters": [
           {
@@ -107,13 +107,13 @@
         "x-tool": true
       }
     },
-    "/v1/flags/decide": {
+    "/v1/flag/decide": {
       "post": {
-        "operationId": "post_flags_decide",
+        "operationId": "post_flag_decide",
         "summary": "Evaluate runs the caller's flag definitions for one identity and returns the flag verdict: which flags are on (or which variant), their payloads, and whether any definition failed to compute.",
         "description": "Evaluate runs the caller's flag definitions for one identity and returns the\nflag verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
         "tags": [
-          "flags"
+          "flag"
         ],
         "requestBody": {
           "content": {
@@ -157,13 +157,13 @@
         "x-tool": true
       }
     },
-    "/v1/flags/defs": {
+    "/v1/flag/defs": {
       "get": {
-        "operationId": "get_flags_defs",
+        "operationId": "get_flag_defs",
         "summary": "Returns every flag definition in the caller's (org, project) store, by key, with its version and who last changed it.",
         "description": "Returns every flag definition in the caller's (org,\nproject) store, by key, with its version and who last changed it.",
         "tags": [
-          "flags"
+          "flag"
         ],
         "responses": {
           "200": {
@@ -181,13 +181,13 @@
         "x-tool": true
       }
     },
-    "/v1/flags/defs/{key}": {
+    "/v1/flag/defs/{key}": {
       "delete": {
-        "operationId": "delete_flags_defs_by_key",
+        "operationId": "delete_flag_defs_by_key",
         "summary": "Removes one flag definition by key and records the deletion in the change log.",
         "description": "Removes one flag definition by key and records the\ndeletion in the change log. A key the caller's store does not hold is a 404.",
         "tags": [
-          "flags"
+          "flag"
         ],
         "parameters": [
           {
@@ -216,11 +216,11 @@
         "x-tool": true
       },
       "get": {
-        "operationId": "get_flags_defs_by_key",
+        "operationId": "get_flag_defs_by_key",
         "summary": "Returns one flag definition by key, or 404 when the caller's store has none under that key.",
         "description": "Returns one flag definition by key, or 404 when the caller's\nstore has none under that key.",
         "tags": [
-          "flags"
+          "flag"
         ],
         "parameters": [
           {
@@ -249,11 +249,11 @@
         "x-tool": true
       },
       "put": {
-        "operationId": "put_flags_defs_by_key",
+        "operationId": "put_flag_defs_by_key",
         "summary": "Creates or replaces the flag definition at the path's key and returns the stored row.",
         "description": "Creates or replaces the flag definition at the path's key and\nreturns the stored row. The BODY IS THE DEFINITION DOCUMENT — the flag-definition\nJSON object the evaluator consumes — and it is stored verbatim except that its\n\"key\" is forced to the key in the URL, so a document can never be filed under a\nname other than the one it was addressed by. Every write bumps the version and\nappends to the change log under the caller's identity.",
         "tags": [
-          "flags"
+          "flag"
         ],
         "parameters": [
           {
@@ -302,13 +302,13 @@
         "x-tool": true
       }
     },
-    "/v1/flags/health": {
+    "/v1/flag/health": {
       "get": {
-        "operationId": "get_flags_health",
+        "operationId": "get_flag_health",
         "summary": "Health reports that the flag engine is serving.",
         "description": "Health reports that the flag engine is serving. It is not gated: liveness must\nbe probe-able without a token.",
         "tags": [
-          "flags"
+          "flag"
         ],
         "responses": {
           "200": {

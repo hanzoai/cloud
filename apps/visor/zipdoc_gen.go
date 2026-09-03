@@ -80,7 +80,7 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/visor GET /v1/visor/compute/bots", zip.Doc{
 		Description: "Returns the caller org's bot machines — the kind=bot machines — each\njoined with the agent binding that says which cloud Agent it runs.\n\nThe bindings are read ONCE and joined by machine id, so the list is O(1) upstream\ncalls, not N+1. A bindings read that fails only costs the reconciled status: a bot\nstill lists without it.",
 		Fields: map[string]string{
-			"agentBinding.agentName":   "AgentName is the cloud Agent (/v1/agents) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
+			"agentBinding.agentName":   "AgentName is the cloud Agent (/v1/agent) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
 			"agentBinding.botVersion":  "BotVersion pins the @hanzo/bot runtime version the machine runs. Empty means\nthe machine took the default in force when it was bound.",
 			"agentBinding.createdTime": "CreatedTime is when the binding was first made.",
 			"agentBinding.machineId":   "MachineId is the bound machine as vm addresses it, owner-qualified\n(\"<org>/<machine>\"). The unqualified half is what this surface's :id routes\ntake.",
@@ -115,7 +115,7 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/visor GET /v1/visor/compute/bots/:id", zip.Doc{
 		Description: "Returns one of the caller org's bot machines with its agent binding.\n\nA machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent\nbinding — either signal is authoritative, so a bot resolves even before its\ncloud-init has stamped every tag. A machine that is neither is 404: this route\nanswers for bots, not for machines.",
 		Fields: map[string]string{
-			"agentBinding.agentName":   "AgentName is the cloud Agent (/v1/agents) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
+			"agentBinding.agentName":   "AgentName is the cloud Agent (/v1/agent) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
 			"agentBinding.botVersion":  "BotVersion pins the @hanzo/bot runtime version the machine runs. Empty means\nthe machine took the default in force when it was bound.",
 			"agentBinding.createdTime": "CreatedTime is when the binding was first made.",
 			"agentBinding.machineId":   "MachineId is the bound machine as vm addresses it, owner-qualified\n(\"<org>/<machine>\"). The unqualified half is what this surface's :id routes\ntake.",
@@ -175,7 +175,7 @@ func init() {
 			"fleetUnit.queued":     "Queued is how many renders are waiting on THIS GPU's own lane in the org's\ngpu-jobs queue. BYO units only — an agent run-target dispatches, it does not\nqueue — and omitted when nothing is waiting.",
 			"fleetUnit.running":    "Running is what the unit is executing right now: agent sessions in flight for\na run-target, claimed renders for a BYO GPU.",
 			"fleetUnit.sessions":   "Sessions is how many agent sessions are open on this unit. Always present,\nand 0 for a source that cannot host agent sessions at all — a fact about that\nplane, not a gap in the reading.",
-			"fleetUnit.source":     "Source is the plane this row came from: \"agent\" (a linked run-target), \"byo\"\n(a worker or cluster the org dialed in) or \"visor\" (a machine Hanzo\nprovisioned). It is half the row's identity, and it says which face owns the\nunit — /v1/agents/targets, /v1/visor/fleet/workers, /v1/visor/machines.",
+			"fleetUnit.source":     "Source is the plane this row came from: \"agent\" (a linked run-target), \"byo\"\n(a worker or cluster the org dialed in) or \"visor\" (a machine Hanzo\nprovisioned). It is half the row's identity, and it says which face owns the\nunit — /v1/agent/targets, /v1/visor/fleet/workers, /v1/visor/machines.",
 			"fleetUnit.spec":       "Spec is the unit's static capability. Absent when the source reported none —\nunknown capability, never a zeroed one.",
 			"fleetUnit.status":     "Status is liveness in the SOURCE's own vocabulary, because each plane decides\nit differently: a run-target's is derived from its heartbeat, a BYO worker's\nis online/offline on the 90s window, a BYO cluster's is \"attached\", and a\nVisor machine's is the provider's word for its lifecycle state.",
 			"fleetUnit.unit":       "Unit is the SOURCE's own id for this unit — a run-target id, a BYO worker id,\na Visor machine name — so a row links straight back to the face that owns it.\nIt is unique within a source, not across them: two planes may mint the same\nid, which is why (source, unit) together is the identity.",
@@ -425,7 +425,7 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/visor GET /v1/visor/machines/:id/agent", zip.Doc{
 		Description: "Returns the agent binding of one of the caller org's\nmachines, or 404 when the machine runs no bot runtime.",
 		Fields: map[string]string{
-			"agentBinding.agentName":   "AgentName is the cloud Agent (/v1/agents) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
+			"agentBinding.agentName":   "AgentName is the cloud Agent (/v1/agent) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
 			"agentBinding.botVersion":  "BotVersion pins the @hanzo/bot runtime version the machine runs. Empty means\nthe machine took the default in force when it was bound.",
 			"agentBinding.createdTime": "CreatedTime is when the binding was first made.",
 			"agentBinding.machineId":   "MachineId is the bound machine as vm addresses it, owner-qualified\n(\"<org>/<machine>\"). The unqualified half is what this surface's :id routes\ntake.",
@@ -444,7 +444,7 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/visor GET /v1/visor/machines/agents", zip.Doc{
 		Description: "Returns every agent↔machine binding in the caller's org — which\nmachines are running which cloud Agent, with vm's own reconciled status.",
 		Fields: map[string]string{
-			"agentBinding.agentName":    "AgentName is the cloud Agent (/v1/agents) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
+			"agentBinding.agentName":    "AgentName is the cloud Agent (/v1/agent) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
 			"agentBinding.botVersion":   "BotVersion pins the @hanzo/bot runtime version the machine runs. Empty means\nthe machine took the default in force when it was bound.",
 			"agentBinding.createdTime":  "CreatedTime is when the binding was first made.",
 			"agentBinding.machineId":    "MachineId is the bound machine as vm addresses it, owner-qualified\n(\"<org>/<machine>\"). The unqualified half is what this surface's :id routes\ntake.",
@@ -590,7 +590,7 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/visor PUT /v1/visor/machines/:id/agent", zip.Doc{
 		Description: "Binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime. The owning org is\nthe validated tenant, never a client field.",
 		Fields: map[string]string{
-			"agentBinding.agentName":   "AgentName is the cloud Agent (/v1/agents) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
+			"agentBinding.agentName":   "AgentName is the cloud Agent (/v1/agent) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
 			"agentBinding.botVersion":  "BotVersion pins the @hanzo/bot runtime version the machine runs. Empty means\nthe machine took the default in force when it was bound.",
 			"agentBinding.createdTime": "CreatedTime is when the binding was first made.",
 			"agentBinding.machineId":   "MachineId is the bound machine as vm addresses it, owner-qualified\n(\"<org>/<machine>\"). The unqualified half is what this surface's :id routes\ntake.",
@@ -602,7 +602,7 @@ func init() {
 			"agentBinding.publicIp":    "PublicIp is the bound machine's public address as vm recorded it on the\nbinding. Empty while the machine has none yet.",
 			"agentBinding.status":      "Status is the binding's lifecycle in VM's OWN words — \"Pending\" while the\nmachine provisions and the runtime is unconfirmed, \"running\" once vm has\nconfirmed it. The vocabulary is vm's and passes through unmapped, which is\nwhy its capitalization does not match the machine states beside it, and it is\nvm's reconciled reading rather than anything asserted here.",
 			"agentBinding.updatedTime": "UpdatedTime is when vm last reconciled it — the age of Status.",
-			"bindAgentReq.agentName":   "AgentName is the cloud Agent (/v1/agents) the machine will run. Required.",
+			"bindAgentReq.agentName":   "AgentName is the cloud Agent (/v1/agent) the machine will run. Required.",
 			"bindAgentReq.botVersion":  "BotVersion pins the @hanzo/bot runtime version; empty takes the default.",
 			"bindAgentReq.id":          "ID is the machine to bind, from the URL path.",
 		},

@@ -113,7 +113,7 @@ func TestTracingMiddleware_PropagatesContext(t *testing.T) {
 
 	app := zip.New(zip.Config{})
 	app.Use(TracingMiddleware())
-	app.Post("/v1/agents/run", func(c *zip.Ctx) error {
+	app.Post("/v1/agent/run", func(c *zip.Ctx) error {
 		// Downstream span opened off c.Context() — exactly how clients/agents and
 		// clients/aihttp open their spans.
 		_, child := httpTracer.Start(c.Context(), "agent.run")
@@ -121,7 +121,7 @@ func TestTracingMiddleware_PropagatesContext(t *testing.T) {
 		return c.JSON(200, map[string]string{"ok": "yes"})
 	})
 
-	req := httptest.NewRequest("POST", "/v1/agents/run", nil)
+	req := httptest.NewRequest("POST", "/v1/agent/run", nil)
 	if _, err := app.Test(req); err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestTracingMiddleware_PropagatesContext(t *testing.T) {
 	if len(spans) != 2 {
 		t.Fatalf("recorded %d spans, want 2 (server + child)", len(spans))
 	}
-	server := findSpan(spans, "POST /v1/agents/run")
+	server := findSpan(spans, "POST /v1/agent/run")
 	child := findSpan(spans, "agent.run")
 	if server == nil || child == nil {
 		t.Fatalf("missing spans: server=%v child=%v", server != nil, child != nil)
@@ -175,11 +175,11 @@ func TestTracingMiddleware_SkipsNoise(t *testing.T) {
 
 	app := zip.New(zip.Config{})
 	app.Use(TracingMiddleware())
-	app.Get("/v1/agents/health", func(c *zip.Ctx) error { return c.JSON(200, "ok") })
+	app.Get("/v1/agent/health", func(c *zip.Ctx) error { return c.JSON(200, "ok") })
 	app.Get("/healthz", func(c *zip.Ctx) error { return c.JSON(200, "ok") })
 	app.Get("/", func(c *zip.Ctx) error { return c.JSON(200, "ok") })
 
-	for _, p := range []string{"/v1/agents/health", "/healthz", "/"} {
+	for _, p := range []string{"/v1/agent/health", "/healthz", "/"} {
 		if _, err := app.Test(httptest.NewRequest("GET", p, nil)); err != nil {
 			t.Fatalf("app.Test %s: %v", p, err)
 		}
@@ -193,8 +193,8 @@ func TestTraceable(t *testing.T) {
 	cases := map[string]bool{
 		"/v1/chat/completions": true,
 		"/v1/models":           true,
-		"/v1/agents/x/run":     true,
-		"/v1/agents/health":    false,
+		"/v1/agent/x/run":     true,
+		"/v1/agent/health":    false,
 		"/v1/kms/health":       false,
 		"/healthz":             false,
 		"/metrics":             false,

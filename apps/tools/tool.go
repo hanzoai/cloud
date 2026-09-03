@@ -10,7 +10,7 @@
 // as MCP tools straight from the typed-op registry onto the host's one MCP server
 // (plugin/<app>/mcp.json → zip.Plugin.Tools). What lives here is ROWS — a tool
 // whose existence, price and activation depend on which org is asking — reached
-// from that same server through the typed POST /v1/tools/call.
+// from that same server through the typed POST /v1/tool/call.
 //
 // Decomplected on the Rich Hickey client: a Source knows how to LIST its tools and
 // DISPATCH one; the registry knows nothing about how any single source works. Each

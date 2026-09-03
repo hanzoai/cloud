@@ -147,7 +147,7 @@ func (o ops) agentGet(ctx context.Context, in *channelAgentRef) (*channelAgents,
 
 // agentPut binds agents to the caller org's channel and answers the bindings as
 // GET would. It requires ORG ADMIN. The agent is named by its ref — the name an
-// org gave it at POST /v1/agents, or a built-in such as dev, des or vi.
+// org gave it at POST /v1/agent, or a built-in such as dev, des or vi.
 //
 // Example: {"channel":"slack","default":"eng","rooms":{"C024BE91L":"des"},"unbind":["C0OLD"]}
 func (o ops) agentPut(ctx context.Context, in *channelAgentsPut) (*channelAgents, error) {

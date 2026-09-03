@@ -441,7 +441,7 @@ func (o ops) project(ctx context.Context, org string) (string, error) {
 		return id, nil
 	}
 	find := func() (string, error) {
-		st, body, err := send(ctx, http.MethodGet, "/v1/projects/", nil, timeout)
+		st, body, err := send(ctx, http.MethodGet, "/v1/project/", nil, timeout)
 		if err != nil {
 			return "", zip.Errorf(http.StatusServiceUnavailable, "flow unavailable")
 		}
@@ -467,7 +467,7 @@ func (o ops) project(ctx context.Context, org string) (string, error) {
 		return "", err
 	}
 	if id == "" {
-		st, body, err := send(ctx, http.MethodPost, "/v1/projects/", map[string]any{"name": org}, timeout)
+		st, body, err := send(ctx, http.MethodPost, "/v1/project/", map[string]any{"name": org}, timeout)
 		if err != nil {
 			return "", zip.Errorf(http.StatusServiceUnavailable, "flow unavailable")
 		}

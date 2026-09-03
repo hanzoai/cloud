@@ -99,8 +99,8 @@ func TestReadUntypedRefusesAMissingFile(t *testing.T) {
 // total and in no product, which is exactly what it is.
 func TestCountReadsTheDispatchableMarkAndTagsIndependently(t *testing.T) {
 	d := &openapi.Document{Paths: map[string]openapi.PathItem{
-		"/v1/agents/sessions": {"get": &openapi.Operation{Tool: true, Tags: []string{"agents"}}},
-		"/v1/agents/stream":   {"get": &openapi.Operation{Tags: []string{"agents"}}},
+		"/v1/agent/sessions": {"get": &openapi.Operation{Tool: true, Tags: []string{"agents"}}},
+		"/v1/agent/stream":   {"get": &openapi.Operation{Tags: []string{"agents"}}},
 		"/.well-known/x":      {"get": &openapi.Operation{}},
 	}}
 	got := openapi.Count(d)

@@ -193,12 +193,12 @@ func TestBindHostRejectsStg(t *testing.T) {
 func TestCreateRejectsReservedSlug(t *testing.T) {
 	app := mountApp(t)
 	for _, slug := range []string{"api", "admin", "login", "wallet", "hanzo"} {
-		status, body := do(t, app, "POST", "/v1/projects", "acme", map[string]any{"name": "X", "slug": slug})
+		status, body := do(t, app, "POST", "/v1/project", "acme", map[string]any{"name": "X", "slug": slug})
 		if status != http.StatusBadRequest {
 			t.Errorf("create slug %q status=%d body=%s, want 400", slug, status, body)
 		}
 	}
-	if status, body := do(t, app, "POST", "/v1/projects", "acme", map[string]any{"name": "My Site", "slug": "my-site"}); status != http.StatusCreated {
+	if status, body := do(t, app, "POST", "/v1/project", "acme", map[string]any{"name": "My Site", "slug": "my-site"}); status != http.StatusCreated {
 		t.Fatalf("create normal slug status=%d body=%s, want 201", status, body)
 	}
 }

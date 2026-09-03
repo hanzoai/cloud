@@ -176,7 +176,7 @@ func TestNoZoneFoundDegradesQuietly(t *testing.T) {
 
 // Configured asks for a TOKEN, not a zone: an edge one lookup away from working
 // must not report itself unconfigured, because that report is what
-// /v1/projects/edge serves and what an operator reads to decide whether a publish
+// /v1/project/edge serves and what an operator reads to decide whether a publish
 // is live.
 func TestConfiguredAsksForTheCredentialNotTheZone(t *testing.T) {
 	log := luxlog.New("test")

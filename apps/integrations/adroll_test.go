@@ -29,7 +29,7 @@ func newAdrollMock(t *testing.T) {
 }
 
 func TestAdrollAuthorizeURL(t *testing.T) {
-	raw, err := adrollAuthorize(OAuthConfig{ClientID: "cid"}, "https://api.hanzo.ai/v1/integrations/adroll/callback", "st8")
+	raw, err := adrollAuthorize(OAuthConfig{ClientID: "cid"}, "https://api.hanzo.ai/v1/integration/adroll/callback", "st8")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestAdrollAuthorizeURL(t *testing.T) {
 func TestAdrollExchangeSeals(t *testing.T) {
 	newAdrollMock(t)
 	res, err := adrollExchange(context.Background(), OAuthConfig{ClientID: "cid", ClientSecret: "csecret"},
-		"https://api.hanzo.ai/v1/integrations/adroll/callback", "code")
+		"https://api.hanzo.ai/v1/integration/adroll/callback", "code")
 	if err != nil {
 		t.Fatalf("exchange: %v", err)
 	}

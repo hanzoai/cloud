@@ -15,13 +15,13 @@
 //
 // Surface (all org-scoped; console's AgentsModule reads {agents:[...]}):
 //
-//	GET    /v1/agents               list agents for the org      -> {agents:[...]}
-//	POST   /v1/agents               create an agent              -> Agent
-//	GET    /v1/agents/:ref          agent detail + recent runs   -> AgentDetail
-//	PATCH  /v1/agents/:ref          update an agent              -> Agent
-//	DELETE /v1/agents/:ref          delete an agent (+ its runs)
-//	POST   /v1/agents/:ref/run      run the agent {input}        -> RunResult
-//	GET    /v1/agents/:ref/runs     run history                  -> {runs:[...]}
+//	GET    /v1/agent               list agents for the org      -> {agents:[...]}
+//	POST   /v1/agent               create an agent              -> Agent
+//	GET    /v1/agent/:ref          agent detail + recent runs   -> AgentDetail
+//	PATCH  /v1/agent/:ref          update an agent              -> Agent
+//	DELETE /v1/agent/:ref          delete an agent (+ its runs)
+//	POST   /v1/agent/:ref/run      run the agent {input}        -> RunResult
+//	GET    /v1/agent/:ref/runs     run history                  -> {runs:[...]}
 //
 // :ref is either the agent's public id (the `agent_...` handle create and list
 // return) OR its org-unique name — resolved by Store.Resolve, so a created agent
@@ -274,7 +274,7 @@ type agentView struct {
 // zip's schema walk takes only EXPORTED fields, and an embedded field of an
 // unexported type is not one, so the published response schema for this shape
 // currently lists `instructions` and `recentRuns` alone. That is a zip gap (the
-// same one that leaves the shipped PATCH /v1/agents/targets/{id} body schema
+// same one that leaves the shipped PATCH /v1/agent/targets/{id} body schema
 // holding only `id`), not a wire difference — encoding/json promotes the inner
 // fields exactly as it always has. It is fixed once, in zip's structSchema, for
 // every embedded shape in the fleet; flattening it here would trade one
@@ -522,27 +522,27 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// parked there — never as an In field, which is caller-supplied and would be a
 	// cross-tenant read the caller asserted for itself.
 	//
-	// IT IS INSTALLED ON THE ROUTER, NOT ON THE /v1/agents GROUP, because this
+	// IT IS INSTALLED ON THE ROUTER, NOT ON THE /v1/agent GROUP, because this
 	// surface is not composed under that group. A group's middleware wraps the
 	// routes in its OWN subtree, and three quarters of this surface is registered
 	// somewhere else: the collection root and the two sub-planes go on the Router by
-	// absolute path (zip.Get(zapp, "/v1/agents"), mountSessions(s, app),
+	// absolute path (zip.Get(zapp, "/v1/agent"), mountSessions(s, app),
 	// mountTargets(s, app)) and only /metrics, /activity and the :ref leaves are
-	// composed beneath g. So a Bridge on g parked no org for /v1/agents/targets or
-	// /v1/agents/sessions, and every op there answered 403 "X-Org-Id required" to a
+	// composed beneath g. So a Bridge on g parked no org for /v1/agent/targets or
+	// /v1/agent/sessions, and every op there answered 403 "X-Org-Id required" to a
 	// request that carried one. Serve installs one app-wide, which is why serving
 	// was unaffected and only the tests — which Mount onto a bare app — could see
 	// it; a gate whose absence just one route away is invisible in production is the
-	g := app.Group("/v1/agents")
+	g := app.Group("/v1/agent")
 	// cloud.Bridge parks the validated org on the context a typed op receives; it
 	// is the composer's install — once at the root of every program — so this
 	// package does not install its own.
 	//
 	// The root of the surface. Declared on the App with its WHOLE path, not on the
-	// group with an empty leaf: joining "/v1/agents" with "" yields "/v1/agents/",
+	// group with an empty leaf: joining "/v1/agent" with "" yields "/v1/agent/",
 	// a different path from the one these two have always served.
-	zip.Get(zapp, "/v1/agents", o.list)
-	zip.Post(zapp, "/v1/agents", o.create, zip.WithStatus(http.StatusCreated))
+	zip.Get(zapp, "/v1/agent", o.list)
+	zip.Post(zapp, "/v1/agent", o.create, zip.WithStatus(http.StatusCreated))
 	// The static org-wide surfaces are listed before the :ref wildcard for reading
 	// order, not for matching: the router resolves by SPECIFICITY, so a literal
 	// beats a param whatever order they register in ("metrics" is never captured as
@@ -552,9 +552,9 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(g, "/metrics", o.metrics)
 	zip.Get(g, "/activity", o.activity)
 	zip.Get(g, "/runs", o.orgRuns)
-	// Live agent-session control plane: /v1/agents/sessions[/...].
+	// Live agent-session control plane: /v1/agent/sessions[/...].
 	mountSessions(s, app)
-	// Agent targets: /v1/agents/targets[/...] — the #48 dispatch destinations a
+	// Agent targets: /v1/agent/targets[/...] — the #48 dispatch destinations a
 	// session runs on.
 	mountTargets(s, app)
 	zip.Get(g, "/:ref", o.get)
@@ -1090,7 +1090,7 @@ type runReq struct {
 // without this the one operation that spends money publishes an operationId and
 // nothing else.
 func init() {
-	openapi.Describe("/v1/agents/:ref/run", http.MethodPost,
+	openapi.Describe("/v1/agent/:ref/run", http.MethodPost,
 		"Run one of your org's agents and get the recorded run back.",
 		"Composes the agent's stored instructions with the caller's `input`, executes one real "+
 			"chat completion through the same in-process AI client the rest of the console uses, "+

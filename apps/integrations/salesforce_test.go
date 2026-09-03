@@ -30,7 +30,7 @@ func newSalesforceMock(t *testing.T, instanceURL string) {
 }
 
 func TestSalesforceAuthorizeScope(t *testing.T) {
-	raw, err := salesforceAuthorize(OAuthConfig{ClientID: "cid"}, "https://api.hanzo.ai/v1/integrations/salesforce/callback", "st8")
+	raw, err := salesforceAuthorize(OAuthConfig{ClientID: "cid"}, "https://api.hanzo.ai/v1/integration/salesforce/callback", "st8")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestSalesforceAuthorizeScope(t *testing.T) {
 func TestSalesforceExchangeSealsTokensAndInstance(t *testing.T) {
 	newSalesforceMock(t, "https://acme.my.salesforce.com")
 	res, err := salesforceExchange(context.Background(), OAuthConfig{ClientID: "cid", ClientSecret: "csecret"},
-		"https://api.hanzo.ai/v1/integrations/salesforce/callback", "code")
+		"https://api.hanzo.ai/v1/integration/salesforce/callback", "code")
 	if err != nil {
 		t.Fatalf("exchange: %v", err)
 	}

@@ -23,7 +23,7 @@ func TestSendSlack(t *testing.T) {
 	e := newApp(t)
 	sl := spySlack(t)
 
-	res := req(t, e, http.MethodPost, "/v1/channels/slack/send", "acme",
+	res := req(t, e, http.MethodPost, "/v1/channel/slack/send", "acme",
 		map[string]any{"room": map[string]any{"id": "C1"}, "replyTo": "171.2", "text": "hi"})
 	if res.Code != http.StatusOK {
 		t.Fatalf("send: %d (%s)", res.Code, res.Body)
@@ -52,7 +52,7 @@ func TestSendDiscordRouteCapability(t *testing.T) {
 	body := map[string]any{"room": map[string]any{"id": "999"}, "text": "x"}
 
 	// No inbound-learned route ⇒ 409, and the transport is never consulted.
-	if r := req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body); r.Code != http.StatusConflict {
+	if r := req(t, e, http.MethodPost, "/v1/channel/discord/send", "acme", body); r.Code != http.StatusConflict {
 		t.Fatalf("routeless send: %d, want 409", r.Code)
 	}
 	if dc.count() != 0 {
@@ -62,7 +62,7 @@ func TestSendDiscordRouteCapability(t *testing.T) {
 	if err := st.upsertRoute(ctx, "acme", "discord", "999", "", time.Now().Unix(), 0); err != nil {
 		t.Fatalf("seed route: %v", err)
 	}
-	res := req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body)
+	res := req(t, e, http.MethodPost, "/v1/channel/discord/send", "acme", body)
 	if res.Code != http.StatusOK {
 		t.Fatalf("send: %d (%s)", res.Code, res.Body)
 	}
@@ -73,7 +73,7 @@ func TestSendDiscordRouteCapability(t *testing.T) {
 	}
 
 	// C1-F1 tenancy: another org holds no route for the same room.
-	if r := req(t, e, http.MethodPost, "/v1/channels/discord/send", "beta", body); r.Code != http.StatusConflict {
+	if r := req(t, e, http.MethodPost, "/v1/channel/discord/send", "beta", body); r.Code != http.StatusConflict {
 		t.Fatalf("cross-org send: %d, want 409", r.Code)
 	}
 	if dc.count() != 1 {
@@ -90,7 +90,7 @@ func TestSendTeamsRouteCapability(t *testing.T) {
 	const root = "https://smba.example/amer/"
 	body := map[string]any{"room": map[string]any{"id": conv}, "text": "x"}
 
-	if r := req(t, e, http.MethodPost, "/v1/channels/teams/send", "acme", body); r.Code != http.StatusConflict {
+	if r := req(t, e, http.MethodPost, "/v1/channel/teams/send", "acme", body); r.Code != http.StatusConflict {
 		t.Fatalf("routeless send: %d, want 409", r.Code)
 	}
 	if tm.count() != 0 {
@@ -100,7 +100,7 @@ func TestSendTeamsRouteCapability(t *testing.T) {
 	if err := st.upsertRoute(ctx, "acme", "teams", conv, root, time.Now().Unix(), 0); err != nil {
 		t.Fatalf("seed route: %v", err)
 	}
-	if r := req(t, e, http.MethodPost, "/v1/channels/teams/send", "acme", body); r.Code != http.StatusOK {
+	if r := req(t, e, http.MethodPost, "/v1/channel/teams/send", "acme", body); r.Code != http.StatusOK {
 		t.Fatalf("send: %d (%s)", r.Code, r.Body)
 	}
 	call := tm.call(t, 0)
@@ -108,7 +108,7 @@ func TestSendTeamsRouteCapability(t *testing.T) {
 		t.Fatalf("transport call = %+v, want the learned serviceURL", call)
 	}
 
-	if r := req(t, e, http.MethodPost, "/v1/channels/teams/send", "beta", body); r.Code != http.StatusConflict {
+	if r := req(t, e, http.MethodPost, "/v1/channel/teams/send", "beta", body); r.Code != http.StatusConflict {
 		t.Fatalf("cross-org send: %d, want 409", r.Code)
 	}
 	if tm.count() != 1 {
@@ -123,7 +123,7 @@ func TestSendTelegramBinding(t *testing.T) {
 	// The telegram bind lives in integrations (OrgForExternalID) and cannot be
 	// seeded from this package — unbound is exactly what an org that never
 	// onboarded telegram looks like, and it must 403 with the transport untouched.
-	res := req(t, e, http.MethodPost, "/v1/channels/telegram/send", "acme",
+	res := req(t, e, http.MethodPost, "/v1/channel/telegram/send", "acme",
 		map[string]any{"room": map[string]any{"id": "777"}, "text": "x"})
 	if res.Code != http.StatusForbidden {
 		t.Fatalf("unbound send: %d, want 403", res.Code)
@@ -151,10 +151,10 @@ func TestSendAuthValidation(t *testing.T) {
 	sl := spySlack(t)
 	ok := map[string]any{"room": map[string]any{"id": "C1"}, "text": "x"}
 
-	if r := req(t, e, http.MethodPost, "/v1/channels/slack/send", "", ok); r.Code != http.StatusForbidden {
+	if r := req(t, e, http.MethodPost, "/v1/channel/slack/send", "", ok); r.Code != http.StatusForbidden {
 		t.Fatalf("anonymous send: %d, want 403", r.Code)
 	}
-	if r := req(t, e, http.MethodPost, "/v1/channels/bogus/send", "acme", ok); r.Code != http.StatusNotFound {
+	if r := req(t, e, http.MethodPost, "/v1/channel/bogus/send", "acme", ok); r.Code != http.StatusNotFound {
 		t.Fatalf("unknown channel: %d, want 404", r.Code)
 	}
 	bad := []map[string]any{
@@ -169,7 +169,7 @@ func TestSendAuthValidation(t *testing.T) {
 		{"room": map[string]any{"id": "C1"}, "text": "x", "channel": "slack"},
 	}
 	for i, b := range bad {
-		if r := req(t, e, http.MethodPost, "/v1/channels/slack/send", "acme", b); r.Code != http.StatusBadRequest {
+		if r := req(t, e, http.MethodPost, "/v1/channel/slack/send", "acme", b); r.Code != http.StatusBadRequest {
 			t.Fatalf("bad body %d: %d, want 400 (%s)", i, r.Code, r.Body)
 		}
 	}
@@ -181,7 +181,7 @@ func TestSendAuthValidation(t *testing.T) {
 func TestChannelsList(t *testing.T) {
 	e := newApp(t)
 
-	res := req(t, e, http.MethodGet, "/v1/channels", "acme", nil)
+	res := req(t, e, http.MethodGet, "/v1/channel", "acme", nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("list: %d (%s)", res.Code, res.Body)
 	}
@@ -222,7 +222,7 @@ func TestChannelsList(t *testing.T) {
 			}
 		}
 	}
-	if r := req(t, e, http.MethodGet, "/v1/channels", "", nil); r.Code != http.StatusForbidden {
+	if r := req(t, e, http.MethodGet, "/v1/channel", "", nil); r.Code != http.StatusForbidden {
 		t.Fatalf("anonymous list: %d, want 403", r.Code)
 	}
 }
@@ -237,7 +237,7 @@ func TestSendIdempotency(t *testing.T) {
 	}
 	body := map[string]any{"room": map[string]any{"id": "999"}, "text": "x", "idempotency": "idem-1"}
 
-	res := req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body)
+	res := req(t, e, http.MethodPost, "/v1/channel/discord/send", "acme", body)
 	if res.Code != http.StatusOK {
 		t.Fatalf("send: %d (%s)", res.Code, res.Body)
 	}
@@ -248,7 +248,7 @@ func TestSendIdempotency(t *testing.T) {
 	}
 
 	// Same key replays the stored receipt without a second transport send.
-	res = req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body)
+	res = req(t, e, http.MethodPost, "/v1/channel/discord/send", "acme", body)
 	if res.Code != http.StatusOK {
 		t.Fatalf("replay: %d (%s)", res.Code, res.Body)
 	}
@@ -263,7 +263,7 @@ func TestSendIdempotency(t *testing.T) {
 
 	// A different key is a different send.
 	body["idempotency"] = "idem-2"
-	if r := req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body); r.Code != http.StatusOK {
+	if r := req(t, e, http.MethodPost, "/v1/channel/discord/send", "acme", body); r.Code != http.StatusOK {
 		t.Fatalf("second key: %d", r.Code)
 	}
 	if dc.count() != 2 {
@@ -284,7 +284,7 @@ func TestSendRetryAfterFailure(t *testing.T) {
 	// C2-1: a transport failure releases the claimed key in the same error
 	// path — a failed send must not poison the retention window.
 	dc.setFail(errors.New("gateway sad"))
-	if r := req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body); r.Code != http.StatusBadGateway {
+	if r := req(t, e, http.MethodPost, "/v1/channel/discord/send", "acme", body); r.Code != http.StatusBadGateway {
 		t.Fatalf("failed send: %d, want 502 (%s)", r.Code, r.Body)
 	}
 	if dc.count() != 1 {
@@ -298,14 +298,14 @@ func TestSendRetryAfterFailure(t *testing.T) {
 
 	// The same key re-attempts and succeeds…
 	dc.setFail(nil)
-	if r := req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body); r.Code != http.StatusOK {
+	if r := req(t, e, http.MethodPost, "/v1/channel/discord/send", "acme", body); r.Code != http.StatusOK {
 		t.Fatalf("retry: %d", r.Code)
 	}
 	if dc.count() != 2 {
 		t.Fatalf("transport calls = %d, want the retry to re-send", dc.count())
 	}
 	// …and only the COMPLETED send replays.
-	if r := req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body); r.Code != http.StatusOK {
+	if r := req(t, e, http.MethodPost, "/v1/channel/discord/send", "acme", body); r.Code != http.StatusOK {
 		t.Fatalf("replay: %d", r.Code)
 	}
 	if dc.count() != 2 {
@@ -329,18 +329,18 @@ func TestSendNoSecretsAtRest(t *testing.T) {
 
 	// Exercise the surfaces that persist state: a plain send, a failed
 	// idempotent send, its retry, and a replay.
-	if r := req(t, e, http.MethodPost, "/v1/channels/slack/send", "acme",
+	if r := req(t, e, http.MethodPost, "/v1/channel/slack/send", "acme",
 		map[string]any{"room": map[string]any{"id": "C1"}, "text": "hi"}); r.Code != http.StatusOK {
 		t.Fatalf("slack send: %d", r.Code)
 	}
 	body := map[string]any{"room": map[string]any{"id": "999"}, "text": "x", "idempotency": "k-s"}
 	dc.setFail(errors.New("boom"))
-	if r := req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body); r.Code != http.StatusBadGateway {
+	if r := req(t, e, http.MethodPost, "/v1/channel/discord/send", "acme", body); r.Code != http.StatusBadGateway {
 		t.Fatalf("failed send: %d", r.Code)
 	}
 	dc.setFail(nil)
 	for range 2 {
-		if r := req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body); r.Code != http.StatusOK {
+		if r := req(t, e, http.MethodPost, "/v1/channel/discord/send", "acme", body); r.Code != http.StatusOK {
 			t.Fatalf("send: %d", r.Code)
 		}
 	}
@@ -385,7 +385,7 @@ func TestSendWhatsAppRouteCapability(t *testing.T) {
 	st := e.store(t)
 	body := map[string]any{"room": map[string]any{"id": "15551234567"}, "text": "x"}
 
-	if r := req(t, e, http.MethodPost, "/v1/channels/whatsapp/send", "acme", body); r.Code != http.StatusConflict {
+	if r := req(t, e, http.MethodPost, "/v1/channel/whatsapp/send", "acme", body); r.Code != http.StatusConflict {
 		t.Fatalf("routeless send: %d, want 409", r.Code)
 	}
 	if wa.count() != 0 {
@@ -395,7 +395,7 @@ func TestSendWhatsAppRouteCapability(t *testing.T) {
 	if err := st.upsertRoute(ctx, "acme", "whatsapp", "15551234567", "", time.Now().Unix(), 0); err != nil {
 		t.Fatalf("seed route: %v", err)
 	}
-	res := req(t, e, http.MethodPost, "/v1/channels/whatsapp/send", "acme", body)
+	res := req(t, e, http.MethodPost, "/v1/channel/whatsapp/send", "acme", body)
 	if res.Code != http.StatusOK {
 		t.Fatalf("send: %d (%s)", res.Code, res.Body)
 	}
@@ -406,7 +406,7 @@ func TestSendWhatsAppRouteCapability(t *testing.T) {
 	}
 
 	// Another org's route is not this org's capability, even for the same number.
-	if r := req(t, e, http.MethodPost, "/v1/channels/whatsapp/send", "beta", body); r.Code != http.StatusConflict {
+	if r := req(t, e, http.MethodPost, "/v1/channel/whatsapp/send", "beta", body); r.Code != http.StatusConflict {
 		t.Fatalf("cross-org send: %d, want 409", r.Code)
 	}
 }

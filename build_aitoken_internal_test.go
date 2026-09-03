@@ -3,7 +3,7 @@ package cloud
 import "testing"
 
 // TestAIM2MTokenURL pins the split-horizon resolution order for the agent-runner
-// M2M token endpoint (the GAP that 502'd every POST /v1/agents/:ref/run: the
+// M2M token endpoint (the GAP that 502'd every POST /v1/agent/:ref/run: the
 // public issuer host is Cloudflare-fronted and 403s an in-cluster loopback with
 // edge error 1006). The runner must mint its token from an IN-CLUSTER URL. Order:
 // explicit override → in-cluster IAM_URL → public IAMIssuer fallback.

@@ -137,7 +137,7 @@ func TestEndpointListsAnEnabledServersTools(t *testing.T) {
 		t.Fatal("an unactivated tool must not be on the MCP endpoint")
 	}
 
-	if r := do(t, app, http.MethodPut, "/v1/tools/activation", "acme",
+	if r := do(t, app, http.MethodPut, "/v1/tool/activation", "acme",
 		map[string]any{"activate": []string{"stripe_charge"}}); r.Code != 200 {
 		t.Fatalf("activate: %d (%s)", r.Code, r.Body)
 	}
@@ -169,7 +169,7 @@ func TestEndpointIsNamespacedPerServer(t *testing.T) {
 	p.http = ts.Client()
 	std.Register(p)
 
-	if r := do(t, app, http.MethodPut, "/v1/tools/activation", "acme",
+	if r := do(t, app, http.MethodPut, "/v1/tool/activation", "acme",
 		map[string]any{"activate": []string{"stripe_charge", "adyen_charge"}}); r.Code != 200 {
 		t.Fatalf("activate: %d (%s)", r.Code, r.Body)
 	}
@@ -190,7 +190,7 @@ func TestEndpointIsPerTenant(t *testing.T) {
 	p := newMCPProvider(mounted.State.servers, fakeKMS{"stripe": "Bearer sk-live"})
 	p.http = ts.Client()
 	std.Register(p)
-	if r := do(t, app, http.MethodPut, "/v1/tools/activation", "acme",
+	if r := do(t, app, http.MethodPut, "/v1/tool/activation", "acme",
 		map[string]any{"activate": []string{"stripe_charge"}}); r.Code != 200 {
 		t.Fatalf("activate: %d (%s)", r.Code, r.Body)
 	}
@@ -212,7 +212,7 @@ func TestServersArePerTenant(t *testing.T) {
 	app := endpointApp(t)
 	enable(t, "acme", "stripe", "com.stripe_mcp", "https://mcp.stripe.com")
 
-	mine := do(t, app, http.MethodGet, "/v1/tools/mcp/servers", "acme", nil)
+	mine := do(t, app, http.MethodGet, "/v1/tool/mcp/servers", "acme", nil)
 	if !strings.Contains(string(mine.Body), `"stripe"`) {
 		t.Fatalf("an org must see its own server: %s", mine.Body)
 	}
@@ -223,12 +223,12 @@ func TestServersArePerTenant(t *testing.T) {
 		t.Fatalf("an enabled listing must record where it came from: %s", mine.Body)
 	}
 
-	theirs := do(t, app, http.MethodGet, "/v1/tools/mcp/servers", "rival", nil)
+	theirs := do(t, app, http.MethodGet, "/v1/tool/mcp/servers", "rival", nil)
 	if strings.Contains(string(theirs.Body), "stripe") {
 		t.Fatalf("another tenant sees acme's server: %s", theirs.Body)
 	}
 	// And cannot delete it either: an id belonging to another tenant is a 404.
-	if r := do(t, app, http.MethodDelete, "/v1/tools/mcp/servers/stripe", "rival", nil); r.Code != 404 {
+	if r := do(t, app, http.MethodDelete, "/v1/tool/mcp/servers/stripe", "rival", nil); r.Code != 404 {
 		t.Fatalf("cross-tenant delete want 404, got %d (%s)", r.Code, r.Body)
 	}
 }

@@ -12,7 +12,7 @@ import (
 )
 
 func TestRedditAuthorizeURL(t *testing.T) {
-	raw, err := redditAuthorize(OAuthConfig{ClientID: "rd-cid"}, "https://api.hanzo.ai/v1/integrations/reddit_ads/callback", "st8")
+	raw, err := redditAuthorize(OAuthConfig{ClientID: "rd-cid"}, "https://api.hanzo.ai/v1/integration/reddit_ads/callback", "st8")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}

@@ -23,11 +23,11 @@ import (
 // repo sync uses (github_app.go). Five org-authed routes, siblings of the repo
 // list/import, addressing one repo as a resource:
 //
-//	GET    /v1/integrations/github/repos/{repo}/pages         — status + live URL + custom domain
-//	POST   /v1/integrations/github/repos/{repo}/pages         — enable/configure (source branch or Actions)
-//	PUT    /v1/integrations/github/repos/{repo}/pages         — set/clear custom domain, HTTPS, source
-//	DELETE /v1/integrations/github/repos/{repo}/pages         — disable
-//	POST   /v1/integrations/github/repos/{repo}/pages/builds  — request a build
+//	GET    /v1/integration/github/repos/{repo}/pages         — status + live URL + custom domain
+//	POST   /v1/integration/github/repos/{repo}/pages         — enable/configure (source branch or Actions)
+//	PUT    /v1/integration/github/repos/{repo}/pages         — set/clear custom domain, HTTPS, source
+//	DELETE /v1/integration/github/repos/{repo}/pages         — disable
+//	POST   /v1/integration/github/repos/{repo}/pages/builds  — request a build
 //
 // Isolation is the whole point. The org comes from the validated principal, never a
 // request field; the requested repo NAME is resolved against the installation's
@@ -414,7 +414,7 @@ func rateLimited(status int, body []byte, hdr http.Header) (bool, string) {
 // place and every action is uniformly 404 for a repo the org's installation cannot
 // touch — before any request body is read.
 // pagesTarget is ONE resolver for both handler shapes: the org comes off the
-// request CONTEXT (cloud.Bridge parks it at /v1/integrations), so a typed op and
+// request CONTEXT (cloud.Bridge parks it at /v1/integration), so a typed op and
 // the raw /builds handler resolve their target through the same three steps —
 // principal gate, repo-name grammar, grant lookup.
 func pagesTarget(ctx context.Context, repo string) (pagesRepo, error) {

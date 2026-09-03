@@ -164,7 +164,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	g.Post("/:platform", cloud.Handle(s, connect))
 	zip.Delete(zapp, "/v1/destination/:platform", o.disconnect)
 	zip.Post(zapp, "/v1/destination/:platform/test", o.test)
-	// The browser tag config is GET /v1/projects/tags — it must be served by the
+	// The browser tag config is GET /v1/project/tags — it must be served by the
 	// process that owns the project store (production runs ~25 single-app processes).
 }
 

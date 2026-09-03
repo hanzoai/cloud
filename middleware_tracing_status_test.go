@@ -45,9 +45,9 @@ func TestSpanRecordsTheStatusTheCallerGot(t *testing.T) {
 
 			app := zip.New(zip.Config{ErrorHandler: ErrorHandler})
 			app.Use(TracingMiddleware())
-			app.Patch("/v1/agents/sessions/:id", func(c *zip.Ctx) error { return tc.err })
+			app.Patch("/v1/agent/sessions/:id", func(c *zip.Ctx) error { return tc.err })
 
-			resp, err := app.Test(httptest.NewRequest("PATCH", "/v1/agents/sessions/sess_x", nil))
+			resp, err := app.Test(httptest.NewRequest("PATCH", "/v1/agent/sessions/sess_x", nil))
 			if err != nil {
 				t.Fatalf("app.Test: %v", err)
 			}

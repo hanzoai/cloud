@@ -275,7 +275,7 @@ func Enforce() zip.Handler {
 // Settle enforces payment for one resource against the REQUEST bound to ctx — the
 // same flow Enforce runs, for a caller that identifies the priced thing itself
 // rather than by path (the tool plane prices a TOOL, and every tool call arrives on
-// the one /v1/tools/call route).
+// the one /v1/tool/call route).
 //
 // Free resource → nil, and no request is needed: an unpriced call off the HTTP path
 // (the CLI's LocalInvoke) still runs. A PRICED one always needs the request, because

@@ -15,14 +15,14 @@
 // one way. The engine is created after UseAll, so the surface resolves it
 // LAZILY per request (503 until it is live).
 //
-// Surface (all under /v1/tasks/*; the studio is its own image on tasks.hanzo.ai):
+// Surface (all under /v1/task/*; the studio is its own image on tasks.hanzo.ai):
 //
-//	/v1/tasks/health                    generic liveness (cloud's per-subsystem contract)
-//	/v1/tasks/settings                  capability flags (open bootstrap)
-//	/v1/tasks/cluster[/health]          cluster status (open probes)
-//	/v1/tasks/namespaces|nexus|...      engine JSON API (identity-gated)
-//	/v1/tasks/mcp                       MCP tool surface (identity-gated)
-//	/v1/tasks/events                    SSE realtime stream (identity-gated)
+//	/v1/task/health                    generic liveness (cloud's per-subsystem contract)
+//	/v1/task/settings                  capability flags (open bootstrap)
+//	/v1/task/cluster[/health]          cluster status (open probes)
+//	/v1/task/namespaces|nexus|...      engine JSON API (identity-gated)
+//	/v1/task/mcp                       MCP tool surface (identity-gated)
+//	/v1/task/events                    SSE realtime stream (identity-gated)
 //
 // Identity: cloud's gateway validates the IAM JWT and mints X-Org-Id / X-User-Id
 // (HIP-0026). gate resolves those two through apps/principal — the ONE place the
@@ -51,19 +51,19 @@ import (
 // subtree is where the engine answers, and it is named ONCE: httpMux registers
 // it and the greedy route beside it covers the same ground. Two spellings of one
 // address is how a redirect comes to name a subtree nobody serves.
-const subtree = "/v1/tasks/"
+const subtree = "/v1/task/"
 
-// bare is the whole answer at /v1/tasks, on every method: a redirect into the
+// bare is the whole answer at /v1/task, on every method: a redirect into the
 // subtree. It is CLOUD's answer — net/http's subtree rule applied to the pattern
 // httpMux registers, never the engine's, which serves this address 404
 // (TestTheEngineDoesNotServeTheBareNoun) — and it reaches a client through the
-// GREEDY route at /v1/tasks/*, which matches the empty remainder and so claims
+// GREEDY route at /v1/task/*, which matches the empty remainder and so claims
 // the bare noun too. TestTheBareNounAnswersEveryByte measures every byte of it.
-const bare = "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. " +
+const bare = "Answers 307 with Location /v1/task/ — this address serves nothing itself. " +
 	"The status and the Location are the same on every method; a GET additionally carries the " +
 	"short HTML body a browser falls back to when it does not follow the redirect itself.\n\n"
 
-// behind is the sentence the five operations at /v1/tasks/* share: what the one
+// behind is the sentence the five operations at /v1/task/* share: what the one
 // wildcard actually fronts, and the gate in front of it.
 const behind = "\n\nThis single address fronts the whole durable-workflow engine — namespaces, " +
 	"workflows, schedules, batches, deployments, nexus, task queues, workers, activities and " +
@@ -90,21 +90,21 @@ const behind = "\n\nThis single address fronts the whole durable-workflow engine
 // they cannot explain.
 func init() {
 	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
-		openapi.Describe("/v1/tasks", m,
+		openapi.Describe("/v1/task", m,
 			"Redirect to the tasks API root",
 			bare+"A 307 preserves both the method and the body, so a client that follows "+
-				"redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A "+
+				"redirects re-sends the request unchanged to /v1/task/ and nothing is lost. A "+
 				"client that does NOT follow redirects sees only the 307 and performs no work — "+
-				"address /v1/tasks/ directly and the hop disappears.")
+				"address /v1/task/ directly and the hop disappears.")
 	}
 
-	openapi.Describe("/v1/tasks/*", http.MethodGet,
+	openapi.Describe("/v1/task/*", http.MethodGet,
 		"Read workflow state from the durable engine",
 		"Reads from the durable engine: list namespaces, workflows, schedules, batches, "+
 			"deployments, task queues, workers and search attributes, fetch one workflow with "+
 			"its history, or subscribe to the realtime event stream. The cluster and settings "+
 			"probes are on this method too."+behind)
-	openapi.Describe("/v1/tasks/*", http.MethodPost,
+	openapi.Describe("/v1/task/*", http.MethodPost,
 		"Start workflows and act on running ones",
 		"Everything that changes the engine's state: register a namespace, start a workflow "+
 			"or signal-with-start one, and signal, query, cancel, terminate or reset a workflow "+
@@ -113,21 +113,21 @@ func init() {
 			"The engine is event-sourced and exactly-once, so an action is durable once it is "+
 			"accepted and survives a process crash — a started workflow resumes rather than "+
 			"restarts."+behind)
-	openapi.Describe("/v1/tasks/*", http.MethodDelete,
+	openapi.Describe("/v1/task/*", http.MethodDelete,
 		"Delete an engine resource",
 		"Removes a resource the engine owns — a namespace and the like — inside the caller's "+
 			"own tenant shard.\n\n"+
 			"It is the narrowest of the three working methods: most of the engine's surface is "+
 			"read on GET and acted on with POST, so a delete that finds no route for its path "+
 			"answers the same plain-text 404 any unrouted path does."+behind)
-	openapi.Describe("/v1/tasks/*", http.MethodPut,
+	openapi.Describe("/v1/task/*", http.MethodPut,
 		"Not served by the engine",
 		"Published because this address accepts every method, but the engine routes no PUT: "+
 			"the answer is a plain-text 404, not a 405, and no state changes.\n\n"+
 			"Nothing here is updated by replacement. The engine is event-sourced — a workflow "+
 			"is changed by signalling, cancelling, terminating or resetting it, all of which "+
 			"are POST — so a client reaching for PUT wants POST."+behind)
-	openapi.Describe("/v1/tasks/*", http.MethodPatch,
+	openapi.Describe("/v1/task/*", http.MethodPatch,
 		"Not served by the engine",
 		"Published because this address accepts every method, but the engine routes no "+
 			"PATCH: the answer is a plain-text 404, not a 405, and no state changes.\n\n"+
@@ -141,11 +141,11 @@ func init() {
 	// so a method added there is covered the day it appears rather than published
 	// bare — which is what a hand-copied list here had already produced for
 	// OPTIONS and TRACE.
-	openapi.DescribeRest("/v1/tasks",
+	openapi.DescribeRest("/v1/task",
 		"Redirect to the tasks API root",
 		bare+"Every method is answered the same way, because a subtree redirect is a routing "+
 			"fact and not a method's answer.")
-	openapi.DescribeRest("/v1/tasks/*",
+	openapi.DescribeRest("/v1/task/*",
 		"Not routed by the durable engine",
 		"Published because this address accepts every method, but the engine routes nothing "+
 			"here: the request arrives as an unrouted path and no workflow is read or started.")
@@ -167,7 +167,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	// TWO REGISTRATIONS, ONE HANDLER, AND ONLY ONE OF THEM IS EVER ENTERED. The
-	// greedy `*` matches the EMPTY remainder, so /v1/tasks/* claims /v1/tasks as
+	// greedy `*` matches the EMPTY remainder, so /v1/task/* claims /v1/task as
 	// well — and it wins there over the exact route in EITHER registration order
 	// (TestTheGreedyRouteClaimsTheBareNoun; a `:param` sibling does not, which is
 	// what makes this a fact about greediness rather than about precedence). The
@@ -175,10 +175,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// the address in the DOCUMENT: paths are derived from the route table, so
 	// without it the capability's own address appears in no subset. It stays for
 	// that, and it carries the same handler so the two can never disagree about
-	// what /v1/tasks answers.
+	// what /v1/task answers.
 	//
 	// That is also why the bare noun cannot be served natively here. Its answer is
-	// cloud's — hanzoai/tasks v1.52.9 registers no /v1/tasks/ subtree pattern at
+	// cloud's — hanzoai/tasks v1.52.9 registers no /v1/task/ subtree pattern at
 	// all, so the engine serves this address 404 on every method
 	// (TestTheEngineDoesNotServeTheBareNoun), and the redirect is net/http's rule
 	// applied to httpMux's own mux.Handle(subtree, …). Owning the answer is not
@@ -192,7 +192,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// reads, so what stays out of it publishes no schema, no prose, no MCP tool,
 	// no CLI command and no SDK method.
 	//
-	// /v1/tasks/* is ONE route over 64 engine operations this router never sees.
+	// /v1/task/* is ONE route over 64 engine operations this router never sees.
 	// They are matched by path SEGMENT inside hanzoai/tasks' own ServeMux
 	// (pkg/tasks/embed.go, HTTPHandler) rather than by patterns, so there is no
 	// route here to type; their inputs are anonymous structs local to that
@@ -213,8 +213,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// re-shaping a relayed answer to fit a local struct is the wire break this
 	// migration exists to avoid.
 	h := zip.AdaptNetHTTP(&surface{})
-	app.All("/v1/tasks", h)
-	app.All("/v1/tasks/*", h)
+	app.All("/v1/task", h)
+	app.All("/v1/task/*", h)
 
 	// THE STUDIO IS NOT HERE. It is its own image (ghcr.io/hanzoai/admin-tasks, built
 	// from hanzoai/admin apps/tasks at base '/') on its own host, tasks.hanzo.ai,
@@ -225,7 +225,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// ONE ORIGIN SURVIVES THE MOVE, and that is why the studio could go. It reads
 	// this surface with same-origin credentials and carries no bearer, so a bundle
 	// on one host and an API on another would send no credential at all. The edge
-	// splits tasks.hanzo.ai instead: the bundle from its own pods, /v1/tasks to
+	// splits tasks.hanzo.ai instead: the bundle from its own pods, /v1/task to
 	// this binary (universe infra/k8s/ingress/routes.yaml), which is the same
 	// split console.hanzo.ai runs. The browser sees one origin either way, so
 	// nothing about the requests that arrive here changes.
@@ -284,23 +284,23 @@ func (s *surface) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // JWT-validating identity middleware for gate — cloud's gateway already validated
 // the JWT, so gate trusts its minted X-User-Id instead of re-verifying. net/http
 // ServeMux longest-prefix matching makes the specific routes win over the
-// /v1/tasks/ catch-all, exactly as in standalone tasksd:
+// /v1/task/ catch-all, exactly as in standalone tasksd:
 //
-//   - /v1/tasks/settings, /v1/tasks/cluster[/health] are OPEN (capability flags
+//   - /v1/task/settings, /v1/task/cluster[/health] are OPEN (capability flags
 //     and probes carry no per-org data), matching tasksd registering them outside
-//     its identity wrap. (/v1/tasks/health is the generic per-subsystem liveness
+//     its identity wrap. (/v1/task/health is the generic per-subsystem liveness
 //     route cloud registers before UseAll, which wins ahead of this mux.)
-//   - the data surface (the /v1/tasks/ catch-all, /v1/tasks/mcp, /v1/tasks/events)
+//   - the data surface (the /v1/task/ catch-all, /v1/task/mcp, /v1/task/events)
 //     is gated: a request without a validated principal is refused, exactly as the
 //     rest of the cloud data plane (clients/principal.Org) and tasksd's
 //     RequireIdentity(require=true) refuse it.
 func httpMux(srv *tasks.Embedded) http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/v1/tasks/settings", srv.HTTPHandler())
-	mux.Handle("/v1/tasks/cluster", srv.ClusterHandler())
-	mux.Handle("/v1/tasks/cluster/health", srv.ClusterHandler())
-	mux.Handle("/v1/tasks/mcp", gate(srv.MCPHandler()))
-	mux.Handle("/v1/tasks/events", gate(srv.EventsHandler()))
+	mux.Handle("/v1/task/settings", srv.HTTPHandler())
+	mux.Handle("/v1/task/cluster", srv.ClusterHandler())
+	mux.Handle("/v1/task/cluster/health", srv.ClusterHandler())
+	mux.Handle("/v1/task/mcp", gate(srv.MCPHandler()))
+	mux.Handle("/v1/task/events", gate(srv.EventsHandler()))
 	mux.Handle(subtree, gate(srv.HTTPHandler()))
 	return mux
 }

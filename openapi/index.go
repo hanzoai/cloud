@@ -34,7 +34,7 @@ package openapi
 // sibling's subtree (apps/zen). What keeps that from SHADOWING anything is one
 // line rather than a policy: an address the document already carries an
 // operation at is the capability's own, and the index does not answer there —
-// GET /v1/agents is the agents collection, not an index of it. The day kms
+// GET /v1/agent is the agents collection, not an index of it. The day kms
 // serves its own root, the document says so and this steps aside with no edit
 // here at all.
 //
@@ -124,7 +124,7 @@ type Index struct {
 // keeps the index from telling an unflagged caller that a capability exists.
 //
 // A capability that READS its own root is in the root index — the href is real
-// and a client can follow it — but has NO entry in the map: GET /v1/agents is
+// and a client can follow it — but has NO entry in the map: GET /v1/agent is
 // the agents collection, and an index of the capability in front of it would be
 // the same address answering two things.
 //

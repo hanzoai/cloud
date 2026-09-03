@@ -13,9 +13,9 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// tags.go — GET /v1/projects/tags, the PUBLIC per-site browser-tag config the
+// tags.go — GET /v1/project/tags, the PUBLIC per-site browser-tag config the
 // hosted tag (track.js / /v1/event/tag.js) fetches to know which client-side pixels to
-// inject. Under /v1/projects because the endpoint follows the store it reads, which is
+// inject. Under /v1/project because the endpoint follows the store it reads, which is
 // this app's (HIP-0139 §3.1).
 //
 // It lives HERE, in the projects app, because a project IS a site and carries its own
@@ -41,8 +41,8 @@ type tagConfig struct {
 }
 
 func init() {
-	openapi.Register("/v1/projects/tags", http.MethodGet, nil, tagConfig{})
-	openapi.Describe("/v1/projects/tags", http.MethodGet,
+	openapi.Register("/v1/project/tags", http.MethodGet, nil, tagConfig{})
+	openapi.Describe("/v1/project/tags", http.MethodGet,
 		"The site's browser tag set for the hosted tag — which pixels to inject, by publishable key",
 		"Returns the client-side pixels the SITE has connected (GA4, Google Ads, LinkedIn, Meta, "+
 			"Pinterest, Reddit, TikTok, X) with their "+
@@ -53,11 +53,11 @@ func init() {
 			"site it answers an empty set at 200 — a page never breaks on its tag config.")
 }
 
-// mountTags registers GET /v1/projects/tags as a public, raw net/http handler
+// mountTags registers GET /v1/project/tags as a public, raw net/http handler
 // (like the event plane's /v1/event/tag.js) that reads THIS process's project store
 // directly.
 func mountTags(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/projects/tags", func(c *zip.Ctx) error {
+	app.Get("/v1/project/tags", func(c *zip.Ctx) error {
 		return serveTags(s, c)
 	})
 }

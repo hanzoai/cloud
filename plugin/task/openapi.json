@@ -17,64 +17,64 @@
   ],
   "tags": [
     {
-      "name": "tasks"
+      "name": "task"
     }
   ],
   "paths": {
-    "/v1/tasks": {
+    "/v1/task": {
       "delete": {
-        "operationId": "delete_tasks",
+        "operationId": "delete_task",
         "summary": "Redirect to the tasks API root",
-        "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
+        "description": "Answers 307 with Location /v1/task/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/task/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/task/ directly and the hop disappears.",
         "tags": [
-          "tasks"
+          "task"
         ],
         "x-public": true
       },
       "get": {
-        "operationId": "get_tasks",
+        "operationId": "get_task",
         "summary": "Redirect to the tasks API root",
-        "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
+        "description": "Answers 307 with Location /v1/task/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/task/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/task/ directly and the hop disappears.",
         "tags": [
-          "tasks"
+          "task"
         ],
         "x-public": true
       },
       "patch": {
-        "operationId": "patch_tasks",
+        "operationId": "patch_task",
         "summary": "Redirect to the tasks API root",
-        "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
+        "description": "Answers 307 with Location /v1/task/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/task/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/task/ directly and the hop disappears.",
         "tags": [
-          "tasks"
+          "task"
         ],
         "x-public": true
       },
       "post": {
-        "operationId": "post_tasks",
+        "operationId": "post_task",
         "summary": "Redirect to the tasks API root",
-        "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
+        "description": "Answers 307 with Location /v1/task/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/task/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/task/ directly and the hop disappears.",
         "tags": [
-          "tasks"
+          "task"
         ],
         "x-public": true
       },
       "put": {
-        "operationId": "put_tasks",
+        "operationId": "put_task",
         "summary": "Redirect to the tasks API root",
-        "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
+        "description": "Answers 307 with Location /v1/task/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/task/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/task/ directly and the hop disappears.",
         "tags": [
-          "tasks"
+          "task"
         ],
         "x-public": true
       }
     },
-    "/v1/tasks/{wildcard1}": {
+    "/v1/task/{wildcard1}": {
       "delete": {
-        "operationId": "delete_tasks_by_wildcard1",
+        "operationId": "delete_task_by_wildcard1",
         "summary": "Delete an engine resource",
         "description": "Removes a resource the engine owns — a namespace and the like — inside the caller's own tenant shard.\n\nIt is the narrowest of the three working methods: most of the engine's surface is read on GET and acted on with POST, so a delete that finds no route for its path answers the same plain-text 404 any unrouted path does.\n\nThis single address fronts the whole durable-workflow engine — namespaces, workflows, schedules, batches, deployments, nexus, task queues, workers, activities and the rest — matched by path segment inside the engine's own router, which is why the document publishes one wildcard rather than sixty-four operations.\n\nMost of it requires a validated principal and is refused 403 otherwise; the settings and cluster probes are open, because capability flags and cluster health carry no tenant data. A principal that is validated but carries NO org is refused too — that request would otherwise read the shared unscoped store instead of anyone's shard, so it fails closed. Admitted, the org, project and user are threaded into the engine, and every read and write lands in that tenant's own shard.\n\nTwo things about the answers differ from the rest of this API and will bite a generic client: errors here carry `code` as a NUMBER rather than the usual `status`, and the address serves several content types — JSON, plain-text refusals, and an event stream at the events path. Until the engine is wired the whole surface answers 503.",
         "tags": [
-          "tasks"
+          "task"
         ],
         "parameters": [
           {
@@ -88,11 +88,11 @@
         ]
       },
       "get": {
-        "operationId": "get_tasks_by_wildcard1",
+        "operationId": "get_task_by_wildcard1",
         "summary": "Read workflow state from the durable engine",
         "description": "Reads from the durable engine: list namespaces, workflows, schedules, batches, deployments, task queues, workers and search attributes, fetch one workflow with its history, or subscribe to the realtime event stream. The cluster and settings probes are on this method too.\n\nThis single address fronts the whole durable-workflow engine — namespaces, workflows, schedules, batches, deployments, nexus, task queues, workers, activities and the rest — matched by path segment inside the engine's own router, which is why the document publishes one wildcard rather than sixty-four operations.\n\nMost of it requires a validated principal and is refused 403 otherwise; the settings and cluster probes are open, because capability flags and cluster health carry no tenant data. A principal that is validated but carries NO org is refused too — that request would otherwise read the shared unscoped store instead of anyone's shard, so it fails closed. Admitted, the org, project and user are threaded into the engine, and every read and write lands in that tenant's own shard.\n\nTwo things about the answers differ from the rest of this API and will bite a generic client: errors here carry `code` as a NUMBER rather than the usual `status`, and the address serves several content types — JSON, plain-text refusals, and an event stream at the events path. Until the engine is wired the whole surface answers 503.",
         "tags": [
-          "tasks"
+          "task"
         ],
         "parameters": [
           {
@@ -106,11 +106,11 @@
         ]
       },
       "patch": {
-        "operationId": "patch_tasks_by_wildcard1",
+        "operationId": "patch_task_by_wildcard1",
         "summary": "Not served by the engine",
         "description": "Published because this address accepts every method, but the engine routes no PATCH: the answer is a plain-text 404, not a 405, and no state changes.\n\nThere is no partial update on this surface. State advances by appending events, so the operations that change a running workflow — signal, cancel, terminate, reset — are all POST.\n\nThis single address fronts the whole durable-workflow engine — namespaces, workflows, schedules, batches, deployments, nexus, task queues, workers, activities and the rest — matched by path segment inside the engine's own router, which is why the document publishes one wildcard rather than sixty-four operations.\n\nMost of it requires a validated principal and is refused 403 otherwise; the settings and cluster probes are open, because capability flags and cluster health carry no tenant data. A principal that is validated but carries NO org is refused too — that request would otherwise read the shared unscoped store instead of anyone's shard, so it fails closed. Admitted, the org, project and user are threaded into the engine, and every read and write lands in that tenant's own shard.\n\nTwo things about the answers differ from the rest of this API and will bite a generic client: errors here carry `code` as a NUMBER rather than the usual `status`, and the address serves several content types — JSON, plain-text refusals, and an event stream at the events path. Until the engine is wired the whole surface answers 503.",
         "tags": [
-          "tasks"
+          "task"
         ],
         "parameters": [
           {
@@ -124,11 +124,11 @@
         ]
       },
       "post": {
-        "operationId": "post_tasks_by_wildcard1",
+        "operationId": "post_task_by_wildcard1",
         "summary": "Start workflows and act on running ones",
         "description": "Everything that changes the engine's state: register a namespace, start a workflow or signal-with-start one, and signal, query, cancel, terminate or reset a workflow that is already running. The MCP tool surface is on this method as well, and is the one part of it that refuses a non-POST with a plain-text 405.\n\nThe engine is event-sourced and exactly-once, so an action is durable once it is accepted and survives a process crash — a started workflow resumes rather than restarts.\n\nThis single address fronts the whole durable-workflow engine — namespaces, workflows, schedules, batches, deployments, nexus, task queues, workers, activities and the rest — matched by path segment inside the engine's own router, which is why the document publishes one wildcard rather than sixty-four operations.\n\nMost of it requires a validated principal and is refused 403 otherwise; the settings and cluster probes are open, because capability flags and cluster health carry no tenant data. A principal that is validated but carries NO org is refused too — that request would otherwise read the shared unscoped store instead of anyone's shard, so it fails closed. Admitted, the org, project and user are threaded into the engine, and every read and write lands in that tenant's own shard.\n\nTwo things about the answers differ from the rest of this API and will bite a generic client: errors here carry `code` as a NUMBER rather than the usual `status`, and the address serves several content types — JSON, plain-text refusals, and an event stream at the events path. Until the engine is wired the whole surface answers 503.",
         "tags": [
-          "tasks"
+          "task"
         ],
         "parameters": [
           {
@@ -142,11 +142,11 @@
         ]
       },
       "put": {
-        "operationId": "put_tasks_by_wildcard1",
+        "operationId": "put_task_by_wildcard1",
         "summary": "Not served by the engine",
         "description": "Published because this address accepts every method, but the engine routes no PUT: the answer is a plain-text 404, not a 405, and no state changes.\n\nNothing here is updated by replacement. The engine is event-sourced — a workflow is changed by signalling, cancelling, terminating or resetting it, all of which are POST — so a client reaching for PUT wants POST.\n\nThis single address fronts the whole durable-workflow engine — namespaces, workflows, schedules, batches, deployments, nexus, task queues, workers, activities and the rest — matched by path segment inside the engine's own router, which is why the document publishes one wildcard rather than sixty-four operations.\n\nMost of it requires a validated principal and is refused 403 otherwise; the settings and cluster probes are open, because capability flags and cluster health carry no tenant data. A principal that is validated but carries NO org is refused too — that request would otherwise read the shared unscoped store instead of anyone's shard, so it fails closed. Admitted, the org, project and user are threaded into the engine, and every read and write lands in that tenant's own shard.\n\nTwo things about the answers differ from the rest of this API and will bite a generic client: errors here carry `code` as a NUMBER rather than the usual `status`, and the address serves several content types — JSON, plain-text refusals, and an event stream at the events path. Until the engine is wired the whole surface answers 503.",
         "tags": [
-          "tasks"
+          "task"
         ],
         "parameters": [
           {

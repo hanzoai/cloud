@@ -8,7 +8,7 @@ import (
 )
 
 // registry.go is the closed transport registry — the connected chat transports
-// and nothing else, enumerated in fixed alphabetical order so GET /v1/channels
+// and nothing else, enumerated in fixed alphabetical order so GET /v1/channel
 // is deterministic.
 
 // capabilities advertises what a transport renders natively, and every field is
@@ -82,7 +82,7 @@ type transport struct {
 }
 
 // transports is the closed set; elements are package vars in their transport
-// files. Fixed alphabetical order — the deterministic GET /v1/channels listing.
+// files. Fixed alphabetical order — the deterministic GET /v1/channel listing.
 // Adding one means adding its probes in capability_test.go, which is what makes
 // its published capabilities checkable rather than asserted.
 var transports = []transport{discordTransport, githubTransport, linearTransport, slackTransport, teamsTransport, telegramTransport, whatsappTransport}

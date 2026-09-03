@@ -224,7 +224,7 @@ func TestBillingGate_NilClientIsNoop(t *testing.T) {
 // REAL declarations, and it is where a change in what customers pay shows up.
 func TestDefaultPrice(t *testing.T) {
 	index(t, &Config{Enable: []string{"ai", "agent", "agents", "commerce", "o11y", "iam", "base", "probe"}},
-		Plugin{Name: "ai", Price: Metered, Prefixes: []string{"/v1/ai", "/v1/tools"}},
+		Plugin{Name: "ai", Price: Metered, Prefixes: []string{"/v1/ai", "/v1/tool"}},
 		Plugin{Name: "agent", Price: Metered},
 		Plugin{Name: "agents", Price: Metered},
 		Plugin{Name: "commerce", Price: Free},
@@ -240,7 +240,7 @@ func TestDefaultPrice(t *testing.T) {
 	}{
 		{"/v1/ai/chat/completions", 0, "ai declares Metered — the model plane's token meter owns the charge, so an edge charge double-bills"},
 		{"/v1/ai/embeddings", 0, "same surface, same declaration"},
-		{"/v1/tools/call", 0, "ai owns /v1/tools too; per-tool dispatch meters downstream"},
+		{"/v1/tool/call", 0, "ai owns /v1/tool too; per-tool dispatch meters downstream"},
 		{"/v1/commerce/billing/usage", 0, "commerce declares Free — it IS the pay path"},
 		{"/v1/o11y/ingest", 0, "o11y declares Free — telemetry ingest is not user-billable"},
 		{"/health", 0, "liveness probe"},
@@ -248,9 +248,9 @@ func TestDefaultPrice(t *testing.T) {
 		{"/v1/iam/health", 0, "subsystem health suffix"},
 		{"/v1/base/health", 0, "subsystem health suffix"},
 		{"/v1/probe/health", 0, "a health probe is free even under a PRICED surface — a probe that 402s hides whether the process is up"},
-		{"/v1/agents/chat", 0, "the orchestrator's round bills through its in-process completion"},
-		{"/v1/agents/chat/presets", 0, "same surface — a read on it is free for the same reason"},
-		{"/v1/agents/x/run", 0, "the agents subsystem meters its own per-run fee"},
+		{"/v1/agent/chat", 0, "the orchestrator's round bills through its in-process completion"},
+		{"/v1/agent/chat/presets", 0, "same surface — a read on it is free for the same reason"},
+		{"/v1/agent/x/run", 0, "the agents subsystem meters its own per-run fee"},
 		{"/v1/probe/thing", 7, "a declared price IS charged — without this case every zero above is unfalsifiable"},
 		{"/v1/nobody/owns-this", 0, "no surface owns it: Undeclared charges nothing HERE and fails TestPriceDeclared instead"},
 	}

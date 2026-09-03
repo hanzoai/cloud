@@ -1,8 +1,8 @@
 // The conversation surface: a conversation that uses your org's own tools to get
 // an answer.
 //
-// It mounts the hanzoai/agent orchestrator into cloud: POST /v1/agents/chat (+
-// /v1/agents/chat/presets, /v1/agents/chat/conversations). The orchestrator logic
+// It mounts the hanzoai/agent orchestrator into cloud: POST /v1/agent/chat (+
+// /v1/agent/chat/presets, /v1/agent/chat/conversations). The orchestrator logic
 // and its per-org conversation history live in github.com/hanzoai/agent, which
 // imports NEITHER cloud NOR ai. Cloud is the composition root: it injects the two
 // clients —
@@ -12,7 +12,7 @@
 //     server-executed tools are the org's activated MCP/registry tools.
 //
 // The round answers UNDER the agents root rather than at it, because POST
-// /v1/agents is already the typed create. Which address it takes is cloud's to
+// /v1/agent is already the typed create. Which address it takes is cloud's to
 // decide: hz.MountAt registers the five routes wherever the composer points them
 // (HIP-1210), so the surface no longer needs a root of its own.
 package agents
@@ -37,14 +37,14 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// chat is where the round answers. The agents root is spent — POST /v1/agents is
+// chat is where the round answers. The agents root is spent — POST /v1/agent is
 // the typed create — so the conversation surface takes a sub-path of it, and the
 // five routes compose off this one address (HIP-1210).
-const chat = "/v1/agents/chat"
+const chat = "/v1/agent/chat"
 
-// UNTYPED BY DESIGN, and not fixable here. All five operations — POST /v1/agents/chat,
-// GET /v1/agents/chat/presets, POST and GET /v1/agents/chat/conversations,
-// GET /v1/agents/chat/conversations/{id} — are registered by hz.MountAt below, which
+// UNTYPED BY DESIGN, and not fixable here. All five operations — POST /v1/agent/chat,
+// GET /v1/agent/chat/presets, POST and GET /v1/agent/chat/conversations,
+// GET /v1/agent/chat/conversations/{id} — are registered by hz.MountAt below, which
 // is github.com/hanzoai/agent's own router wiring (agent.go in v1.0.7). This
 // package registers NO route of its own, so there is nothing in cloud to convert:
 // they become typeable in hanzoai/agent, which owns them, exactly as apps/tasks'

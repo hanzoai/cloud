@@ -1,7 +1,7 @@
 package integrations
 
 // chrome.go registers Chrome as an ORG apikey connector for the /connectors
-// surface (the org-scoped /v1/integrations plane both hanzo.app and the console
+// surface (the org-scoped /v1/integration plane both hanzo.app and the console
 // render). It represents pairing the Hanzo browser extension — a LOCAL install
 // (source ~/work/hanzo/extension) that drives Chrome over an MCP bridge so agent
 // tasks can navigate, read pages, and fill forms from the user's browser.

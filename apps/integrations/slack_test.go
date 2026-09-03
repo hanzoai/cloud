@@ -49,7 +49,7 @@ func stubSlackAPI(t *testing.T) {
 
 func TestSlackAuthorizeURL(t *testing.T) {
 	creds := OAuthConfig{ClientID: "cid-123", ClientSecret: "secret"}
-	redirectURI := "https://api.hanzo.ai/v1/integrations/slack/callback"
+	redirectURI := "https://api.hanzo.ai/v1/integration/slack/callback"
 	raw, err := slackAuthorize(creds, redirectURI, "STATE-XYZ")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
@@ -80,7 +80,7 @@ func TestSlackExchangeParsesOK(t *testing.T) {
 	stubSlackAPI(t)
 	res, err := slackExchange(context.Background(),
 		OAuthConfig{ClientID: "cid", ClientSecret: "sec"},
-		"https://api.hanzo.ai/v1/integrations/slack/callback", "goodcode")
+		"https://api.hanzo.ai/v1/integration/slack/callback", "goodcode")
 	if err != nil {
 		t.Fatalf("exchange: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestSlackExchangeErrorBody(t *testing.T) {
 	stubSlackAPI(t)
 	if _, err := slackExchange(context.Background(),
 		OAuthConfig{ClientID: "cid", ClientSecret: "sec"},
-		"https://api.hanzo.ai/v1/integrations/slack/callback", "wrongcode"); err == nil {
+		"https://api.hanzo.ai/v1/integration/slack/callback", "wrongcode"); err == nil {
 		t.Fatal("exchange with ok:false must return an error")
 	}
 }
@@ -125,7 +125,7 @@ func TestSlackProviderRegistered(t *testing.T) {
 	if !ok {
 		t.Fatal("slack provider not registered")
 	}
-	if p.RedirectPath != "/v1/integrations/slack/callback" {
+	if p.RedirectPath != "/v1/integration/slack/callback" {
 		t.Fatalf("slack RedirectPath: %q", p.RedirectPath)
 	}
 	if p.Category != "Communication" {

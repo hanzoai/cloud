@@ -37,14 +37,14 @@ import (
 //     overwrite the domain `error` key. That is the same collision sessions_typed.go
 //     records, seen from the side where it bites.
 var untypedByDesign = map[string]string{
-	"POST /v1/agents/chat":                   "registered by github.com/hanzoai/agent, and it relays an upstream 4xx's status and body verbatim.",
-	"GET /v1/agents/chat/conversations":      "registered by github.com/hanzoai/agent; typing it is that repo's change, not this one.",
-	"POST /v1/agents/chat/conversations":     "registered by github.com/hanzoai/agent; typing it is that repo's change, not this one.",
-	"GET /v1/agents/chat/conversations/{id}": "registered by github.com/hanzoai/agent; typing it is that repo's change, not this one.",
-	"GET /v1/agents/chat/presets":            "registered by github.com/hanzoai/agent; typing it is that repo's change, not this one.",
-	"GET /v1/agents/sessions/stream": "an open SSE response written by a loop that outlives the handler " +
+	"POST /v1/agent/chat":                   "registered by github.com/hanzoai/agent, and it relays an upstream 4xx's status and body verbatim.",
+	"GET /v1/agent/chat/conversations":      "registered by github.com/hanzoai/agent; typing it is that repo's change, not this one.",
+	"POST /v1/agent/chat/conversations":     "registered by github.com/hanzoai/agent; typing it is that repo's change, not this one.",
+	"GET /v1/agent/chat/conversations/{id}": "registered by github.com/hanzoai/agent; typing it is that repo's change, not this one.",
+	"GET /v1/agent/chat/presets":            "registered by github.com/hanzoai/agent; typing it is that repo's change, not this one.",
+	"GET /v1/agent/sessions/stream": "an open SSE response written by a loop that outlives the handler " +
 		"(c.SendStreamWriter); a typed op returns one marshalled value and there is no In/Out for a feed.",
-	"POST /v1/agents/{ref}/run": "two bodies on two failures: a 502 answers with the RECORDED RUN, and a balance " +
+	"POST /v1/agent/{ref}/run": "two bodies on two failures: a 502 answers with the RECORDED RUN, and a balance " +
 		"denial answers cloud.DenyResource's NESTED {\"error\":{code,message}} — which cannot ride " +
 		"HTTPError.Detail, because the envelope is written last and would overwrite the domain `error` key.",
 }
@@ -65,7 +65,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 
 	served, typed := map[string]bool{}, map[string]bool{}
 	for path, item := range doc.Paths {
-		if !strings.HasPrefix(path, "/v1/agents") {
+		if !strings.HasPrefix(path, "/v1/agent") {
 			continue
 		}
 		for method := range item {
@@ -73,7 +73,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 		}
 	}
 	for key := range reg.Ops {
-		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/agents") {
+		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/agent") {
 			typed[key] = true
 		}
 	}

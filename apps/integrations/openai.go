@@ -1,6 +1,6 @@
 package integrations
 
-// openai.go registers the OpenAI ChatGPT/Codex USER connector (/v1/integrations/connectors
+// openai.go registers the OpenAI ChatGPT/Codex USER connector (/v1/integration/connectors
 // plane): device-code sign-in, oauth-bundle adoption (CLI local PKCE), and
 // refresh-token rotation. Protocol facts come from the Codex device flow:
 // usercode POST /api/accounts/deviceauth/usercode; poll POST

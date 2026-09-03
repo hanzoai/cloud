@@ -68,7 +68,7 @@ var refusals = []struct{ name, why string }{
 	{"delete_framework_roles_user_role", "DELETE /v1/framework/roles/{user}/{role}"},
 	{"post_git_keys", "POST /v1/git/keys — an SSH key is a credential even on the git surface"},
 	{"delete_git_keys_id", "and removing one is still key management"},
-	{"post_agents_targets_id_key", "POST /v1/agents/targets/{id}/key — enrols a machine agent"},
+	{"post_agents_targets_id_key", "POST /v1/agent/targets/{id}/key — enrols a machine agent"},
 	{"delete_account_keys", "DELETE /v1/account/keys — the head resource, so no store owns it"},
 }
 
@@ -87,12 +87,12 @@ var survivors = []struct{ name, why string }{
 
 	// The agent loop. Every one of these was refused while `session` was an
 	// unqualified authority noun.
-	{"post_agents_sessions", "POST /v1/agents/sessions — an agent session is a unit of WORK"},
+	{"post_agents_sessions", "POST /v1/agent/sessions — an agent session is a unit of WORK"},
 	{"post_agents_sessions_by_id_message", "the turn itself"},
 	{"post_agents_sessions_by_id_stop", "…and stopping it"},
 	{"patch_agents_sessions_id", "…and steering it"},
 	{"get_agents_sessions_stream", "…and watching it"},
-	{"post_agents_by_ref_run", "POST /v1/agents/{ref}/run"},
+	{"post_agents_by_ref_run", "POST /v1/agent/{ref}/run"},
 	{"post_agents_targets_id_claim", "claiming a target is not minting its key"},
 
 	// Code, search, git, deploy, exec.
@@ -325,7 +325,7 @@ func TestRefuse_ANamelessToolIsNotProjectable(t *testing.T) {
 //
 // Both addresses have since folded, and a fold is where that defect recurs: rank
 // reads the PATH, so an op that moves takes whatever bucket its new first segment
-// names. The run is at /v1/agents/coding and ranks with agents; lsp left
+// names. The run is at /v1/agent/coding and ranks with agents; lsp left
 // /v1/code/lsp, where it had been ranking on code's stem, and needed one of its
 // own or it would have fallen exactly as the run once did.
 func TestRank_AFoldedAddressKeepsItsBucket(t *testing.T) {
@@ -351,7 +351,7 @@ func TestRank_AFoldedAddressKeepsItsBucket(t *testing.T) {
 // asset's number, not a bearer secret. But the neighbour test read either side,
 // and in a REST path the id before a subresource names the PARENT:
 //
-//	GET /v1/integrations/connectors/{id}/token   →  get | connectors | by | id | token
+//	GET /v1/integration/connectors/{id}/token   →  get | connectors | by | id | token
 //
 // The id there is the connector's. The token is exactly what it says, and the
 // MCP server projected it to every model as `get_connector_token` — a live OAuth

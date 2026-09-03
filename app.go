@@ -94,7 +94,7 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	// the FINAL response body and re-serializes it via zap-proto/md when the
 	// caller asked for markdown (Accept: text/markdown or ?format=md). JSON stays
 	// the default for machines; cfg.MarkdownDefaultPrefixes lets designated
-	// agent endpoints (/v1/code/, /v1/agents/…) default to markdown. Touches NO
+	// agent endpoints (/v1/code/, /v1/agent/…) default to markdown. Touches NO
 	// handler and fails safe (a render error leaves the JSON intact). See
 	// middleware_markdown.go.
 	app.Use(MarkdownNegotiation(cfg.MarkdownDefaultPrefixes))

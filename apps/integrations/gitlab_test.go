@@ -34,7 +34,7 @@ func TestGitLabRegisteredProvider(t *testing.T) {
 // app was provisioned with them.
 func TestGitLabAuthorizeURL(t *testing.T) {
 	creds := OAuthConfig{ClientID: "5a68c0e6"}
-	raw, err := gitlabAuthorize(creds, "https://api.hanzo.ai/v1/integrations/gitlab/callback", "st8")
+	raw, err := gitlabAuthorize(creds, "https://api.hanzo.ai/v1/integration/gitlab/callback", "st8")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestGitLabExchange(t *testing.T) {
 	defer func() { gitlabBase = old }()
 
 	creds := OAuthConfig{ClientID: "cid", ClientSecret: "secret"}
-	res, err := gitlabExchange(context.Background(), creds, "https://api.hanzo.ai/v1/integrations/gitlab/callback", "authcode")
+	res, err := gitlabExchange(context.Background(), creds, "https://api.hanzo.ai/v1/integration/gitlab/callback", "authcode")
 	if err != nil {
 		t.Fatalf("exchange: %v", err)
 	}

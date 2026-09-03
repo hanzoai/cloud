@@ -23,7 +23,7 @@ import (
 
 // ── social Public API stub ──────────────────────────────────────────────────────
 
-// socialStub is an in-memory hanzoai/social: GET /public/v1/integrations lists the
+// socialStub is an in-memory hanzoai/social: GET /public/v1/integration lists the
 // configured channels; POST /public/v1/posts records the body and returns a post id,
 // failing (400) for any integration id in failFor. It records every Authorization
 // header so a test can assert per-brand credential propagation.
@@ -41,7 +41,7 @@ func newSocialStub(t *testing.T, integs []socialIntegration) *socialStub {
 	t.Helper()
 	s := &socialStub{integs: integs, failFor: map[string]bool{}}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/public/v1/integrations", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/public/v1/integration", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.authSeen = append(s.authSeen, r.Header.Get("Authorization"))
 		s.mu.Unlock()

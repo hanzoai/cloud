@@ -70,7 +70,7 @@ func onPublish(s *cloud.Service[state], ctx context.Context, org string, p *Proj
 // purgeTag flushes the edge cache-tag site-<org>-<slug> for a project's site. It is
 // the ONE place that derives the cache-tag and issues the purge, so every purge
 // site — deploy (onPublish), domain-bind (setDomains), delete (del), and the
-// dedicated POST /v1/projects/:slug/purge — shares one tag and one failure policy.
+// dedicated POST /v1/project/:slug/purge — shares one tag and one failure policy.
 // Best-effort by construction: PurgeTags is a warn-only no-op when the edge (CF) is
 // unconfigured, and a purge miss is logged, never fatal — the S3 origin keeps
 // serving and the edge self-heals when the short HTML TTL lapses.
@@ -129,7 +129,7 @@ func siteURL(s *cloud.Service[state], _org, slug string) string {
 // target project, it versions and records a deployment, uploads the files to S3,
 // flips the deployment and project "live" at the pretty <slug>.<apex> host, and
 // runs the go-live side effects (first-come host binding + edge purge). Every
-// deploy write-path — the tar-artifact path (deployArtifact) and both /v1/projects/sites
+// deploy write-path — the tar-artifact path (deployArtifact) and both /v1/project/sites
 // paths — funnels through here, so versioning, the S3 write, host binding, the
 // lifecycle emit, and the status transitions live in exactly one place (DRY).
 // source records how the artifact was produced ("upload" | "generated" | "deploy").

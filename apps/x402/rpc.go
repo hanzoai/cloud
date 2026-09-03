@@ -13,7 +13,7 @@ import (
 // rpc.go — the payment rail, published for the processes that do not contain it.
 //
 // The tool plane prices a TOOL, and every tool call arrives on the one
-// /v1/tools/call route with the name in the body. In one process that is
+// /v1/tool/call route with the name in the body. In one process that is
 // x402.Settle, a function call. In the fleet — one binary per app — the tools
 // process has no rail at all, which is why every priced dispatch answered a
 // permanent 402 with no terms in it: a refusal no client could ever satisfy.

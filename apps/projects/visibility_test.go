@@ -574,7 +574,7 @@ func visibilityOf(t *testing.T, s *cloud.Service[state], org, slug, vis string) 
 // create makes one public project through the surface, as a publisher does.
 func create(t *testing.T, app *zip.App, slug string) {
 	t.Helper()
-	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/project", "acme",
 		map[string]any{"name": slug, "slug": slug}); code != http.StatusCreated {
 		t.Fatalf("create %s want 201, got %d (%s)", slug, code, body)
 	}
@@ -586,7 +586,7 @@ func create(t *testing.T, app *zip.App, slug string) {
 func adminPatchProject(t *testing.T, app *zip.App, org, slug string, in map[string]any) projectsProject {
 	t.Helper()
 	b, _ := json.Marshal(in)
-	req := httptest.NewRequest(http.MethodPatch, "/v1/projects/"+slug, bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPatch, "/v1/project/"+slug, bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Org-Id", org)
 	req.Header.Set("X-User-Id", "u_admin")
@@ -630,7 +630,7 @@ func TestPublishingReachesTheForge(t *testing.T) {
 // closed, so there is no window between existing and being locked.
 func TestAPrivateProjectIsBornClosed(t *testing.T) {
 	app, f, _ := mountShared(t)
-	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/project", "acme",
 		map[string]any{"name": "Secret", "slug": "secret", "visibility": "private"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
@@ -654,7 +654,7 @@ func TestRetractionClosesTheSource(t *testing.T) {
 		// Private is metered like every other paid surface. With no fee configured
 		// the gate is open, which is the free-tier operator default — so this
 		// asserts the CLIENT, not the price.
-		code, body := do(t, app, http.MethodPatch, "/v1/projects/secret", "acme",
+		code, body := do(t, app, http.MethodPatch, "/v1/project/secret", "acme",
 			map[string]any{"visibility": "private"})
 		if code != http.StatusOK {
 			t.Fatalf("go private want 200, got %d (%s)", code, body)
@@ -695,7 +695,7 @@ func TestARetractionSurvivesAForgeThatLies(t *testing.T) {
 	settled(t, "the repository to be readable", func() bool { return f.readable(t, "acme_secret") })
 
 	f.set(&f.deaf, true) // the next visibility write is accepted and ignored
-	if code, body := do(t, app, http.MethodPatch, "/v1/projects/secret", "acme",
+	if code, body := do(t, app, http.MethodPatch, "/v1/project/secret", "acme",
 		map[string]any{"visibility": "private"}); code != http.StatusOK {
 		t.Fatalf("go private want 200, got %d (%s)", code, body)
 	}
@@ -765,7 +765,7 @@ func TestEveryCopyFollowsTheRow(t *testing.T) {
 		create(t, app, "secret")
 		settled(t, "the repository to be readable", func() bool { return f.readable(t, "acme_secret") })
 
-		if code, body := do(t, app, http.MethodPatch, "/v1/projects/secret", "acme",
+		if code, body := do(t, app, http.MethodPatch, "/v1/project/secret", "acme",
 			map[string]any{"visibility": "private"}); code != http.StatusOK {
 			t.Fatalf("go private want 200, got %d (%s)", code, body)
 		}
@@ -801,7 +801,7 @@ func TestEveryCopyFollowsTheRow(t *testing.T) {
 		settled(t, "the repository to be readable", func() bool { return f.readable(t, "acme_board") })
 		drained(t, s)
 
-		if code, body := do(t, app, http.MethodDelete, "/v1/projects/board", "acme", nil); code != http.StatusNoContent {
+		if code, body := do(t, app, http.MethodDelete, "/v1/project/board", "acme", nil); code != http.StatusNoContent {
 			t.Fatalf("delete want 204, got %d (%s)", code, body)
 		}
 		// Asserted with NO WAITING, like the forge half: the slug is free to
@@ -860,7 +860,7 @@ func TestAnAbsentGitAppStopsNothing(t *testing.T) {
 	create(t, app, "board")
 	settled(t, "the forge's copy to be readable", func() bool { return f.readable(t, "acme_board") })
 
-	if code, body := do(t, app, http.MethodPatch, "/v1/projects/board", "acme",
+	if code, body := do(t, app, http.MethodPatch, "/v1/project/board", "acme",
 		map[string]any{"visibility": "private"}); code != http.StatusOK {
 		t.Fatalf("go private with no git app want 200, got %d (%s)", code, body)
 	}
@@ -914,7 +914,7 @@ func TestDeletingAProjectTakesItsSourceWithIt(t *testing.T) {
 	settled(t, "the repository to be readable", func() bool { return f.readable(t, "acme_board") })
 	drained(t, s)
 
-	if code, body := do(t, app, http.MethodDelete, "/v1/projects/board", "acme", nil); code != http.StatusNoContent {
+	if code, body := do(t, app, http.MethodDelete, "/v1/project/board", "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("delete want 204, got %d (%s)", code, body)
 	}
 	// Asserted with no waiting: the slug is free to reclaim the moment the delete
@@ -942,7 +942,7 @@ func TestADeleteRetiresTheSourceBesideAWriteInFlight(t *testing.T) {
 	s.State.queue.add("acme/board", reconcile, func() { <-release }) // a reconcile, in flight
 	defer close(release)
 
-	if code, body := do(t, app, http.MethodDelete, "/v1/projects/board", "acme", nil); code != http.StatusNoContent {
+	if code, body := do(t, app, http.MethodDelete, "/v1/project/board", "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("delete want 204, got %d (%s)", code, body)
 	}
 	if f.exists("acme_board") {
@@ -962,10 +962,10 @@ func TestAForgeOutageDoesNotFailADelete(t *testing.T) {
 	drained(t, s)
 
 	f.set(&f.down, true)
-	if code, body := do(t, app, http.MethodDelete, "/v1/projects/board", "acme", nil); code != http.StatusNoContent {
+	if code, body := do(t, app, http.MethodDelete, "/v1/project/board", "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("delete against a dead forge want 204, got %d (%s)", code, body)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/projects/board", "acme", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/project/board", "acme", nil); code != http.StatusNotFound {
 		t.Fatalf("get after delete want 404, got %d", code)
 	}
 	// What is left behind is exactly what the audit exists to find: a readable
@@ -982,7 +982,7 @@ func TestAReclaimedSlugGetsAFreshSource(t *testing.T) {
 	app, f, _ := mountShared(t)
 	s := mounted
 	// PRIVATE first: its commits are the ones that must not resurface.
-	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/project", "acme",
 		map[string]any{"name": "Secret", "slug": "board", "visibility": "private"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
@@ -990,7 +990,7 @@ func TestAReclaimedSlugGetsAFreshSource(t *testing.T) {
 	drained(t, s)
 	first := f.mark(t, "acme_board")
 
-	if code, body := do(t, app, http.MethodDelete, "/v1/projects/board", "acme", nil); code != http.StatusNoContent {
+	if code, body := do(t, app, http.MethodDelete, "/v1/project/board", "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("delete want 204, got %d (%s)", code, body)
 	}
 	if f.exists("acme_board") {
@@ -1020,7 +1020,7 @@ func TestAReclaimedSlugInheritsNothingFromALeftover(t *testing.T) {
 	app, f, sc := mountShared(t)
 	s := mounted
 	// PRIVATE first: its commits are the ones that must not resurface.
-	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/project", "acme",
 		map[string]any{"name": "Secret", "slug": "board", "visibility": "private"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
@@ -1059,7 +1059,7 @@ func TestAReclaimedSlugInheritsNothingFromALeftover(t *testing.T) {
 func TestAReclaimedSlugIsFreshUnderAWriteThatRacesTheCreate(t *testing.T) {
 	app, f, _ := mountShared(t)
 	s := mounted
-	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/project", "acme",
 		map[string]any{"name": "Secret", "slug": "board", "visibility": "private"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
@@ -1075,7 +1075,7 @@ func TestAReclaimedSlugIsFreshUnderAWriteThatRacesTheCreate(t *testing.T) {
 	// finished.
 	release := f.stall()
 	create(t, app, "board")
-	if code, body := do(t, app, http.MethodPatch, "/v1/projects/board", "acme",
+	if code, body := do(t, app, http.MethodPatch, "/v1/project/board", "acme",
 		map[string]any{"description": "mine now"}); code != http.StatusOK {
 		t.Fatalf("update want 200, got %d (%s)", code, body)
 	}
@@ -1101,7 +1101,7 @@ func TestADeleteThatRacesACreateLeavesNoOpenOrphan(t *testing.T) {
 	create(t, app, "board") // public; its run blocks inside the forge's create
 	settled(t, "the create to reach the forge", func() bool { return f.asked() > 0 })
 
-	if code, body := do(t, app, http.MethodDelete, "/v1/projects/board", "acme", nil); code != http.StatusNoContent {
+	if code, body := do(t, app, http.MethodDelete, "/v1/project/board", "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("delete want 204, got %d (%s)", code, body)
 	}
 	release()
@@ -1128,7 +1128,7 @@ func TestRefiringIsIdempotent(t *testing.T) {
 	create(t, app, "board")
 	settled(t, "the repository to be readable", func() bool { return f.readable(t, "acme_board") })
 	for i := 0; i < 3; i++ {
-		if code, body := do(t, app, http.MethodPatch, "/v1/projects/board", "acme",
+		if code, body := do(t, app, http.MethodPatch, "/v1/project/board", "acme",
 			map[string]any{"description": "again"}); code != http.StatusOK {
 			t.Fatalf("update want 200, got %d (%s)", code, body)
 		}
@@ -1146,17 +1146,17 @@ func TestRefiringIsIdempotent(t *testing.T) {
 func TestAForgeOutageDoesNotFailAProjectWrite(t *testing.T) {
 	app, f, _ := mountShared(t)
 	f.set(&f.down, true)
-	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/project", "acme",
 		map[string]any{"name": "Alone", "slug": "alone"}); code != http.StatusCreated {
 		t.Fatalf("create against a dead forge want 201, got %d (%s)", code, body)
 	}
-	if code, body := do(t, app, http.MethodPatch, "/v1/projects/alone", "acme",
+	if code, body := do(t, app, http.MethodPatch, "/v1/project/alone", "acme",
 		map[string]any{"visibility": "private"}); code != http.StatusOK {
 		t.Fatalf("update against a dead forge want 200, got %d (%s)", code, body)
 	}
 	// And the write is the truth: the row says private even though the forge never
 	// heard about it.
-	code, body := do(t, app, http.MethodGet, "/v1/projects/alone", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/project/alone", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("get want 200, got %d (%s)", code, body)
 	}

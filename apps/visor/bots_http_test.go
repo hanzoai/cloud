@@ -13,16 +13,16 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// fakeAgents is a faithful stand-in for the cloud /v1/agents surface the bot
+// fakeAgents is a faithful stand-in for the cloud /v1/agent surface the bot
 // composition depends on. It implements exactly the two behaviors a bot relies
 // on, so a test proves the launch→message path without a real gateway:
 //
-//	POST /v1/agents            create-if-absent — records the agent and 201s;
+//	POST /v1/agent            create-if-absent — records the agent and 201s;
 //	                           409 on a repeat (idempotency); 400 when a
 //	                           non-empty model is outside its catalog (so a test
 //	                           proves launchBot propagates the model-validation
 //	                           400 before provisioning any machine).
-//	POST /v1/agents/:name/run  runs ONLY an agent that was actually created
+//	POST /v1/agent/:name/run  runs ONLY an agent that was actually created
 //	                           (200 pong), else 404 "agent not found" — the exact
 //	                           Resolve semantics messageBot depends on, so a test
 //	                           proves resolve-now-succeeds because launch created it.
@@ -45,8 +45,8 @@ func (a *fakeAgents) server(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 
-	// POST /v1/agents — create-if-absent (with model validation).
-	mux.HandleFunc("/v1/agents", func(w http.ResponseWriter, r *http.Request) {
+	// POST /v1/agent — create-if-absent (with model validation).
+	mux.HandleFunc("/v1/agent", func(w http.ResponseWriter, r *http.Request) {
 		var b struct{ Name, Model, Instructions string }
 		_ = json.NewDecoder(r.Body).Decode(&b)
 		a.mu.Lock()
@@ -67,9 +67,9 @@ func (a *fakeAgents) server(t *testing.T) *httptest.Server {
 		_, _ = w.Write([]byte(`{"id":"agent_x","name":"` + b.Name + `"}`))
 	})
 
-	// POST /v1/agents/{name}/run — runs only a created agent, else 404 (Resolve).
-	mux.HandleFunc("/v1/agents/", func(w http.ResponseWriter, r *http.Request) {
-		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/agents/"), "/run")
+	// POST /v1/agent/{name}/run — runs only a created agent, else 404 (Resolve).
+	mux.HandleFunc("/v1/agent/", func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/agent/"), "/run")
 		var b struct{ Input string }
 		_ = json.NewDecoder(r.Body).Decode(&b)
 		a.mu.Lock()
@@ -90,7 +90,7 @@ func (a *fakeAgents) server(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// wasCreated reports whether an agent of that name was created via POST /v1/agents.
+// wasCreated reports whether an agent of that name was created via POST /v1/agent.
 func (a *fakeAgents) wasCreated(name string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()

@@ -31,10 +31,10 @@ import (
 //
 // MOUNT HANDOFF (integrations owner adds these before the /:provider wildcards):
 //
-//	app.Post("/v1/integrations/teams/events",         s.teamsEvents)
-//	app.Get("/v1/integrations/teams/link",            s.teamsLink)
-//	app.Get("/v1/integrations/teams/link/aad",        s.teamsLinkAAD)
-//	app.Get("/v1/integrations/teams/link/callback",   s.teamsLinkCallback)
+//	app.Post("/v1/integration/teams/events",         s.teamsEvents)
+//	app.Get("/v1/integration/teams/link",            s.teamsLink)
+//	app.Get("/v1/integration/teams/link/aad",        s.teamsLinkAAD)
+//	app.Get("/v1/integration/teams/link/callback",   s.teamsLinkCallback)
 
 // teamsEvents is the Bot Framework messaging webhook. It parses the activity (to
 // obtain serviceUrl), verifies the Bot Framework JWT (audience-bound + serviceurl-

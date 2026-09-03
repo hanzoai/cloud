@@ -11,7 +11,7 @@
 //   - fleet.go       (/v1/platform/fleet) — the ADMIN fleet drift board: observes +
 //     deploys SYSTEM Service CRs across the platform namespaces, SuperAdmin
 //     only. It answers "what is the fleet running, and roll a tag."
-//   - apps/projects (/v1/projects)  — per-org STATIC sites (S3 hosting).
+//   - apps/projects (/v1/project)  — per-org STATIC sites (S3 hosting).
 //   - apps/platform (/v1/platform)  — THIS: per-org CONTAINER apps. Users
 //     create projects + applications, build them (arcd BuildKit) and deploy them
 //     (operator hanzo.ai/v1 Service CR into their OWN tenant-<org> namespace).

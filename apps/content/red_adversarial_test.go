@@ -545,7 +545,7 @@ func TestRed_SocialUpstreamHostileNo5xx(t *testing.T) {
 
 	// (b) integrations garbage body → 503 (decode wrapped as errUpstream).
 	srvGarbage := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/public/v1/integrations") {
+		if strings.HasPrefix(r.URL.Path, "/public/v1/integration") {
 			_, _ = w.Write([]byte(`{not-an-array`))
 			return
 		}

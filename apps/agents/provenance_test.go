@@ -74,7 +74,7 @@ func TestGuardRefusesSecretInTranscript(t *testing.T) {
 	body, _ := json.Marshal(map[string]any{
 		"text": "then I exported AWS_ACCESS_KEY_ID=" + secret + " and reran the deploy",
 	})
-	code, resp := do(t, app, http.MethodPost, "/v1/agents/sessions/"+s.ID+"/events", "acme",
+	code, resp := do(t, app, http.MethodPost, "/v1/agent/sessions/"+s.ID+"/events", "acme",
 		map[string]any{"kind": KindMessage, "payload": json.RawMessage(body)})
 
 	if code != http.StatusUnprocessableEntity {
@@ -126,7 +126,7 @@ func TestGuardRefusesSecretInTranscript(t *testing.T) {
 	}
 
 	// Nothing was stored: the refusal is the whole outcome.
-	code, resp = do(t, app, http.MethodGet, "/v1/agents/sessions/"+s.ID, "acme", nil)
+	code, resp = do(t, app, http.MethodGet, "/v1/agent/sessions/"+s.ID, "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("detail want 200, got %d (%s)", code, resp)
 	}
@@ -146,7 +146,7 @@ func TestGuardAdmitsKMSReference(t *testing.T) {
 	body, _ := json.Marshal(map[string]any{
 		"text": "read the deploy key from KMS by name: hanzo/projects/shop/deploy-key",
 	})
-	code, resp := do(t, app, http.MethodPost, "/v1/agents/sessions/"+s.ID+"/events", "acme",
+	code, resp := do(t, app, http.MethodPost, "/v1/agent/sessions/"+s.ID+"/events", "acme",
 		map[string]any{"kind": KindMessage, "payload": json.RawMessage(body)})
 	if code != http.StatusCreated {
 		t.Fatalf("a KMS reference is not a secret; want 201, got %d (%s)", code, resp)
@@ -172,7 +172,7 @@ func TestPublishedBuildIsPubliclyReadable(t *testing.T) {
 		{"text": "added CartProvider and the checkout route", "commit": "a1b2c3d4e5f6071829", "subject": "shop: cart + checkout"},
 	} {
 		p, _ := json.Marshal(turn)
-		code, b := do(t, app, http.MethodPost, "/v1/agents/sessions/"+s.ID+"/events", "acme",
+		code, b := do(t, app, http.MethodPost, "/v1/agent/sessions/"+s.ID+"/events", "acme",
 			map[string]any{"kind": KindMessage, "payload": json.RawMessage(p)})
 		if code != http.StatusCreated {
 			t.Fatalf("append turn want 201, got %d (%s)", code, b)
@@ -181,20 +181,20 @@ func TestPublishedBuildIsPubliclyReadable(t *testing.T) {
 
 	// Anonymous, before publishing: nothing to see. Note doNoUser sends no
 	// X-User-Id — a true stranger, exactly who this route is for.
-	code, b := doNoUser(t, app, http.MethodGet, "/v1/agents/builds/acme/shop", "", nil)
+	code, b := doNoUser(t, app, http.MethodGet, "/v1/agent/builds/acme/shop", "", nil)
 	if code != http.StatusNotFound {
 		t.Fatalf("unpublished build must be invisible to a stranger; got %d (%s)", code, b)
 	}
 
 	// The author publishes.
-	code, b = do(t, app, http.MethodPatch, "/v1/agents/sessions/"+s.ID, "acme",
+	code, b = do(t, app, http.MethodPatch, "/v1/agent/sessions/"+s.ID, "acme",
 		map[string]any{"published": true})
 	if code != http.StatusOK {
 		t.Fatalf("publish want 200, got %d (%s)", code, b)
 	}
 
 	// The same stranger can now read the build.
-	code, b = doNoUser(t, app, http.MethodGet, "/v1/agents/builds/acme/shop", "", nil)
+	code, b = doNoUser(t, app, http.MethodGet, "/v1/agent/builds/acme/shop", "", nil)
 	if code != http.StatusOK {
 		t.Fatalf("published build want 200 for a stranger, got %d (%s)", code, b)
 	}
@@ -221,24 +221,24 @@ func TestPublishedBuildIsPubliclyReadable(t *testing.T) {
 	}
 
 	// And it shows up in the public index the gallery links from.
-	code, b = doNoUser(t, app, http.MethodGet, "/v1/agents/builds", "", nil)
+	code, b = doNoUser(t, app, http.MethodGet, "/v1/agent/builds", "", nil)
 	if code != http.StatusOK || !strings.Contains(string(b), "shop") {
 		t.Fatalf("published build must appear in the public index: %d %s", code, b)
 	}
 }
 
-// TestPublishRequiresAProject refuses a build with no product: /v1/agents/builds
+// TestPublishRequiresAProject refuses a build with no product: /v1/agent/builds
 // is keyed on (org, project), so publishing without one creates a story nobody
 // can open — better refused at the write than silently unreachable.
 func TestPublishRequiresAProject(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
-	code, b := do(t, app, http.MethodPost, "/v1/agents/sessions", "acme",
+	code, b := do(t, app, http.MethodPost, "/v1/agent/sessions", "acme",
 		map[string]any{"agent": "dev", "published": true})
 	if code != http.StatusBadRequest {
 		t.Fatalf("publish without a project want 400, got %d (%s)", code, b)
 	}
 	s := register(t, app, "acme", map[string]any{"agent": "dev"})
-	code, b = do(t, app, http.MethodPatch, "/v1/agents/sessions/"+s.ID, "acme",
+	code, b = do(t, app, http.MethodPatch, "/v1/agent/sessions/"+s.ID, "acme",
 		map[string]any{"published": true})
 	if code != http.StatusBadRequest {
 		t.Fatalf("patch-publish without a project want 400, got %d (%s)", code, b)
@@ -251,13 +251,13 @@ func TestBuildsAreOrgKeyed(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
 	for _, org := range []string{"acme", "globex"} {
 		s := register(t, app, org, map[string]any{"agent": "dev", "project": "shop", "title": org + " build"})
-		if code, b := do(t, app, http.MethodPatch, "/v1/agents/sessions/"+s.ID, org,
+		if code, b := do(t, app, http.MethodPatch, "/v1/agent/sessions/"+s.ID, org,
 			map[string]any{"published": true}); code != http.StatusOK {
 			t.Fatalf("publish %s want 200, got %d (%s)", org, code, b)
 		}
 	}
 	for _, org := range []string{"acme", "globex"} {
-		code, b := doNoUser(t, app, http.MethodGet, "/v1/agents/builds/"+org+"/shop", "", nil)
+		code, b := doNoUser(t, app, http.MethodGet, "/v1/agent/builds/"+org+"/shop", "", nil)
 		if code != http.StatusOK {
 			t.Fatalf("%s build want 200, got %d (%s)", org, code, b)
 		}
@@ -277,7 +277,7 @@ func TestBuildsAreOrgKeyed(t *testing.T) {
 func TestDeployBecomesTheLastTurn(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
 	s := register(t, app, "acme", map[string]any{"agent": "dev", "project": "shop"})
-	if code, b := do(t, app, http.MethodPatch, "/v1/agents/sessions/"+s.ID, "acme",
+	if code, b := do(t, app, http.MethodPatch, "/v1/agent/sessions/"+s.ID, "acme",
 		map[string]any{"published": true}); code != http.StatusOK {
 		t.Fatalf("publish: %d %s", code, b)
 	}
@@ -286,7 +286,7 @@ func TestDeployBecomesTheLastTurn(t *testing.T) {
 	deployWriter{s: mounted}.OnDeploy(context.Background(), "acme", "shop",
 		"https://shop.hanzo.app", "dep_123")
 
-	code, b := doNoUser(t, app, http.MethodGet, "/v1/agents/builds/acme/shop", "", nil)
+	code, b := doNoUser(t, app, http.MethodGet, "/v1/agent/builds/acme/shop", "", nil)
 	if code != http.StatusOK {
 		t.Fatalf("read build: %d %s", code, b)
 	}
@@ -309,7 +309,7 @@ func TestDeployWithoutABuildSessionIsSilent(t *testing.T) {
 	_ = app
 	deployWriter{s: mounted}.OnDeploy(context.Background(), "acme", "never-built",
 		"https://never-built.hanzo.app", "dep_1")
-	code, b := doNoUser(t, app, http.MethodGet, "/v1/agents/builds/acme/never-built", "", nil)
+	code, b := doNoUser(t, app, http.MethodGet, "/v1/agent/builds/acme/never-built", "", nil)
 	if code != http.StatusNotFound {
 		t.Fatalf("a script-deployed site has no build story; want 404, got %d (%s)", code, b)
 	}
@@ -445,7 +445,7 @@ func TestSessionViewCarriesOwnOrg(t *testing.T) {
 	if s.Org != "acme" {
 		t.Fatalf("register must echo the caller's org, got %q", s.Org)
 	}
-	code, b := do(t, app, http.MethodGet, "/v1/agents/sessions", "acme", nil)
+	code, b := do(t, app, http.MethodGet, "/v1/agent/sessions", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list: %d %s", code, b)
 	}

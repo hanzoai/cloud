@@ -23,9 +23,9 @@ import (
 // (ported verbatim from team-go/pkg/slack) that binds a Slack user to their own
 // Hanzo account so @hanzo runs ON BEHALF OF them:
 //
-//	GET /v1/integrations/slack/link           leg1: set __Host- init cookie + redirect to Slack sign-in
-//	GET /v1/integrations/slack/link/slack     leg2: Slack sign-in callback; require init-cookie==state BEFORE exchange
-//	GET /v1/integrations/slack/link/callback  leg3: hanzo.id OIDC callback; bind Slack↔Hanzo, seal refresh in KMS
+//	GET /v1/integration/slack/link           leg1: set __Host- init cookie + redirect to Slack sign-in
+//	GET /v1/integration/slack/link/slack     leg2: Slack sign-in callback; require init-cookie==state BEFORE exchange
+//	GET /v1/integration/slack/link/callback  leg3: hanzo.id OIDC callback; bind Slack↔Hanzo, seal refresh in KMS
 //
 // TRANSPLANT DEFENSE. The binding identity is NEVER a URL/state param. Leg1 mints
 // a random nonce carried BOTH in an httpOnly __Host- init cookie AND the
@@ -267,7 +267,7 @@ func slackLinkURL(s *cloud.Service[state], teamID, slackUser string) (string, er
 	if err != nil {
 		return "", err
 	}
-	return "https://" + s.Domain + "/v1/integrations/slack/link?state=" + url.QueryEscape(state), nil
+	return "https://" + s.Domain + "/v1/integration/slack/link?state=" + url.QueryEscape(state), nil
 }
 
 // ── per-user Hanzo binding (KMS-custodied, per-org) ─────────────────────────
@@ -485,7 +485,7 @@ func slackLinkCallbackURI(s *cloud.Service[state]) string {
 	if v := environ.Or("SLACK_LINK_REDIRECT_URI", ""); v != "" {
 		return v
 	}
-	return "https://" + s.Domain + "/v1/integrations/slack/link/callback"
+	return "https://" + s.Domain + "/v1/integration/slack/link/callback"
 }
 
 // slackLinkSlackURI is the Slack sign-in redirect (leg2).
@@ -493,7 +493,7 @@ func slackLinkSlackURI(s *cloud.Service[state]) string {
 	if v := environ.Or("SLACK_LINK_SLACK_REDIRECT_URI", ""); v != "" {
 		return v
 	}
-	return "https://" + s.Domain + "/v1/integrations/slack/link/slack"
+	return "https://" + s.Domain + "/v1/integration/slack/link/slack"
 }
 
 // slackInstall is the app's Direct install URL — the address Slack's "Add to
@@ -512,7 +512,7 @@ func slackLinkSlackURI(s *cloud.Service[state]) string {
 //
 // It carries NO state and binds NO org, and that is correct rather than a gap:
 // the org is resolved where it has always been resolved — the generic
-// /v1/integrations/:provider/callback, from the signed state a console connect
+// /v1/integration/:provider/callback, from the signed state a console connect
 // minted, or OrgForExternalID for a workspace already connected. An install that
 // begins here finishes there under exactly the rules every other install obeys,
 // and the callback's labeled failure already returns the browser to the console

@@ -188,7 +188,7 @@ func mustJSON(t *testing.T, b []byte, v any) {
 // register is a helper that POSTs a session and returns its view.
 func register(t *testing.T, app *zip.App, org string, body map[string]any) sessionView {
 	t.Helper()
-	code, b := do(t, app, http.MethodPost, "/v1/agents/sessions", org, body)
+	code, b := do(t, app, http.MethodPost, "/v1/agent/sessions", org, body)
 	if code != http.StatusCreated {
 		t.Fatalf("register want 201, got %d (%s)", code, b)
 	}
@@ -202,8 +202,8 @@ func register(t *testing.T, app *zip.App, org string, body map[string]any) sessi
 func TestSessionsHTTPTreeAndScope(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
 
-	// Route precedence: /v1/agents/sessions is NOT captured by /v1/agents/:name.
-	code, b := do(t, app, http.MethodGet, "/v1/agents/sessions", "acme", nil)
+	// Route precedence: /v1/agent/sessions is NOT captured by /v1/agent/:name.
+	code, b := do(t, app, http.MethodGet, "/v1/agent/sessions", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list sessions want 200 (not shadowed by :name), got %d (%s)", code, b)
 	}
@@ -233,7 +233,7 @@ func TestSessionsHTTPTreeAndScope(t *testing.T) {
 	}
 
 	// Default list = ROOTS only (the outer-agent view).
-	code, b = do(t, app, http.MethodGet, "/v1/agents/sessions", "acme", nil)
+	code, b = do(t, app, http.MethodGet, "/v1/agent/sessions", "acme", nil)
 	mustJSON(t, b, &empty)
 	if code != http.StatusOK || len(empty.Sessions) != 1 || empty.Sessions[0].ID != root.ID {
 		t.Fatalf("default list want [root], got %d %+v", code, empty.Sessions)
@@ -243,7 +243,7 @@ func TestSessionsHTTPTreeAndScope(t *testing.T) {
 	}
 
 	// The tree endpoint returns the full subagent-flow graph.
-	code, b = do(t, app, http.MethodGet, "/v1/agents/sessions/"+root.ID+"/tree", "acme", nil)
+	code, b = do(t, app, http.MethodGet, "/v1/agent/sessions/"+root.ID+"/tree", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("tree want 200, got %d (%s)", code, b)
 	}
@@ -267,25 +267,25 @@ func TestSessionsHTTPTreeAndScope(t *testing.T) {
 	}
 
 	// Cross-tenant: evil cannot see, read, tree, control, or parent-under acme's root.
-	code, b = do(t, app, http.MethodGet, "/v1/agents/sessions", "evil", nil)
+	code, b = do(t, app, http.MethodGet, "/v1/agent/sessions", "evil", nil)
 	mustJSON(t, b, &empty)
 	if len(empty.Sessions) != 0 {
 		t.Fatalf("evil must see 0 sessions, got %d", len(empty.Sessions))
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/agents/sessions/"+root.ID, "evil", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/agent/sessions/"+root.ID, "evil", nil); code != http.StatusNotFound {
 		t.Fatalf("evil get acme session want 404, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/agents/sessions/"+root.ID+"/tree", "evil", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/agent/sessions/"+root.ID+"/tree", "evil", nil); code != http.StatusNotFound {
 		t.Fatalf("evil tree acme session want 404, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents/sessions/"+root.ID+"/stop", "evil", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent/sessions/"+root.ID+"/stop", "evil", nil); code != http.StatusNotFound {
 		t.Fatalf("evil control acme session want 404, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents/sessions/"+root.ID+"/events", "evil",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent/sessions/"+root.ID+"/events", "evil",
 		map[string]any{"kind": "log"}); code != http.StatusNotFound {
 		t.Fatalf("evil append to acme session want 404, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents/sessions", "evil",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent/sessions", "evil",
 		map[string]any{"agent": "x", "parentSessionId": root.ID}); code != http.StatusBadRequest {
 		t.Fatalf("evil parent-under acme root want 400, got %d", code)
 	}
@@ -299,7 +299,7 @@ func TestSessionsHTTPEventsAndStatus(t *testing.T) {
 
 	// Append events: message, tool-call, spawn — seq is monotonic.
 	for i, k := range []string{KindMessage, KindToolCall, KindSpawn} {
-		code, b := do(t, app, http.MethodPost, "/v1/agents/sessions/"+root.ID+"/events", "acme",
+		code, b := do(t, app, http.MethodPost, "/v1/agent/sessions/"+root.ID+"/events", "acme",
 			map[string]any{"kind": k, "payload": map[string]any{"n": i}})
 		if code != http.StatusCreated {
 			t.Fatalf("append %s want 201, got %d (%s)", k, code, b)
@@ -311,13 +311,13 @@ func TestSessionsHTTPEventsAndStatus(t *testing.T) {
 		}
 	}
 	// Bad kind + bad payload are rejected.
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents/sessions/"+root.ID+"/events", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent/sessions/"+root.ID+"/events", "acme",
 		map[string]any{"kind": "bogus"}); code != http.StatusBadRequest {
 		t.Fatalf("bad kind want 400, got %d", code)
 	}
 
 	// Detail shows recent events + event count.
-	code, b := do(t, app, http.MethodGet, "/v1/agents/sessions/"+root.ID, "acme", nil)
+	code, b := do(t, app, http.MethodGet, "/v1/agent/sessions/"+root.ID, "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("detail want 200, got %d (%s)", code, b)
 	}
@@ -328,7 +328,7 @@ func TestSessionsHTTPEventsAndStatus(t *testing.T) {
 	}
 
 	// PATCH running -> done sets endedAt; then terminal is monotonic.
-	code, b = do(t, app, http.MethodPatch, "/v1/agents/sessions/"+root.ID, "acme",
+	code, b = do(t, app, http.MethodPatch, "/v1/agent/sessions/"+root.ID, "acme",
 		map[string]any{"status": StatusDone})
 	if code != http.StatusOK {
 		t.Fatalf("patch done want 200, got %d (%s)", code, b)
@@ -338,7 +338,7 @@ func TestSessionsHTTPEventsAndStatus(t *testing.T) {
 	if done.Status != StatusDone || done.EndedAt == "" {
 		t.Fatalf("done must set endedAt, got %+v", done)
 	}
-	if code, _ := do(t, app, http.MethodPatch, "/v1/agents/sessions/"+root.ID, "acme",
+	if code, _ := do(t, app, http.MethodPatch, "/v1/agent/sessions/"+root.ID, "acme",
 		map[string]any{"status": StatusRunning}); code != http.StatusConflict {
 		t.Fatalf("reopen finished session want 409, got %d", code)
 	}
@@ -385,7 +385,7 @@ func TestSessionsControlAuthzAndForward(t *testing.T) {
 		"agent": "dev", "taskWorkflowId": "wf-123", "taskRunId": "run-1",
 	})
 	// pause -> Signal("pause")
-	code, b := do(t, app, http.MethodPost, "/v1/agents/sessions/"+backed.ID+"/pause", "acme", nil)
+	code, b := do(t, app, http.MethodPost, "/v1/agent/sessions/"+backed.ID+"/pause", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("pause want 200, got %d (%s)", code, b)
 	}
@@ -399,10 +399,10 @@ func TestSessionsControlAuthzAndForward(t *testing.T) {
 		t.Fatalf("pause must forward + record a control event, got %+v", res)
 	}
 	// message (steer) -> Signal("message")
-	do(t, app, http.MethodPost, "/v1/agents/sessions/"+backed.ID+"/message", "acme",
+	do(t, app, http.MethodPost, "/v1/agent/sessions/"+backed.ID+"/message", "acme",
 		map[string]any{"message": "focus on the bug"})
 	// stop -> Cancel
-	code, _ = do(t, app, http.MethodPost, "/v1/agents/sessions/"+backed.ID+"/stop", "acme", nil)
+	code, _ = do(t, app, http.MethodPost, "/v1/agent/sessions/"+backed.ID+"/stop", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("stop want 200, got %d", code)
 	}
@@ -419,13 +419,13 @@ func TestSessionsControlAuthzAndForward(t *testing.T) {
 	// Control is recorded as an event even on a NON-task-backed session
 	// (forwarded=false) — stream-consuming surfaces act on it.
 	plain := register(t, app, "acme", map[string]any{"agent": "dev"})
-	code, b = do(t, app, http.MethodPost, "/v1/agents/sessions/"+plain.ID+"/pause", "acme", nil)
+	code, b = do(t, app, http.MethodPost, "/v1/agent/sessions/"+plain.ID+"/pause", "acme", nil)
 	mustJSON(t, b, &res)
 	if code != http.StatusOK || res.Forwarded {
 		t.Fatalf("plain pause want 200 forwarded=false, got %d %+v", code, res)
 	}
 	// The control command landed in the event log.
-	_, b = do(t, app, http.MethodGet, "/v1/agents/sessions/"+plain.ID, "acme", nil)
+	_, b = do(t, app, http.MethodGet, "/v1/agent/sessions/"+plain.ID, "acme", nil)
 	var det sessionDetail
 	mustJSON(t, b, &det)
 	if det.Events != 1 || det.RecentEvents[0].Kind != KindControl {
@@ -434,7 +434,7 @@ func TestSessionsControlAuthzAndForward(t *testing.T) {
 
 	// A forward FAILURE is a 502 but the intent is still recorded.
 	ft.failNext = true
-	code, _ = do(t, app, http.MethodPost, "/v1/agents/sessions/"+backed.ID+"/resume", "acme", nil)
+	code, _ = do(t, app, http.MethodPost, "/v1/agent/sessions/"+backed.ID+"/resume", "acme", nil)
 	// backed was stopped above (running still — stop only records/cancels, status
 	// is surface-owned), so resume is allowed; the forward fails -> 502.
 	if code != http.StatusBadGateway {
@@ -442,17 +442,17 @@ func TestSessionsControlAuthzAndForward(t *testing.T) {
 	}
 
 	// AuthZ: X-Org-Id without a validated principal (no X-User-Id) is refused.
-	if code, _ := doNoUser(t, app, http.MethodPost, "/v1/agents/sessions/"+backed.ID+"/pause", "acme", nil); code != http.StatusForbidden {
+	if code, _ := doNoUser(t, app, http.MethodPost, "/v1/agent/sessions/"+backed.ID+"/pause", "acme", nil); code != http.StatusForbidden {
 		t.Fatalf("control without validated principal want 403, got %d", code)
 	}
-	if code, _ := doNoUser(t, app, http.MethodPost, "/v1/agents/sessions", "acme",
+	if code, _ := doNoUser(t, app, http.MethodPost, "/v1/agent/sessions", "acme",
 		map[string]any{"agent": "x"}); code != http.StatusForbidden {
 		t.Fatalf("register without validated principal want 403, got %d", code)
 	}
 
 	// Control on a finished session is refused (409).
 	fin := register(t, app, "acme", map[string]any{"agent": "dev", "status": StatusDone})
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents/sessions/"+fin.ID+"/pause", "acme", nil); code != http.StatusConflict {
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent/sessions/"+fin.ID+"/pause", "acme", nil); code != http.StatusConflict {
 		t.Fatalf("control a finished session want 409, got %d", code)
 	}
 }
@@ -461,13 +461,13 @@ func TestSessionsControlAuthzAndForward(t *testing.T) {
 
 func TestRunOpensRootSession(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "the answer"})
-	do(t, app, http.MethodPost, "/v1/agents", "acme",
+	do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "helper", "model": "m", "instructions": "x"})
-	if code, _ := do(t, app, http.MethodPost, "/v1/agents/helper/run", "acme", map[string]any{"input": "hi"}); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodPost, "/v1/agent/helper/run", "acme", map[string]any{"input": "hi"}); code != http.StatusOK {
 		t.Fatalf("run want 200")
 	}
 	// The run is now visible as a root session with a log event.
-	_, b := do(t, app, http.MethodGet, "/v1/agents/sessions", "acme", nil)
+	_, b := do(t, app, http.MethodGet, "/v1/agent/sessions", "acme", nil)
 	var lst struct {
 		Sessions []sessionView `json:"sessions"`
 	}

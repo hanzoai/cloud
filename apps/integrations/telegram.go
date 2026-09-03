@@ -14,7 +14,7 @@ import (
 // inbound chat id.
 //
 // Telegram does NOT fit the OAuth authorize→callback round trip, so it SHADOWS the
-// generic connect with its own literal POST /v1/integrations/telegram/connect
+// generic connect with its own literal POST /v1/integration/telegram/connect
 // (telegram_events.go) that mints a short, single-use deep-link code → org. The
 // registry entry here exists for the CARD (list/get/available/connected/disconnect)
 // and gates `available` on the bot token; its Authorize/Exchange are never reached

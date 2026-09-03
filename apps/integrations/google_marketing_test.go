@@ -24,7 +24,7 @@ func TestGoogleMarketingAuthorizeScopes(t *testing.T) {
 		{"google_analytics", googleAuthorizeWith(googleAnalyticsScopes), "auth/analytics.readonly", "adwords"},
 	}
 	for _, tc := range cases {
-		raw, err := tc.authFn(OAuthConfig{ClientID: "cid"}, "https://api.hanzo.ai/v1/integrations/"+tc.provider+"/callback", "st8")
+		raw, err := tc.authFn(OAuthConfig{ClientID: "cid"}, "https://api.hanzo.ai/v1/integration/"+tc.provider+"/callback", "st8")
 		if err != nil {
 			t.Fatalf("%s authorize: %v", tc.provider, err)
 		}

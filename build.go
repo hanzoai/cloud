@@ -792,7 +792,7 @@ func pickEmbedClient(cfg *Config, log luxlog.Logger) AIClient {
 // runner runs in-cluster and the public issuer host (https://hanzo.id) is fronted
 // by Cloudflare, which 403s a server-side (non-browser) loopback POST with edge
 // error 1006 — so minting against the PUBLIC issuer URL fails and every
-// POST /v1/agents/:ref/run 502s. Measured: an in-cluster POST to
+// POST /v1/agent/:ref/run 502s. Measured: an in-cluster POST to
 // https://hanzo.id/v1/iam/oauth/token answers 403/1006, http://iam.hanzo.svc/... 200.
 // This mirrors the KMS login-broker resolution (apps/kms/mount.go) exactly — one
 // split-horizon policy, no drift. Prefer, in order: an explicit override

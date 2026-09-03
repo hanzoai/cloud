@@ -33,7 +33,7 @@ func TestTheOfferSaysHowToAcceptIt(t *testing.T) {
 		"created",
 		"private",
 		"https://github.com/acme/widgets",
-		"/v1/integrations/github/import",
+		"/v1/integration/github/import",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the offer must name %q so it can be acted on; got:\n%s", want, got)

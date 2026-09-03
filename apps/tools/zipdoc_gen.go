@@ -30,7 +30,7 @@ func init() {
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools", zip.Doc{
-		Description: "Lists every tool the caller's org and project can reach, from every\nsource, each flagged with whether it is activated. This is the discovery\nsurface: one flat set of names spanning connector actions, user functions,\nzap-service routes, agents, skills and the org's own external MCP servers,\ndeduplicated by name so the highest-precedence source wins a collision. It\nlists; it does not call — dispatch is POST /v1/tools/call.",
+		Description: "Lists every tool the caller's org and project can reach, from every\nsource, each flagged with whether it is activated. This is the discovery\nsurface: one flat set of names spanning connector actions, user functions,\nzap-service routes, agents, skills and the org's own external MCP servers,\ndeduplicated by name so the highest-precedence source wins a collision. It\nlists; it does not call — dispatch is POST /v1/tool/call.",
 		Fields: map[string]string{
 			"Currency.Code":       "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
 			"Currency.Decimals":   "fractional digits of the smallest unit",
@@ -58,7 +58,7 @@ func init() {
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools/catalog", zip.Doc{
-		Description: "Lists the MCP servers the public registries publish, as we hold\nthem: our canonical copy of registry.modelcontextprotocol.io, plus what we\ndecided about each entry.\n\nThis is the SHELF an org picks from. A listing with a streamable-http endpoint\ncan be enabled as-is — POST /v1/tools/mcp/servers with its id — and its tools then\njoin the org's tool plane and the fleet's MCP server. A listing that only ships a\nstdio package needs a process to run it, which is why the transports are on\nevery entry rather than implied.\n\nHidden entries are absent: they are the ones we took off the shelf. A platform\nSuperAdmin sees them, because the same query answers \"what is on the shelf\" and\n\"what is in the catalog\" and two queries would drift apart.\n\nIt is PAGED — 50 by default, 200 at most. The public registry publishes tens of\nthousands of servers, so an unbounded answer is a twenty-megabyte response and a\nstorefront that renders in a minute. total is the whole match, not the page.",
+		Description: "Lists the MCP servers the public registries publish, as we hold\nthem: our canonical copy of registry.modelcontextprotocol.io, plus what we\ndecided about each entry.\n\nThis is the SHELF an org picks from. A listing with a streamable-http endpoint\ncan be enabled as-is — POST /v1/tool/mcp/servers with its id — and its tools then\njoin the org's tool plane and the fleet's MCP server. A listing that only ships a\nstdio package needs a process to run it, which is why the transports are on\nevery entry rather than implied.\n\nHidden entries are absent: they are the ones we took off the shelf. A platform\nSuperAdmin sees them, because the same query answers \"what is on the shelf\" and\n\"what is in the catalog\" and two queries would drift apart.\n\nIt is PAGED — 50 by default, 200 at most. The public registry publishes tens of\nthousands of servers, so an unbounded answer is a twenty-megabyte response and a\nstorefront that renders in a minute. total is the whole match, not the page.",
 		Fields: map[string]string{
 			"MCPListing.description": "Description is the publisher's one-line summary.",
 			"MCPListing.featured":    "Featured puts the listing on the front of the shelf. Curation.",
@@ -151,7 +151,7 @@ func init() {
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools/plugins/authored", zip.Doc{
-		Description: "Lists the plugins the caller's org BUILT, newest first,\neach with the TypeScript as authored. That is a different set with a different\nlifecycle from GET /v1/tools/plugins, which reports the subsystems this deployment\nmounted. The bundled CommonJS the runtime executes is never included, and\nneither is any credential — a plugin names the connectors provider it needs and\nreads the credential from ctx.auth at run time.",
+		Description: "Lists the plugins the caller's org BUILT, newest first,\neach with the TypeScript as authored. That is a different set with a different\nlifecycle from GET /v1/tool/plugins, which reports the subsystems this deployment\nmounted. The bundled CommonJS the runtime executes is never included, and\nneither is any credential — a plugin names the connectors provider it needs and\nreads the credential from ctx.auth at run time.",
 		Fields: map[string]string{
 			"AuthoredPlugin.createdAt":   "CreatedAt is when the plugin was last built, Unix seconds.",
 			"AuthoredPlugin.id":          "ID is the plugin's id within the org, and the id a delete addresses.",
@@ -163,7 +163,7 @@ func init() {
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools/skills", zip.Doc{
-		Description: "Lists the skills the caller's org can reach — the brand's embedded\ncatalogue plus the org's own authored ones — with each one's activation flag.\nA skill is discovery and activation metadata attached to an agent, never called\ndirectly, so every entry here is non-dispatchable. It is GET /v1/tools narrowed\nto one source, not a second store: a name a caller sees here is the same entry,\nwith the same activation state, that discovery reports.",
+		Description: "Lists the skills the caller's org can reach — the brand's embedded\ncatalogue plus the org's own authored ones — with each one's activation flag.\nA skill is discovery and activation metadata attached to an agent, never called\ndirectly, so every entry here is non-dispatchable. It is GET /v1/tool narrowed\nto one source, not a second store: a name a caller sees here is the same entry,\nwith the same activation state, that discovery reports.",
 		Fields: map[string]string{
 			"Currency.Code":         "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
 			"Currency.Decimals":     "fractional digits of the smallest unit",
@@ -185,7 +185,7 @@ func init() {
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools/skills/authored", zip.Doc{
-		Description: "Lists the caller org's OWN skills with their SKILL.md\nbodies. GET /v1/tools/skills is the registry view — the brand's catalogue plus this\norg's, with activation flags and no bodies; this is the EDITABLE set, so it\ncarries the content that view omits and nothing the org did not write.",
+		Description: "Lists the caller org's OWN skills with their SKILL.md\nbodies. GET /v1/tool/skills is the registry view — the brand's catalogue plus this\norg's, with activation flags and no bodies; this is the EDITABLE set, so it\ncarries the content that view omits and nothing the org did not write.",
 		Fields: map[string]string{
 			"Skill.content":            "Content is the SKILL.md body, markdown.",
 			"Skill.createdAt":          "CreatedAt is when the skill was last written, Unix seconds.",
@@ -236,10 +236,10 @@ func init() {
 		Description: "Turns the files into skills and makes them the source's whole\ncontribution. The ORG is the caller's, from the plane context: a repository\ncan only ever write the skills of the org that holds it.",
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/tools POST /v1/tools/call", zip.Doc{
-		Description: "Runs one of the caller's activated tools and answers with its output.\n\nThis is the endpoint onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 client or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tools — ?activated=true for the callable set.",
+		Description: "Runs one of the caller's activated tools and answers with its output.\n\nThis is the endpoint onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 client or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tool — ?activated=true for the callable set.",
 		Fields: map[string]string{
 			"toolCall.arguments": "Arguments is the tool's own input object, passed through verbatim to\nwhichever source owns it.",
-			"toolCall.name":      "Name is the tool to run, exactly as GET /v1/tools reports it.",
+			"toolCall.name":      "Name is the tool to run, exactly as GET /v1/tool reports it.",
 			"toolResult.name":    "Name is the tool that ran.",
 			"toolResult.result":  "Result is the tool's own output, verbatim — its shape is the tool's, not\nthis plane's.",
 		},
@@ -267,7 +267,7 @@ func init() {
 			"MCPServer.source":           "Source is where the registration came from: \"catalog\" when it was enabled\noff the shelf, \"org\" when the org registered the URL itself. It is DERIVED\nfrom Listing rather than stored, because two columns for one fact is two\nchances to disagree.",
 			"MCPServer.url":              "URL is the server's JSON-RPC endpoint. Always a public http(s) host: the\nregistration boundary and the dialer both refuse anything else.",
 			"createServerReq.authHeader": "AuthHeader is the request header the credential is injected into, e.g.\n\"Authorization\". Empty means the server needs no credential.",
-			"createServerReq.listing":    "Listing enables a CATALOG entry instead — the id from GET /v1/tools/catalog.\nThe endpoint is the listing's own streamable-http remote, so a listing that\nonly ships a stdio package is refused: there is nothing to reach yet.",
+			"createServerReq.listing":    "Listing enables a CATALOG entry instead — the id from GET /v1/tool/catalog.\nThe endpoint is the listing's own streamable-http remote, so a listing that\nonly ships a stdio package is refused: there is nothing to reach yet.",
 			"createServerReq.name":       "Name labels the server for the org. Required with URL; with Listing it\ndefaults to the listing's own title.",
 			"createServerReq.secret":     "Secret is the credential VALUE. It is sealed into KMS under a per-org ref\nand never stored in SQLite, never listed, and never returned.",
 			"createServerReq.url":        "URL is the server's JSON-RPC endpoint. It must be an http(s) URL naming a\nPUBLIC host: loopback, link-local, private and cloud-metadata addresses are\nrefused here and again when the dialer connects.",

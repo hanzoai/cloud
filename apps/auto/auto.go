@@ -167,7 +167,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	routes(app, s)
 
 	// Register every connector action into the unified tool plane. This is the ONLY
-	// projection of them: discovery is GET /v1/tools, dispatch is POST /v1/tools/call,
+	// projection of them: discovery is GET /v1/tool, dispatch is POST /v1/tool/call,
 	// and through that registry every action is a tool on the fleet's one agent MCP server.
 	tools.Register(connectorToolProvider{})
 

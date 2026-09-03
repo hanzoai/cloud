@@ -95,7 +95,7 @@ func TestDiscordInteractionsHandler(t *testing.T) {
 
 	post := func(body string, sign bool) httpResult {
 		ts := strconv.FormatInt(time.Now().Unix(), 10)
-		rq := httptest.NewRequest(http.MethodPost, "/v1/integrations/discord/interactions", strings.NewReader(body))
+		rq := httptest.NewRequest(http.MethodPost, "/v1/integration/discord/interactions", strings.NewReader(body))
 		rq.Header.Set("Content-Type", "application/json")
 		if sign {
 			sig := ed25519.Sign(priv, append([]byte(ts), []byte(body)...))
@@ -250,7 +250,7 @@ func TestTelegramWebhookAuthAndIsolation(t *testing.T) {
 	}
 
 	post := func(secretHdr, body string) int {
-		rq := httptest.NewRequest(http.MethodPost, "/v1/integrations/telegram/webhook", strings.NewReader(body))
+		rq := httptest.NewRequest(http.MethodPost, "/v1/integration/telegram/webhook", strings.NewReader(body))
 		rq.Header.Set("Content-Type", "application/json")
 		if secretHdr != "" {
 			rq.Header.Set(telegramSecretHeader, secretHdr)

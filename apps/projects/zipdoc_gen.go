@@ -7,27 +7,27 @@ import (
 )
 
 func init() {
-	zip.Describe("github.com/hanzoai/cloud/apps/projects DELETE /v1/projects/:slug", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects DELETE /v1/project/:slug", zip.Doc{
 		Description: "Deletes a project and takes its site off the internet.\n\nThe metadata delete is authoritative and everything after it is best-effort,\nin this order: the public `<slug>` subdomain binding is released so the slug is\nfree to reclaim, the release rows are dropped so a reclaimed slug never\ninherits the previous owner's rollback menu, the git source is retired on\nevery copy it has so a reclaimed slug never adopts a repository left behind\n(visibility.go), the S3 origin is purged under BOTH `<org>/<slug>/` and the\nsite's sibling release space, and the edge cache-tag is flushed. A failure in\nany of those is logged and the delete still answers 204 — resurrecting a\nproject because a purge missed would be worse than a leaked prefix.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404 and\nnothing of theirs is touched.",
 		Fields: map[string]string{
 			"projectsRef.slug": "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects DELETE /v1/projects/:slug/domains/:host", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects DELETE /v1/project/:slug/domains/:host", zip.Doc{
 		Description: "Gives a custom hostname back, so the name is free to reuse.\n\nA claim is FIRST-COME and global, so an add-only surface was not ownership but\na leak: a customer who mistyped a domain, or claimed one they later moved\nelsewhere, could neither reuse it nor let anyone else. This is the third\nwriter that closes it. The release is scoped to (host, org, slug), so it can\nonly ever drop THIS tenant's own claim, and it is IDEMPOTENT: releasing a host\nwe do not hold is a clean 204, never a 404 that would let a caller probe which\nhosts other tenants hold. The edge cache-tag is flushed, since the host stops\nrouting here.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"projectsDomainRef.host": "Host is the custom hostname, from the path. It is cleaned to its canonical\nform (lowercased, trailing dot dropped) before anything is looked up.",
 			"projectsDomainRef.slug": "Slug is the project the host is attached to, from the path.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects DELETE /v1/projects/:slug/star", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects DELETE /v1/project/:slug/star", zip.Doc{
 		Description: "Removes the caller's own bookmark from a project, and answers whether\nit is starred afterwards.\n\nIt removes only YOUR star — the same one star wrote — so a project other\npeople have starred stays on their lists. Unstarring one you had not starred\nis not an error; it leaves it unstarred.",
 		Fields: map[string]string{
 			"projectsRef.slug":     "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
 			"projectsStar.starred": "Starred is whether THIS caller has starred the project after the toggle —\ntheir own bookmark, not a property the project carries, so two people see\ntwo answers for one project.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/projects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/project", zip.Doc{
 		Description: "Returns every project your org owns.\n\nEach row carries the slug, name, framework, visibility, status and live URL —\nthe same rows console and the builder render, because there is only one store\nbehind both. It requires a validated principal (403 without one) and is keyed\nby that principal's org, so it never contains another tenant's project.",
 		Fields: map[string]string{
 			"projectsProject.analytics":           "Analytics is whether the web-analytics beacon is injected into this site's\npages. It is ON by default — a project has to opt out — and it is what the\nstatic builder reads to decide whether to inject at all.",
@@ -61,7 +61,7 @@ func init() {
 			"projectsRepo.url":                    "URL is the clone address of the repository this project builds from.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/projects/:slug", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/project/:slug", zip.Doc{
 		Description: "Returns one project of yours by slug — its settings, its live URL\nand the deployment currently serving it.\n\nScope: a validated principal is required (403 without one) and the lookup is\nkeyed by (org, slug), so another tenant's slug is a 404 exactly like a\nnonexistent one.",
 		Fields: map[string]string{
 			"projectsProject.analytics":           "Analytics is whether the web-analytics beacon is injected into this site's\npages. It is ON by default — a project has to opt out — and it is what the\nstatic builder reads to decide whether to inject at all.",
@@ -96,7 +96,7 @@ func init() {
 			"projectsRepo.url":                    "URL is the clone address of the repository this project builds from.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/projects/:slug/deployments", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/project/:slug/deployments", zip.Doc{
 		Description: "Returns a project's deploy history, newest version first.\n\nEvery deploy of the project is a row — uploads, generated sites, and git/CI\nbuilds alike — carrying its version, status, source, commit, live URL, file\ncount and byte count. The short-lived upload grant a queued git deployment was\nhanded is NOT replayed here: it exists only on the 202 that minted it, so a\ngrant cannot outlive its build by being fetched again.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"projectsDeployment.bucket":     "Bucket is the object-store bucket its files were written to.",
@@ -122,7 +122,7 @@ func init() {
 			"projectsUploadGrant.url":       "URL is the address to POST each object to. It is signed for the PUBLIC\nendpoint, because the signature covers the host and CI posts from outside the\ncluster.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/projects/:slug/deployments/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/project/:slug/deployments/:id", zip.Doc{
 		Description: "Returns one deployment of a project by id.\n\nIt is how a console follows a build: the status (`queued`, `uploading`,\n`live`, `error`), the message a failure left, and the URL and prefix it went\nlive at. Like the history, it never replays the upload grant.\n\nScope: a validated principal is required (403 without one). Both the project\nand the deployment are resolved within that principal's org, so a deployment\nof another project — or of another tenant — is a 404.",
 		Fields: map[string]string{
 			"projectsDeployment.bucket":     "Bucket is the object-store bucket its files were written to.",
@@ -149,7 +149,7 @@ func init() {
 			"projectsUploadGrant.url":       "URL is the address to POST each object to. It is signed for the PUBLIC\nendpoint, because the signature covers the host and CI posts from outside the\ncluster.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/projects/:slug/domains", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/project/:slug/domains", zip.Doc{
 		Description: "Returns every custom hostname this site holds: the live ones, plus\nany pending claim with the DNS records it still owes.\n\n`domains` is the routing answer — the hosts that are verified right now —\nwhile `claims` is the full panel, one row per host, each saying whether it is\nlive or pending and, if pending, exactly what to publish.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"Record.name":              "the record name the customer creates",
@@ -169,7 +169,7 @@ func init() {
 			"projectsRef.slug":         "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/projects/:slug/releases", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/project/:slug/releases", zip.Doc{
 		Description: "Returns a site's releases newest-first, marking the active one —\nthe rollback menu.\n\nEach row carries the release id to activate, the source it was promoted from,\nits object and byte counts, and the URL if it is the one serving. Retention\nbounds the list, so it is the set that can actually still be rolled back to,\nnot a full history.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"projectsRef.slug":          "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
@@ -183,7 +183,7 @@ func init() {
 			"projectsRelease.url":       "URL is where the site serves. Present only on the ACTIVE release, since an\ninactive one is not answering anywhere.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/projects/edge", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/project/edge", zip.Doc{
 		Description: "health reports whether a publish reaches readers, rather than whether it was\naccepted. Those are different questions and only the second one was ever\nvisible.\n\nIt asks the edge and nothing else. There is no live call to the provider here:\nConfigured is a local fact, it is the fact that was missing, and a health check\nthat spends a third-party API call is one an operator learns not to run.",
 		Fields: map[string]string{
 			"edgeState.configured": "Configured is whether the edge holds credentials to act at all. False means\nevery purge is a no-op.",
@@ -195,8 +195,8 @@ func init() {
 			"edgeState.status":     "Status is \"ok\" when a publish reaches readers immediately, else \"degraded\".",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/projects/sites", zip.Doc{
-		Description: "Returns the org's deployed sites at the pretty URLs they serve at.\n\nIt reads the SAME org-scoped store as /v1/projects and keeps only the projects\nthat are actually `live`, so a draft or a failed build is not advertised as a\nsite.\n\nScope: a validated principal is required (403 without one) and the list is\nkeyed by that principal's org.",
+	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/project/sites", zip.Doc{
+		Description: "Returns the org's deployed sites at the pretty URLs they serve at.\n\nIt reads the SAME org-scoped store as /v1/project and keeps only the projects\nthat are actually `live`, so a draft or a failed build is not advertised as a\nsite.\n\nScope: a validated principal is required (403 without one) and the list is\nkeyed by that principal's org.",
 		Fields: map[string]string{
 			"projectsSite.name":      "Name is the site's display name.",
 			"projectsSite.slug":      "Slug is the site's handle — also the label of the host it serves at.",
@@ -205,7 +205,7 @@ func init() {
 			"projectsSite.url":       "URL is the pretty address readers use, not the object-store path behind it.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/projects/sites/:slug", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects GET /v1/project/sites/:slug", zip.Doc{
 		Description: "Returns one site — the same row ListSites carries, for one slug.\n\nEvery sub-resource under a site already answered: deployments, releases,\npublish. The site itself did not, and a route that is never registered\nanswers 404 for a LIVE site exactly as it does for one that was never\ncreated. So the one call a client makes to ask \"is it there yet?\" could only\never say no, and a CI lane watching for its own publish would wait forever on\na success it had already achieved.\n\nThe org is the caller's, never a path segment. A slug is unique within an org\nand two orgs may both own `tel`; taking the org from the validated principal\ninstead of the URL means a caller cannot read another org's site by editing a\npath, and it is the same scope ListProjects and ListSites already use.\n\nA site that exists but is not live is NOT found here, matching ListSites,\nwhich keeps only `live` rows so a draft or a failed build is never advertised\nas a site. One definition of \"is a site\", used by both.",
 		Fields: map[string]string{
 			"projectsRef.slug":       "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
@@ -216,7 +216,7 @@ func init() {
 			"projectsSite.url":       "URL is the pretty address readers use, not the object-store path behind it.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects PATCH /v1/projects/:slug", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects PATCH /v1/project/:slug", zip.Doc{
 		Description: "Changes a project's settings, and only the settings you send.\n\nEvery field is optional and absent means \"leave it\": `name` may not be blanked,\n`framework` must stay a known build hint, and `cacheControl` is capped at 256\ncharacters with no newlines (it becomes a response header). `visibility` flips\npublic/private under the same rule as create — public is free, private needs a\nfunded org. `upstream` and `license` are free-text credit for third-party work,\nand sending \"\" clears one. Changing anything reconciles the project's canonical\ngit repo, so a visibility change reaches the source and not just the listing.\n\n`hidden`/`hiddenReason` are platform MODERATION and are ignored unless the\ncaller is a platform admin; they remove a project from the public catalogue\nwithout touching the publisher's own visibility choice, so un-hiding restores\nexactly what they asked for.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"projectsProject.analytics":           "Analytics is whether the web-analytics beacon is injected into this site's\npages. It is ON by default — a project has to opt out — and it is what the\nstatic builder reads to decide whether to inject at all.",
@@ -284,7 +284,7 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /sites/resolve-org", zip.Doc{
 		Description: "Is the first-party path: it NEVER falls back to\nunique-across-orgs, so an internal host is served only by our own project and\nnever a customer's same-named one.",
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/projects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/project", zip.Doc{
 		Description: "Creates a project — the handle a site is deployed and served\nunder — and answers 201 with it in `draft`.\n\n`name` is required; `slug` is derived from the name when omitted and is the\nidentifier that matters — it becomes the S3 key segment, the public host\n`<slug>.hanzo.app`, and the handle every later call addresses, so it must\nmatch `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$` and may not be a reserved label\nsuch as `api` or `admin`. `framework` is a build hint from a closed set,\ndefaulting to `static`; it never gates a deploy, it only tells CI how to build\na linked repo.\n\nTwo defaults are worth knowing: the analytics beacon is ON unless `analytics`\nis explicitly false, and `visibility` is `public` unless asked otherwise.\nPublishing publicly is free; PRIVATE is the paid feature, and an unfunded org\nasking for it is refused rather than quietly published as public. Creation\nalso provisions the project's data space and a canonical git repo, both\nbest-effort — neither can fail the create.\n\nScope: a validated principal is required (403 without one) and the project is\ncreated in THAT principal's org. The slug is unique per org, so a slug already\nused in the caller's own org is a 409 while the same slug in another org is\nirrelevant.",
 		Fields: map[string]string{
 			"projectsCreate.analytics":            "Analytics is the opt-OUT for the wired-by-default analytics beacon: absent\n(nil) ⇒ ON (the default); explicit false ⇒ off. A pointer so \"unset\" is\ndistinguishable from \"false\" — the only way to turn the default off.",
@@ -327,7 +327,7 @@ func init() {
 			"projectsRepo.url":                    "URL is the clone address of the repository this project builds from.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/projects/:slug/deployments", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/project/:slug/deployments", zip.Doc{
 		Description: "Opens a deployment and hands back a short-lived, prefix-scoped\ngrant to write its bytes straight to object storage. Answers 202.\n\nThis is the path for a site too large to send as one archive: a real export is\nhundreds of megabytes against a 16 MiB body limit, so the bytes deliberately do\nNOT pass through the API. The answer carries `bucket`, `prefix` and `upload` —\na presigned POST policy that S3 itself confines to this site's prefix\n(starts-with `<org>/<slug>/`), expires in 30 minutes and bounds each object.\nSo a build writes its own files and holds no standing bucket credential; there\nis nothing to rotate and nothing that leaks between tenants. Never guess the\nprefix — it is server-derived, and a guessed one lands where nothing is served.\n\nThe deployment is `queued` until POST .../deployments/{id}/complete flips it\nlive (or error). That completion is also where DELETION happens: the grant\nauthorizes writes only, so a build cannot remove a file, and cloud reconciles\nthe prefix against the `keys` manifest the completion carries. A build that\ndies before completing leaves the deployment queued rather than a half-live\nsite.\n\nThe grant is on the 202 and NOWHERE else — it is never stored and never\nreplayed on a later read, so it cannot outlive the build it was minted for. A\ndeployment whose grant could not be minted is still created and still\ncompletable; it simply carries no `upload`, and a caller with no other way to\nwrite should treat that as the failure it is.\n\nBilling: the hosting gate runs BEFORE anything is created (402 unfunded, 503\ncommerce unreachable), and the debit lands on the completion that goes live —\nnever on a queued or failed build.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"projectsDeployStart.commit":    "Commit is the git sha this build was produced from, recorded on the\ndeployment so a released site can be traced back to its source. Optional.\n\nIt is the ONLY field here, and deliberately: the predecessor also accepted\n`source` and `branch`. `source` was the Content-Type discriminator this\nsplit removed. `branch` was accepted and DISCARDED — there is no branch\ncolumn on a deployment, and the lifecycle event derives the branch from the\nproject's own linked one — so declaring it would publish a settable field\nthat does nothing into the document, every generated SDK and the MCP input\nschema. A field that is read by nothing is not described as if it were.\n\n`url:\"-\"` because zip binds the query string OVER a decoded body, so\nwithout it a `?commit=` the caller never sent would outrank the one it did.",
@@ -354,7 +354,7 @@ func init() {
 			"projectsUploadGrant.url":       "URL is the address to POST each object to. It is signed for the PUBLIC\nendpoint, because the signature covers the host and CI posts from outside the\ncluster.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/projects/:slug/deployments/:id/complete", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/project/:slug/deployments/:id/complete", zip.Doc{
 		Description: "CompleteDeployment is the CI completion hook that flips a queued git\ndeployment to live (or error) once CI has synced the built site to S3.\n\n`status` must be `live` or `error`. On a LIVE completion the public host is\nclaimed FIRST, so the deployment reports the URL it actually OWNS — a\nCI-supplied `liveUrl` is a hint that can refine that URL but can never assert\na subdomain another tenant holds. `keys` is the manifest CI just uploaded,\nrelative to the deployment prefix: cloud reconciles the prefix against it so a\npage deleted from the build actually stops serving. Omit `keys` and nothing is\ndeleted — the prefix only grows. Reconciliation runs only on a live completion\n(pruning against a failed build's manifest would delete the site the last good\nbuild is still serving) and is best-effort, so a stale leftover never turns a\nsuccessful deploy into a 500. A live completion is also the one billable\nmoment on the git path; an error completion bills nothing.\n\nScope: a validated principal is required (403 without one). CI authenticates\nwith an org-scoped token through the gateway, so the deployment is resolved\nwithin that principal's org and another tenant's slug or deployment id is a\n404.",
 		Fields: map[string]string{
 			"projectsComplete.bytes":        "Bytes is their total size in bytes.",
@@ -388,7 +388,7 @@ func init() {
 			"projectsUploadGrant.url":       "URL is the address to POST each object to. It is signed for the PUBLIC\nendpoint, because the signature covers the host and CI posts from outside the\ncluster.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/projects/:slug/domains", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/project/:slug/domains", zip.Doc{
 		Description: "Attaches one or more CUSTOM public hostnames to this org's site.\n\nBinding a host you do not own would let you shadow it at the edge, so which\noutcome you get depends on whether ownership is already established: a SuperAdmin\nvouches (the operator manages the customer's DNS, so its bind IS the proof) and\nbinds VERIFIED immediately; every other caller, INCLUDING an admin of the\ndeployment's own brand org, has the host CLAIMED as pending and gets the DNS\nchallenge back in `bound[].records`. A pending claim HOLDS the name so nobody\nelse can take it, but it does not route until POST .../domains/{host}/verify\nproves control.\n\nA hostname we operate is refused to a non-vouched caller (those are assigned\nby the platform, never claimed), a host another site already holds is a 409,\nand a name the platform holds is a 400 for EVERY caller — a vouch skips the\nownership proof, never the host table's own invariant. Claims and binds are\nidempotent for the same\n(org, slug), and re-claiming returns the SAME token rather than invalidating a\nrecord the customer has already published. The edge cache-tag is flushed\nafterwards so a newly-verified host serves the current build immediately.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"Record.name":                  "the record name the customer creates",
@@ -409,7 +409,7 @@ func init() {
 			"projectsDomainsBind.slug":     "Slug is the site the hosts attach to, from the path.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/projects/:slug/domains/:host/verify", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/project/:slug/domains/:host/verify", zip.Doc{
 		Description: "Checks the DNS challenge for a pending custom hostname and, when\nit passes, promotes the host so it begins routing at the edge.\n\nIt answers 200 either way, with the host's honest current state: verified once\nthe TXT record is found, still pending — with the records to publish and the\nresolver's own explanation in `detail` — when it is not. A not-yet is not an\nerror: the check ran, DNS simply has not propagated, and the customer retries.\nAn already-verified host is returned unchanged without re-resolving. On a\nsuccessful promotion the edge cache-tag is flushed, since the host routes as\nof that moment.\n\nScope: a validated principal is required (403 without one). Both the site and\nthe claim are resolved within that principal's org, so a host claimed by\nanother tenant is \"not claimed by this site\".",
 		Fields: map[string]string{
 			"Record.name":              "the record name the customer creates",
@@ -426,7 +426,7 @@ func init() {
 			"projectsDomainRef.slug":   "Slug is the project the host is attached to, from the path.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/projects/:slug/publish", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/project/:slug/publish", zip.Doc{
 		Description: "Promotes a build output into a new release AND goes live with it —\ncreate+activate in one call, which is the 99% path.\n\nIt is exactly the two halves in sequence with no extra semantics, so the\nstaged flow and the one-shot flow can never drift apart: `source` is promoted\nunder the same org-relative rule and the same guards CreateRelease applies,\nthen the site's pointer is flipped to it, the public host is claimed and the\nedge is purged. Idempotent on unchanged bytes — same manifest, same release id,\nno copy — and billed once, after the release exists.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"projectsPublish.slug":      "Slug is the site to publish, from the path.",
@@ -441,7 +441,7 @@ func init() {
 			"projectsRelease.url":       "URL is where the site serves. Present only on the ACTIVE release, since an\ninactive one is not answering anywhere.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/projects/:slug/purge", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/project/:slug/purge", zip.Doc{
 		Description: "Flushes the site's edge cache without redeploying anything.\n\nIt invalidates the edge cache-tag `site-<org>-<slug>` and stamps `lastPurgeAt`\n(unix seconds), and it NEVER writes or deletes the S3 origin — the live build\nkeeps serving; only stale copies held at the edge drop, so the next request\nre-fetches the current artifact from origin. Idempotent, and an edge that is\nunconfigured or failing is not fatal: `lastPurgeAt` is still stamped and the\nanswer is still the updated project.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"projectsProject.analytics":           "Analytics is whether the web-analytics beacon is injected into this site's\npages. It is ON by default — a project has to opt out — and it is what the\nstatic builder reads to decide whether to inject at all.",
@@ -476,7 +476,7 @@ func init() {
 			"projectsRepo.url":                    "URL is the clone address of the repository this project builds from.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/projects/:slug/releases", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/project/:slug/releases", zip.Doc{
 		Description: "Promotes a build output into a new immutable release WITHOUT\nserving it — the staged half of publishing, for when you want to check a\nrelease before it goes live. Answers 201.\n\n`source` is a path RELATIVE to your org's own storage space: the org segment\nis prepended server-side from the validated principal and the bucket is never\nin the request at all, so a server-side copy can only ever reach bytes your\norg already owns. The prefix is listed, content-addressed (SHA-256 over the\nsorted manifest of key/size/etag), and copied into an immutable\n`<org>/.releases/<slug>/<id>/` prefix; the row is written LAST, so a partial\ncopy is unreachable rather than merely unlikely. Re-publishing an unchanged\nsource is idempotent BY CONSTRUCTION — same bytes, same id, no copy at all.\n\nThe source must contain index.html at its root and stay under the same file\nand byte caps an artifact deploy does (413 past them); a source that changes\nmid-copy is a 409 and the release is abandoned. Each publish also reclaims\nreleases past the retention depth, so a site's release space stays bounded.\nThis is the billable half — the hosting gate runs before any copy, and the\ndebit lands once the release exists.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"projectsPublish.slug":      "Slug is the site to publish, from the path.",
@@ -491,7 +491,7 @@ func init() {
 			"projectsRelease.url":       "URL is where the site serves. Present only on the ACTIVE release, since an\ninactive one is not answering anywhere.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/projects/:slug/releases/:release/activate", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/project/:slug/releases/:release/activate", zip.Doc{
 		Description: "Points the site at an existing release — the go-live, and\nequally the ROLLBACK.\n\nAim it at an older release and the site serves that one again: releases are\nimmutable and retained to the retention depth, so nothing is rebuilt or\nre-copied and the flip is one atomic statement. Before the flip, two\nconditions run in the order that gives each its own honest answer — the ROW\nsays whether this release exists for this tenant at all (404, with no signal\nabout a foreign id), and only then do the BYTES say whether it can still serve\n(410 GONE when retention has reclaimed them; that rollback target is not\ncoming back, so publish again). Going live also claims the public host and\npurges the edge, so the release is reachable and no cached predecessor is\nserved. NOT billed: no new content is produced, only a pointer moved.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"projectsRelease.active":     "Active is whether this is the release the site is SERVING right now. Exactly\none release of a site is active; the others are kept so they can be activated\nagain, until retention reclaims them.",
@@ -506,8 +506,8 @@ func init() {
 			"projectsReleaseRef.slug":    "Slug is the site the release belongs to, from the path.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/projects/fork", zip.Doc{
-		Description: "Creates a project seeded from a PUBLISHED EXAMPLE — either a\nstarter-kit template from the ONE embedded gallery catalog, or any live\nproject on the platform (an example a seeded creator published, or another\norg's app serving at <slug>.hanzo.app). Answers 201 with the new project.\n\n`slug` names the PARENT to fork and is required. Templates resolve first, and\nthe caller org's own private templates ahead of the public gallery, so a\ncurated template slug keeps meaning the same thing even if someone later\npublishes a live project under it; `variant` picks that template's\nformat/page/theme. If no template matches, the slug resolves to the UNIQUE\nlive project that owns it across all orgs — the same resolution the site edge\nuses to serve <slug>.hanzo.app, so what you can browse is what you can fork.\n\n`name` and `target` override the derived project name and slug; everything\nelse is inherited from the parent. A live parent contributes its REPO, so the\nchild builds from the same source — the parent's deployed bytes are never\ncopied, because releases are per-tenant by design and the fork publishes its\nown. The parent it actually resolved is stamped on the child as `forkedFrom`,\nso attribution is a fact recorded at fork time rather than a claim\nreconstructed later.\n\nIt funnels through the SAME create path POST /v1/projects uses, so slug\nvalidation, org scoping, ID minting and the 409 on a slug the caller's own org\nalready uses are identical.\n\nScope: a validated principal is required (403 without one) and the child is\ncreated in THAT principal's org.",
+	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/project/fork", zip.Doc{
+		Description: "Creates a project seeded from a PUBLISHED EXAMPLE — either a\nstarter-kit template from the ONE embedded gallery catalog, or any live\nproject on the platform (an example a seeded creator published, or another\norg's app serving at <slug>.hanzo.app). Answers 201 with the new project.\n\n`slug` names the PARENT to fork and is required. Templates resolve first, and\nthe caller org's own private templates ahead of the public gallery, so a\ncurated template slug keeps meaning the same thing even if someone later\npublishes a live project under it; `variant` picks that template's\nformat/page/theme. If no template matches, the slug resolves to the UNIQUE\nlive project that owns it across all orgs — the same resolution the site edge\nuses to serve <slug>.hanzo.app, so what you can browse is what you can fork.\n\n`name` and `target` override the derived project name and slug; everything\nelse is inherited from the parent. A live parent contributes its REPO, so the\nchild builds from the same source — the parent's deployed bytes are never\ncopied, because releases are per-tenant by design and the fork publishes its\nown. The parent it actually resolved is stamped on the child as `forkedFrom`,\nso attribution is a fact recorded at fork time rather than a claim\nreconstructed later.\n\nIt funnels through the SAME create path POST /v1/project uses, so slug\nvalidation, org scoping, ID minting and the 409 on a slug the caller's own org\nalready uses are identical.\n\nScope: a validated principal is required (403 without one) and the child is\ncreated in THAT principal's org.",
 		Fields: map[string]string{
 			"projectsFork.name":                   "target project name (optional; defaults to the parent's title)",
 			"projectsFork.slug":                   "parent slug to fork — catalog template or published project (required)",
@@ -544,8 +544,8 @@ func init() {
 			"projectsRepo.url":                    "URL is the clone address of the repository this project builds from.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/projects/sites", zip.Doc{
-		Description: "Generates a self-contained, mobile-responsive static site from a\nnatural-language brief and deploys it live in one call.\n\nOne inference call turns `brief` (capped at 8 KiB) into a file manifest, which\nthen runs through the SAME validation, guards and viewport guarantee as a\nhand-supplied manifest: index.html required at the root, absolute and\ntraversal paths rejected, per-file and total size capped, and a mobile\nviewport meta tag injected into every HTML document that lacks one. The\ngenerated site is fully inline — no CDNs, no remote fonts or images — so it is\nCSP-safe. `slug` and `name` are optional: the model's own title is preferred,\nand a slug is derived or minted when none is given.\n\nIt writes into the SAME org-scoped store as /v1/projects — it ensures a\nproject (framework `static`) for the resolved slug and records a deployment —\nso this is a second entry point to one publish pipeline, not a second copy of\nproject state. Ordering is the billing contract: the hosting gate runs BEFORE\nany inference or upload, so a denied gate generates and uploads NOTHING, and\nthe debit lands once, only after the site is actually live. The tokens are\nbilled to the same ledger the hosting fee was reserved against.\n\nAnswers 503 when object storage or inference is unconfigured, and 400 when the\nmodel's manifest cannot be parsed or fails the guards.\n\nScope: a validated principal is required (403 without one) and the site is\npublished into THAT principal's org.",
+	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/project/sites", zip.Doc{
+		Description: "Generates a self-contained, mobile-responsive static site from a\nnatural-language brief and deploys it live in one call.\n\nOne inference call turns `brief` (capped at 8 KiB) into a file manifest, which\nthen runs through the SAME validation, guards and viewport guarantee as a\nhand-supplied manifest: index.html required at the root, absolute and\ntraversal paths rejected, per-file and total size capped, and a mobile\nviewport meta tag injected into every HTML document that lacks one. The\ngenerated site is fully inline — no CDNs, no remote fonts or images — so it is\nCSP-safe. `slug` and `name` are optional: the model's own title is preferred,\nand a slug is derived or minted when none is given.\n\nIt writes into the SAME org-scoped store as /v1/project — it ensures a\nproject (framework `static`) for the resolved slug and records a deployment —\nso this is a second entry point to one publish pipeline, not a second copy of\nproject state. Ordering is the billing contract: the hosting gate runs BEFORE\nany inference or upload, so a denied gate generates and uploads NOTHING, and\nthe debit lands once, only after the site is actually live. The tokens are\nbilled to the same ledger the hosting fee was reserved against.\n\nAnswers 503 when object storage or inference is unconfigured, and 400 when the\nmodel's manifest cannot be parsed or fails the guards.\n\nScope: a validated principal is required (403 without one) and the site is\npublished into THAT principal's org.",
 		Fields: map[string]string{
 			"projectsBuildSite.brief":         "Brief is what the site should be, in plain language. It is the whole input the\nmodel gets and it is size-bounded.",
 			"projectsBuildSite.model":         "Model names which model writes the site. Absent takes the deployment's\ndefault — this route spends inference on the caller's org either way.",
@@ -559,8 +559,8 @@ func init() {
 			"projectsSiteDeploy.url":          "URL is the canonical live URL, https://<slug>.<apex> — empty when the\nsubdomain belongs to another tenant and this site has none.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/projects/sites/deploy", zip.Doc{
-		Description: "Deploys a caller-supplied file manifest — the deploy_site\ncapability an agent calls — and answers with where it went live.\n\n`files` is a list of {path, content} pairs, the same shape the brief build\nemits, and it runs through the SAME guards: index.html required at the root,\nabsolute and traversal paths rejected, per-file and total size capped, and a\nmobile viewport meta tag injected into every HTML document that lacks one — so\na hand-built site is exactly as safe and as responsive as a generated one.\n`slug` and `name` are optional; a slug is derived from the name or minted.\n\nIt writes into the SAME org-scoped store as /v1/projects, ensuring a project\n(framework `static`) for the resolved slug and recording a deployment. The\nhosting gate runs before the upload and the debit lands once, after the site\nis live — a failed upload is never billed. Answers 503 when object storage is\nunconfigured.\n\nScope: a validated principal is required (403 without one) and the site is\npublished into THAT principal's org.",
+	zip.Describe("github.com/hanzoai/cloud/apps/projects POST /v1/project/sites/deploy", zip.Doc{
+		Description: "Deploys a caller-supplied file manifest — the deploy_site\ncapability an agent calls — and answers with where it went live.\n\n`files` is a list of {path, content} pairs, the same shape the brief build\nemits, and it runs through the SAME guards: index.html required at the root,\nabsolute and traversal paths rejected, per-file and total size capped, and a\nmobile viewport meta tag injected into every HTML document that lacks one — so\na hand-built site is exactly as safe and as responsive as a generated one.\n`slug` and `name` are optional; a slug is derived from the name or minted.\n\nIt writes into the SAME org-scoped store as /v1/project, ensuring a project\n(framework `static`) for the resolved slug and recording a deployment. The\nhosting gate runs before the upload and the debit lands once, after the site\nis live — a failed upload is never billed. Answers 503 when object storage is\nunconfigured.\n\nScope: a validated principal is required (403 without one) and the site is\npublished into THAT principal's org.",
 		Fields: map[string]string{
 			"projectsDeploySite.files":        "Files is the whole site, inline — every file it consists of. It REPLACES what\nis there rather than merging, so an omitted file is a deleted one.",
 			"projectsDeploySite.name":         "Name is the site's display name.",
@@ -575,7 +575,7 @@ func init() {
 			"projectsSiteDeploy.url":          "URL is the canonical live URL, https://<slug>.<apex> — empty when the\nsubdomain belongs to another tenant and this site has none.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/projects PUT /v1/projects/:slug/star", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/projects PUT /v1/project/:slug/star", zip.Doc{
 		Description: "Bookmarks a project for the person calling, and answers whether it is\nstarred afterwards.\n\nThe star is YOURS: it is keyed by you as well as by the project, so two people\nsee two answers for the same one and starring it says nothing about anybody\nelse's list. Starring a project you have already starred leaves it starred.",
 		Fields: map[string]string{
 			"projectsRef.slug":     "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",

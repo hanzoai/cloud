@@ -11,7 +11,7 @@ import (
 )
 
 func TestLinkedinAuthorizeURL(t *testing.T) {
-	raw, err := linkedinAuthorize(OAuthConfig{ClientID: "li-cid"}, "https://api.hanzo.ai/v1/integrations/linkedin_ads/callback", "st8")
+	raw, err := linkedinAuthorize(OAuthConfig{ClientID: "li-cid"}, "https://api.hanzo.ai/v1/integration/linkedin_ads/callback", "st8")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}

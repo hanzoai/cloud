@@ -17,7 +17,7 @@ import (
 
 // linear.go is what the Linear connector does once a person has connected it.
 // The connector itself is the user-scoped API-key provider in saas.go: a person
-// enrols their own Linear key under /v1/integrations/connectors/linear, and every
+// enrols their own Linear key under /v1/integration/connectors/linear, and every
 // call here — the claim, the comment, the backfill — spends that person's key, so
 // what it writes in Linear carries their name.
 //
@@ -155,7 +155,7 @@ type linearClaimOut struct {
 // organization another org already holds is refused.
 //
 // Example: {"secret":"whsec_…"}
-// Response: {"organization":"6f0b…","name":"acme","path":"/v1/integrations/linear/webhook"}
+// Response: {"organization":"6f0b…","name":"acme","path":"/v1/integration/linear/webhook"}
 func (o ops) linearClaim(ctx context.Context, in *linearClaimIn) (*linearClaimOut, error) {
 	org, user, err := caller(ctx)
 	if err != nil {
@@ -193,7 +193,7 @@ func (o ops) linearClaim(ctx context.Context, in *linearClaimIn) (*linearClaimOu
 	if err := putUserLink(o.s, org, "linear", defaultSubjectKey, userLink{Subject: user}); err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "bind claimer: %v", err)
 	}
-	return &linearClaimOut{Organization: d.Organization.ID, Name: d.Organization.URLKey, Path: "/v1/integrations/linear/webhook"}, nil
+	return &linearClaimOut{Organization: d.Organization.ID, Name: d.Organization.URLKey, Path: "/v1/integration/linear/webhook"}, nil
 }
 
 // linearIssue is the issue as the webhook delivers it and as the backfill reads

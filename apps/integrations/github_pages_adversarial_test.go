@@ -145,15 +145,15 @@ func TestAdv_CrossTenant_SharedRepoName(t *testing.T) {
 	connectOrg(t, "beta", "888", "acct")
 
 	// acme's widgets → acme-gh/widgets
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusOK {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusOK {
 		t.Fatalf("acme widgets want 200, got %d (%s)", r.Code, r.Body)
 	}
 	// beta's widgets → beta-co/widgets
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "beta", nil); r.Code != http.StatusOK {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "beta", nil); r.Code != http.StatusOK {
 		t.Fatalf("beta widgets want 200, got %d (%s)", r.Code, r.Body)
 	}
 	// acme asks for beta-only "private" → 404, and beta-co/private must NEVER be hit.
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/private/pages", "acme", nil); r.Code != http.StatusNotFound {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos/private/pages", "acme", nil); r.Code != http.StatusNotFound {
 		t.Fatalf("acme cross-tenant private want 404, got %d (%s)", r.Code, r.Body)
 	}
 
@@ -202,7 +202,7 @@ func TestAdv_OwnerPathInjection(t *testing.T) {
 	}
 	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete} {
 		for _, p := range payloads {
-			path := "/v1/integrations/github/repos/" + p + "/pages"
+			path := "/v1/integration/github/repos/" + p + "/pages"
 			r := req(t, app, method, path, "acme", map[string]any{"cname": "www.example.com"})
 			if r.Code < 400 || r.Code >= 500 {
 				// A 2xx/3xx here would mean the payload resolved to SOME repo.
@@ -262,7 +262,7 @@ func TestAdv_CNAMEInjection(t *testing.T) {
 		m.rawURIs = nil
 		m.bodies = nil
 		m.mu.Unlock()
-		r := req(t, app, http.MethodPut, "/v1/integrations/github/repos/widgets/pages", "acme",
+		r := req(t, app, http.MethodPut, "/v1/integration/github/repos/widgets/pages", "acme",
 			map[string]any{"cname": tc.cname})
 		sawPut := false
 		var putBody string
@@ -321,7 +321,7 @@ func TestAdv_TokenNeverInURLorError(t *testing.T) {
 		app := newApp(t, newKMS(t))
 		connectOrg(t, "acme", "777", "acct")
 
-		r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil)
+		r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "acme", nil)
 		if strings.Contains(string(r.Body), "tok-777") || strings.Contains(string(r.Body), "ghs_") {
 			t.Fatalf("code %d: response leaked token: %s", code, r.Body)
 		}
@@ -351,7 +351,7 @@ func TestAdv_TokenEchoedByGitHub(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acct")
 
-	r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "acme", nil)
 	leaked := strings.Contains(string(r.Body), "tok-777")
 	t.Logf("GitHub-echoes-token → handler leaks it in surfaced 4xx body: %v (status %d) body=%s", leaked, r.Code, r.Body)
 	// Not a hard failure: GitHub does not echo the Authorization header in practice.
@@ -370,7 +370,7 @@ func TestAdv_ConfusedDeputy(t *testing.T) {
 		withGithubApp(t, m.srv)
 		app := newApp(t, newKMS(t))
 		connectOrg(t, "acme", "777", "acct")
-		r := req(t, app, http.MethodPut, "/v1/integrations/github/repos/widgets/pages", "acme",
+		r := req(t, app, http.MethodPut, "/v1/integration/github/repos/widgets/pages", "acme",
 			map[string]any{"foo": "bar", "unknown": 123, "buildType": ""})
 		if r.Code != http.StatusBadRequest {
 			t.Errorf("unknown-only PUT want 400, got %d (%s)", r.Code, r.Body)
@@ -390,7 +390,7 @@ func TestAdv_ConfusedDeputy(t *testing.T) {
 		withGithubApp(t, m.srv)
 		app := newApp(t, newKMS(t))
 		connectOrg(t, "acme", "777", "acct")
-		r := req(t, app, http.MethodPost, "/v1/integrations/github/repos/empty/pages", "acme", map[string]any{})
+		r := req(t, app, http.MethodPost, "/v1/integration/github/repos/empty/pages", "acme", map[string]any{})
 		if r.Code != http.StatusBadRequest {
 			t.Errorf("empty-default-branch POST want 400, got %d (%s)", r.Code, r.Body)
 		}
@@ -410,10 +410,10 @@ func TestAdv_ConfusedDeputy(t *testing.T) {
 		withGithubApp(t, m.srv)
 		app := newApp(t, newKMS(t))
 		connectOrg(t, "acme", "777", "acct")
-		if r := req(t, app, http.MethodDelete, "/v1/integrations/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusNotFound {
+		if r := req(t, app, http.MethodDelete, "/v1/integration/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusNotFound {
 			t.Errorf("DELETE never-enabled want 404, got %d (%s)", r.Code, r.Body)
 		}
-		if r := req(t, app, http.MethodPost, "/v1/integrations/github/repos/widgets/pages/builds", "acme", nil); r.Code != http.StatusNotFound {
+		if r := req(t, app, http.MethodPost, "/v1/integration/github/repos/widgets/pages/builds", "acme", nil); r.Code != http.StatusNotFound {
 			t.Errorf("BUILD never-enabled want 404, got %d (%s)", r.Code, r.Body)
 		}
 	}
@@ -427,12 +427,12 @@ func TestAdv_ConfusedDeputy(t *testing.T) {
 		app := newApp(t, newKMS(t))
 		connectOrg(t, "acme", "777", "acct")
 		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete} {
-			r := req(t, app, method, "/v1/integrations/github/repos/ungranted/pages", "acme", map[string]any{"branch": "main"})
+			r := req(t, app, method, "/v1/integration/github/repos/ungranted/pages", "acme", map[string]any{"branch": "main"})
 			if r.Code != http.StatusNotFound {
 				t.Errorf("%s ungranted want 404, got %d (%s)", method, r.Code, r.Body)
 			}
 		}
-		r := req(t, app, http.MethodPost, "/v1/integrations/github/repos/ungranted/pages/builds", "acme", nil)
+		r := req(t, app, http.MethodPost, "/v1/integration/github/repos/ungranted/pages/builds", "acme", nil)
 		if r.Code != http.StatusNotFound {
 			t.Errorf("build ungranted want 404, got %d (%s)", r.Code, r.Body)
 		}
@@ -457,7 +457,7 @@ func TestAdv_GrantRevokedBetweenListAndCall(t *testing.T) {
 	withGithubApp(t, m.srv)
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acct")
-	if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusNotFound {
+	if r := req(t, app, http.MethodGet, "/v1/integration/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusNotFound {
 		t.Fatalf("revoked-after-list want honest 404, got %d (%s)", r.Code, r.Body)
 	}
 	_ = fmt.Sprint // keep fmt imported if unused paths change

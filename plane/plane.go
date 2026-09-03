@@ -548,7 +548,7 @@ const (
 	// sandbox's idle clock is a different length depending on the answer.
 	//
 	// It crosses the plane because the two ends really are two processes. The
-	// stream that proves presence is agents' (GET /v1/agents/sessions/stream); the
+	// stream that proves presence is agents' (GET /v1/agent/sessions/stream); the
 	// pods are apps/sandbox's; they ship as separate plugin binaries. Nothing else
 	// in this fleet knows the fact and nothing else needs it.
 	SandboxAttach = "sandbox_attach"
@@ -580,7 +580,7 @@ const (
 	// It is on the plane because the two ends are different processes: the refusal
 	// runs in whichever binary serves the capability, and the definitions live in
 	// the flags app's per-org store. It is a plane op rather than a call to
-	// /v1/flags because the refusal runs BEFORE the capability's own endpoint, on a
+	// /v1/flag because the refusal runs BEFORE the capability's own endpoint, on a
 	// request that may carry no credential this deployment can replay — and asking
 	// the edge would mean cloud presenting a customer's bearer to cloud.
 	//
@@ -673,7 +673,7 @@ const (
 // bought by hitting a URL.
 //
 // A tool needs an id at all because every tool call arrives on the SAME route,
-// POST /v1/tools/call, with the tool named in the body — the path cannot say
+// POST /v1/tool/call, with the tool named in the body — the path cannot say
 // which capability is being bought.
 const toolResourcePrefix = "tool:"
 
@@ -1193,7 +1193,7 @@ type FlagValue struct {
 // Flag is the verdict: whether the caller's org holds it.
 //
 // One boolean, because the caller asks one question. A flag's variant and payload
-// are a richer answer that /v1/flags already gives to a caller that wants one, and
+// are a richer answer that /v1/flag already gives to a caller that wants one, and
 // a refusal that read a variant would have to decide which variants mean yes.
 type Flag struct {
 	On bool `json:"on"`
@@ -3331,7 +3331,7 @@ type CodingStartIn struct {
 	// ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the
 	// surface that started it has somewhere for it to talk. Empty means nobody is
 	// listening and the run simply does not narrate — which is the app surface's
-	// case, because /v1/agents/coding hands back a session id and the session stream is
+	// case, because /v1/agent/coding hands back a session id and the session stream is
 	// a better progress feed than any message could be.
 	//
 	// It is an ADDRESS and not a token: the engine says "put this text there",
@@ -3352,12 +3352,12 @@ type CodingStartIn struct {
 // op answers when the run is admitted, not when it is finished: the session id is
 // the handle every later question about the run is asked with, and the branch is
 // the ref the run is permitted to write (nothing else — see the forge's ref
-// policy). Progress streams at /v1/agents/sessions/{sessionId}/stream for every
+// policy). Progress streams at /v1/agent/sessions/{sessionId}/stream for every
 // surface equally, which is why neither surface grew a progress endpoint of its
 // own.
 type CodingStarted struct {
 	// SessionID is the run's handle: its durable record, and the id its live
-	// progress streams under at /v1/agents/sessions/{sessionId}/stream. Every
+	// progress streams under at /v1/agent/sessions/{sessionId}/stream. Every
 	// later question about this run is asked with it.
 	SessionID string `json:"sessionId"`
 	// Branch is the ref the run will push its work to, and the ONLY ref it is

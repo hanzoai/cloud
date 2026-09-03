@@ -183,7 +183,7 @@ var noNumber = map[string]bool{
 // It is keyed on the whole prefix and not on the bare word, and that is the
 // safety property: only the segment that NAMES a capability is ever rewritten.
 // A capability's own surface is untouched, so git's /v1/git/projects keeps every
-// letter it has even while /v1/projects is an alias of /v1/project — the alias
+// letter it has even while /v1/project is an alias of /v1/project — the alias
 // is anchored at the root, so a sibling's word deep inside somebody else's
 // subtree can never be caught by it.
 //

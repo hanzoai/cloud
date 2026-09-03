@@ -23,7 +23,7 @@ var agentsMount = agents.Use
 // `agents openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:     "agents",
+		Name:     "agent",
 		Price:    cloud.Metered,
 		Use:      mountAgents,
 		Shutdown: shutdownAgents,

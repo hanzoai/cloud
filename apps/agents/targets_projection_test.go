@@ -21,7 +21,7 @@ func TestTargetOpsProjectEverywhere(t *testing.T) {
 	app := mountApp(t, nil)
 
 	const opID = "post_agents_targets"
-	const path = "/v1/agents/targets"
+	const path = "/v1/agent/targets"
 
 	// ---- 1. OpenAPI: the document the SDK repos generate from -------------
 	spec := app.OpenAPISpec()
@@ -110,9 +110,9 @@ func TestTargetOpsProjectEverywhere(t *testing.T) {
 func TestTargetDeleteIsURLOnly(t *testing.T) {
 	app := mountApp(t, nil)
 	paths, _ := app.OpenAPISpec()["paths"].(map[string]map[string]any)
-	del, _ := paths["/v1/agents/targets/{id}"]["delete"].(map[string]any)
+	del, _ := paths["/v1/agent/targets/{id}"]["delete"].(map[string]any)
 	if del == nil {
-		t.Fatal("no DELETE /v1/agents/targets/{id} in the document")
+		t.Fatal("no DELETE /v1/agent/targets/{id} in the document")
 	}
 	if _, has := del["requestBody"]; has {
 		t.Error("DELETE declares a requestBody — a bodyless method carries none")

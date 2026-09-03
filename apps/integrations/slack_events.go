@@ -51,11 +51,11 @@ import (
 // MOUNT HANDOFF (registered in integrations.go's routes(); this file deliberately
 // does NOT edit Mount/routes — clean separation):
 //
-//	app.Post("/v1/integrations/slack/events",        cloud.Handle(s, slackEvents))
-//	app.Post("/v1/integrations/slack/commands",      cloud.Handle(s, slackCommands))
-//	app.Get("/v1/integrations/slack/link",           cloud.Handle(s, slackLink))
-//	app.Get("/v1/integrations/slack/link/slack",     cloud.Handle(s, slackLinkSlack))
-//	app.Get("/v1/integrations/slack/link/callback",  cloud.Handle(s, slackLinkCallback))
+//	app.Post("/v1/integration/slack/events",        cloud.Handle(s, slackEvents))
+//	app.Post("/v1/integration/slack/commands",      cloud.Handle(s, slackCommands))
+//	app.Get("/v1/integration/slack/link",           cloud.Handle(s, slackLink))
+//	app.Get("/v1/integration/slack/link/slack",     cloud.Handle(s, slackLinkSlack))
+//	app.Get("/v1/integration/slack/link/callback",  cloud.Handle(s, slackLinkCallback))
 
 // slackMaxBody bounds the webhook body we read + sign over, AND every Slack Web API
 // response we read. Slack payloads are small; a hostile/oversized body can neither
@@ -86,7 +86,7 @@ func slackBridgeReady(s *cloud.Service[state]) {
 // ── Events webhook ──────────────────────────────────────────────────────────
 
 // slackEvents is the Slack Events API webhook (the app's request_url:
-// https://{domain}/v1/integrations/slack/events). It HMAC-verifies the raw body,
+// https://{domain}/v1/integration/slack/events). It HMAC-verifies the raw body,
 // answers the url_verification challenge, and routes @mentions / DMs — acking FAST
 // (empty 200) and doing the billed work async on the channel under the bounded pool,
 // deduped durably on event_id. There is one flow: the turn's own tools reach the
@@ -199,7 +199,7 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 // ── Slash command ───────────────────────────────────────────────────────────
 
 // slackCommands handles a Slack slash command (application/x-www-form-urlencoded)
-// at https://{domain}/v1/integrations/slack/commands. Same HMAC gate; deduped on
+// at https://{domain}/v1/integration/slack/commands. Same HMAC gate; deduped on
 // trigger_id; acks within Slack's 3s budget (empty 200) and posts the answer
 // asynchronously via the command's response_url on the channel.
 func slackCommands(s *cloud.Service[state], c *zip.Ctx) error {

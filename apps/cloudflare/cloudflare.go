@@ -6,7 +6,7 @@
 // that drives an org's Zones/Analytics, Pages, Workers, Workers AI, R2, KV, and
 // D1 through the SAME per-org, KMS-sealed API token the org
 // connected via apps/integrations. Connecting the provider stays on the
-// integrations plane (/v1/integrations/cloudflare/{connect,callback}); MANAGING the
+// integrations plane (/v1/integration/cloudflare/{connect,callback}); MANAGING the
 // resources is this first-class plane — "how you connected" and "what you manage"
 // are separated, one concern each. Every call drives Cloudflare with the org's own
 // scoped token, so the platform never reaches Cloudflare with a global env token —

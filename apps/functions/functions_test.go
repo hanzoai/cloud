@@ -128,7 +128,7 @@ func TestToViewNoInvocationsOmitsMetrics(t *testing.T) {
 	if v.Invocations7d != nil || v.SuccessRate != nil || v.AvgDurationMs != nil || v.Errors7d != nil {
 		t.Fatalf("metrics must be nil when no invocations, got %+v", v)
 	}
-	if v.Endpoint != "/v1/functions/f/invoke" {
+	if v.Endpoint != "/v1/function/f/invoke" {
 		t.Fatalf("endpoint should be the invoke URL, got %q", v.Endpoint)
 	}
 }

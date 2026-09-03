@@ -3,7 +3,7 @@ package integrations
 // crm.go registers the CRM & customer-support connectors an agentic marketing
 // loop reads to know its customers. Customer-held API tokens, verified live via
 // keyVerify against each provider's identity/account read — the exact declarative
-// shape saas.go uses for HubSpot, on the per-user /v1/integrations/connectors plane. The
+// shape saas.go uses for HubSpot, on the per-user /v1/integration/connectors plane. The
 // OAuth-only CRM (Salesforce) lives on the org plane in salesforce.go; these are
 // the token-auth providers that fit the one key mechanism.
 
@@ -72,7 +72,7 @@ func init() {
 		Verify: keyVerify(keySpec{
 			provider: "reamaze",
 			origin:   subdomainOrigin("REAMAZE_API_BASE", ".reamaze.io", "reamaze"),
-			path:     "/api/v1/channels",
+			path:     "/api/v1/channel",
 			place:    basicRaw, minLen: 8, echoAccount: true,
 		}),
 	})

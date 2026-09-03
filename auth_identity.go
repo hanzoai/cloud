@@ -259,7 +259,7 @@ func KMSMachineClientID(org string) string { return kmsMachineAudience(org) }
 // Order matters: subjectOrg is checked FIRST because a key principal's empty `orgs`
 // is correct-by-design, not a degraded token. Reading the membership set first and
 // failing closed on it is what 403'd every customer API key on org-scoped routes
-// (/v1/agents, /v1/gpus, /v1/billing/*) in v1.801.244 while leaving unscoped
+// (/v1/agent, /v1/gpus, /v1/billing/*) in v1.801.244 while leaving unscoped
 // /v1/models working — which is why the pre-pin probe, which only ever asserted
 // /v1/models, could not see it.
 // A MACHINE JWT (client_credentials, IAM `type` == "application" — e.g. the

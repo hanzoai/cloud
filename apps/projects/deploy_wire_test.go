@@ -35,7 +35,7 @@ func TestDeploymentStartIsItsOwnOperation(t *testing.T) {
 	app := mountApp(t)
 	newSite(t, app, "acme", "handbook")
 
-	code, b := do(t, app, http.MethodPost, "/v1/projects/handbook/deployments", "acme", map[string]any{"commit": "abc123"})
+	code, b := do(t, app, http.MethodPost, "/v1/project/handbook/deployments", "acme", map[string]any{"commit": "abc123"})
 	if code != http.StatusAccepted {
 		t.Fatalf("start deployment want 202, got %d %s", code, b)
 	}
@@ -61,7 +61,7 @@ func TestDeploymentStartIsItsOwnOperation(t *testing.T) {
 
 	// The archive address is now ONE operation: a JSON body is no longer a second
 	// way in, so it cannot answer 202 here any more.
-	if code, b := do(t, app, http.MethodPost, "/v1/projects/handbook/deploy", "acme", map[string]any{"commit": "abc"}); code == http.StatusAccepted {
+	if code, b := do(t, app, http.MethodPost, "/v1/project/handbook/deploy", "acme", map[string]any{"commit": "abc"}); code == http.StatusAccepted {
 		t.Fatalf("the archive address must not enqueue; got 202 %s", b)
 	}
 }
@@ -76,7 +76,7 @@ func TestStartNeedsNoLinkedRepo(t *testing.T) {
 	app := mountApp(t)
 	newSite(t, app, "acme", "norepo")
 
-	code, b := do(t, app, http.MethodPost, "/v1/projects/norepo/deployments", "acme", map[string]any{})
+	code, b := do(t, app, http.MethodPost, "/v1/project/norepo/deployments", "acme", map[string]any{})
 	if code != http.StatusAccepted {
 		t.Fatalf("a site with no linked repo must still open a deployment, got %d %s", code, b)
 	}
@@ -90,7 +90,7 @@ func TestTheQueryStringCannotRedirectACommit(t *testing.T) {
 	app := mountApp(t)
 	newSite(t, app, "acme", "pinned")
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/projects/pinned/deployments?commit=attacker", strings.NewReader(`{"commit":"real"}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/project/pinned/deployments?commit=attacker", strings.NewReader(`{"commit":"real"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Org-Id", "acme")
 	req.Header.Set("X-User-Id", "u_acme")
@@ -109,13 +109,13 @@ func TestTheQueryStringCannotRedirectACommit(t *testing.T) {
 }
 
 // TestOneNounServesTheWholeLifecycle is the reconciliation, finished. Deployments
-// used to exist ONLY under /v1/projects while publish and releases existed ONLY
+// used to exist ONLY under /v1/project while publish and releases existed ONLY
 // under /v1/sites, so shipping a site meant straddling two names for one resource
 // — which is exactly what the two scripts did. There is one noun now, and open →
 // list → complete runs end to end on it.
 func TestOneNounServesTheWholeLifecycle(t *testing.T) {
 	app := mountApp(t)
-	const base, slug = "/v1/projects", "alpha"
+	const base, slug = "/v1/project", "alpha"
 	newSite(t, app, "acme", slug)
 
 	code, b := do(t, app, http.MethodPost, base+"/"+slug+"/deployments", "acme", map[string]any{})
@@ -142,12 +142,12 @@ func TestTheGrantIsOnlyOnTheStart(t *testing.T) {
 	app := mountApp(t)
 	newSite(t, app, "acme", "once")
 
-	_, b := do(t, app, http.MethodPost, "/v1/projects/once/deployments", "acme", map[string]any{})
+	_, b := do(t, app, http.MethodPost, "/v1/project/once/deployments", "acme", map[string]any{})
 	var d projectsDeployment
 	if err := json.Unmarshal(b, &d); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	code, rb := do(t, app, http.MethodGet, "/v1/projects/once/deployments/"+d.ID, "acme", nil)
+	code, rb := do(t, app, http.MethodGet, "/v1/project/once/deployments/"+d.ID, "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("read back: %d %s", code, rb)
 	}
@@ -171,8 +171,8 @@ func TestTheGrantIsOnlyOnTheStart(t *testing.T) {
 func TestTheStartReachesEveryProjection(t *testing.T) {
 	app := mountApp(t)
 	want := map[string]bool{
-		"POST /v1/projects/:slug/deployments": false,
-		"POST /v1/projects/:slug/publish":     false,
+		"POST /v1/project/:slug/deployments": false,
+		"POST /v1/project/:slug/publish":     false,
 	}
 	for _, c := range app.Commands() {
 		key := c.Method + " " + c.Path

@@ -13,7 +13,7 @@ import (
 
 // TestCommerceErrorScope proves commerceErrorScope() confines commerce's always-500
 // JSON envelope to commerce-owned prefixes: a post-commerce subsystem route
-// (/v1/projects) that returns a typed 403 renders 403 (zip default), while a
+// (/v1/project) that returns a typed 403 renders 403 (zip default), while a
 // commerce route (/v1/commerce/store/...) still gets commerce's envelope. Mirrors the frozen
 // order: kms (before commerce) → commerce group chain → projects + store (after).
 // Regression for the release-smoke failure where 14 post-commerce endpoints 500'd.
@@ -34,7 +34,7 @@ func TestCommerceErrorScope(t *testing.T) {
 	// projects (after commerce) — typed 403; must NOT be clobbered to 500. On the
 	// APP, not the group: that is the whole point of the case, a sibling subsystem
 	// whose routes are not beneath commerce's chain.
-	app.Get("/v1/projects", func(c *zip.Ctx) error { return principal.Refused(c) })
+	app.Get("/v1/project", func(c *zip.Ctx) error { return principal.Refused(c) })
 	// a commerce store route — typed 403; commerce envelope applies. Registered ON
 	// THE GROUP, which is both what production does (Mount's commerce group) and
 	// what makes this test a valid program: zip refuses to compose a definition
@@ -67,7 +67,7 @@ func TestCommerceErrorScope(t *testing.T) {
 		wantCode int
 	}{
 		{"/v1/kms/health", 403},             // before commerce
-		{"/v1/projects", 403},               // after commerce — must NOT be clobbered to 500
+		{"/v1/project", 403},               // after commerce — must NOT be clobbered to 500
 		{"/v1/commerce/store/current", 403}, // commerce's own route — its handler still honors 403
 	} {
 		code, body := probe(tc.path)
@@ -86,9 +86,9 @@ func TestCommerceErrorScope(t *testing.T) {
 	}{
 		{"/v1/commerce/store/current", true},
 		{"/v1/commerce/checkout", true},
-		{"/v1/projects", false},
+		{"/v1/project", false},
 		{"/v1/agent/presets", false},
-		{"/v1/agents", false},
+		{"/v1/agent", false},
 	} {
 		if got := hasCommercePrefix(p.path); got != p.own {
 			t.Errorf("hasCommercePrefix(%q) = %v, want %v", p.path, got, p.own)

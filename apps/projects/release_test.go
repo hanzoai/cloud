@@ -47,7 +47,7 @@ func seedBuild(f *fakeS3, org, rel, marker string) {
 // newSite creates a project (a site) for org.
 func newSite(t *testing.T, app *zip.App, org, slug string) {
 	t.Helper()
-	code, body := doSite(t, app, http.MethodPost, "/v1/projects", org,
+	code, body := doSite(t, app, http.MethodPost, "/v1/project", org,
 		map[string]any{"name": slug, "slug": slug})
 	if code != http.StatusCreated {
 		t.Fatalf("create site %q for %q: want 201, got %d (%s)", slug, org, code, body)
@@ -75,7 +75,7 @@ func postRaw(t *testing.T, app *zip.App, path, org string, raw []byte) (int, []b
 // publish promotes source and goes live in one call, returning status + body.
 func publish(t *testing.T, app *zip.App, org, slug, source string) (int, []byte) {
 	t.Helper()
-	return doSite(t, app, http.MethodPost, "/v1/projects/"+slug+"/publish", org,
+	return doSite(t, app, http.MethodPost, "/v1/project/"+slug+"/publish", org,
 		map[string]any{"source": source})
 }
 
@@ -322,7 +322,7 @@ func TestRelease_PartialCopyNeverActivates(t *testing.T) {
 	}
 	// ...and naming any release id explicitly cannot flip the pointer either.
 	code, _ = doSite(t, app, http.MethodPost,
-		"/v1/projects/shop/releases/rel_"+strings.Repeat("a", 32)+"/activate", "acme", nil)
+		"/v1/project/shop/releases/rel_"+strings.Repeat("a", 32)+"/activate", "acme", nil)
 	if code != http.StatusNotFound {
 		t.Fatalf("activating a release with no row want 404, got %d", code)
 	}
@@ -375,7 +375,7 @@ func TestRelease_RollbackRestoresThePriorRelease(t *testing.T) {
 
 	copiesBefore := f.copyCount()
 	code, body := doSite(t, app, http.MethodPost,
-		"/v1/projects/shop/releases/"+first.ReleaseID+"/activate", "acme", nil)
+		"/v1/project/shop/releases/"+first.ReleaseID+"/activate", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("rollback want 200, got %d (%s)", code, body)
 	}
@@ -394,7 +394,7 @@ func TestRelease_RollbackRestoresThePriorRelease(t *testing.T) {
 		t.Fatalf("prior release was not retained: ok=%v body=%q", ok, got)
 	}
 	// The rollback menu marks exactly one active release, newest first.
-	code, body = doSite(t, app, http.MethodGet, "/v1/projects/shop/releases", "acme", nil)
+	code, body = doSite(t, app, http.MethodGet, "/v1/project/shop/releases", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list releases want 200, got %d (%s)", code, body)
 	}
@@ -498,7 +498,7 @@ func TestRelease_ReservedSlugRejected(t *testing.T) {
 		if code != http.StatusNotFound {
 			t.Fatalf("reserved slug %q publish want 404, got %d (%s)", slug, code, body)
 		}
-		code, _ = doSite(t, app, http.MethodGet, "/v1/projects/"+slug+"/releases", "acme", nil)
+		code, _ = doSite(t, app, http.MethodGet, "/v1/project/"+slug+"/releases", "acme", nil)
 		if code != http.StatusNotFound {
 			t.Fatalf("reserved slug %q list want 404, got %d", slug, code)
 		}
@@ -591,7 +591,7 @@ func TestRelease_ConcurrentActivateIsSerialized(t *testing.T) {
 		wg.Add(1)
 		go func(id string) {
 			defer wg.Done()
-			doSite(t, app, http.MethodPost, "/v1/projects/shop/releases/"+id+"/activate", "acme", nil)
+			doSite(t, app, http.MethodPost, "/v1/project/shop/releases/"+id+"/activate", "acme", nil)
 		}(id)
 	}
 	wg.Wait()
@@ -612,7 +612,7 @@ func TestRelease_DoubleActivateIsIdempotent(t *testing.T) {
 	id := decodeRelease(t, b).ReleaseID
 
 	for i := range 2 {
-		code, body := doSite(t, app, http.MethodPost, "/v1/projects/shop/releases/"+id+"/activate", "acme", nil)
+		code, body := doSite(t, app, http.MethodPost, "/v1/project/shop/releases/"+id+"/activate", "acme", nil)
 		if code != http.StatusOK {
 			t.Fatalf("activate #%d want 200, got %d (%s)", i, code, body)
 		}
@@ -641,7 +641,7 @@ func TestRelease_CrossOrgActivateDenied(t *testing.T) {
 	// Yet the two releases are independent rows over independent object copies:
 	// evil cannot activate the victim's release ON THE VICTIM'S SITE.
 	code, _ := doSite(t, app, http.MethodPost,
-		"/v1/projects/shop/releases/"+victim+"/activate", "evil", nil)
+		"/v1/project/shop/releases/"+victim+"/activate", "evil", nil)
 	if code != http.StatusNotFound {
 		t.Fatalf("cross-org activate want 404, got %d", code)
 	}
@@ -660,10 +660,10 @@ func TestRelease_NoPrincipalDenied(t *testing.T) {
 	seedBuild(f, "acme", "builds/v1", "one")
 
 	for _, tc := range []struct{ method, path string }{
-		{http.MethodPost, "/v1/projects/shop/publish"},
-		{http.MethodPost, "/v1/projects/shop/releases"},
-		{http.MethodGet, "/v1/projects/shop/releases"},
-		{http.MethodPost, "/v1/projects/shop/releases/rel_" + strings.Repeat("a", 32) + "/activate"},
+		{http.MethodPost, "/v1/project/shop/publish"},
+		{http.MethodPost, "/v1/project/shop/releases"},
+		{http.MethodGet, "/v1/project/shop/releases"},
+		{http.MethodPost, "/v1/project/shop/releases/rel_" + strings.Repeat("a", 32) + "/activate"},
 	} {
 		code, body := doSite(t, app, tc.method, tc.path, "", map[string]any{"source": "builds/v1"})
 		if code != http.StatusForbidden {
@@ -684,7 +684,7 @@ func TestRelease_MalformedReleaseIDRejected(t *testing.T) {
 		"rel_" + strings.Repeat("a", 31), "rel_" + strings.Repeat("A", 32),
 		"rel_" + strings.Repeat("z", 32), "..", "rel_..", "%2e%2e", "rel_" + strings.Repeat("a", 33),
 	} {
-		code, _ := doSite(t, app, http.MethodPost, "/v1/projects/shop/releases/"+id+"/activate", "acme", nil)
+		code, _ := doSite(t, app, http.MethodPost, "/v1/project/shop/releases/"+id+"/activate", "acme", nil)
 		if code != http.StatusNotFound {
 			t.Fatalf("malformed id %q want 404, got %d", id, code)
 		}
@@ -697,7 +697,7 @@ func TestRelease_StagedCreateDoesNotServe(t *testing.T) {
 	f, app := releaseHarness(t)
 	seedBuild(f, "acme", "builds/v1", "one")
 
-	code, body := doSite(t, app, http.MethodPost, "/v1/projects/shop/releases", "acme",
+	code, body := doSite(t, app, http.MethodPost, "/v1/project/shop/releases", "acme",
 		map[string]any{"source": "builds/v1"})
 	if code != http.StatusCreated {
 		t.Fatalf("create release want 201, got %d (%s)", code, body)
@@ -713,7 +713,7 @@ func TestRelease_StagedCreateDoesNotServe(t *testing.T) {
 	if _, ok := f.body(testBucket, releasePrefix("acme", "shop", rel.ReleaseID)+"/index.html"); !ok {
 		t.Fatalf("staged release bytes missing")
 	}
-	code, _ = doSite(t, app, http.MethodPost, "/v1/projects/shop/releases/"+rel.ReleaseID+"/activate", "acme", nil)
+	code, _ = doSite(t, app, http.MethodPost, "/v1/project/shop/releases/"+rel.ReleaseID+"/activate", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("activate want 200, got %d", code)
 	}
@@ -751,7 +751,7 @@ func TestRelease_ArtifactDeployTakesBackThePointer(t *testing.T) {
 	_, b := publish(t, app, "acme", "shop", "builds/v1")
 	rel := decodeRelease(t, b)
 
-	code, body := postRaw(t, app, "/v1/projects/shop/deploy", "acme",
+	code, body := postRaw(t, app, "/v1/project/shop/deploy", "acme",
 		buildTar(t, true, map[string]string{"index.html": "<!doctype html><title>artifact</title>"}))
 	if code != http.StatusOK {
 		t.Fatalf("artifact deploy want 200, got %d (%s)", code, body)
@@ -767,7 +767,7 @@ func TestRelease_ArtifactDeployTakesBackThePointer(t *testing.T) {
 	if _, ok := f.body(testBucket, releasePrefix("acme", "shop", rel.ReleaseID)+"/index.html"); !ok {
 		t.Fatalf("artifact deploy destroyed a retained release")
 	}
-	code, _ = doSite(t, app, http.MethodPost, "/v1/projects/shop/releases/"+rel.ReleaseID+"/activate", "acme", nil)
+	code, _ = doSite(t, app, http.MethodPost, "/v1/project/shop/releases/"+rel.ReleaseID+"/activate", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("re-activating the surviving release want 200, got %d", code)
 	}
@@ -786,7 +786,7 @@ func TestRelease_ArtifactDeployTakesBackThePointer(t *testing.T) {
 // site can accumulate releases while the pointer stays put.
 func stagedRelease(t *testing.T, app *zip.App, org, slug, source string) string {
 	t.Helper()
-	code, body := doSite(t, app, http.MethodPost, "/v1/projects/"+slug+"/releases", org,
+	code, body := doSite(t, app, http.MethodPost, "/v1/project/"+slug+"/releases", org,
 		map[string]any{"source": source})
 	if code != http.StatusCreated {
 		t.Fatalf("staged release from %q: want 201, got %d (%s)", source, code, body)
@@ -887,7 +887,7 @@ func TestRelease_RetentionNeverPrunesTheLiveRelease(t *testing.T) {
 	if got := getProject(t, "acme", "shop").CurrentRelease; got != live {
 		t.Fatalf("pointer moved off the live release: %q", got)
 	}
-	code, body = doSite(t, app, http.MethodPost, "/v1/projects/shop/releases/"+live+"/activate", "acme", nil)
+	code, body = doSite(t, app, http.MethodPost, "/v1/project/shop/releases/"+live+"/activate", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("re-activating the live release want 200, got %d (%s)", code, body)
 	}
@@ -912,7 +912,7 @@ func TestRelease_ActivateRefusesAReleaseWhoseBytesAreGone(t *testing.T) {
 	// Reclaim the rollback target's bytes out from under its row.
 	f.remove(testBucket, releasePrefix("acme", "shop", old)+"/index.html")
 
-	code, body := doSite(t, app, http.MethodPost, "/v1/projects/shop/releases/"+old+"/activate", "acme", nil)
+	code, body := doSite(t, app, http.MethodPost, "/v1/project/shop/releases/"+old+"/activate", "acme", nil)
 	if code != http.StatusGone {
 		t.Fatalf("activating a release whose bytes are gone want 410, got %d (%s)", code, body)
 	}

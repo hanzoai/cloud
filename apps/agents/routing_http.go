@@ -19,9 +19,9 @@ import (
 // machine's capability. A run offered to target X is never reachable from a claim
 // for target Y, and a claim for another org's target 404s at the org boundary.
 //
-//	POST /v1/agents/targets/:id/key                  mint/rotate this target's claim key -> {claimKey}
-//	POST /v1/agents/targets/:id/claim                long-poll for the next routed run (X-Target-Key)
-//	POST /v1/agents/targets/:id/runs/:runId/report   report a routed run's terminal result (X-Target-Key)
+//	POST /v1/agent/targets/:id/key                  mint/rotate this target's claim key -> {claimKey}
+//	POST /v1/agent/targets/:id/claim                long-poll for the next routed run (X-Target-Key)
+//	POST /v1/agent/targets/:id/runs/:runId/report   report a routed run's terminal result (X-Target-Key)
 
 // claimLongPoll bounds one Claim wait; on expiry the daemon gets 204 and re-polls
 // immediately, which also refreshes its serving liveness. A var (not a const) so a
@@ -41,7 +41,7 @@ const (
 func mountRouting(s *cloud.Service[state], app cloud.Router) {
 	assertSingleReplica(s.Log)
 	o := routingOps{s: s}
-	g := app.Group("/v1/agents")
+	g := app.Group("/v1/agent")
 	zip.Post(g, "/targets/:id/key", o.mintClaimKey)
 	zip.Post(g, "/targets/:id/claim", o.claim)
 	zip.Post(g, "/targets/:id/runs/:runId/report", o.report)

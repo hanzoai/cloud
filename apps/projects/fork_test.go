@@ -96,14 +96,14 @@ func TestMapFramework(t *testing.T) {
 }
 
 // TestForkCreatesProjectFromTemplate is the end-to-end wire proof: POST
-// /v1/projects/fork with a real gallery slug creates an org-scoped Project seeded
+// /v1/project/fork with a real gallery slug creates an org-scoped Project seeded
 // from the template (name=title, framework mapped, repo=source), and the same
-// record is then readable via GET /v1/projects/:slug.
+// record is then readable via GET /v1/project/:slug.
 func TestForkCreatesProjectFromTemplate(t *testing.T) {
 	app := mountApp(t)
 
 	// Fork "synapse" (Next.js 14.2 + TS) into maxpower's org, default slug/name.
-	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
+	code, body := do(t, app, http.MethodPost, "/v1/project/fork", "maxpower",
 		map[string]any{"slug": "synapse"})
 	if code != http.StatusCreated {
 		t.Fatalf("fork synapse want 201, got %d (%s)", code, body)
@@ -146,7 +146,7 @@ func TestForkCreatesProjectFromTemplate(t *testing.T) {
 	}
 
 	// The forked project is a real record: readable via the normal GET.
-	code, body = do(t, app, http.MethodGet, "/v1/projects/synapse", "maxpower", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/project/synapse", "maxpower", nil)
 	if code != http.StatusOK {
 		t.Fatalf("get forked project want 200, got %d (%s)", code, body)
 	}
@@ -160,7 +160,7 @@ func TestForkVariantSelection(t *testing.T) {
 	app := mountApp(t)
 
 	// The React variant of prism is "React 18 + Vite" → vite, not react.
-	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
+	code, body := do(t, app, http.MethodPost, "/v1/project/fork", "maxpower",
 		map[string]any{"slug": "prism", "variant": "react"})
 	if code != http.StatusCreated {
 		t.Fatalf("fork prism/react want 201, got %d (%s)", code, body)
@@ -181,7 +181,7 @@ func TestForkVariantSelection(t *testing.T) {
 	}
 
 	// No preference → the template's default shape, under the bare slug.
-	code, body = do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
+	code, body = do(t, app, http.MethodPost, "/v1/project/fork", "maxpower",
 		map[string]any{"slug": "prism"})
 	if code != http.StatusCreated {
 		t.Fatalf("fork prism want 201, got %d (%s)", code, body)
@@ -193,7 +193,7 @@ func TestForkVariantSelection(t *testing.T) {
 
 	// A template whose NAME is a reserved subdomain still forks in one click:
 	// the derived slug is a default, so it takes the suffix its demo carries.
-	code, body = do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
+	code, body = do(t, app, http.MethodPost, "/v1/project/fork", "maxpower",
 		map[string]any{"slug": "metrics"})
 	if code != http.StatusCreated {
 		t.Fatalf("fork metrics want 201, got %d (%s)", code, body)
@@ -204,7 +204,7 @@ func TestForkVariantSelection(t *testing.T) {
 	}
 
 	// An unknown variant is a 404, not a silent fall back to the default.
-	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
+	if code, _ := do(t, app, http.MethodPost, "/v1/project/fork", "maxpower",
 		map[string]any{"slug": "prism", "variant": "cobol"}); code != http.StatusNotFound {
 		t.Fatalf("unknown variant want 404, got %d", code)
 	}
@@ -216,7 +216,7 @@ func TestForkFrameworkMappingAndOverrides(t *testing.T) {
 	app := mountApp(t)
 
 	// "Next.js 14.2 + TS" → next. Override name + target slug.
-	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
+	code, body := do(t, app, http.MethodPost, "/v1/project/fork", "maxpower",
 		map[string]any{"slug": "saas-landing", "name": "My Landing", "target": "landing-1"})
 	if code != http.StatusCreated {
 		t.Fatalf("fork saas-landing want 201, got %d (%s)", code, body)
@@ -234,7 +234,7 @@ func TestForkFrameworkMappingAndOverrides(t *testing.T) {
 	}
 
 	// A bare-HTML template forks to "static".
-	code, body = do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
+	code, body = do(t, app, http.MethodPost, "/v1/project/fork", "maxpower",
 		map[string]any{"slug": "loop", "variant": "html"})
 	if code != http.StatusCreated {
 		t.Fatalf("fork html want 201, got %d (%s)", code, body)
@@ -252,32 +252,32 @@ func TestForkOrgScopingAndErrors(t *testing.T) {
 	app := mountApp(t)
 
 	// No org → 403 (org-scoped exactly like the other routes).
-	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "", map[string]any{"slug": "synapse"}); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodPost, "/v1/project/fork", "", map[string]any{"slug": "synapse"}); code != http.StatusForbidden {
 		t.Fatalf("no-org fork want 403, got %d", code)
 	}
 	// Missing template slug → 400.
-	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower", map[string]any{}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/project/fork", "maxpower", map[string]any{}); code != http.StatusBadRequest {
 		t.Fatalf("no-slug fork want 400, got %d", code)
 	}
 	// Unknown template → 404.
-	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower", map[string]any{"slug": "does-not-exist"}); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodPost, "/v1/project/fork", "maxpower", map[string]any{"slug": "does-not-exist"}); code != http.StatusNotFound {
 		t.Fatalf("unknown template fork want 404, got %d", code)
 	}
 
 	// maxpower forks synapse.
-	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower", map[string]any{"slug": "synapse"}); code != http.StatusCreated {
+	if code, _ := do(t, app, http.MethodPost, "/v1/project/fork", "maxpower", map[string]any{"slug": "synapse"}); code != http.StatusCreated {
 		t.Fatalf("maxpower fork want 201, got %d", code)
 	}
 	// A second fork of the same template into the SAME org → 409 (slug taken).
-	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower", map[string]any{"slug": "synapse"}); code != http.StatusConflict {
+	if code, _ := do(t, app, http.MethodPost, "/v1/project/fork", "maxpower", map[string]any{"slug": "synapse"}); code != http.StatusConflict {
 		t.Fatalf("dup fork want 409, got %d", code)
 	}
 	// A DIFFERENT org can fork the same template (same slug, different org).
-	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "synapse"}); code != http.StatusCreated {
+	if code, _ := do(t, app, http.MethodPost, "/v1/project/fork", "acme", map[string]any{"slug": "synapse"}); code != http.StatusCreated {
 		t.Fatalf("acme fork same template want 201, got %d", code)
 	}
 	// acme cannot see maxpower's forked project.
-	if code, _ := do(t, app, http.MethodGet, "/v1/projects/synapse", "acme", nil); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodGet, "/v1/project/synapse", "acme", nil); code != http.StatusOK {
 		// acme forked its OWN synapse above, so it SHOULD see one — assert isolation
 		// via a slug acme never forked.
 		t.Fatalf("acme should see its own synapse, got %d", code)
@@ -301,7 +301,7 @@ func TestForkPublishedProjectRecordsLineage(t *testing.T) {
 		t.Fatalf("seed example: %v", err)
 	}
 
-	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "acme",
+	code, body := do(t, app, http.MethodPost, "/v1/project/fork", "acme",
 		map[string]any{"slug": "example-kanban", "target": "my-board", "name": "My Board"})
 	if code != http.StatusCreated {
 		t.Fatalf("fork published example want 201, got %d (%s)", code, body)
@@ -331,7 +331,7 @@ func TestForkPublishedProjectRecordsLineage(t *testing.T) {
 	if err := mounted.State.store.CreateProject(context.Background(), dr); err != nil {
 		t.Fatalf("seed draft: %v", err)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "example-draft"}); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodPost, "/v1/project/fork", "acme", map[string]any{"slug": "example-draft"}); code != http.StatusNotFound {
 		t.Fatalf("fork of a draft want 404, got %d", code)
 	}
 }
@@ -341,7 +341,7 @@ func TestForkPublishedProjectRecordsLineage(t *testing.T) {
 // kinds of parent.
 func TestForkTemplateRecordsLineage(t *testing.T) {
 	app := mountApp(t)
-	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "synapse"})
+	code, body := do(t, app, http.MethodPost, "/v1/project/fork", "acme", map[string]any{"slug": "synapse"})
 	if code != http.StatusCreated {
 		t.Fatalf("fork want 201, got %d (%s)", code, body)
 	}
@@ -372,7 +372,7 @@ func TestForkPrivateTemplateIsOwnerOnly(t *testing.T) {
 		t.Fatalf("publish private template want 201, got %d (%s)", code, body)
 	}
 
-	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "acme-portal"})
+	code, body := do(t, app, http.MethodPost, "/v1/project/fork", "acme", map[string]any{"slug": "acme-portal"})
 	if code != http.StatusCreated {
 		t.Fatalf("owner fork of own template want 201, got %d (%s)", code, body)
 	}
@@ -385,7 +385,7 @@ func TestForkPrivateTemplateIsOwnerOnly(t *testing.T) {
 		t.Fatalf("private-template lineage = %q, want acme/acme-portal", p.ForkedFrom)
 	}
 
-	if code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "globex", map[string]any{"slug": "acme-portal"}); code != http.StatusNotFound {
+	if code, body := do(t, app, http.MethodPost, "/v1/project/fork", "globex", map[string]any{"slug": "acme-portal"}); code != http.StatusNotFound {
 		t.Fatalf("cross-org fork of a private template want 404, got %d (%s)", code, body)
 	}
 }
@@ -399,7 +399,7 @@ func TestForkPrivateTemplateIsOwnerOnly(t *testing.T) {
 func TestPublishingIsUngated(t *testing.T) {
 	app := mountApp(t)
 
-	code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+	code, body := do(t, app, http.MethodPost, "/v1/project", "acme",
 		map[string]any{"name": "Newcomer", "slug": "newcomer"})
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
@@ -414,7 +414,7 @@ func TestPublishingIsUngated(t *testing.T) {
 	}
 
 	// Asking for it explicitly is the same answer, not a different code path.
-	code, body = do(t, app, http.MethodPatch, "/v1/projects/newcomer", "acme",
+	code, body = do(t, app, http.MethodPatch, "/v1/project/newcomer", "acme",
 		map[string]any{"visibility": "public"})
 	if code != http.StatusOK {
 		t.Fatalf("patch public want 200, got %d (%s)", code, body)
@@ -426,7 +426,7 @@ func TestPublishingIsUngated(t *testing.T) {
 
 	// Anything that is neither is refused rather than quietly coerced: a caller
 	// that misspells "private" must not be handed a public project.
-	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/project", "acme",
 		map[string]any{"name": "Typo", "slug": "typo", "visibility": "secret"}); code != http.StatusBadRequest {
 		t.Fatalf("unknown visibility want 400, got %d (%s)", code, body)
 	}
@@ -438,12 +438,12 @@ func TestPublishingIsUngated(t *testing.T) {
 // restores exactly what they asked for with no second write to get wrong.
 func TestModerationIsAdminOnlyAndSubtractive(t *testing.T) {
 	app := mountApp(t)
-	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/project", "acme",
 		map[string]any{"name": "Spam", "slug": "spam"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
 
-	code, body := do(t, app, http.MethodPatch, "/v1/projects/spam", "acme",
+	code, body := do(t, app, http.MethodPatch, "/v1/project/spam", "acme",
 		map[string]any{"hidden": true, "hiddenReason": "self-moderated"})
 	if code != http.StatusOK {
 		t.Fatalf("tenant patch want 200, got %d (%s)", code, body)
@@ -457,7 +457,7 @@ func TestModerationIsAdminOnlyAndSubtractive(t *testing.T) {
 	adminPatch := func(t *testing.T, in map[string]any) projectsProject {
 		t.Helper()
 		b, _ := json.Marshal(in)
-		req := httptest.NewRequest(http.MethodPatch, "/v1/projects/spam", bytes.NewReader(b))
+		req := httptest.NewRequest(http.MethodPatch, "/v1/project/spam", bytes.NewReader(b))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Org-Id", "acme")
 		req.Header.Set("X-User-Id", "u_admin")
@@ -539,7 +539,7 @@ func TestPrivateAndModeratedProjectsLeaveNoCatalogRow(t *testing.T) {
 // counterpart field: it is the org that pays, which no request can forge.
 func TestCreditIsUngated(t *testing.T) {
 	app := mountApp(t)
-	code, body := do(t, app, http.MethodPost, "/v1/projects", "acme", map[string]any{
+	code, body := do(t, app, http.MethodPost, "/v1/project", "acme", map[string]any{
 		"name": "Fitness Pro", "slug": "kinetic",
 		"upstream": "UI8 — Fitness Pro: Website UI Kit", "license": "UI8 commercial licence",
 	})
@@ -554,7 +554,7 @@ func TestCreditIsUngated(t *testing.T) {
 
 	// Settable after the fact too: the demos that most need crediting are the ones
 	// already live. And a credit is rendered on a card, so it stays single-line.
-	code, body = do(t, app, http.MethodPatch, "/v1/projects/kinetic", "acme",
+	code, body = do(t, app, http.MethodPatch, "/v1/project/kinetic", "acme",
 		map[string]any{"upstream": "  UI8\nnewline  ", "license": "MIT"})
 	if code != http.StatusOK {
 		t.Fatalf("patch want 200, got %d (%s)", code, body)

@@ -73,9 +73,9 @@ func TestRunRetriesTransientThenSucceedsBillsOnce(t *testing.T) {
 	ai := &scriptedAI{content: "recovered", busy: map[string]int{"gpt-4o-mini": 2}}
 	app := mountBilled(t, bs.start(t), ai)
 
-	do(t, app, http.MethodPost, "/v1/agents", "acme",
+	do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"})
-	code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"})
+	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("run that recovers after 2 retries want 200, got %d (%s)", code, body)
 	}
@@ -114,9 +114,9 @@ func TestRunFailsOverToReliableModelAndBillsIt(t *testing.T) {
 	ai := &scriptedAI{content: "from-failover", busy: map[string]int{"gpt-4o-mini": 99}}
 	app := mountBilled(t, bs.start(t), ai)
 
-	do(t, app, http.MethodPost, "/v1/agents", "acme",
+	do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"})
-	code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"})
+	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("failover run want 200, got %d (%s)", code, body)
 	}
@@ -155,9 +155,9 @@ func TestRunAllAttemptsBusyExhaustedNoDebit(t *testing.T) {
 	ai := &scriptedAI{allBusy: true}
 	app := mountBilled(t, bs.start(t), ai)
 
-	do(t, app, http.MethodPost, "/v1/agents", "acme",
+	do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"})
-	code, _ := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"})
+	code, _ := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusBadGateway {
 		t.Fatalf("exhausted run want 502, got %d", code)
 	}

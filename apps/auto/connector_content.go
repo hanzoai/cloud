@@ -11,7 +11,7 @@ import (
 // (clients/content) exposed as automation ACTIONS and MCP TOOLS, so the loop runs
 // AUTONOMOUSLY. Each action is both a flow step and an MCP tool named
 // "content_<action>" on the unified tool plane — the surface a scheduled flow, an
-// /v1/agents tool call, or a headless hanzo-bot drives.
+// /v1/agent tool call, or a headless hanzo-bot drives.
 //
 // Why a first-class connector and not core.http_request → /v1/content/*: core.http_request
 // has an SSRF guard that blocks cluster-internal targets in prod, so a flow cannot reach
