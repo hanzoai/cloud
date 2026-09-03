@@ -26,7 +26,10 @@ import (
 // closure. It carries the client and no logic — the same shape apps/marketplace's
 // registry uses for its plane op, and for the same reason: zipdoc lifts prose from
 // a named handler and has nothing to read off a func literal.
-type secretOps struct{ c cloud.KMSClient }
+type secretOps struct {
+	c cloud.KMSClient
+	a *attest
+}
 
 // exposeSecrets publishes the store's reads and writes. Mount calls it.
 func exposeSecrets(c cloud.KMSClient) {
@@ -34,7 +37,7 @@ func exposeSecrets(c cloud.KMSClient) {
 		return
 	}
 	p := cloud.Plane()
-	o := secretOps{c: c}
+	o := secretOps{c: c, a: newAttest(context.Background())}
 
 	zip.Post[plane.SecretIn, plane.Secret](p, "/kms/get", o.get,
 		zip.WithOperationID(plane.KMSGet),
@@ -65,7 +68,7 @@ func exposeSecrets(c cloud.KMSClient) {
 // either. The same ref rule as every other op applies, so a tenant's material is
 // removable only by a call acting for that tenant.
 func (o secretOps) del(ctx context.Context, in *plane.SecretIn) (*plane.Secret, error) {
-	if err := authorize(ctx, in.Ref); err != nil {
+	if err := o.authorize(ctx, in.Ref); err != nil {
 		return nil, err
 	}
 	if err := o.c.DeleteSecret(ctx, in.Ref); err != nil {
@@ -88,7 +91,7 @@ func (o secretOps) del(ctx context.Context, in *plane.SecretIn) (*plane.Secret, 
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o secretOps) get(ctx context.Context, in *plane.SecretIn) (*plane.Secret, error) {
-	if err := authorize(ctx, in.Ref); err != nil {
+	if err := o.authorize(ctx, in.Ref); err != nil {
 		return nil, err
 	}
 	v, err := o.c.GetSecret(ctx, in.Ref)
@@ -108,7 +111,7 @@ func (o secretOps) get(ctx context.Context, in *plane.SecretIn) (*plane.Secret, 
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o secretOps) put(ctx context.Context, in *plane.SecretIn) (*plane.Secret, error) {
-	if err := authorize(ctx, in.Ref); err != nil {
+	if err := o.authorize(ctx, in.Ref); err != nil {
 		return nil, err
 	}
 	if err := o.c.PutSecret(ctx, in.Ref, in.Value); err != nil {
@@ -128,7 +131,7 @@ func (o secretOps) put(ctx context.Context, in *plane.SecretIn) (*plane.Secret, 
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o secretOps) sign(ctx context.Context, in *plane.SecretIn) (*plane.Secret, error) {
-	if err := authorize(ctx, in.Ref); err != nil {
+	if err := o.authorize(ctx, in.Ref); err != nil {
 		return nil, err
 	}
 	sig, err := o.c.Sign(ctx, in.Ref, in.Value)
@@ -138,29 +141,16 @@ func (o secretOps) sign(ctx context.Context, in *plane.SecretIn) (*plane.Secret,
 	return &plane.Secret{Value: sig}, nil
 }
 
-// authorize checks the ref against the tenant the call is acting for.
-//
-// A ref that names a tenant must match it. That catches an app asking for one
-// org's material while acting for another, which is a bug worth failing on.
-//
-// A ref that names none is the DEPLOYMENT's own material and is served to any
-// peer, because the socket already decided who may ask: it is 0600 and
-// SO_PEERCRED-authenticated, so a caller here is one of our own processes. A
-// second gate derived from config would not add a boundary, only a spelling of
-// one that already exists — and the platform-admin bit is minted from a
-// validated token at the edge and cannot be asserted by a background call.
-func authorize(ctx context.Context, ref string) error {
-	if ref == "" {
-		return zip.ErrBadRequest("kms: empty ref")
+// authorize decides one call: who the kernel and the kubelet say is asking,
+// what the call states it acts for, and which tenant the ref names, all in
+// [admit]. A call with no transport behind it is this process asking itself,
+// which is the platform.
+func (o secretOps) authorize(ctx context.Context, ref string) error {
+	if zip.Local(ctx) {
+		return admit(ref, cloud.Who(ctx).Org, identity{Org: cloud.Brand(), Platform: true}, true)
 	}
-	org, ok := tenantOf(ref)
-	if !ok {
-		return nil
-	}
-	if who := cloud.Who(ctx).Org; who != org {
-		return zip.ErrForbidden(fmt.Sprintf("kms: ref %q belongs to %q but the call acts for %q", ref, org, who))
-	}
-	return nil
+	who, ok := o.a.of(ctx)
+	return admit(ref, cloud.Who(ctx).Org, who, ok)
 }
 
 // tenantOf reads the org out of a ref, and reports whether the ref names one at

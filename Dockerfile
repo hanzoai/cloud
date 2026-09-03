@@ -281,6 +281,7 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 # built image (and any deployment can be smoked via `docker run --entrypoint /smoke`).
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
+    CGO_ENABLED=0 go build -ldflags="$GO_LDFLAGS" -o /kmsfetch ./cmd/kmsfetch && \
     CGO_ENABLED=0 go build -ldflags="$GO_LDFLAGS" -o /smoke ./plugin/smoke
 # THERE IS NO BOX DAEMON. cmd/boxd was deleted with the design that needed it:
 # a sandbox is a POD, and commands reach it over the Kubernetes exec subresource
@@ -443,6 +444,9 @@ COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
+# The init a workload runs to read its secrets over the node's KMS socket into
+# memory; it holds no credential, the kernel says who it is.
+COPY --from=build /kmsfetch /kmsfetch
 COPY --from=build /smoke /smoke
 # No /boxd: see the build stage. Nothing is carried for a daemon that no longer
 # exists, and a COPY of a path the build stage never wrote is its own hard failure.

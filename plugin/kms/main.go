@@ -21,6 +21,7 @@ func main() {
 		Price:      cloud.Free,
 		Use:        kms.Use,
 		OwnsHealth: true,
+		Shared:     true,
 	}}, []string{"kms"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
