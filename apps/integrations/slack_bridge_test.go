@@ -185,9 +185,10 @@ func TestRouteSlackEvent(t *testing.T) {
 	if d := routeSlackEvent([]byte(`{"type":"event_callback","team_id":"T1","event_id":"E3","event":{"type":"message","channel_type":"im","bot_id":"B1","text":"echo","channel":"D1","ts":"3.3"}}`)); d.Kind != slackRouteAck {
 		t.Fatalf("bot echo must ack, got %+v", d)
 	}
-	// Plain channel message (no mention, not im) → ack (not an agent trigger).
-	if d := routeSlackEvent([]byte(`{"type":"event_callback","team_id":"T1","event_id":"E4","event":{"type":"message","channel_type":"channel","user":"U1","text":"just chatting","channel":"C1","ts":"4.4"}}`)); d.Kind != slackRouteAck {
-		t.Fatalf("plain channel message must ack, got %+v", d)
+	// Plain channel message → agent, answered IN the channel. The bot is a member
+	// of the rooms it was invited to, so it hears them without being named.
+	if d := routeSlackEvent([]byte(`{"type":"event_callback","team_id":"T1","event_id":"E4","event":{"type":"message","channel_type":"channel","user":"U1","text":"just chatting","channel":"C1","ts":"4.4"}}`)); d.Kind != slackRouteAgent || d.ThreadTS != "" {
+		t.Fatalf("plain channel message must reach the agent in-channel, got %+v", d)
 	}
 	// Garbage → ignore.
 	if d := routeSlackEvent([]byte(`not json`)); d.Kind != slackRouteIgnore {

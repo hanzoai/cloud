@@ -256,6 +256,13 @@ struct refreshOut {
     Connection bytes @8
 }
 
+struct slackJoinOut {
+    Listed  i64         @0
+    Joined  list<text>  @8
+    Already i64         @16
+    Failed  list<bytes> @24
+}
+
 struct verifyOut {
     Provider   text       @0
     Active     bool       @8
@@ -453,6 +460,10 @@ interface integrations {
     # caller's key can see (default state=open); the webhook keeps them live
     # thereafter. Synchronous and bounded, idempotent by ExtRef.
     post_integrations_linear_issues_backfill(req: linearBackfillIn) returns (rep: linearBackfillResult)
+    # Joins every public channel in the caller org's workspace.
+    # Org admin, because it changes what the whole workspace sees: after it the agent
+    # is a member of every public room and answers in all of them.
+    post_integrations_slack_join() returns (rep: slackJoinOut)
     # Mints a short, single-use deep-link code bound to the caller's
     # org and returns the t.me link the console navigates to. Org-authed: a caller with
     # no validated principal is 403 (same gate as the framework connect). The code is
@@ -467,9 +478,9 @@ interface integrations {
 }
 
 # ---------------------------------------------------------------------
-# 30 op(s) here. What follows is what this schema does not carry.
+# 31 op(s) here. What follows is what this schema does not carry.
 #
-# opaque (13) — crosses, arrives without its name:
+# opaque (14) — crosses, arrives without its name:
 #   connectorProvidersOut.Providers  integrations.connectorProviderView (list element)
 #   connectorsOut.Connectors  integrations.connView (list element)
 #   credentialIn.OAuth  integrations.oauthBundleIn
@@ -483,3 +494,4 @@ interface integrations {
 #   listOut.Providers  integrations.providerView (list element)
 #   providerView.Connection  integrations.connectionView
 #   refreshOut.Connection  integrations.connView
+#   slackJoinOut.Failed  integrations.joinFailure (list element)

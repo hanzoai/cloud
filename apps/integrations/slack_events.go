@@ -177,6 +177,19 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 			channelSpawn(s, org, func() { slackThinking(s, org, route.Channel, route.ThreadTS) })
 		}
 		return c.NoContent(http.StatusOK)
+	case slackRouteJoined:
+		// Only the BOT's own join changes anything: a person joining a room it is
+		// already in does not widen where it can speak. Recorded, not acted on —
+		// the message arm mirrors the room from the next message, with no list to
+		// keep and nothing to fall out of step with Slack's own membership.
+		org, ok := OrgForExternalID("slack", d.TeamID)
+		if !ok {
+			return c.NoContent(http.StatusOK)
+		}
+		if conn, ok := ConnectionFor(org, "slack", ""); ok && conn.BotUserID != "" && d.User == conn.BotUserID {
+			s.Log.Info("slack: now mirroring a channel", "org", org, "channel", d.Channel)
+		}
+		return c.NoContent(http.StatusOK)
 	default: // slackRouteAck / slackRouteIgnore — valid but nothing to act on
 		return c.NoContent(http.StatusOK)
 	}
@@ -305,6 +318,7 @@ const (
 	slackRouteAck                             // valid but nothing to act on (echo/subtype/non-message)
 	slackRouteAgent                           // @mention / DM: run an agent on-behalf-of the user
 	slackRouteHome                            // app_home_opened: publish the Home tab
+	slackRouteJoined                          // member_joined_channel: the bot now mirrors a room
 )
 
 type slackRoute struct {
@@ -397,22 +411,39 @@ func routeSlackEvent(raw []byte) slackRoute {
 			Kind: slackRouteAgent, TeamID: env.TeamID, Channel: ev.Channel, User: ev.User,
 			Text: stripLeadingMention(ev.Text), ThreadTS: threadOr(ev.ThreadTS, ev.TS),
 		}
+	// The bot was added to a channel. There is nothing to record: Slack delivers
+	// message.channels only for channels the app has JOINED, so its membership IS
+	// the subscription and the arm below starts mirroring the room on its own. The
+	// event is carried anyway because it is the only moment the bot's reach grows,
+	// and an operator who cannot see that has no way to know where it can speak.
+	case "member_joined_channel":
+		return slackRoute{Kind: slackRouteJoined, TeamID: env.TeamID, Channel: ev.Channel, User: ev.User}
 	case "message":
-		// Drop the bot's own messages + non-plain subtypes (edit/delete/join), and
-		// act ONLY on DMs (channel_type=="im"); a plain channel message with no
-		// mention is not an agent trigger.
-		if ev.BotID != "" || ev.Subtype != "" || ev.User == "" || ev.Text == "" || ev.ChannelType != "im" {
+		// Every surface a member can be spoken to on: a public channel, a private
+		// channel, a group DM, a DM. It answered ONLY DMs before, so @hanzo sat
+		// silent in every room it had been invited to unless someone spelled out its
+		// name — a member that hears one of four rooms is not a member.
+		//
+		// Dropped: the bot's own posts (bot_id, and the bot_message subtype) and
+		// every non-plain subtype — an edit, a delete, a join notice — so a reply
+		// never loops back on itself and a join notice is not read as a question.
+		if ev.BotID != "" || ev.Subtype != "" || ev.User == "" || ev.Text == "" {
 			return slackRoute{Kind: slackRouteAck}
 		}
-		// A DM does NOT thread. A channel needs threading because the reply shares
-		// the room with everyone else's conversation; a DM is already a private
-		// two-party room, so threading every answer under its own question buries
-		// each one behind a "1 reply" a person has to click. Slack's own assistants
-		// answer inline here, and an agent that makes you open a thread to read one
-		// sentence reads as broken even when it worked.
+		switch ev.ChannelType {
+		case "channel", "group", "im", "mpim":
+		default:
+			return slackRoute{Kind: slackRouteAck}
+		}
+		// Answer where the conversation already is: under the thread when the
+		// message is in one, in the room otherwise. Threading an unthreaded message
+		// buries a one-sentence answer behind a "1 reply" nobody clicks, which reads
+		// as a dead bot; Slack's own assistants answer inline. A person who
+		// deliberately threaded is asking for a side conversation, and gets one.
 		//
-		// A DM the user DELIBERATELY threaded (ev.ThreadTS set) is honoured — that
-		// is them asking for a side conversation, not the default.
+		// An @mention is the exception, above: it is a summons rather than a turn in
+		// the room's conversation, so it threads under itself and leaves the channel
+		// as it found it.
 		return slackRoute{
 			Kind: slackRouteAgent, TeamID: env.TeamID, Channel: ev.Channel, User: ev.User,
 			Text: stripLeadingMention(ev.Text), ThreadTS: ev.ThreadTS,

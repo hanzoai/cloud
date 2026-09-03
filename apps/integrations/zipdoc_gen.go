@@ -446,6 +446,18 @@ func init() {
 		Example:  json.RawMessage(`{"state":"all"}`),
 		Response: json.RawMessage(`{"issues":430,"created":410,"updated":20,"failed":0}`),
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/integrations POST /v1/integrations/slack/join", zip.Doc{
+		Description: "Joins every public channel in the caller org's workspace.\n\nOrg admin, because it changes what the whole workspace sees: after it the agent\nis a member of every public room and answers in all of them.",
+		Fields: map[string]string{
+			"joinFailure.channel":  "Channel is Slack's id for the room that refused.",
+			"joinFailure.error":    "Error is Slack's own code, carried through unchanged.",
+			"joinFailure.name":     "Name is that room's human name, so the operator does not have to look the id up.",
+			"slackJoinOut.already": "Already counts the channels it was a member of before, kept apart from\nJoined because only one of the two is a change.",
+			"slackJoinOut.failed":  "Failed is per-channel, so one refusal does not hide the rest of the walk.",
+			"slackJoinOut.joined":  "Joined names the channels this run walked into — the change it made.",
+			"slackJoinOut.listed":  "Listed is every public, unarchived channel the workspace has.",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/integrations POST /v1/integrations/telegram/connect", zip.Doc{
 		Description: "Mints a short, single-use deep-link code bound to the caller's\norg and returns the t.me link the console navigates to. Org-authed: a caller with\nno validated principal is 403 (same gate as the framework connect). The code is\nstored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to\nbind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`\npayload limit.",
 		Fields: map[string]string{
