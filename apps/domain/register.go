@@ -23,8 +23,8 @@ type Offer struct {
 
 // quoteFrom prices a registrar search result through the markup.
 func (s *Service) quoteFrom(r SearchResult) Offer {
-	cost := dollarsToCents(r.Price)
-	renewCost := dollarsToCents(r.Renewal)
+	cost := centsOf(r.Price)
+	renewCost := centsOf(r.Renewal)
 	return Offer{
 		Domain:            strings.ToLower(r.Domain),
 		Available:         r.Available,

@@ -32,6 +32,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -328,7 +329,7 @@ func (o booksOps) bookScan(ctx context.Context, in *BookRequest) (*BookResponse,
 		} else if dup {
 			return nil, zip.ErrConflict(fmt.Sprintf(
 				"a bill from %s for %s dated %s already booked (scan %s) — set override to book a duplicate",
-				id.Vendor, dollars(id.Total), id.Issued, prior))
+				id.Vendor, money.Cents(id.Total), id.Issued, prior))
 		}
 	}
 	posted, err := st.post(ctx, v, RoundOffAllowance)
@@ -516,7 +517,7 @@ func (st *store) buildDraft(ctx context.Context, ex Extracted, scanID string) (S
 			ID:       scanID,
 			Kind:     "scan-category",
 			Text:     "Which category is this " + vendor + " bill? Set a vendor or rule so future bills self-classify.",
-			Amount:   dollars(ex.TotalCents),
+			Amount:   money.Cents(ex.TotalCents).String(),
 			Account:  account,
 			PostedAt: postingAt,
 		}}

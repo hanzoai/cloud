@@ -37,7 +37,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
-	"github.com/hanzoai/cloud/apps/admin/money"
+	"github.com/hanzoai/cloud/money"
 )
 
 // volumeGiBCents is DO's block-storage rate: $0.10 per GiB per month. Droplet LOCAL
@@ -1227,7 +1227,7 @@ func shrinkRecipe(v Volume, target int) string {
 			"keeps no history and cannot see how fast the data grows. Check the workload's growth "+
 			"rate before committing to a number you can only increase again.\n\n%s",
 		v.SizeGiB, target, gibLabel(v.UsedBytes),
-		usd(money.Cents(v.SizeGiB-target)*volumeGiBCents), target,
+		money.Cents(v.SizeGiB-target)*volumeGiBCents, target,
 		strings.Join(steps, "\n"))
 }
 
@@ -1420,10 +1420,6 @@ func imageRepo(img string) string {
 	}
 	return s
 }
-
-// usd renders cents as dollars WITHOUT going through a float — the same integer-cents
-// discipline the arithmetic keeps, kept through formatting too.
-func usd(c money.Cents) string { return fmt.Sprintf("$%d.%02d", c/100, c%100) }
 
 // gibLabel renders a measured byte count with the sub-GiB precision that is the whole
 // point of measuring: "0.5 GiB", never the "0 GiB" an integer conversion would print.

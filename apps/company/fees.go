@@ -1,10 +1,9 @@
 package company
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
-	"strconv"
+	"github.com/hanzoai/cloud/internal/environ"
 	"strings"
 	"time"
 )
@@ -252,17 +251,4 @@ func (o ops) tariff(_ context.Context, in *tariffIn) (*Tariff, error) {
 		ExpeditedEIN:  in.ExpeditedEIN,
 		AgentOfRecord: in.AgentOfRecord,
 	})
-}
-
-// dollars renders cents for a human sentence. It exists so a message can name
-// the fee it is refusing over WITHOUT a literal price written into prose, which
-// is how "$999" ended up in an error, a comment and a test that all had to be
-// edited together the day the price moved.
-func dollars(cents int64) string {
-	whole := cents / 100
-	frac := cents % 100
-	if frac == 0 {
-		return strconv.FormatInt(whole, 10)
-	}
-	return fmt.Sprintf("%d.%02d", whole, frac)
 }

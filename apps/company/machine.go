@@ -21,6 +21,8 @@ package company
 import (
 	"fmt"
 	"strings"
+
+	"github.com/hanzoai/cloud/money"
 )
 
 // Stage is one state of the formation machine. The happy (formation) path runs
@@ -333,7 +335,7 @@ func guardKYCVerified(f *Formation) error {
 // sentence — a figure written into an error drifts the day the price moves.
 func guardPaid(f *Formation) error {
 	if !f.Paid {
-		return fmt.Errorf("the $%s formation fee has not been paid", dollars(feeCents()))
+		return fmt.Errorf("the %s formation fee has not been paid", money.Cents(feeCents()))
 	}
 	return nil
 }

@@ -34,10 +34,19 @@ func (m Markup) Sell(costCents int64) int64 {
 	return marked
 }
 
-// dollarsToCents converts a registrar USD price (a float) to integer cents, rounding
-// to the nearest cent. Registrar prices are exact to the cent, so this is lossless in
-// practice; rounding guards against float representation drift.
-func dollarsToCents(usd float64) int64 {
+// centsOf rounds a registrar USD price to integer cents.
+//
+// It takes a float because the registrar's wire IS one: name.com sends
+// purchasePrice and renewalPrice as JSON numbers, so the value is a binary
+// approximation before this package sees it and there is no exact decimal left to
+// parse. money.ParseUSD is the reader for a price that arrives as a STRING — the
+// DigitalOcean balances take that path — and it is not this one's replacement.
+//
+// The rounding is what makes the figure exact again, and it is sound for these
+// inputs: a registrar price is exact to the cent, so the value is never near a
+// half-cent midpoint where a representation error of one part in 10^12 could
+// decide the answer.
+func centsOf(usd float64) int64 {
 	if usd <= 0 {
 		return 0
 	}

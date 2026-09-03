@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/admin/money"
+	"github.com/hanzoai/cloud/money"
 )
 
 // apiBase is DigitalOcean's public API host. Overridable in tests via NewWithBase.
@@ -668,19 +668,20 @@ func (c *Client) send(ctx context.Context, method, path string, payload any) ([]
 }
 
 // dollarsToCents parses a DO decimal-dollar string ("23.44", "-40000.00") into
-// integer cents, rounding to the nearest cent. A blank/invalid string is 0 — DO
-// always sends a value, so this only guards a malformed field, and zero there is
-// the honest fallback (never a fabricated amount).
+// integer cents. A blank/invalid string is 0 — DO always sends a value, so this
+// only guards a malformed field, and zero there is the honest fallback (never a
+// fabricated amount).
+//
+// It parses the STRING exactly rather than routing it through a float64 first,
+// which is the path money.MarshalJSON exists to keep open: DO sends these figures
+// as decimal strings precisely so a reader need not choose a binary approximation
+// of them, and choosing one anyway threw that away one balance at a time.
 func dollarsToCents(s string) money.Cents {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0
-	}
-	f, err := strconv.ParseFloat(s, 64)
+	a, err := money.ParseUSD(s)
 	if err != nil {
 		return 0
 	}
-	return centsOf(f)
+	return money.Cents(a.Cents())
 }
 
 // centsOf rounds decimal dollars to integer cents.
