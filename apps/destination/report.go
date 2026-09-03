@@ -13,6 +13,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/apps/kms"
 )
 
 // report.go is the INBOUND half of this plane. Send pushes conversions OUT to a
@@ -289,8 +290,8 @@ const reportTimeout = 60 * time.Second
 // org the platforms that did answer. A platform absent from the result reported
 // nothing, which is a fact and not an error.
 func pull(s *cloud.Service[state], ctx context.Context, org string, w Window) (map[string]int, error) {
-	if !validOrg(org) {
-		return nil, fmt.Errorf("destinations: org must be a DNS-1123 label")
+	if kms.OrgPath(org) == "" {
+		return nil, fmt.Errorf("destinations: org names no store")
 	}
 	w = w.days()
 	if err := w.check(); err != nil {

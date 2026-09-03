@@ -1,12 +1,12 @@
 package integrations
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
@@ -295,8 +296,8 @@ type slackUserLink struct {
 }
 
 func putSlackUserLink(s *cloud.Service[state], org, slackUser string, link slackUserLink) error {
-	if !validOrg(org) {
-		return fmt.Errorf("slack: invalid org")
+	if kms.OrgPath(org) == "" {
+		return fmt.Errorf("slack: org names no store")
 	}
 	blob, err := json.Marshal(link)
 	if err != nil {

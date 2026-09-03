@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
 )
 
@@ -74,7 +75,7 @@ func InvokeTool(ctx context.Context, org, name string, args map[string]any) (any
 	if mounted == nil {
 		return nil, ErrNotMounted
 	}
-	if org == "" || !validOrg(org) {
+	if !principal.NamesOrg(org) {
 		return nil, fmt.Errorf("a validated org is required")
 	}
 	out, err := dispatchTool(ctx, org, name, args)

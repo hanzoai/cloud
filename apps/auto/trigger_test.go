@@ -285,12 +285,14 @@ func TestDeliverIdempotent(t *testing.T) {
 	}
 }
 
-// TestDeliverFailsClosedWithoutOrg proves Deliver refuses a missing/invalid org and
-// starts nothing (the org is the sole tenant key; it must never default).
+// TestDeliverFailsClosedWithoutOrg proves Deliver refuses an absent org and starts
+// nothing. The org is the sole tenant key and must never default — it keys a SQL
+// column and a tasks-engine namespace, never a path, so absence is the only way it
+// can be wrong here.
 func TestDeliverFailsClosedWithoutOrg(t *testing.T) {
 	newApp(t)
 	got := captureStarter(t)
-	for _, org := range []string{"", "bad/org", "a b"} {
+	for _, org := range []string{"", "   "} {
 		if _, err := Deliver(context.Background(), org, TriggerEvent{Source: "github", Name: "push"}); err != ErrNoOrg {
 			t.Fatalf("org %q must return ErrNoOrg, got %v", org, err)
 		}

@@ -28,14 +28,15 @@
 package kms
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/internal/org"
+	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
@@ -248,22 +249,6 @@ func firstNonEmpty(get func(string) string, keys ...string) string {
 
 // ── path helpers ───────────────────────────────────────────────────────────────
 
-// validOrg accepts a DNS-1123-ish label. It is the tenant-isolation boundary
-// folded into the store path, so it is validated strictly at the edge.
-func validOrg(org string) bool {
-	if org == "" || len(org) > 63 {
-		return false
-	}
-	for _, r := range org {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
 // The key-shape validators live in ONE place — this package — so the HTTP
 // boundary and the in-process store methods enforce identically (DRY). The REST
 // handlers reuse ValidSegment / ValidSubpath here to return a specific 400 early,
@@ -271,15 +256,35 @@ func validOrg(org string) bool {
 func validName(s string) bool { return ValidSegment(s, MaxNameLen) }
 func validEnv(s string) bool  { return ValidSegment(s, MaxEnvLen) }
 
-// orgPath folds an org + an optional relative subpath into the store path,
-// namespacing every org under /orgs/{org}. "" subpath → /orgs/{org}.
-func orgPath(org, sub string) string {
-	base := "/orgs/" + org
-	sub = strings.Trim(strings.TrimSpace(sub), "/")
-	if sub == "" {
-		return base
+// OrgPath renders the path an org's secrets live under — /orgs/<slug>, plus any
+// sub-segments — and "" for an org that names nothing. It is the ONE spelling of
+// that path; integrations, destinations and the reseal inventory ask here rather
+// than each concatenating its own.
+//
+// The org SEGMENT IS DERIVED, not validated. namespace.Sanitize is this estate's
+// fold from an identity's org to a name that can key storage, and its answer is
+// always [a-z0-9-]: "../../etc/passwd" keys "etc-passwd-3754d6cb3a38e118", so no
+// org can name a path outside its own subtree and the tenant boundary holds by
+// construction. A clean lowercase label up to 32 characters is returned unchanged,
+// which is every real org, so the path is the one it always was.
+//
+// The empty answer is the refusal, and it agrees with the identity boundary for
+// free: OrgHasUnsafeRune is Sanitize's "" under another name, so an org that gets
+// no scope at the edge names no store here. Stated as two predicates instead, the
+// two drifted — the edge granted a scope to an org 64 characters long or bearing a
+// '.', and four subsystems then answered it 403.
+func OrgPath(org string, sub ...string) string {
+	slug := namespace.Sanitize(org)
+	if slug == "" {
+		return ""
 	}
-	return base + "/" + sub
+	p := "/orgs/" + slug
+	for _, s := range sub {
+		if s = strings.Trim(strings.TrimSpace(s), "/"); s != "" {
+			p += "/" + s
+		}
+	}
+	return p
 }
 
 // targetOf splits a secret's coordinate (sub-path + name) into the validated
@@ -316,7 +321,12 @@ func targetOf(org, sub string) (path, name string, ok bool) {
 	if !validName(name) || !ValidSubpath(subpath) {
 		return "", "", false
 	}
-	return orgPath(org, subpath), name, true
+	// An org that names no path is refused HERE as well as at the tenant resolver.
+	// Returning ("", name, true) would key the secret at "/<name>" — outside every
+	// org's subtree and shared by all of them — which is the one answer a split
+	// between "the caller has an org" and "the org has a path" could produce.
+	path = OrgPath(org, subpath)
+	return path, name, path != ""
 }
 
 // envOr returns env or the "default" environment when empty. defaultEnv is

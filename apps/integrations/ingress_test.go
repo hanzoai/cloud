@@ -267,8 +267,8 @@ func waitForSlot(t *testing.T, org string) {
 }
 
 // A send names the org it sends AS, and the boundary refuses one that does not.
-// The org is what buys the credential — TokenFor's validOrg refuses an empty one
-// and telegram's chat bind can never match it — so a caller that dropped it
+// The org is what buys the credential — TokenFor refuses an org that names no
+// store and telegram's chat bind can never match it — so a caller that dropped it
 // reached a per-transport error on two transports and spent a shared app
 // credential unchecked on the other two.
 func TestChatSendNeedsTheOrgItSendsAs(t *testing.T) {

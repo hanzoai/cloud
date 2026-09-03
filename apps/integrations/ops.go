@@ -116,7 +116,7 @@ func superAdmin(ctx context.Context) bool { return factsOf(ctx).super }
 // be a path segment. Unchanged from the raw form it replaces — missing identity is
 // 403, because authed fails before any user check runs.
 func caller(ctx context.Context) (org, user string, err error) {
-	org, err = authed(ctx, principalRequired)
+	org, err = principal.Acting(ctx)
 	if err != nil {
 		return "", "", err
 	}
@@ -125,21 +125,6 @@ func caller(ctx context.Context) (org, user string, err error) {
 		return "", "", zip.ErrBadRequest("invalid user id")
 	}
 	return org, user, nil
-}
-
-// authed is the two-step org gate every org-scoped handler on this surface opens
-// with, unchanged from its raw form: no validated principal → 403 carrying the
-// op's own message, an org that is not a DNS-1123 label → 400. forbidden is the
-// message that op has always answered with.
-func authed(ctx context.Context, forbidden string) (string, error) {
-	org, err := principal.Acting(ctx)
-	if err != nil {
-		return "", err
-	}
-	if !validOrg(org) {
-		return "", zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	return org, nil
 }
 
 // principalRequired is the 403 message the read/status ops have always answered

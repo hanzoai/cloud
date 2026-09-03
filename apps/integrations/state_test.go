@@ -137,13 +137,17 @@ func TestStateMACCheckedBeforeParse(t *testing.T) {
 	}
 }
 
-// TestStateBadOrgRejected proves the state-derived org is validated inside verify:
-// even a token signed with the REAL key (so the MAC is valid) is rejected when its
-// org would smuggle path structure — so a callback can never fold a hostile org
-// into the KMS/store key, independent of the connect-boundary check.
+// TestStateBadOrgRejected proves verify refuses a state whose org names no store,
+// even when the MAC is valid — so a signing bug cannot produce a callback that
+// proceeds with no tenant at all.
+//
+// The list holds what folds to NOTHING: empty, and the whitespace/control class no
+// injective fold survives. "bad/org" and ".." are absent on purpose — they name
+// their own subtree now rather than smuggling structure into someone else's, which
+// TestAnOrgCannotNameAnothersPath in the broker proves directly.
 func TestStateBadOrgRejected(t *testing.T) {
 	s := testService()
-	for _, org := range []string{"bad/org", "..", "a b", "org\x00", ""} {
+	for _, org := range []string{"a b", "org\x00", " ", ""} {
 		tok, err := sign(s, org, "slack", "n")
 		if err != nil {
 			t.Fatalf("sign %q: %v", org, err)

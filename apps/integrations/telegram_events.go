@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -53,7 +54,7 @@ var telegramAPIBase = "https://api.telegram.org"
 // payload limit.
 // Response: {"authorizeUrl":"https://t.me/hanzo_bot?start=9f3c1d2e4b5a6c7d8e9f0a1b2c3d4e5f"}
 func (o ops) telegramConnect(ctx context.Context, _ *cloud.Unit) (*authorizeOut, error) {
-	org, err := authed(ctx, "a validated principal is required to connect an integration")
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

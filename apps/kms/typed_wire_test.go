@@ -25,6 +25,7 @@ package kms
 // the API rather than a gap in the generator.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -738,7 +739,15 @@ func TestTheEndpointIsOneRule(t *testing.T) {
 			body: `{"name":"a","env":"prod","value":"v"}`, want: http.StatusOK},
 		{name: "admin reads back", method: http.MethodGet, path: "/v1/kms/secrets/a?env=prod", org: "acme",
 			admin: true, want: http.StatusOK},
-		{name: "bad org", method: http.MethodGet, path: "/v1/kms/secrets", org: "a/b", want: http.StatusBadRequest},
+		// An org bearing path structure is a TENANT, not an error: OrgPath derives its
+		// segment, so "a/b" reads its own empty store rather than acme's. The refusal
+		// it used to get was a rune check standing in for isolation; isolation is now
+		// the construction, and TestAnOrgCannotNameAnothersPath is where it is proved.
+		{name: "org with a slash reads its own store", method: http.MethodGet, path: "/v1/kms/secrets",
+			org: "a/b", want: http.StatusOK},
+		// An org that folds to nothing still cannot name a store.
+		{name: "blank org", method: http.MethodGet, path: "/v1/kms/secrets", org: "   ",
+			want: http.StatusForbidden},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			status, body := ask(t, app, tc.method, tc.path, tc.org, tc.admin, tc.body)
@@ -867,5 +876,38 @@ func TestHealthFailsClosedWithBothStatuses(t *testing.T) {
 	if degraded.Ready || degraded.Error == "" || degraded.Signing != nil {
 		t.Errorf("health-only reports %s — it must be not-ready, carry the reason, and claim nothing "+
 			"about signing it cannot ask", body)
+	}
+}
+
+// TestAnOrgCannotNameAnothersPath is the isolation the store rests on, and it is a
+// property of how the path is BUILT rather than of which runes an org may contain.
+//
+// OrgPath derives its segment through namespace.Sanitize, whose answer is always
+// [a-z0-9-]. So the three spellings an attacker would reach for — a traversal, a
+// separator, a bare ".." — cannot address acme's subtree: each names its own, and
+// each reads back empty with acme's secret still where acme put it. The predicate
+// this replaced could only say "no" to the spellings it had thought of.
+func TestAnOrgCannotNameAnothersPath(t *testing.T) {
+	app := broker(t)
+
+	if status, body := ask(t, app, http.MethodPost, "/v1/kms/secrets", "acme", true,
+		`{"name":"SECRET","env":"prod","value":"acme-only"}`); status != http.StatusOK {
+		t.Fatalf("seed acme: status %d (%s)", status, body)
+	}
+
+	for _, org := range []string{"acme/../acme", "../acme", "acme/", "..", "a/b"} {
+		t.Run(org, func(t *testing.T) {
+			status, body := ask(t, app, http.MethodGet, "/v1/kms/secrets/SECRET?env=prod", org, true, "")
+			if status == http.StatusOK {
+				t.Fatalf("org %q read acme's secret: %s", org, body)
+			}
+			if bytes.Contains(body, []byte("acme-only")) {
+				t.Fatalf("org %q saw acme's value in a %d: %s", org, status, body)
+			}
+		})
+	}
+
+	if status, body := ask(t, app, http.MethodGet, "/v1/kms/secrets/SECRET?env=prod", "acme", true, ""); status != http.StatusOK {
+		t.Fatalf("acme lost its own secret: status %d (%s)", status, body)
 	}
 }

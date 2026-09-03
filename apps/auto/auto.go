@@ -40,12 +40,12 @@
 package auto
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"strconv"
 	"time"
@@ -375,7 +375,7 @@ type createFlowReq struct {
 //
 // Example: {"displayName": "Nightly Sync", "trigger": {"name": "trigger", "type": "PIECE_TRIGGER", "displayName": "Start", "strategy": "MANUAL", "settings": {"pieceName": "core", "triggerName": "manual"}}}
 func (o ops) createFlow(ctx context.Context, in *createFlowReq) (*populatedFlow, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +414,7 @@ type listQuery struct {
 // ListFlows returns the caller org's automations, most-recently-updated first. The
 // optional `limit` query bounds the page.
 func (o ops) listFlows(ctx context.Context, in *listQuery) (*flowPage, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +430,7 @@ func (o ops) listFlows(ctx context.Context, in *listQuery) (*flowPage, error) {
 //
 // Example: {"id": "flow_1"}
 func (o ops) getFlow(ctx context.Context, in *flowRef) (*populatedFlow, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +471,7 @@ type patchFlowIn struct {
 //
 // Example: {"id": "flow_1", "folderId": "ops"}
 func (o ops) updateFlow(ctx context.Context, in *patchFlowIn) (*Flow, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -513,7 +513,7 @@ func (o ops) updateFlow(ctx context.Context, in *patchFlowIn) (*Flow, error) {
 //
 // Example: {"id": "flow_1"}
 func (o ops) deleteFlow(ctx context.Context, in *flowRef) (*cloud.Unit, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -543,7 +543,7 @@ type versionQuery struct {
 //
 // Example: {"id": "flow_1"}
 func (o ops) listVersions(ctx context.Context, in *versionQuery) (*versionPage, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -571,7 +571,7 @@ type createVersionIn struct {
 //
 // Example: {"id": "flow_1", "displayName": "v2"}
 func (o ops) createVersion(ctx context.Context, in *createVersionIn) (*FlowVersion, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -674,7 +674,7 @@ func init() {
 // edit endpoint stays a route and nothing else — no MCP tool, no CLI command, no
 // SDK method.
 func applyOperation(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
@@ -839,7 +839,7 @@ func runBudgetPerMin() int {
 //
 // Example: {"id": "flow_1"}
 func (o ops) runFlow(ctx context.Context, in *flowRef) (*FlowRun, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -872,7 +872,7 @@ type runQuery struct {
 // ListRuns returns the caller org's run history, newest first. The optional
 // `flowId` query narrows it to one flow and `limit` bounds the page.
 func (o ops) listRuns(ctx context.Context, in *runQuery) (*runPage, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -896,7 +896,7 @@ type runRef struct {
 //
 // Example: {"id": "run_1"}
 func (o ops) getRun(ctx context.Context, in *runRef) (*FlowRun, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -947,7 +947,7 @@ func (o ops) getRun(ctx context.Context, in *runRef) (*FlowRun, error) {
 // never accepted. TestOpsAddressThroughArgumentsAlone is the pin; the four REST pins
 // stay green through it, which is why that fifth one exists.
 func resumeRun(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
@@ -1020,7 +1020,7 @@ func resumeRun(s *cloud.Service[state], c *zip.Ctx) error {
 // ZAP call, because those carry the arguments object as the WHOLE input and (source,
 // event) live only in the URL. See TestOpsAddressThroughArgumentsAlone.
 func inboundHook(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
@@ -1072,7 +1072,7 @@ func causationDepth(c *zip.Ctx) int {
 //
 // Example: {"id": "flow_1"}
 func (o ops) enableFlow(ctx context.Context, in *flowRef) (*Flow, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1085,7 +1085,7 @@ func (o ops) enableFlow(ctx context.Context, in *flowRef) (*Flow, error) {
 //
 // Example: {"id": "flow_1"}
 func (o ops) disableFlow(ctx context.Context, in *flowRef) (*Flow, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1338,32 +1338,6 @@ func auditRun(s *cloud.Service[state], ctx context.Context, org, flowID, runID s
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-
-// tenant resolves the caller's org, additionally validOrg-checking it because the
-// org is folded into per-org engine namespaces + store keys.
-func tenant(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
-	org, ok := principal.Org(c)
-	if !ok || !validOrg(org) {
-		return "", false
-	}
-	return org, true
-}
-
-// tenantOf is tenant() for a typed op: the VALIDATED org the identity boundary
-// minted and cloud.Bridge parked on the context — never a field of In, because an In
-// field is caller-supplied and a tenant key read from one is a cross-tenant read the
-// caller asserted for itself. Same validOrg rule and same 403 as tenant, and it fails
-// closed off the HTTP path, where nothing parked an org.
-func tenantOf(ctx context.Context) (string, error) {
-	org, err := principal.Acting(ctx)
-	if err != nil {
-		return "", err
-	}
-	if !validOrg(org) {
-		return "", zip.ErrForbidden("a validated principal is required")
-	}
-	return org, nil
-}
 
 // validated is the gate for the ops that need a principal but no tenant: the
 // connector catalogue is the same for every org, so it asks only that the caller be

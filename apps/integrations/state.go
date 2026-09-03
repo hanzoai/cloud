@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/kms"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -143,7 +144,7 @@ func verify(s *cloud.Service[state], token, provider string) (statePayload, erro
 		return statePayload{}, badState(fmt.Sprintf("expired %s ago (states live %s)",
 			time.Since(time.Unix(p.Exp, 0)).Round(time.Second), stateTTL))
 	}
-	if !validOrg(p.Org) || strings.TrimSpace(p.Nonce) == "" {
+	if kms.OrgPath(p.Org) == "" || strings.TrimSpace(p.Nonce) == "" {
 		return statePayload{}, badState("unusable org/nonce binding")
 	}
 	return p, nil

@@ -25,9 +25,9 @@
 // principal.Org (a VALIDATED principal — a client-forged X-Org-Id with no
 // bearer is refused 403). The callback is Slack/GitHub-initiated and therefore
 // UNAUTHENTICATED, so its org is taken ONLY from the HMAC-signed, single-use
-// state — never a header (see state.go). Every org that reaches KMS or the store
-// is additionally validOrg-checked so it can never smuggle path structure into a
-// secret key.
+// state — never a header (see state.go). Every org that reaches KMS keys through
+// kms.OrgPath, which derives its path segment rather than trusting it, so no org
+// can smuggle path structure into a secret key.
 //
 // SECRET CUSTODY. Per-org customer tokens live ONLY in KMS (sealed, AES-256-GCM
 // envelope), keyed /orgs/{org}/integrations/{provider}. The store holds only
@@ -39,13 +39,13 @@
 package integrations
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"maps"
 	"net/http"
 	"net/url"
@@ -1080,7 +1080,7 @@ func snapshotRegistry() map[string]*Provider {
 //
 // Response: {"providers":[{"id":"slack","name":"Slack","description":"Connect your workspace.","category":"Communication","available":true,"connected":true,"connection":{"account":"Acme","externalId":"T0231","scopes":["chat:write"],"connectedAt":"2026-07-01T10:00:00Z"}}]}
 func (o ops) list(ctx context.Context, _ *cloud.Unit) (*listOut, error) {
-	org, err := authed(ctx, principalRequired)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1107,7 +1107,7 @@ func (o ops) list(ctx context.Context, _ *cloud.Unit) (*listOut, error) {
 // Example: {"provider":"slack"}
 // Response: {"id":"slack","name":"Slack","description":"Connect your workspace.","category":"Communication","available":true,"connected":false}
 func (o ops) get(ctx context.Context, in *providerRef) (*providerView, error) {
-	org, err := authed(ctx, principalRequired)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1136,7 +1136,7 @@ func (o ops) get(ctx context.Context, in *providerRef) (*providerView, error) {
 // Example: {"provider":"cloudflare","token":"cf-scoped-api-token","accountId":"a1b2c3"}
 // Response: {"connected":true,"provider":"cloudflare","account":"Acme","externalId":"a1b2c3","scopes":[]}
 func (o ops) connect(ctx context.Context, in *connectIn) (*connectOut, error) {
-	org, err := authed(ctx, "a validated principal is required to connect an integration")
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1309,7 +1309,7 @@ func connectByCredential(s *cloud.Service[state], ctx context.Context, org strin
 // Example: {"provider":"cloudflare"}
 // Response: {"provider":"cloudflare","active":true,"account":"Acme","externalId":"a1b2c3","scopes":["zone:read"]}
 func (o ops) verifyConn(ctx context.Context, in *providerRef) (*verifyOut, error) {
-	org, err := authed(ctx, principalRequired)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1454,7 +1454,7 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 // Example: {"provider":"slack"}
 // Response: {"disconnected":true}
 func (o ops) disconnect(ctx context.Context, in *providerRef) (*disconnectOut, error) {
-	org, err := authed(ctx, "a validated principal is required to disconnect an integration")
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1593,9 +1593,6 @@ const errCredentialStore = "the credential store is unavailable on this deployme
 // this gate is for is the case with no store at all.
 func kmsReady(s *cloud.Service[state]) bool { return s.State.kms != nil }
 
-// kmsPath is the per-org, per-provider KMS namespace: /orgs/{org}/integrations/{provider}.
-// org is validOrg-checked at every entry point, so it can never smuggle path
-// structure; provider is a fixed registry slug.
 // connOwner is the account a connection is keyed by. Only a MultiAccount provider
 // gets one; everything else keeps the empty owner its callers resolve.
 func connOwner(p *Provider, res *ExchangeResult) string {
@@ -1605,19 +1602,23 @@ func connOwner(p *Provider, res *ExchangeResult) string {
 	return res.AccountLabel
 }
 
+// kmsPath is the per-org, per-provider KMS namespace: /orgs/{slug}/integrations/
+// {provider}, and "" for an org that names no store. The org segment is derived by
+// kms.OrgPath, so it cannot smuggle path structure whatever it is called; provider
+// is a fixed registry slug.
 func kmsPath(org, provider string) string {
-	return "/orgs/" + org + "/integrations/" + provider
+	return kms.OrgPath(org, "integrations", provider)
 }
 
 // userPath is the per-user connector namespace:
-// /orgs/{org}/users/{user}/connectors/{provider}/{label}. Segments are
-// pre-validated (validOrg/validUser/registry slug/validLabel) but the COMBINED
-// path can exceed the KMS 253-byte cap (a 128-char user + 64-char label
-// overflows), so the full path is checked with kms.ValidSubpath — failure is a
-// ready-made 400 *zip.HTTPError (client input, never a 503).
+// /orgs/{slug}/users/{user}/connectors/{provider}/{label}. Segments are
+// pre-validated (validUser/registry slug/validLabel) but the COMBINED path can
+// exceed the KMS 253-byte cap (a 128-char user + 64-char label overflows), so the
+// full path is checked with kms.ValidSubpath — failure is a ready-made 400
+// *zip.HTTPError (client input, never a 503).
 func userPath(org, user, provider, label string) (string, error) {
-	p := "/orgs/" + org + "/users/" + user + "/connectors/" + provider + "/" + label
-	if !kms.ValidSubpath(p) {
+	p := kms.OrgPath(org, "users", user, "connectors", provider, label)
+	if p == "" || !kms.ValidSubpath(p) {
 		return "", zip.ErrBadRequest("user and label combine into a custody path that is too long")
 	}
 	return p, nil
@@ -1771,7 +1772,7 @@ func Connected(ctx context.Context, org, provider string) bool {
 	if s == nil || s.State.store == nil {
 		return false
 	}
-	if !validOrg(org) {
+	if kms.OrgPath(org) == "" {
 		return false
 	}
 	if _, ok := s.State.providers[provider]; !ok {
@@ -1782,8 +1783,8 @@ func Connected(ctx context.Context, org, provider string) bool {
 }
 
 func tokenFor(s *cloud.Service[state], ctx context.Context, org, provider, name string) ([]byte, error) {
-	if !validOrg(org) {
-		return nil, fmt.Errorf("integrations: invalid org")
+	if kms.OrgPath(org) == "" {
+		return nil, fmt.Errorf("integrations: org names no store")
 	}
 	if _, ok := s.State.providers[provider]; !ok {
 		return nil, fmt.Errorf("integrations: unknown provider %q", provider)
@@ -1892,24 +1893,6 @@ func consoleURL() string {
 		return strings.TrimRight(v, "/")
 	}
 	return defaultConsoleURL
-}
-
-// validOrg accepts a DNS-1123-ish label. The org is folded into the KMS secret
-// path and the store key, so it is validated strictly at every boundary that
-// reaches custody. Identical rule to clients/kms's tenant boundary (kept local
-// because that copy is unexported; both mirror the SAME platform org-slug shape).
-func validOrg(org string) bool {
-	if org == "" || len(org) > 63 {
-		return false
-	}
-	for _, r := range org {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 // validUser mirrors the kms.ValidSubpath per-segment rule: the user id is a

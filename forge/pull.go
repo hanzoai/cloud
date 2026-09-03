@@ -34,10 +34,10 @@ import (
 // re-proposal is the same proposal — reporting the forge's 422 to a person who
 // asked for a link would be technically true and useless.
 func (c *Client) Propose(ctx context.Context, owner, repo, base, head, title, body string) (string, error) {
-	if err := validOrg(owner); err != nil {
+	if err := validSegment(owner); err != nil {
 		return "", err
 	}
-	if err := validOrg(repo); err != nil {
+	if err := validSegment(repo); err != nil {
 		return "", fmt.Errorf("forge: repo: %w", err)
 	}
 	head = strings.TrimSpace(head)

@@ -1,9 +1,10 @@
 package integrations
 
 import (
-	"github.com/hanzoai/cloud"
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"io"
 	"net/http"
 	"net/url"
@@ -63,7 +64,7 @@ type gitlabProjectsOut struct {
 //
 // Response: {"projects":[{"name":"widgets","fullName":"acme/widgets","private":true,"defaultBranch":"main","pushedAt":"2026-07-01T10:00:00Z","cloneUrl":"https://gitlab.com/acme/widgets.git","htmlUrl":"https://gitlab.com/acme/widgets"}],"account":"acme"}
 func (o ops) gitlabProjects(ctx context.Context, _ *cloud.Unit) (*gitlabProjectsOut, error) {
-	org, err := authed(ctx, principalRequired)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -252,8 +252,8 @@ func serveSend() {
 // and reads nothing across tenants.
 //
 // So the org is REQUIRED here, at the boundary, rather than left to each
-// transport to notice. Custody is what the org buys: TokenFor's validOrg refuses
-// an empty one and telegram's chat bind can never match it, so a caller that
+// transport to notice. Custody is what the org buys: TokenFor refuses an org that
+// names no store and telegram's chat bind can never match it, so a caller that
 // omitted it reached a per-transport error message on two transports and spent a
 // shared app credential unchecked on two others. One refusal, named once, and a
 // dropped org is loud where it was silent.

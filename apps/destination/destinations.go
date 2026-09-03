@@ -1,12 +1,12 @@
 package destination
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"maps"
 	"net/http"
 	"slices"
@@ -202,22 +202,6 @@ func init() {
 // — also the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// tenantOf is the VALIDATED org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself. It applies the same validOrg custody check the
-// untyped handlers do, because the org is folded into the KMS secret path.
-func tenantOf(ctx context.Context) (string, error) {
-	org, err := principal.Acting(ctx)
-	if err != nil {
-		return "", err
-	}
-	if !validOrg(org) {
-		return "", zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	return org, nil
-}
-
 // orgAdmin reports whether the caller is an org admin — the gate every
 // destination MUTATION keeps. It needs the REQUEST rather than the tenant because
 // org-admin-ness lives in a header (X-User-IsOrgAdmin) that principal.OrgFrom
@@ -277,7 +261,7 @@ type destinationTest struct {
 // whether a credential resolves right now, and the config fields the console
 // renders for it.
 func (o ops) list(ctx context.Context, _ *cloud.Unit) (*destinationList, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +291,7 @@ func (o ops) list(ctx context.Context, _ *cloud.Unit) (*destinationList, error) 
 //
 // Example: {"platform": "ga4"}
 func (o ops) get(ctx context.Context, in *destinationRef) (*DestinationStatus, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -332,7 +316,7 @@ func (o ops) get(ctx context.Context, in *destinationRef) (*DestinationStatus, e
 //
 // Example: {"platform": "ga4"}
 func (o ops) disconnect(ctx context.Context, in *destinationRef) (*destinationDisconnected, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +347,7 @@ func (o ops) disconnect(ctx context.Context, in *destinationRef) (*destinationDi
 //
 // Example: {"platform": "ga4"}
 func (o ops) test(ctx context.Context, in *destinationRef) (*destinationTest, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -424,22 +408,6 @@ func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 func platformParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("platform")) }
 
-// validOrg mirrors clients/integrations: the org is folded into the KMS secret path
-// and the store key, so it is validated strictly at every custody boundary.
-func validOrg(org string) bool {
-	if org == "" || len(org) > 63 {
-		return false
-	}
-	for _, r := range org {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
 // toStr coerces a decoded JSON value to a trimmed string (numbers → their literal;
 // non-scalars → ""). Lets the connect body carry an id as a string or a number.
 func toStr(v any) string {
@@ -483,9 +451,10 @@ func camelOf(s string) string {
 
 func kmsReady(s *cloud.Service[state]) bool { return s.State.kms != nil && s.State.kms.Ready() }
 
-// kmsPath is the per-org, per-platform KMS namespace. org is validOrg-checked at
-// every entry point; platform is a fixed registry slug.
-func kmsPath(org, platform string) string { return "/orgs/" + org + "/destinations/" + platform }
+// kmsPath is the per-org, per-platform KMS namespace, and "" for an org that names
+// no store. platform is a fixed registry slug — the caller looked it up in dests
+// before reaching here, so only the org can be unusable.
+func kmsPath(org, platform string) string { return kms.OrgPath(org, "destinations", platform) }
 
 func kmsGet(s *cloud.Service[state], path, name string) ([]byte, error) {
 	return s.State.kms.Get(path, name, kmsEnv)
@@ -588,8 +557,8 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
+	if kms.OrgPath(org) == "" {
+		return zip.ErrBadRequest("org names no store")
 	}
 	dest, ok := s.State.dests[platformParam(c)]
 	if !ok {
@@ -676,8 +645,8 @@ func Connect(ctx context.Context, org, platform string, in map[string]any) (Dest
 		return DestinationStatus{}, fmt.Errorf("destinations: not mounted")
 	}
 	s := mounted
-	if !validOrg(org) {
-		return DestinationStatus{}, fmt.Errorf("destinations: invalid org")
+	if kms.OrgPath(org) == "" {
+		return DestinationStatus{}, fmt.Errorf("destinations: org names no store")
 	}
 	dest, ok := s.State.dests[strings.TrimSpace(platform)]
 	if !ok {
@@ -720,8 +689,8 @@ func List(ctx context.Context, org string) ([]DestinationStatus, error) {
 		return nil, fmt.Errorf("destinations: not mounted")
 	}
 	s := mounted
-	if !validOrg(org) {
-		return nil, fmt.Errorf("destinations: invalid org")
+	if kms.OrgPath(org) == "" {
+		return nil, fmt.Errorf("destinations: org names no store")
 	}
 	rows, err := s.State.store.List(ctx, org)
 	if err != nil {

@@ -221,13 +221,15 @@ func TestIntegrationsConnectKMSNotReady503(t *testing.T) {
 	}
 }
 
-func TestIntegrationsConnectInvalidOrg400(t *testing.T) {
+// TestIntegrationsConnectNeedsAnOrg proves connect refuses a caller the identity
+// boundary granted no org scope to. An org bearing path structure is NOT that case:
+// kms.OrgPath derives its segment, so it connects into its own subtree and reaches
+// nobody else's — the isolation the refusal used to stand in for.
+func TestIntegrationsConnectNeedsAnOrg(t *testing.T) {
 	slackConfiguredEnv(t)
 	app := newApp(t, newKMS(t))
-	// A validated principal whose org would smuggle path structure into the KMS
-	// key is refused at the boundary (400), before any secret op.
-	if r := req(t, app, http.MethodPost, "/v1/integrations/slack/connect", "bad/org", nil); r.Code != http.StatusBadRequest {
-		t.Fatalf("connect invalid org want 400, got %d (%s)", r.Code, r.Body)
+	if r := req(t, app, http.MethodPost, "/v1/integrations/slack/connect", "  ", nil); r.Code != http.StatusForbidden {
+		t.Fatalf("connect with no org scope want 403, got %d (%s)", r.Code, r.Body)
 	}
 }
 
