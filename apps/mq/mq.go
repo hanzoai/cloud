@@ -34,7 +34,7 @@
 //
 // # CONNECTION
 //
-// Mount dials pubsub.URL() — the ONE bus knob every app in this process reads —
+// Mount dials bus.URL() — the ONE bus knob every app in this process reads —
 // with unlimited reconnect, so this app mounts (and can describe itself) with
 // no broker running; every op answers 503 until the plane is reachable and the
 // health op reports degraded rather than lying. Shutdown drains the client.
@@ -53,7 +53,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/pubsub"
+	"github.com/hanzoai/cloud/bus"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/zap-proto/zip"
@@ -90,7 +90,7 @@ var b *broker
 func Use(app cloud.Router, deps cloud.Deps) error {
 	log := luxlog.Default().New("subsystem", "mq")
 
-	nc, err := nats.Connect(pubsub.URL(),
+	nc, err := nats.Connect(bus.URL(),
 		nats.Name("cloud-mq"),
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),
@@ -99,7 +99,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		// Fail closed: only a malformed URL/options error lands here (a down
 		// broker retries in the background); a config error must abort boot.
-		return fmt.Errorf("mq.Use:  dial %s (fail-closed): %w", pubsub.URL(), err)
+		return fmt.Errorf("mq.Use:  dial %s (fail-closed): %w", bus.URL(), err)
 	}
 	js, err := jetstream.New(nc)
 	if err != nil {
@@ -139,7 +139,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(g, "/health", st.health)
 	zip.Get(g, "/info", st.info)
 
-	log.Info("mq admin surface mounted", "bus", pubsub.URL())
+	log.Info("mq admin surface mounted", "bus", bus.URL())
 	return nil
 }
 

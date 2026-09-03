@@ -14,7 +14,7 @@ package webhook
 // spawning unbounded goroutines or dropping events).
 //
 // NO OPS KNOB, and no publish. This subsystem is a pure CONSUMER: it dials the ONE bus
-// apps/pubsub exports (pubsub.URL — see that package's doc), and it consumes streams
+// apps/pubsub exports (bus.URL — see that package's doc), and it consumes streams
 // that OTHER subsystems own and create. It used to carry a knob of its own that defaulted
 // to OFF, which meant a deployment that set nothing delivered no webhooks at all while
 // every other app on the same bus worked; the embedded bus always serves and fails boot
@@ -27,7 +27,6 @@ package webhook
 // diverge quietly: it fails to bind, forever, and delivers nothing on ANY stream.
 
 import (
-	"github.com/hanzoai/cloud/internal/shorten"
 	"bytes"
 	"context"
 	"crypto/hmac"
@@ -37,6 +36,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"io"
 	"math/big"
 	"net/http"
@@ -47,7 +47,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/event"
-	"github.com/hanzoai/cloud/apps/pubsub"
+	"github.com/hanzoai/cloud/bus"
 	"github.com/hanzoai/commerce/events"
 	"github.com/hanzoai/commerce/infra"
 	luxlog "github.com/luxfi/log"
@@ -198,7 +198,7 @@ func (d *dispatcher) storeFor(org string) (*store, error) {
 // fails the mount: the connect + consume loop runs in the background and retries a down
 // bus forever, so the registry serves from the first moment either way.
 func (d *dispatcher) start() {
-	url := pubsub.URL()
+	url := bus.URL()
 	ctx, cancel := context.WithCancel(context.Background())
 	d.mu.Lock()
 	d.cancel = cancel

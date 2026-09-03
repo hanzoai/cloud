@@ -58,7 +58,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/pubsub"
+	"github.com/hanzoai/cloud/bus"
 	"github.com/hanzoai/commerce/infra"
 	"github.com/hanzoai/pubsub-go/jetstream"
 	"github.com/zap-proto/zip"
@@ -123,18 +123,21 @@ const publishTimeout = 5 * time.Second
 // exports, which every app in this binary dials. It is not analytics' knob to own — a
 // private variable here would be one more place for a deployment to point half the
 // platform at a different bus. See the apps/pubsub package doc for the knob itself.
-func busURL() string { return pubsub.URL() }
+func busURL() string { return bus.URL() }
 
-// bus holds the process's ONE connection to the plane, dialed on first use and reused.
+// link is the process's ONE connection to the plane, dialed on first use and reused.
 // It is a struct rather than a bare package var so the connect is guarded by a single
 // mutex: a burst of concurrent first requests dials once, not once per request.
-type bus struct {
+//
+// It is named for what it is — a connection — rather than for the thing at the far
+// end of it, which is the bus and now has a package of that name.
+type link struct {
 	mu     sync.Mutex
 	client *infra.PubSubClient
 	ready  bool
 }
 
-var conn = &bus{}
+var conn = &link{}
 
 // errBusUnavailable is what the endpoint answers with when the plane cannot take a fact.
 // It is a 503 and never a 200: silently dropping an accepted event is the one failure
@@ -144,7 +147,7 @@ var errBusUnavailable = errors.New("event plane unavailable")
 // connect returns the live client, dialing and ensuring the stream on first use. It
 // re-dials after a failure rather than latching, so a bus that was briefly down heals
 // without a restart.
-func (b *bus) connect(ctx context.Context) (*infra.PubSubClient, error) {
+func (b *link) connect(ctx context.Context) (*infra.PubSubClient, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.ready && b.client != nil {
@@ -314,7 +317,7 @@ func retire(ctx context.Context, js jetstream.JetStream) error {
 		if err != nil {
 			return fmt.Errorf("stream %s holds %s and its state could not be read: %w", name, subject, err)
 		}
-		if strings.HasPrefix(name, pubsub.TenantPrefix) {
+		if strings.HasPrefix(name, bus.TenantPrefix) {
 			return fmt.Errorf("stream %s is a TENANT stream and holds %s, which belongs to the platform event plane; "+
 				"refusing to remove it — the tenant endpoint must not be able to bind this subject", name, subject)
 		}
@@ -345,14 +348,14 @@ var eventStream = jetstream.StreamConfig{
 }
 
 // drop marks the connection dead so the next publish re-dials.
-func (b *bus) drop() {
+func (b *link) drop() {
 	b.mu.Lock()
 	b.ready = false
 	b.mu.Unlock()
 }
 
 // close releases the connection on graceful shutdown.
-func (b *bus) close() {
+func (b *link) close() {
 	b.mu.Lock()
 	cl := b.client
 	b.client, b.ready = nil, false

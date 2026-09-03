@@ -22,7 +22,7 @@
 // It ALWAYS serves, like the PubSub plane it rides (a staged cutover that is
 // over). Mount fails CLOSED: a connect/bind error within the startup window
 // aborts boot rather than serving a phantom broker. It dials the bus through
-// pubsub.URL — the ONE knob every app in this process reads — so it cannot end
+// bus.URL — the ONE knob every app in this process reads — so it cannot end
 // up bridging a different bus than the one analytics publishes and webhooks
 // consumes, and there is never a silent half-embed.
 package kafka
@@ -35,7 +35,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/pubsub"
+	"github.com/hanzoai/cloud/bus"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/kafka/protocol"
 	"github.com/hanzoai/kafka/types"
@@ -62,7 +62,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	adminPort := environ.Int("CLOUD_KAFKA_ADMIN_PORT", 0)
 
 	cfg := &types.Configuration{
-		PubSubUrl:      pubsub.URL(),
+		PubSubUrl:      bus.URL(),
 		PubSubCredFile: environ.Or("CLOUD_KAFKA_PUBSUB_CREDS", ""),
 		BrokerHost:     environ.Or("CLOUD_KAFKA_HOST", "cloud"),
 		BrokerPort:     port,

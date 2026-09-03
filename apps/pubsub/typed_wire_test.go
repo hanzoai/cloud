@@ -35,6 +35,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
+
+	"github.com/hanzoai/cloud/bus"
 )
 
 const wireTimeout = 15 * time.Second
@@ -184,7 +186,7 @@ func TestPublishTakesBothPaths(t *testing.T) {
 		t.Fatalf("jetstream: %v", err)
 	}
 	if _, err := js.AddStream(&natsio.StreamConfig{
-		Name:     TenantPrefix + org + "-ORDERS",
+		Name:     bus.TenantPrefix + org + "-ORDERS",
 		Subjects: []string{"pub." + org + ".orders.>"},
 	}); err != nil {
 		t.Fatalf("add stream: %v", err)

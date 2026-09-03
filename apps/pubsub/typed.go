@@ -55,6 +55,8 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/zap-proto/zip"
+
+	"github.com/hanzoai/cloud/bus"
 )
 
 // zipdoc lifts the doc comment off each typed op and each In/Out field into
@@ -196,7 +198,7 @@ type busMessage struct {
 // Example: {"subject": "orders.created", "data": "{\"id\":\"o_1\"}",
 // "headers": {"Nats-Msg-Id": "o_1"}}
 func (o ops) publish(ctx context.Context, in *busPublish) (*busAck, error) {
-	org, err := Org(ctx)
+	org, err := bus.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +206,7 @@ func (o ops) publish(ctx context.Context, in *busPublish) (*busAck, error) {
 	if err != nil {
 		return nil, err
 	}
-	js, nc, err := Bus()
+	js, nc, err := bus.Bus()
 	if err != nil {
 		return nil, err
 	}
@@ -216,26 +218,26 @@ func (o ops) publish(ctx context.Context, in *busPublish) (*busAck, error) {
 	if _, err := js.StreamNameBySubject(ctx, subj); err == nil {
 		ack, perr := js.PublishMsg(ctx, msg)
 		if perr != nil {
-			return nil, Err(perr)
+			return nil, bus.Err(perr)
 		}
 		return &busAck{OK: true, Stream: unphys(org, ack.Stream), Seq: ack.Sequence, Duplicate: ack.Duplicate}, nil
 	} else if !errors.Is(err, jetstream.ErrStreamNotFound) {
-		return nil, Err(err)
+		return nil, bus.Err(err)
 	}
 	if err := nc.PublishMsg(msg); err != nil {
-		return nil, Err(err)
+		return nil, bus.Err(err)
 	}
 	// A bounded flush, so the 200 means "the server has it", not "buffered in
 	// this process".
 	if err := nc.FlushTimeout(5 * time.Second); err != nil {
-		return nil, Err(err)
+		return nil, bus.Err(err)
 	}
 	return &busAck{OK: true}, nil
 }
 
 // unphys strips the org's physical prefix off a stream name JetStream reports,
 // so a receipt names the stream the way the caller does.
-func unphys(org, name string) string { return strings.TrimPrefix(name, phys(org, "")) }
+func unphys(org, name string) string { return strings.TrimPrefix(name, bus.Phys(org, "")) }
 
 // header converts wire headers to the bus's header shape.
 func header(h map[string]string) nats.Header {
@@ -257,7 +259,7 @@ func header(h map[string]string) nats.Header {
 // Example: {"subject": "billing.quote", "data": "{\"sku\":\"gpu_1\"}",
 // "timeoutMs": 2000}
 func (o ops) request(ctx context.Context, in *busRequest) (*busMessage, error) {
-	org, err := Org(ctx)
+	org, err := bus.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +267,7 @@ func (o ops) request(ctx context.Context, in *busRequest) (*busMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, nc, err := Bus()
+	_, nc, err := bus.Bus()
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +281,7 @@ func (o ops) request(ctx context.Context, in *busRequest) (*busMessage, error) {
 	case errors.Is(err, context.DeadlineExceeded):
 		return nil, zip.Errorf(http.StatusRequestTimeout, "no reply within %dms", wait)
 	case err != nil:
-		return nil, Err(err)
+		return nil, bus.Err(err)
 	}
 	return &busMessage{Subject: unmap(org, reply.Subject), Data: string(reply.Data), Headers: reply.Header}, nil
 }
