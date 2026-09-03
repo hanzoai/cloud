@@ -1556,7 +1556,6 @@ func (e *Env) ensureToken(ctx context.Context) (string, error) {
 			nc := credsFromToken(tr)
 			// Preserve any machine tokens + a refresh token IAM did not re-issue.
 			nc.PlatformToken = e.creds.PlatformToken
-			nc.BuildToken = e.creds.BuildToken
 			if nc.RefreshToken == "" {
 				nc.RefreshToken = e.creds.RefreshToken
 			}

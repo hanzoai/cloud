@@ -168,8 +168,7 @@ func describeCatalog() {
 			"human owns — not the retail price, not the markup, not the entitlement tier — so a "+
 			"sync can never overwrite an administrator's pricing decision. The gate is a PLATFORM "+
 			"principal rather than a platform ADMIN, because the caller is normally a scheduled "+
-			"job holding the internal service token, which carries platform scope but no admin "+
-			"claim.")
+			"job — the platform's own application, an IAM identity under the admin org.")
 
 	openapi.Describe("/v1/commerce/catalog/models/refresh", http.MethodPost,
 		"Refresh the model catalog by reading the upstream provider",
@@ -179,7 +178,7 @@ func describeCatalog() {
 			"is READ rather than told. If that upstream cannot be read the call answers 502 and "+
 			"writes NOTHING: a sync that cannot see its source must never conclude the source "+
 			"is empty, because that conclusion would withdraw every model on sale. The gate is "+
-			"a PLATFORM principal so the scheduled job's service token qualifies.")
+			"a PLATFORM principal so the scheduled job's application identity qualifies.")
 
 	openapi.Describe("/v1/commerce/catalog/seed", http.MethodPost,
 		"Seed the embedded catalog, without disturbing edits already made",
@@ -333,7 +332,7 @@ func describeStore() {
 		"Answers a freshly minted token carrying ONLY the published-read permission — enough for "+
 			"a logged-out shopper's storefront to read your published catalog and nothing more, "+
 			"with no write and no admin scope. It is org-bound, signed with the org's own secret "+
-			"and subject to the org id, so unlike a shared service token it can never act on "+
+			"and subject to the org id, so it can never act on "+
 			"another tenant. Minting ROTATES rather than accumulates: the previous storefront "+
 			"token is dropped first and is invalid immediately, so re-minting is how you revoke. "+
 			"Admin is enforced by the handler as well as the route, because the route's token gate "+
@@ -686,8 +685,7 @@ func (m merchantKind) gate() string {
 		s += " The org must also be entitled to the commerce admin: the paywall answers 402 " +
 			"subscription_required unless the org holds an active or trialing pro subscription, a live " +
 			"trial credit or a redeemed invite, and 503 when that entitlement cannot be read rather " +
-			"than admitting on an unknown. The internal service token and a platform superadmin pass " +
-			"straight through."
+			"than admitting on an unknown. A platform superadmin passes straight through."
 	}
 	return s
 }

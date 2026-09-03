@@ -90,7 +90,6 @@ func mountReader(t *testing.T) *zip.App {
 	t.Cleanup(srv.Close)
 
 	t.Setenv("CLOUD_COMMERCE_HTTP_URL", srv.URL)
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-token")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	// The composer's install, once at the root, ahead of every route it serves:
 	// cloud.Bridge parks the validated org on the context for billing's typed ops.

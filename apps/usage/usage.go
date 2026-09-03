@@ -540,7 +540,7 @@ func tsLiteral(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05"
 // month-to-date consumption with the wallet behind it, and the movement list the
 // category/series breakdown folds over — from the process that owns the ledger.
 //
-// It used to be two service-token GETs, /v1/billing/usage/rollup and
+// It used to be two HTTP GETs, /v1/billing/usage/rollup and
 // /v1/billing/transactions, sent through the commerce transport. That transport
 // does not reach a network when commerce is co-resident: it dispatches back into
 // this binary's own router BY PATH, and neither route is registered here —

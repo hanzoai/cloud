@@ -267,7 +267,6 @@ func printCluster(w io.Writer, c Cluster) {
 
 func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 	var br BuildReq
-	var buildToken string
 	cmd := &cobra.Command{
 		Use:   "build <repo>",
 		Short: "Enqueue a platform-native build on the runner fabric (no GitHub builders)",
@@ -297,7 +296,7 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 			// idiomatic `owner/name` shorthand and expand it to GitHub (the host
 			// for every hanzoai/luxfi/zooai repo). A full URL passes through.
 			br.Repo = normalizeRepoURL(br.Repo)
-			job, err := e.runner(gf).EnqueueBuild(cmd.Context(), br, e.buildToken(buildToken))
+			job, err := e.runner(gf).EnqueueBuild(cmd.Context(), br, e.buildToken())
 			if err != nil {
 				return err
 			}
@@ -327,7 +326,6 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 	f.StringVar(&br.Arch, "arch", "", "amd64|arm64 (default amd64)")
 	f.StringVar(&br.Bucket, "bucket", "", "object-store bucket for artifacts (default: the contract's bucket:)")
 	f.StringVar(&br.Tag, "tag", "", "version segment artifacts publish under (default: the sha)")
-	f.StringVar(&buildToken, "build-token", "", "platform build-enqueue token (else env/credential store)")
 	return cmd
 }
 

@@ -29,13 +29,13 @@ import (
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/crawl"
-	"github.com/hanzoai/cloud/metering"
-	"github.com/hanzoai/cloud/tenant"
 	"github.com/hanzoai/cloud/apps/websearch"
 	"github.com/hanzoai/cloud/manifest"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/tenant"
 )
 
 // The MODEL API IS THE RELAY'S REGISTRY, and it is asked rather than described.
@@ -388,8 +388,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	//
 	// `ai` is its OWN process, so cloud.BalanceReader() (a package-level var installFinance
 	// sets in the CLOUD process) is ALWAYS nil here and the ai module fell back to an HTTP
-	// self-call to /v1/billing/balance. That request carries COMMERCE_SERVICE_TOKEN and
-	// no user, so it is not a validated principal at the edge and answers 401 — and the
+	// self-call to /v1/billing/balance. That request carried a shared service token and
+	// no user, so it was not a validated principal at the edge and answered 401 — and the
 	// balance gate is fail-CLOSED, so EVERY completion 503'd (chat, copilot, documents)
 	// on a pod whose ledger was perfectly healthy. Routing money reads back through the
 	// public edge was the mistake; the edge is for customers, the plane is for us.

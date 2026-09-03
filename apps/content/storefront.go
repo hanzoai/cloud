@@ -38,8 +38,8 @@ import (
 // pipeline used (products.json._meta.library: designs/<slug>/<kind>_<role>.png, take
 // assets where kind ∈ [ecom,product,lifestyle]). Tenant scope is the validated org
 // (X-Org-Id on the S2S call); the image is referenced by its S3 URL — no copy, no
-// re-host. Fail-closed by default: no COMMERCE_SERVICE_TOKEN (or no reachable
-// commerce) ⇒ errNotConfigured ⇒ a publish records "not_configured" and never fails.
+// re-host. Fail-closed by default: no reachable commerce ⇒ errNotConfigured ⇒ a
+// publish records "not_configured" and never fails.
 
 const (
 	// commerceURLEnv / commerceTokenEnv are the SAME deployment config every cloud
@@ -185,9 +185,9 @@ func (s commerceStorefront) Publish(ctx context.Context, org string, req Storefr
 
 // ProductExists resolves a product handle (slug) against the org's catalog via
 // GET /v1/product/<handle> (the generic product REST get resolves by slug), pinned to
-// the caller org by X-Org-Id behind the admin service token. 2xx ⇒ exists; 404 ⇒
-// resolved-but-absent (a real dangling handle); a missing token / unreachable commerce
-// or an auth rejection ⇒ errNotConfigured (the gate skips); anything else ⇒ errUpstream.
+// the caller org by X-Org-Id. 2xx ⇒ exists; 404 ⇒ resolved-but-absent (a real
+// dangling handle); an unreachable commerce or an auth rejection ⇒ errNotConfigured
+// (the gate skips); anything else ⇒ errUpstream.
 func (s commerceStorefront) ProductExists(ctx context.Context, org, handle string) (bool, error) {
 	if s.base == "" {
 		return false, errNotConfigured
@@ -208,8 +208,8 @@ func (s commerceStorefront) ProductExists(ctx context.Context, org, handle strin
 	}
 }
 
-// do performs one S2S commerce request: admin bearer + X-Org-Id (commerce trusts the
-// org header ONLY behind the service token), over the self-routing commerce transport.
+// do performs one commerce request pinned to org by X-Org-Id, over the
+// self-routing commerce transport, which carries the platform's identity.
 // apps/account/topup.go carried the same commerceDo until 0b0f2599a deleted it.
 func (s commerceStorefront) do(ctx context.Context, method, path, org string, body []byte) (int, []byte, error) {
 	var rdr io.Reader

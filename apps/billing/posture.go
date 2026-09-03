@@ -179,7 +179,7 @@ func mintedTier(ctx context.Context) string {
 }
 
 // mayMint reports whether this caller may name an entitlement rather than earn
-// one: platform authority, or the trusted in-process service token. It is the
+// one: platform authority. It is the
 // same bar the store applies to the same class of client string, asked once
 // here so the two halves cannot drift.
 func mayMint(ctx context.Context) bool {

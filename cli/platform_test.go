@@ -127,7 +127,7 @@ func TestPlatformRedeployNotOK(t *testing.T) {
 
 func TestPlatformEnqueueBuild(t *testing.T) {
 	p, done := platformStub(t, "svc-tok", func(w http.ResponseWriter, r *http.Request) {
-		// The build endpoint must use the BUILD token, not the service token.
+		// The build endpoint sends the caller's own token, not the platform token.
 		if got := r.Header.Get("Authorization"); got != "Bearer build-tok" {
 			t.Errorf("build auth header = %q (must use build token)", got)
 		}

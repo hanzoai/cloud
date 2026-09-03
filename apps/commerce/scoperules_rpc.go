@@ -8,7 +8,7 @@ package commerce
 // The rows are spend-alert rows and they live HERE, in the process that mounts
 // commerce. Their reader is cloud's ScopeRateLimit, an EDGE middleware in
 // whatever process serves the request — so it used to fetch them with a
-// service-token GET /v1/billing/alerts through the commerce transport. That
+// GET /v1/billing/alerts through the commerce transport. That
 // transport dispatches in-process by publishing the WHOLE shared app, so the
 // fetch re-ran the entire edge chain, including ScopeRateLimit, whose cache is
 // still cold because it is only filled after the fetch returns. It asked again,

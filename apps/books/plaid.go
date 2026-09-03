@@ -26,12 +26,12 @@ package books
 // exactly once. This file does NOT edit bank.go.
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"slices"

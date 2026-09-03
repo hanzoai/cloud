@@ -77,8 +77,8 @@ func init() {
 				"A method the caller does not own is NOT FOUND rather than refused — the same "+
 				"answer whether the id names nothing or names somebody else's card — so an id "+
 				"cannot be probed for existence.\n\n"+
-				"A platform operator or the trusted in-process service token may act on any "+
-				"subject inside the org; everyone else may only remove their own.")
+				"A platform operator may act on any subject inside the org; everyone else "+
+				"may only remove their own.")
 	}
 }
 

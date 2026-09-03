@@ -214,7 +214,6 @@ type loginFlags struct {
 	passwordStdin bool
 	token         string
 	platformToken string
-	buildToken    string
 	scope         string
 }
 
@@ -263,9 +262,6 @@ func runLogin(env *Env, lf *loginFlags, cmd *cobra.Command) error {
 	if lf.platformToken != "" {
 		creds.PlatformToken = lf.platformToken
 	}
-	if lf.buildToken != "" {
-		creds.BuildToken = lf.buildToken
-	}
 
 	// Persist under this identity's stable key and make it active. A second
 	// login as a different owner (e.g. admin vs hanzo for the same email, via a
@@ -313,7 +309,6 @@ func bindLoginFlags(cmd *cobra.Command, lf *loginFlags) {
 	f.BoolVar(&lf.passwordStdin, "password-stdin", false, "read the password from stdin (for automation)")
 	f.StringVar(&lf.token, "token", "", "store this access token directly (skip the password grant)")
 	f.StringVar(&lf.platformToken, "platform-token", "", "also store the platform control-plane service token")
-	f.StringVar(&lf.buildToken, "build-token", "", "also store the platform build-enqueue token")
 	f.StringVar(&lf.scope, "scope", "openid profile email", "OAuth scope")
 }
 

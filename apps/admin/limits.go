@@ -16,7 +16,7 @@ import (
 
 // The SuperAdmin usage-cap + promo control plane, twinning /v1/admin/flags. It owns
 // no store: it FORWARDS to commerce (the billing source of truth) over the ONE
-// service-token client —
+// commerce client —
 //
 //	promos      → commerce /v1/platform/promo   (the admin-configured plan promo)
 //	caps        → commerce's spend-alert ops, BY NAME over the internal plane
@@ -67,8 +67,8 @@ type capIn struct {
 
 // getPromo reads the current platform plan promo — the singleton discount offer, e.g.
 // the 50%-off launch promo. Commerce stores it in the reserved platform namespace, so
-// the org sent with the read is the admin org and the service token is what passes
-// commerce's own platform-admin gate.
+// the org sent with the read is the admin org, and the platform identity the
+// transport carries is what passes commerce's own platform-admin gate.
 //
 // Response: {"status":"ok","msg":"","data":{"percentOff":50,"start":"2026-07-01T00:00:00Z",
 // "end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"total":0}

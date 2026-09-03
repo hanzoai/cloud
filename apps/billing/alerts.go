@@ -8,7 +8,7 @@ package billing
 // cap is a financial safety control, so a compromised member key must not be
 // able to delete the org's ceiling (unbounded spend) or set a one-cent enforcing
 // one (an org-wide 402). The verdict is a SERVICE reading it on every priced
-// call, presenting a service token and no user, and it reads any non-2xx as
+// call, as the platform with no user, and it reads any non-2xx as
 // fail-open — so a refusal there does not fail, it silently lifts the ceiling.
 //
 // Both reach the same rows through the same core in the process that owns them,
@@ -50,16 +50,16 @@ func init() {
 		"Remove one spend cap",
 		"Deletes a budget the caller's org owns and answers 204.\n\n"+
 			"Removing a cap REMOVES A CEILING, so it takes the same bar as setting "+
-			"one: a validated org admin, the platform SuperAdmin, or the trusted "+
-			"in-process service token. A member who could delete the org's cap would "+
+			"one: a validated org admin or the platform SuperAdmin. A member who "+
+			"could delete the org's cap would "+
 			"have unbounded spend.\n\n"+
 			"A cap this org does not own is NOT FOUND rather than refused — the same "+
 			"answer whether the id is unknown or belongs to another customer — so an "+
 			"id cannot be probed for existence by trying to delete it.")
 }
 
-// capAdmin refuses a cap WRITE to anyone but a validated org admin, the platform
-// SuperAdmin, or the trusted in-process service token.
+// capAdmin refuses a cap WRITE to anyone but a validated org admin or the
+// platform SuperAdmin.
 //
 // A spend cap is a FINANCIAL SAFETY control, and both directions of getting it
 // wrong are expensive: a member who can delete the org's cap has unbounded
@@ -188,8 +188,8 @@ func (o ops) amendAlert(ctx context.Context, in *plane.AlertPatch) (*plane.Alert
 // Answers whether one proposed spend fits inside this org's caps.
 //
 // It is the per-request verdict the metering edge consumes before every priced
-// call, and its caller is a SERVICE rather than a person: a service token plus
-// the gateway-pinned org, with no user behind it. So this admits that principal
+// call, and its caller is a SERVICE rather than a person: the platform, stating
+// the org over the plane, with no user behind it. So this admits that principal
 // where the CRUD beside it does not.
 //
 // Every covering row is evaluated, most-restrictive-wins, and the tightest one

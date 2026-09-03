@@ -378,12 +378,12 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// platform admin edits); it is cross-tenant data, never org-scoped.
 	//
 	// TokenRequired is passed for the same reason the standalone passes it
-	// (api.Route hands AdminRoute its adminRequired): IAMTokenRequired resolves a
-	// USER, and only TokenRequired's service-token branch stamps the marker
-	// IsServiceToken reads. Without it no scheduled run can ever authenticate
-	// here — the model sync 403'd on every attempt and the model catalog sat
-	// empty in production. Same reason the auto-recharge poke below is wired with
-	// its own TokenRequired rather than relying on this group's chain.
+	// (api.Route hands AdminRoute its adminRequired). The scheduled runs that
+	// reach these routes — the model sync, the auto-recharge poke below — are the
+	// platform's own application, an IAM identity under the reserved admin org,
+	// and IsPlatform admits it; a shared service token used to be their only
+	// door, and when it was not wired the model sync 403'd on every attempt and
+	// the catalog sat empty in production.
 	// The bundle binds the module's own route table, so no route in it is
 	// typed yet — module work, per the module-handler note.
 	catalogapi.AdminRoute(commerceV1, commercemid.TokenRequired())
@@ -505,8 +505,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	//
 	// There used to be thirty-seven registrations here, each one a commerce
 	// module handler mounted at a /v1/billing address with its own gate chain
-	// re-derived by hand — the console reads, the mint writes, the service-token
-	// twins, the spend-cap CRUD. They were right to exist: commerce's own route
+	// re-derived by hand — the console reads, the mint writes, the spend-cap
+	// CRUD. They were right to exist: commerce's own route
 	// bundle is never compiled into this binary, so an address nothing named here
 	// reached nobody, and the history each of them carried was a real outage.
 	//

@@ -14,13 +14,11 @@
 // Commerce is a PLUGIN in this binary, not a deployment of its own. Plan reads it
 // over the internal plane — a call by name on commerce's own socket, which cannot
 // reach the public edge by accident. The reads still on HTTP below are the ones
-// whose plane ops do not exist yet; each is a service-token call authenticated with
-// the admin-scoped COMMERCE_SERVICE_TOKEN (a KMS-sourced secret already on the cloud
-// env — never hard-coded). A per-subject read resolves the org's billing namespace
-// from the TRUSTED X-Org-Id header (commerce's EdgeAuth trusts it only when the
-// bearer is the service token) AND keys the wallet under the bare slug — one value,
-// the subject, is both. The fleet Costs god-view is org-independent and sends no
-// subject.
+// whose plane ops do not exist yet; each crosses the commerce transport, which
+// carries the platform's identity, and names its tenant in X-Org-Id. A per-subject
+// read resolves the org's billing namespace from that header AND keys the wallet
+// under the bare slug — one value, the subject, is both. The fleet Costs god-view
+// is org-independent and sends no subject.
 package commerce
 
 import (
@@ -210,14 +208,13 @@ type Costs struct {
 }
 
 // Costs reads commerce's vendor-COGS god-view (GET /v1/costs) for a period — the
-// SINGLE source of truth for what we pay every vendor. It authenticates with the
-// admin S2S service token (no IAM user identity) and is org-INDEPENDENT, so it
-// sends no subject. Zero (not an error) when commerce is unwired.
+// SINGLE source of truth for what we pay every vendor. It is org-INDEPENDENT, so
+// it sends no subject. Zero (not an error) when commerce is unwired.
 func (c *Client) Costs(ctx context.Context, period string) (Costs, error) {
 	var out Costs
 	// The platform's own books live in the reserved admin org, and this read is a
 	// fleet god-view rather than a tenant one — so it names that org rather than
-	// a subject, which is the same scope the service token gave it.
+	// a subject.
 	reply, err := commercepeer.FinanceCosts(cloud.For(ctx, authz.AdminOrg), &plane.CostsIn{Period: period})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
@@ -299,8 +296,8 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, subject str
 	}
 	req.Header.Set("Accept", "application/json")
 	if subject != "" {
-		// Commerce's EdgeAuth trusts X-Org-Id ONLY after it verifies the bearer is the
-		// COMMERCE_SERVICE_TOKEN, then resolves the per-org billing namespace from it.
+		// Commerce resolves the per-org billing namespace from X-Org-Id, trusting it
+		// because the transport carried the platform's identity across the hop.
 		req.Header.Set("X-Org-Id", subject)
 	}
 	resp, err := c.http.Do(req)
