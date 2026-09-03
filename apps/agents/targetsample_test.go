@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/samples"
+	"github.com/hanzoai/cloud/samples"
 )
 
 // targetsample_test.go covers the FIRST emitter: a run-target heartbeat also

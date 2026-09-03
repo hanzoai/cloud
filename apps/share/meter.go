@@ -26,7 +26,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // feeEnv is the operator knob: SHARE_FEE_CENTS_ACCOUNT, or SHARE_FEE_CENTS for

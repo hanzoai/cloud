@@ -20,7 +20,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/finance"
 )
 
 // commerceTxn is one ledger entry, projected to the fields the rule map reads.

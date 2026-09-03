@@ -39,7 +39,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 	hpricing "github.com/hanzoai/pricing"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"

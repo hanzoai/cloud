@@ -37,7 +37,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // TestLiveEverySignalLandsItsOwnRow drives one fact of EACH landable signal

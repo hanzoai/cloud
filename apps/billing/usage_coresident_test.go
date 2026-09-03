@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/money"
 )
 

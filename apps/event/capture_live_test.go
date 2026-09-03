@@ -36,7 +36,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )

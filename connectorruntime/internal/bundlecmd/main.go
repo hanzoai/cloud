@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"os"
 
-	connectorruntime "github.com/hanzoai/cloud/apps/connectorruntime"
+	connectorruntime "github.com/hanzoai/cloud/connectorruntime"
 )
 
 func main() {

@@ -40,7 +40,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/cron"
+	"github.com/hanzoai/cloud/cron"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
 	tasksauth "github.com/hanzoai/tasks/pkg/auth"

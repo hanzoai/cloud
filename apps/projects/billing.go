@@ -2,7 +2,7 @@ package projects
 
 import (
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )

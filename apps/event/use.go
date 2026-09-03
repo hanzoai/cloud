@@ -89,7 +89,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 	"github.com/hanzoai/cloud/apps/principal"
 	planeops "github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/types"

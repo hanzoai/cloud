@@ -18,7 +18,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/k8s"
 	"time"
 
 	"github.com/hanzoai/cloud"

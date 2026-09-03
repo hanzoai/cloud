@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/tenant"
+	"github.com/hanzoai/cloud/tenant"
 	"github.com/hanzoai/cloud/plane"
 )
 

@@ -3,7 +3,7 @@ package metering_test
 import (
 	"net/http"
 
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // Example shows the ONE way a non-LLM product opts into pay-for-everything:

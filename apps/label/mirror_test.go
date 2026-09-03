@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/tenant"
+	"github.com/hanzoai/cloud/tenant"
 )
 
 // TestTheMirrorSortKeyKeepsCorrections is the finding that changed the table.

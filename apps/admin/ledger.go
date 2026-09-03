@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/admin/core"
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // ledgerTable is the AI usage ledger. The ai plane owns its writes; admin only reads.

@@ -63,8 +63,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/hanzoai/cloud/apps/datastore"
-	"github.com/hanzoai/cloud/apps/tenant"
+	"github.com/hanzoai/cloud/datastore"
+	"github.com/hanzoai/cloud/tenant"
 )
 
 // columnar is the pair of statements that reach the derived copy: the write and

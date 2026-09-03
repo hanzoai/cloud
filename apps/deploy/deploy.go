@@ -53,7 +53,7 @@ import (
 	"regexp"
 
 	"github.com/hanzoai/authz"
-	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/k8s"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
 

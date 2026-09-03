@@ -24,7 +24,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // errUnconfigured marks the warehouse not connected on this deployment — core.SrcOf

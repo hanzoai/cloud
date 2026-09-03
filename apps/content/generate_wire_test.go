@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/openapi"
 )
 

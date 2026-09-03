@@ -23,7 +23,7 @@ import (
 
 	"github.com/hanzoai/commerce/billing/creditledger"
 
-	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 )

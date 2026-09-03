@@ -16,7 +16,7 @@ import (
 	s3 "github.com/hanzos3/go"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/s3admin"
+	"github.com/hanzoai/cloud/s3admin"
 	"github.com/hanzoai/cloud/apps/sites"
 	"github.com/hanzoai/cloud/internal/environ"
 )

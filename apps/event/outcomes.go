@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // SubjectOutcome is one subject's (distinct_id's) participation in an experiment

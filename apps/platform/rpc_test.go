@@ -38,7 +38,7 @@ import (
 	"github.com/hanzoai/cloud/internal/planetest"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/k8s"
 	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"

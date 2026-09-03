@@ -19,7 +19,7 @@ import (
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // studio_render.go is the ASSET half of the Generator client: it turns a design + kind into

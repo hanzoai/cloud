@@ -38,12 +38,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/k8s"
 	"github.com/hanzoai/cloud/internal/environ"
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/zap-proto/zip"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

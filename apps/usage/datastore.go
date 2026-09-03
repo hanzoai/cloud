@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // datastore.go is the WAREHOUSE projection of account usage: the hanzo.account_usage

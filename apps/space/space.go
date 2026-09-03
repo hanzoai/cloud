@@ -45,7 +45,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/s3admin"
+	"github.com/hanzoai/cloud/s3admin"
 	"github.com/hanzoai/cloud/internal/fare"
 )
 

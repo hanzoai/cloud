@@ -17,7 +17,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 	"github.com/hanzoai/cloud/openapi"
 	hplans "github.com/hanzoai/plans"
 )

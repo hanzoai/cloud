@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // SEV1 regression: a HANGING/hot-looping commerce authorize must NEVER hang the

@@ -54,7 +54,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 	"github.com/hanzoai/cloud/apps/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"

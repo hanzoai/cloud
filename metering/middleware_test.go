@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/account"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // commerceStub is the whole money peer for a middleware test: it serves the balance READ

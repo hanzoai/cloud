@@ -42,7 +42,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 	hplans "github.com/hanzoai/plans"
 	"github.com/zap-proto/zip"
 )

@@ -63,7 +63,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/admin/core"
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // Fully-qualified datastore tables. admin only READS these — the ai gateway owns

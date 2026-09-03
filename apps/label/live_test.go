@@ -38,8 +38,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/datastore"
-	"github.com/hanzoai/cloud/apps/tenant"
+	"github.com/hanzoai/cloud/datastore"
+	"github.com/hanzoai/cloud/tenant"
 )
 
 // live returns the tenant keys for one run, or skips. The org carries the run's

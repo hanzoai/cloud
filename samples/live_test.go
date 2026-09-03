@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // live_test.go proves the plane against a REAL datastore: the DDL actually parses

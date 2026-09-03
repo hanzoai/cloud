@@ -58,8 +58,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/datastore"
-	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/datastore"
+	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/hanzoai/types"

@@ -25,7 +25,7 @@ import (
 	aicontrollers "github.com/hanzoai/ai/controllers"
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	cloudmoney "github.com/hanzoai/cloud/money"
 	hmoney "github.com/hanzoai/money"

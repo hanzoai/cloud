@@ -51,7 +51,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/openapi"
 	htrust "github.com/hanzoai/trust"

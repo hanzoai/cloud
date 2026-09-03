@@ -32,7 +32,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // CampaignEvents is the per-campaign funnel read from event.event, scoped to

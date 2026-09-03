@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 	hplans "github.com/hanzoai/plans"
 )
 

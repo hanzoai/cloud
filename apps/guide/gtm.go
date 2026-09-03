@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // gtm.go is the Business AI Guide's ANALYTICS LENS: it reads the org's real funnel

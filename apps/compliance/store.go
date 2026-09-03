@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hanzoai/cloud/apps/idv"
+	"github.com/hanzoai/cloud/idv"
 	"github.com/hanzoai/cloud/sqlpool"
 	_ "github.com/hanzoai/sqlite"
 )

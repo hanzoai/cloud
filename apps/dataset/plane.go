@@ -44,8 +44,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/datastore"
-	"github.com/hanzoai/cloud/apps/tenant"
+	"github.com/hanzoai/cloud/datastore"
+	"github.com/hanzoai/cloud/tenant"
 )
 
 // store is the warehouse as this plane uses it: three calls and no more. It is an

@@ -18,7 +18,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
-	"github.com/hanzoai/cloud/apps/fleet"
+	"github.com/hanzoai/cloud/fleet"
 )
 
 // clusterScanTimeout bounds ONE cluster's read. A cluster that exceeds it is recorded

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // fakeCommerce records the last request and replies with a canned status+body.

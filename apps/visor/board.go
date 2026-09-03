@@ -35,7 +35,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/agents"
-	"github.com/hanzoai/cloud/apps/samples"
+	"github.com/hanzoai/cloud/samples"
 	"github.com/zap-proto/zip"
 )
 

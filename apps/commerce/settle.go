@@ -128,7 +128,7 @@ import (
 	"net/http"
 	"strings"
 
-	financeclient "github.com/hanzoai/cloud/apps/finance"
+	financeclient "github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 	commercebilling "github.com/hanzoai/commerce/api/billing"

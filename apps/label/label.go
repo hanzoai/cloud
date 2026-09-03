@@ -68,7 +68,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/apps/tenant"
+	"github.com/hanzoai/cloud/tenant"
 	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"

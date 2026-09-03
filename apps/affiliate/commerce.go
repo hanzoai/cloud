@@ -3,7 +3,7 @@ package affiliate
 import (
 	"context"
 
-	"github.com/hanzoai/cloud/apps/payout"
+	"github.com/hanzoai/cloud/payout"
 )
 
 // commerce is the ONE thing the commission loop asks of the money plane, and it is a

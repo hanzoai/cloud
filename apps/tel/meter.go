@@ -28,7 +28,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // feeEnv is the operator knob: TEL_FEE_CENTS_NUMBER / _MESSAGE / _CALL per act,

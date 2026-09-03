@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	hcaptable "github.com/hanzoai/captable"
-	"github.com/hanzoai/cloud/apps/goja"
+	"github.com/hanzoai/cloud/goja"
 )
 
 // TestFullLifecycle drives the REAL embedded captable bundle against a REAL

@@ -6,7 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
-	ledger "github.com/hanzoai/cloud/apps/finance"
+	ledger "github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/plane"
 )
 
