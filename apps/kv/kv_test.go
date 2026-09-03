@@ -223,7 +223,7 @@ func TestTenancyIsNeverACallerField(t *testing.T) {
 // TestRidesThePlaneFromItsOwnBinary is the property the split introduced.
 //
 // In production this app is its own process: there is no embedded server in it,
-// so pubsub.Bus dials the ONE plane at the address the bus knob names. The
+// so bus.Bus dials the ONE plane at the address the bus knob names. The
 // arrangement below is exactly that — a plane running with no routes of its own
 // on this app, reached over CLOUD_PUBSUB_URL — and the six ops must be
 // indistinguishable from the in-process case. If they are not, the split

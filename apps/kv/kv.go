@@ -23,9 +23,9 @@
 //
 // It is still the same plane. apps/pubsub runs the ONE embedded NATS +
 // JetStream node this cloud has, and this app rides it through the four calls
-// that package exports for exactly this — [pubsub.Bus] to reach it,
-// [pubsub.Org] for who is asking, [pubsub.Qualify] for what a caller's bucket
-// is called out there, and [pubsub.Err] for what a refusal from it means on the
+// that package exports for exactly this — [bus.Bus] to reach it,
+// [bus.Org] for who is asking, [bus.Qualify] for what a caller's bucket
+// is called out there, and [bus.Err] for what a refusal from it means on the
 // wire. Composition, not duplication: no second server, no second connection
 // policy, and one place the tenancy rule is written.
 //
@@ -36,7 +36,7 @@
 // Mount registers routes and nothing else. It does NOT check the bus first: the
 // plane is another process, so refusing to mount until it answers would make
 // boot order load-bearing and turn a slow neighbour into this app's outage.
-// [pubsub.Bus] fails closed per request instead — 503 while the plane is
+// [bus.Bus] fails closed per request instead — 503 while the plane is
 // unreachable, and correct the moment it is back.
 //
 // Values are TEXT. `value` is a JSON string carried verbatim as UTF-8 bytes, so
@@ -54,7 +54,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/pubsub"
+	"github.com/hanzoai/cloud/bus"
 )
 
 // zipdoc lifts the doc comment off each typed op and each In/Out field into
@@ -70,7 +70,7 @@ import (
 type ops struct{ s *cloud.Service[state] }
 
 // state is empty on purpose: this app owns no store of its own. The store is
-// the plane, reached through pubsub.Bus.
+// the plane, reached through bus.Bus.
 type state struct{}
 
 // Mount registers the surface. There is nothing to start.
@@ -194,11 +194,11 @@ type kvPage struct {
 //
 // Example: {"history": 5, "ttl": 3600}
 func (o ops) createBucket(ctx context.Context, in *bucketWrite) (*bucketRecord, error) {
-	org, err := pubsub.Org(ctx)
+	org, err := bus.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
-	name, ok := pubsub.Qualify(org, in.Bucket)
+	name, ok := bus.Qualify(org, in.Bucket)
 	if !ok {
 		return nil, zip.ErrBadRequest("bucket must be 1-64 of letters, digits or _")
 	}
@@ -209,7 +209,7 @@ func (o ops) createBucket(ctx context.Context, in *bucketWrite) (*bucketRecord, 
 	if history > 64 {
 		return nil, zip.ErrBadRequest("history is capped at 64")
 	}
-	js, _, err := pubsub.Bus()
+	js, _, err := bus.Bus()
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func (o ops) createBucket(ctx context.Context, in *bucketWrite) (*bucketRecord, 
 		MaxValueSize: maxValue,
 	})
 	if err != nil {
-		return nil, pubsub.Err(err)
+		return nil, bus.Err(err)
 	}
 	return bucket(ctx, in.Bucket, kv)
 }
@@ -235,7 +235,7 @@ func (o ops) createBucket(ctx context.Context, in *bucketWrite) (*bucketRecord, 
 func bucket(ctx context.Context, name string, kv jetstream.KeyValue) (*bucketRecord, error) {
 	status, err := kv.Status(ctx)
 	if err != nil {
-		return nil, pubsub.Err(err)
+		return nil, bus.Err(err)
 	}
 	return &bucketRecord{
 		Bucket:  name,
@@ -250,17 +250,17 @@ func bucket(ctx context.Context, name string, kv jetstream.KeyValue) (*bucketRec
 // malformed and telling it the bucket is missing are the same fact here, and
 // only one of the two says nothing about another org.
 func bucketOf(ctx context.Context, org, name string) (jetstream.KeyValue, error) {
-	q, ok := pubsub.Qualify(org, name)
+	q, ok := bus.Qualify(org, name)
 	if !ok {
 		return nil, zip.ErrNotFound("bucket not found")
 	}
-	js, _, err := pubsub.Bus()
+	js, _, err := bus.Bus()
 	if err != nil {
 		return nil, err
 	}
 	kv, err := js.KeyValue(ctx, q)
 	if err != nil {
-		return nil, pubsub.Err(err)
+		return nil, bus.Err(err)
 	}
 	return kv, nil
 }
@@ -269,20 +269,20 @@ func bucketOf(ctx context.Context, org, name string) (jetstream.KeyValue, error)
 // revision with it — and answers 204 with no body. 404 when the org has no
 // bucket of that name.
 func (o ops) deleteBucket(ctx context.Context, in *bucketRef) (*cloud.Unit, error) {
-	org, err := pubsub.Org(ctx)
+	org, err := bus.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
-	name, ok := pubsub.Qualify(org, in.Bucket)
+	name, ok := bus.Qualify(org, in.Bucket)
 	if !ok {
 		return nil, zip.ErrNotFound("bucket not found")
 	}
-	js, _, err := pubsub.Bus()
+	js, _, err := bus.Bus()
 	if err != nil {
 		return nil, err
 	}
 	if err := js.DeleteKeyValue(ctx, name); err != nil {
-		return nil, pubsub.Err(err)
+		return nil, bus.Err(err)
 	}
 	return nil, nil
 }
@@ -290,7 +290,7 @@ func (o ops) deleteBucket(ctx context.Context, in *bucketRef) (*cloud.Unit, erro
 // Get returns one key's current value and revision. 404 when the bucket does
 // not exist, the key was never written, or its latest revision is a delete.
 func (o ops) get(ctx context.Context, in *keyRef) (*kvEntry, error) {
-	org, err := pubsub.Org(ctx)
+	org, err := bus.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +300,7 @@ func (o ops) get(ctx context.Context, in *keyRef) (*kvEntry, error) {
 	}
 	e, err := kv.Get(ctx, in.Key)
 	if err != nil {
-		return nil, pubsub.Err(err)
+		return nil, bus.Err(err)
 	}
 	out := entry(e)
 	return &out, nil
@@ -330,7 +330,7 @@ func entry(e jetstream.KeyValueEntry) kvEntry {
 //
 // Example: {"value": "{\"theme\":\"dark\"}"}
 func (o ops) put(ctx context.Context, in *kvWrite) (*kvAck, error) {
-	org, err := pubsub.Org(ctx)
+	org, err := bus.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +340,7 @@ func (o ops) put(ctx context.Context, in *kvWrite) (*kvAck, error) {
 	}
 	rev, err := kv.Put(ctx, in.Key, []byte(in.Value))
 	if err != nil {
-		return nil, pubsub.Err(err)
+		return nil, bus.Err(err)
 	}
 	return &kvAck{Revision: rev}, nil
 }
@@ -349,7 +349,7 @@ func (o ops) put(ctx context.Context, in *kvWrite) (*kvAck, error) {
 // see it and Get answers 404 — and answers 204 with no body. 404 when the
 // bucket does not exist.
 func (o ops) del(ctx context.Context, in *keyRef) (*cloud.Unit, error) {
-	org, err := pubsub.Org(ctx)
+	org, err := bus.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +358,7 @@ func (o ops) del(ctx context.Context, in *keyRef) (*cloud.Unit, error) {
 		return nil, err
 	}
 	if err := kv.Delete(ctx, in.Key); err != nil {
-		return nil, pubsub.Err(err)
+		return nil, bus.Err(err)
 	}
 	return nil, nil
 }
@@ -367,7 +367,7 @@ func (o ops) del(ctx context.Context, in *keyRef) (*cloud.Unit, error) {
 // every delete marker up to the bucket's History depth. 404 when the bucket
 // does not exist or the key was never written.
 func (o ops) history(ctx context.Context, in *keyRef) (*kvPage, error) {
-	org, err := pubsub.Org(ctx)
+	org, err := bus.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +377,7 @@ func (o ops) history(ctx context.Context, in *keyRef) (*kvPage, error) {
 	}
 	entries, err := kv.History(ctx, in.Key)
 	if err != nil {
-		return nil, pubsub.Err(err)
+		return nil, bus.Err(err)
 	}
 	page := make([]kvEntry, 0, len(entries))
 	for _, e := range entries {

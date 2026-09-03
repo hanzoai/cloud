@@ -7,8 +7,8 @@ package mq
 // monitoring (that refusal is pinned in typed_wire_test.go).
 
 import (
-	"github.com/hanzoai/cloud"
 	"context"
+	"github.com/hanzoai/cloud"
 	"time"
 
 	"github.com/hanzoai/cloud/apps/principal"

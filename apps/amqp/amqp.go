@@ -26,15 +26,15 @@
 // waits for the gateway to report ready — the bus answered, the stream and the
 // topology bucket exist, the listener is bound — and a failure or a timeout
 // aborts boot rather than serving a phantom broker. It dials the bus through
-// pubsub.URL, the ONE knob every app in this process reads, so it cannot end
+// bus.URL, the ONE knob every app in this process reads, so it cannot end
 // up bridging a different bus than the one analytics publishes and webhooks
 // consumes, and there is never a silent half-embed.
 package amqp
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net"
 	"strconv"
 	"time"
@@ -43,7 +43,7 @@ import (
 
 	"github.com/hanzoai/amqp/protocol"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/pubsub"
+	"github.com/hanzoai/cloud/bus"
 )
 
 // Mount order is the row position in manifest/apps.go: this must stay AFTER
@@ -67,7 +67,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	b := protocol.NewBroker(protocol.Config{
 		Addr:        net.JoinHostPort("", strconv.Itoa(port)),
-		PubSubURL:   pubsub.URL(),
+		PubSubURL:   bus.URL(),
 		PubSubCreds: environ.Or("CLOUD_AMQP_PUBSUB_CREDS", ""),
 		Product:     "hanzo-cloud",
 		Version:     cloud.Version,
@@ -85,7 +85,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	case <-b.Ready():
 	case <-time.After(startup):
 		b.Shutdown()
-		return fmt.Errorf("amqp.Use:  gateway not ready within %s (fail-closed): pubsub %s", startup, pubsub.URL())
+		return fmt.Errorf("amqp.Use:  gateway not ready within %s (fail-closed): pubsub %s", startup, bus.URL())
 	}
 
 	gateway = b
@@ -102,7 +102,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		}
 	}()
 
-	log.Info("amqp gateway serving", "addr", b.Addr(), "pubsub_url", pubsub.URL())
+	log.Info("amqp gateway serving", "addr", b.Addr(), "pubsub_url", bus.URL())
 	return nil
 }
 

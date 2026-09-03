@@ -27,10 +27,10 @@ package event
 // scaling ingest is scaling replicas, no handler changes.
 
 import (
-	"github.com/hanzoai/cloud"
 	"cmp"
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud"
 	"net/http"
 	"strings"
 	"time"

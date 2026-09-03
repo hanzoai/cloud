@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/pubsub"
+	"github.com/hanzoai/cloud/bus"
 	"github.com/hanzoai/commerce/infra"
 	"github.com/hanzoai/pubsub-go/jetstream"
 	psembed "github.com/hanzoai/pubsub/embed"
@@ -143,7 +143,7 @@ func TestEnsureNeverRetiresATenantStream(t *testing.T) {
 	_, cl := planeOn(t)
 	ctx := context.Background()
 	js := cl.JetStream()
-	tenant := pubsub.TenantPrefix + "acme-orders"
+	tenant := bus.TenantPrefix + "acme-orders"
 	squat(t, js, tenant)
 
 	err := EnsureEventStream(ctx, cl)
