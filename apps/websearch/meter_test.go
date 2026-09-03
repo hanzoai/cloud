@@ -191,7 +191,6 @@ func TestServiceCallerGetsTheFreeTier(t *testing.T) {
 func TestSearXNGEndpointBillsTheCaller(t *testing.T) {
 	l := planetest.Money(t, 100000)
 	braveAt(t, "brave")
-	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
 
 	t.Setenv(account.KeyEnv, testCSRFKey)
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})

@@ -19,11 +19,11 @@ package crawl
 // have into an error.
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"maps"
 	"net"

@@ -48,7 +48,6 @@ func seamApp(t *testing.T) (*zip.App, *int32) {
 	t.Cleanup(srv.Close)
 	t.Setenv("WEBSEARCH_ENGINES", "bing")
 	t.Setenv("WEBSEARCH_BING_URL", srv.URL)
-	t.Setenv("WEBSEARCH_API_KEY", "k")
 	// No cache, so every admitted call really asks the engine and the counter
 	// below is the number of times somebody was PAID. With the default TTL a
 	// second caller of the same query is served from memory and the count

@@ -41,7 +41,6 @@ func visit(t *testing.T, app *zip.App, extra map[string]string) (int, string) {
 
 func TestACookieAloneCannotSpendOnSearch(t *testing.T) {
 	mockBing(t, bingFixture)
-	t.Setenv("WEBSEARCH_API_KEY", "k")
 	app := mounted(t)
 
 	if st, body := visit(t, app, nil); st != http.StatusForbidden {
@@ -55,13 +54,14 @@ func TestACookieAloneCannotSpendOnSearch(t *testing.T) {
 		t.Errorf("a search with a bearer = 403 %s — the control must cost an API client nothing", body)
 	}
 	rq := httptest.NewRequest(http.MethodGet, "/v1/websearch/search?q=example", nil)
-	rq.Header.Set("X-API-Key", "k")
+	rq.Header.Set("X-User-Id", "u-acme")
+	rq.Header.Set("X-Org-Id", "acme")
 	resp, err := app.Test(rq)
 	if err != nil {
 		t.Fatalf("service search: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("the service key search = %d, want 200 — a caller that sends no cookie cannot be forged into", resp.StatusCode)
+		t.Errorf("the validated-principal search = %d, want 200 — a caller that sends no cookie cannot be forged into", resp.StatusCode)
 	}
 }
