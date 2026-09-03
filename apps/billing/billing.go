@@ -48,9 +48,9 @@
 package billing
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"net/url"
@@ -58,7 +58,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
@@ -125,7 +124,7 @@ type state struct {
 
 // Mount registers the customer-facing /v1/billing/* read surface on app.
 //
-// Every write below asks account.CSRF, which verifies a MAC the account process
+// Every write below asks cloud.CSRF, which verifies a MAC the account process
 // minted. Whether this process holds that key is not asked here: the catalog read
 // at /v1/billing/plans is public and answers no token at all, so a key question
 // gets between an anonymous caller and a price list it does not need.
@@ -285,12 +284,12 @@ var billingSubjectKeys = []string{"user", "userId", "customerId"}
 //
 // Scope is unchanged by this. The token is compared constant-time against the
 // configured COMMERCE_SERVICE_TOKEN by the predicate apps/account already owns
-// (account.IsServiceToken), and the org comes from X-Org-Id — which the gateway strips
+// (cloud.IsServiceToken), and the org comes from X-Org-Id — which the gateway strips
 // from every client request — never from a caller-supplied field. It grants no user, no
 // admin and no roles, so it is a READ resolution only: the money WRITE
 // (createPaymentMethod) and the user-scoped breakdown (usageAccounts, which needs
 // c.User()) keep asking principal.Org and refuse it.
-func readerOrg(c *zip.Ctx) (string, bool) { return account.ReaderOrg(c) }
+func readerOrg(c *zip.Ctx) (string, bool) { return cloud.ReaderOrg(c) }
 
 // proxy resolves the caller's OWN org (readerOrg), pins the commerce
 // billing subject to it on EVERY subject key (the client can NEVER widen scope — the

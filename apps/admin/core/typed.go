@@ -30,7 +30,6 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -99,7 +98,7 @@ func Admit(ctx context.Context) (*zip.Ctx, error) {
 // READ vs CHANGE is the distinction, and each has ONE gate. An operation reaching for
 // Admit when it changes something is then a visible choice rather than an omission.
 func Change(ctx context.Context) (*zip.Ctx, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	return Admit(ctx)
@@ -139,7 +138,7 @@ func AdmitScoped(ctx context.Context, s *cloud.Service[State]) (*zip.Ctx, error)
 // the caller it admits is an ordinary customer's own org admin rather than a SuperAdmin,
 // so the ambient session it rides is a customer's browser on the open web.
 func ChangeScoped(ctx context.Context, s *cloud.Service[State]) (*zip.Ctx, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	return AdmitScoped(ctx, s)

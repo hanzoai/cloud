@@ -1097,7 +1097,7 @@ func TestAWriteOffTheHTTPPathIsRefused(t *testing.T) {
 		// read, before the deadline starts, before the forge hears anything)
 		// would survive being deleted. The control's own words are the only
 		// evidence that it is what answered.
-		if !strings.Contains(err.Error(), account.Unattested) {
+		if !strings.Contains(err.Error(), cloud.Unattested) {
 			t.Errorf("%s off the HTTP path was refused by something other than the control: %v", tc.name, err)
 		}
 	}

@@ -92,19 +92,18 @@
 package websearch
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"strings"
 
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/crawl"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
@@ -239,7 +238,7 @@ func webSearch(ctx context.Context, in *webSearchQuery) (*webSearchResults, erro
 	if !principal.ValidatedFrom(ctx) {
 		return nil, zip.ErrUnauthorized("sign in to search the web")
 	}
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	q := strings.TrimSpace(in.Q)
@@ -403,7 +402,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// the call plane, the graph, the CLI — and asks the same control in its own
 	// preamble, which is the one place every seam passes through. One decision, two
 	// shapes, never two decisions.
-	g := app.Group("/v1/websearch", account.RequireCSRFOnSpend())
+	g := app.Group("/v1/websearch", cloud.RequireCSRFOnSpend())
 	// Both arms are ONE handler and one context. There is no net/http adaptor
 	// here any more, and the re-attachment that used to sit in this leaf went
 	// with it: c.Context() IS the context cloud.Bridge parked the validated

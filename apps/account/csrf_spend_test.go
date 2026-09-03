@@ -6,6 +6,7 @@ package account
 // pinning is that it asks both and applies them in the right order.
 
 import (
+	"github.com/hanzoai/cloud"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,7 +19,7 @@ func reachedIt(t *testing.T, path string, hdr map[string]string) (int, bool) {
 	t.Helper()
 	var ran bool
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Use(RequireCSRFOnSpend())
+	app.Use(cloud.RequireCSRFOnSpend())
 	app.Get(path, func(c *zip.Ctx) error {
 		ran = true
 		return c.NoContent(http.StatusNoContent)

@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
@@ -128,7 +127,7 @@ func (o ops) rollup(ctx context.Context, _ *cloud.Unit) (*plane.Rollup, error) {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) mode(ctx context.Context, in *plane.ModeIn) (*plane.Mode, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	org, err := principalOrg(ctx)
@@ -188,5 +187,5 @@ func mayMint(ctx context.Context) bool {
 	if !ok {
 		return false
 	}
-	return principal.IsSuperAdmin(c) || account.IsServiceToken(c)
+	return principal.IsSuperAdmin(c) || cloud.IsServiceToken(c)
 }

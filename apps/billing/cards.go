@@ -24,7 +24,6 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
@@ -115,7 +114,7 @@ func init() {
 // sale's sealed body verbatim. Re-rendering that body would hand a retrying
 // client different bytes for the same completed act.
 func subscribeWithCard(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := account.CSRF(c.Context()); err != nil {
+	if err := cloud.CSRF(c.Context()); err != nil {
 		return err
 	}
 	org, subject, err := payerOf(c)
@@ -204,7 +203,7 @@ func (o ops) setAutoRecharge(ctx context.Context, in *plane.AutoRechargeEdit) (*
 	// and the CLI reach this op without touching route middleware, and a browser
 	// authenticates this surface from an ambient session cookie that any origin's
 	// request carries. See changesSomething in change_control_test.go.
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	org, _, err := payer(ctx)

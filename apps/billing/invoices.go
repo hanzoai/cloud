@@ -21,7 +21,6 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
@@ -103,7 +102,7 @@ func (o ops) invoices(ctx context.Context, _ *cloud.Unit) (*plane.Invoices, erro
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) raiseInvoice(ctx context.Context, in *plane.RaiseIn) (*plane.Invoice, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	org, _, err := payer(ctx)
@@ -140,7 +139,7 @@ func (o ops) invoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice,
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) issueInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	org, _, err := payer(ctx)
@@ -160,7 +159,7 @@ func (o ops) issueInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Inv
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) voidInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	org, _, err := payer(ctx)
@@ -183,7 +182,7 @@ func (o ops) voidInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invo
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) collectInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Collected, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	org, _, err := payer(ctx)

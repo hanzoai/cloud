@@ -52,7 +52,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/internal/mint"
@@ -337,7 +336,7 @@ func (o referralOps) claim(ctx context.Context, body *claimRequest) (*claimView,
 	// Asked here rather than on the route because a route is one of the seams that
 	// reach an operation: zip wraps the route's handler, while MCP, the call plane,
 	// the graph and the CLI call the op with the caller already authenticated.
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	s := o.s

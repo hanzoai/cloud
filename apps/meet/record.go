@@ -45,7 +45,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	accountapp "github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -363,7 +362,7 @@ func (o ops) ready(ctx context.Context, name string, act bool) (principal.Princi
 	// passes it. The group still carries the same control for /getToken, which has no
 	// preamble of its own; one rule, two call sites, never two rules.
 	if act == changes {
-		if err := accountapp.CSRF(ctx); err != nil {
+		if err := cloud.CSRF(ctx); err != nil {
 			return no(err)
 		}
 	}

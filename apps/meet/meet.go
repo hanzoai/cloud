@@ -43,7 +43,6 @@
 package meet
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -51,6 +50,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"os"
 	"sort"
@@ -61,7 +61,6 @@ import (
 	// Aliased: this package's tests already bind `account` to a UUID literal, and
 	// an import that shadows a package-level identifier is a compile error in the
 	// test build only — green `go build`, red `go test`.
-	accountapp "github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/openapi"
@@ -871,7 +870,7 @@ var unsafe = map[string]bool{
 // SPA at meet.hanzo.ai, which is cross-origin and bearer-only and sends no cookie
 // at all.
 func requireCSRFOnWrites() zip.Handler {
-	gate := accountapp.RequireCSRF()
+	gate := cloud.RequireCSRF()
 	return func(c *zip.Ctx) error {
 		if !unsafe[c.Method()] {
 			return c.Next()

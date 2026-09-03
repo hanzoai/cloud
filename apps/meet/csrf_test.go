@@ -30,7 +30,7 @@ import (
 // sends no cookie at all — is unaffected.
 //
 // Mirrors apps/todo/typed_wire_test.go TestAmbientCookieWritesNeedCSRF,
-// because it is the same gate over the same account.RequireCSRF.
+// because it is the same gate over the same cloud.RequireCSRF.
 func TestAmbientCookieMintNeedsCSRF(t *testing.T) {
 	app := mount(t, "APIkey", "apisecret")
 
