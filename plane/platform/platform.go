@@ -30,9 +30,17 @@ const App = "platform"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.PlatformBuild,
 	plane.PlatformFleet,
 	plane.PlatformPush,
 	plane.PlatformRelease,
+}
+
+// PlatformBuild build one image from a repository at a commit.
+//
+// Calls plane.PlatformBuild on platform over the peer plane.
+func PlatformBuild(ctx context.Context, in *plane.BuildIn) (*plane.Queued, error) {
+	return plane.Ask[plane.BuildIn, plane.Queued](ctx, App, plane.PlatformBuild, in)
 }
 
 // PlatformFleet every app this org can observe.

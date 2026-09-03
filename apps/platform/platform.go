@@ -213,6 +213,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// which made OnGitPush's nil-when-unregistered a silent no-op for every push
 	// the fleet has ever served.
 	exposePush()
+	exposeBuild()
 
 	// The same trigger from the FORGE. Pushes land on git.hanzo.ai, a separate
 	// server whose refs never touch this fleet's receive-pack, so the two clients
