@@ -244,23 +244,24 @@ type Config struct {
 	// subjected to a per-request binding lookup, and a customer binding can never
 	// shadow a real Hanzo host. The apex is always treated as self.
 	SelfDomains []string
-	// FirstPartyApex is a SelfDomain (e.g. hanzo.ai) on which we serve a small set
-	// of OUR OWN first-party sites (cd/flow/gallery.hanzo.ai) — the brand's own
-	// pages, not customer sites. It uses the OPPOSITE security model to Apex: Apex
-	// is multi-tenant, so sites are the DEFAULT and a denylist (Reserved) carves out
-	// app hosts; the brand apex carries api/console/iam/kms/… and CANNOT afford a
-	// denylist gap (one missing label = a project shadowing a real host → the OAuth
-	// account-takeover in reserved.go), so here sites are OPT-IN: ONLY a label in
-	// FirstPartySites serves, everything else falls through to the normal pipeline,
-	// protected by default. Empty = no first-party sites (the multi-tenant-only
-	// default). The apex itself is unaffected (hanzo.app stays the site default).
-	FirstPartyApex  string
-	FirstPartySites []string
-	// FirstPartyOrg is the org that OWNS the first-party sites (hanzo). A first-party
-	// host resolves PINNED to this org — never unique-across-orgs — so a customer's
-	// same-named project can never be served on our internal apex. Empty ⇒ the
-	// first-party sites cannot resolve (fail-closed), so it must be set when
-	// FirstPartyApex is.
+	// FirstPartyApex is a SelfDomain (e.g. hanzo.ai) on which we serve OUR OWN
+	// sites — the brand's own pages, not customer sites.
+	//
+	// It uses the SAME security model as Apex: sites are the default and the
+	// Reserved denylist carves out our app hosts. It used to be the opposite, an
+	// opt-in allowlist (CLOUD_SITES_FIRSTPARTY), on the reasoning that this apex
+	// carries api/console/iam/kms and cannot afford a denylist gap. Two things
+	// retired that. The gap is not an account-takeover here, because resolution on
+	// this apex is PINNED to FirstPartyOrg — a customer's same-named project can
+	// never be served on it, so the worst case is our own org shadowing our own
+	// host. And one policy is better than two that can disagree about a label:
+	// createProject and BindHost already enforce Reserved, so the allowlist was a
+	// second gate answering the same question, kept by hand, in an env var.
+	//
+	// The obligation it takes on is real and is stated where it bites: adding an
+	// internal host to the estate means naming its label in Reserved in the same
+	// change. TestSiteSlugBrandApex is what fails when that is forgotten.
+	FirstPartyApex string
 	FirstPartyOrg string
 }
 
@@ -270,9 +271,8 @@ type Config struct {
 // serve/create/bind never disagree. It reads the resolver at request time.
 type Server struct {
 	apex            string
-	firstPartyApex  string          // internal apex serving OUR opt-in first-party sites (hanzo.ai); "" = none
-	firstPartySites map[string]bool // the explicit allowlist of first-party site labels on that apex
-	firstPartyOrg   string          // the org that owns the first-party sites — resolution is PINNED to it
+	brandApex string // the apex serving OUR OWN sites (hanzo.ai); "" = none
+	brandOrg  string // the org that owns them — resolution on brandApex is PINNED to it
 	admin           s3admin.Admin
 	log             luxlog.Logger
 }
@@ -291,35 +291,15 @@ func New(cfg Config, log luxlog.Logger) *Server {
 	// from the same environment (reserved.go seed).
 	SetReservedExtra(cfg.Reserved)
 	SetSelfDomains(selfOf(cfg))
-	// First-party apex (internal, opt-in sites) — normalize and build the explicit
-	// allowlist. Empty apex or empty owning org ⇒ disabled.
-	fpApex := strings.ToLower(strings.TrimSpace(cfg.FirstPartyApex))
-	fpOrg := strings.ToLower(strings.TrimSpace(cfg.FirstPartyOrg))
-	fpSites := map[string]bool{}
-	// First-party sites require BOTH an apex AND an owning org: the org PINS
+	// The brand apex serves sites owned by ONE org, and needs both: the org PINS
 	// resolution so a customer's same-named project can never shadow an internal
-	// host. Missing either ⇒ disabled (fail-closed) — no <label>.<fpApex> ever
-	// resolves as a site; every such host falls through to the normal pipeline.
-	if fpApex != "" && fpOrg != "" {
-		for _, l := range cfg.FirstPartySites {
-			l = strings.ToLower(strings.TrimSpace(l))
-			if l == "" {
-				continue
-			}
-			// Belt-and-suspenders on the brand apex (RED F-2): NEVER let a reserved
-			// label (api/login/wallet/console/…) be published as a first-party site,
-			// even if an operator lists it — those hosts must stay real app/auth
-			// surfaces. Drop it loudly; it can never resolve as a site.
-			if IsReserved(l) {
-				log.Warn("first-party site label is reserved — dropped", "label", l)
-				continue
-			}
-			fpSites[l] = true
-		}
-	} else {
-		fpApex = "" // no owning org ⇒ never serve a first-party site (fail-closed)
+	// host. Missing either ⇒ disabled (fail-closed).
+	brandApex := strings.ToLower(strings.TrimSpace(cfg.FirstPartyApex))
+	brandOrg := strings.ToLower(strings.TrimSpace(cfg.FirstPartyOrg))
+	if brandOrg == "" {
+		brandApex = ""
 	}
-	return &Server{apex: apex, firstPartyApex: fpApex, firstPartySites: fpSites, firstPartyOrg: fpOrg, admin: s3admin.New(), log: log.New("subsystem", "sites")}
+	return &Server{apex: apex, brandApex: brandApex, brandOrg: brandOrg, admin: s3admin.New(), log: log.New("subsystem", "sites")}
 }
 
 // Middleware is the host-router. Three outcomes, in order:
@@ -471,7 +451,7 @@ func (s *Server) resolveLive(ctx context.Context, key string) (Site, bool) {
 }
 
 // resolveLivePinned resolves a slug to a LIVE Site, org-PINNED for a first-party
-// host (ResolveOrg over s.firstPartyOrg — never the unique-across-orgs fallback, so
+// host (ResolveOrg over s.brandOrg — never the unique-across-orgs fallback, so
 // a customer's same-named project can never be served on our internal apex) and via
 // the normal resolver otherwise. Same ok=false failure modes as resolveLive.
 func (s *Server) resolveLivePinned(ctx context.Context, slug string, firstParty bool) (Site, bool) {
@@ -482,9 +462,9 @@ func (s *Server) resolveLivePinned(ctx context.Context, slug string, firstParty 
 	if r == nil {
 		return Site{}, false
 	}
-	site, found, err := r.ResolveOrg(ctx, s.firstPartyOrg, slug)
+	site, found, err := r.ResolveOrg(ctx, s.brandOrg, slug)
 	if err != nil {
-		s.log.Error("resolve failed", "slug", slug, "org", s.firstPartyOrg, "err", err)
+		s.log.Error("resolve failed", "slug", slug, "org", s.brandOrg, "err", err)
 		return Site{}, false
 	}
 	if !found || site.Status != "live" {
@@ -529,19 +509,25 @@ func (s *Server) siteSlug(host string) (slug string, firstParty bool, ok bool) {
 	if i := strings.IndexByte(host, ':'); i >= 0 {
 		host = host[:i] // strip any :port
 	}
-	// First-party apex (internal, e.g. hanzo.ai) — OPT-IN sites. ONLY an explicitly
-	// allow-listed label serves as a site; EVERY other `<label>.<firstPartyApex>`
-	// (api, console, iam, kms, world, chat, …) returns false and falls through to the
-	// normal /v1 + console pipeline, protected BY DEFAULT. There is no denylist to
-	// keep complete — the allowlist IS the boundary — so a NEW internal host can never
-	// be shadowed by a first-come project (the account-takeover in reserved.go).
-	// Terminal for this apex: a non-allow-listed host never reaches the multi-tenant
-	// branch below, and the label must still be a bare valid slug so a dotted key
-	// (`x.y.hanzo.ai`) can't match a map entry.
-	if s.firstPartyApex != "" {
-		fpSuffix := "." + s.firstPartyApex
-		if label, under := strings.CutSuffix(host, fpSuffix); under {
-			if s.firstPartySites[label] && !strings.Contains(label, ".") && slugRE.MatchString(label) {
+	// Brand apex (e.g. hanzo.ai). The RESERVED SET is the boundary — the same one
+	// createProject and BindHost enforce — so there is one policy here rather than
+	// two. It used to be a hand-kept opt-in allowlist (CLOUD_SITES_FIRSTPARTY),
+	// which meant every new site needed an operator to edit an env var, and the
+	// two gates could disagree about the same label.
+	//
+	// Dropping the allowlist is safe because resolution on this apex is PINNED to
+	// the owning org (resolveLivePinned → ResolveOrg): a customer's same-named
+	// project can never be served here, so the exposure is not the account-takeover
+	// reserved.go describes. What the reserved set must cover is OUR OWN internal
+	// hosts, and it names them — api, console, iam, kms, id, and the artifact and
+	// delivery plane (oci, pkg, ci, cd, s3, git).
+	//
+	// Terminal for this apex: a reserved host never reaches the multi-tenant branch
+	// below, and the label must still be a bare valid slug so a dotted key
+	// (`x.y.hanzo.ai`) cannot match.
+	if s.brandApex != "" {
+		if label, under := strings.CutSuffix(host, "."+s.brandApex); under {
+			if !IsReserved(label) && !strings.Contains(label, ".") && slugRE.MatchString(label) {
 				return label, true, true
 			}
 			return "", false, false
@@ -591,7 +577,7 @@ func (s *Server) serve(c *zip.Ctx, slug string, firstParty bool) error {
 	if firstParty {
 		// Internal first-party host — resolve PINNED to the owning org, never the
 		// unique-across-orgs fallback, so a customer's same-named project can't shadow it.
-		site, found, err = r.ResolveOrg(c.Context(), s.firstPartyOrg, slug)
+		site, found, err = r.ResolveOrg(c.Context(), s.brandOrg, slug)
 	} else {
 		site, found, err = r.Resolve(c.Context(), slug)
 	}

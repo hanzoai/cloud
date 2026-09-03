@@ -194,13 +194,12 @@ func TestSiteSlug(t *testing.T) {
 // PROTECTED. This opt-in allowlist is the security boundary that replaces the
 // denylist-completeness burden: on the brand's own domain a missing reserved label
 // must NOT become a publishable site (the OAuth account-takeover in reserved.go).
-func TestSiteSlugFirstParty(t *testing.T) {
+func TestSiteSlugBrandApex(t *testing.T) {
 	s := New(Config{
 		Apex:            "hanzo.app",
 		Reserved:        []string{"app", "api", "admin"},
 		SelfDomains:     []string{"hanzo.ai"},
 		FirstPartyApex:  "hanzo.ai",
-		FirstPartySites: []string{"cd", "flow", "gallery"},
 		FirstPartyOrg:   "hanzo",
 	}, luxlog.New("test"))
 	site := func(host, want string) {
@@ -210,31 +209,23 @@ func TestSiteSlugFirstParty(t *testing.T) {
 	}
 	notSite := func(host string) {
 		if slug, _, ok := s.siteSlug(host); ok {
-			t.Errorf("siteSlug(%q) = (%q,true), want not-a-site (protected)", host, slug)
+			t.Errorf("siteSlug(%q) = (%q,true), want not-a-site (reserved)", host, slug)
 		}
 	}
-	// Allow-listed internal sites serve on the brand apex.
-	site("cd.hanzo.ai", "cd")
+	// Non-reserved labels on the brand apex serve as sites, org-pinned.
+	site("gallery.hanzo.ai", "gallery")
+	site("world.hanzo.ai", "world")
 	site("flow.hanzo.ai", "flow")
-	site("Gallery.Hanzo.AI", "gallery") // case-insensitive
-	site("cd.hanzo.ai:443", "cd")       // port stripped
-	// THE BOUNDARY: every non-allow-listed brand-apex host is protected — it falls
-	// through to the normal /v1 + console pipeline, NEVER served as a site. This holds
-	// for real internal hosts reserved.go may never have listed (iam/kms/world/chat),
-	// so a first-come project can never shadow one.
-	notSite("api.hanzo.ai")
-	notSite("console.hanzo.ai")
-	notSite("iam.hanzo.ai") // not in baseReserved — protected anyway (opt-in default)
-	notSite("kms.hanzo.ai")
-	notSite("world.hanzo.ai")
-	notSite("chat.hanzo.ai")
-	notSite("models.hanzo.ai")
-	notSite("anything-unlisted.hanzo.ai")
-	notSite("cd.acme.hanzo.ai") // a dotted key can never match a bare allowlist entry
-	notSite("hanzo.ai")         // bare apex, no label
-	// The multi-tenant apex is unaffected: users' sites still resolve on hanzo.app.
-	site("my-cool-site.hanzo.app", "my-cool-site")
-	notSite("api.hanzo.app") // still reserved on the multi-tenant apex
+	site("gallery.hanzo.ai:443", "gallery")
+	// Reserved labels never do — our own hosts, including the artifact plane that
+	// was answering with a copy of the console before this changed.
+	for _, h := range []string{
+		"api.hanzo.ai", "console.hanzo.ai", "iam.hanzo.ai", "kms.hanzo.ai",
+		"oci.hanzo.ai", "pkg.hanzo.ai", "ci.hanzo.ai", "cd.hanzo.ai",
+		"s3.hanzo.ai", "git.hanzo.ai", "chat.hanzo.ai", "models.hanzo.ai",
+	} {
+		notSite(h)
+	}
 }
 
 // ---- middleware: passthrough vs terminal + resolver keying --------------
@@ -578,27 +569,32 @@ func headerMap(pairs [][2]string) map[string]string {
 	return m
 }
 
-// TestFirstPartyOrgPinned is the ship-blocker proof (RED #4): a first-party host
-// resolves through ResolveOrg PINNED to the owning org, NEVER the unique-across-orgs
-// Resolve — so a customer who names a project "cd" can never be served on cd.hanzo.ai.
-func TestFirstPartyOrgPinned(t *testing.T) {
+// TestBrandApexOrgPinned is the ship-blocker proof (RED #4): a host on the brand
+// apex resolves through ResolveOrg PINNED to the owning org, NEVER the
+// unique-across-orgs Resolve — so a customer who names a project "gallery" can
+// never be served on gallery.hanzo.ai.
+//
+// This pinning is what makes the reserved set sufficient on its own: the exposure
+// dropping the old allowlist could have reopened is a CUSTOMER shadowing one of
+// our hosts, and pinning makes that unrepresentable rather than merely refused.
+func TestBrandApexOrgPinned(t *testing.T) {
 	s := New(Config{
 		Apex: "hanzo.app", SelfDomains: []string{"hanzo.ai"},
-		FirstPartyApex: "hanzo.ai", FirstPartySites: []string{"cd"}, FirstPartyOrg: "hanzo",
+		FirstPartyApex: "hanzo.ai", FirstPartyOrg: "hanzo",
 	}, luxlog.New("test"))
-	fr := &fakeResolver{site: Site{Org: "hanzo", Slug: "cd", Status: "live", Bucket: "b", Prefix: "hanzo/cd"}, found: true}
+	fr := &fakeResolver{site: Site{Org: "hanzo", Slug: "gallery", Status: "live", Bucket: "b", Prefix: "hanzo/gallery"}, found: true}
 	SetResolver(fr)
 	defer SetResolver(nil)
 
 	// First-party host → org-pinned resolve, and NOT the unique-slug path.
-	slug, fp, ok := s.siteSlug("cd.hanzo.ai")
-	if !ok || !fp || slug != "cd" {
-		t.Fatalf("siteSlug(cd.hanzo.ai) = (%q,%v,%v), want (cd,true,true)", slug, fp, ok)
+	slug, fp, ok := s.siteSlug("gallery.hanzo.ai")
+	if !ok || !fp || slug != "gallery" {
+		t.Fatalf("siteSlug(gallery.hanzo.ai) = (%q,%v,%v), want (gallery,true,true)", slug, fp, ok)
 	}
 	if _, ok := s.resolveLivePinned(context.Background(), slug, fp); !ok {
 		t.Fatal("first-party resolve failed")
 	}
-	if len(fr.orgCalls) != 1 || fr.orgCalls[0] != "hanzo/cd" {
+	if len(fr.orgCalls) != 1 || fr.orgCalls[0] != "hanzo/gallery" {
 		t.Errorf("first-party did NOT org-pin: orgCalls=%v", fr.orgCalls)
 	}
 	if len(fr.calls) != 0 {
@@ -622,24 +618,29 @@ func TestFirstPartyOrgPinned(t *testing.T) {
 	}
 }
 
-// TestFirstPartyDropsReserved (RED F-2): a reserved label an operator mistakenly
-// lists in the first-party allowlist must NOT become a site on the brand apex —
-// api/login stay real auth surfaces; only clean labels (cd) serve.
-func TestFirstPartyDropsReserved(t *testing.T) {
+// TestBrandApexRefusesReserved is the boundary, and it is the ONLY one now.
+//
+// This replaced a test that a reserved label listed in CLOUD_SITES_FIRSTPARTY was
+// dropped from the allowlist. There is no allowlist: the reserved set decides, so
+// a NEW internal host is protected the moment its label is named there rather than
+// when an operator remembers to leave it out of an env var.
+//
+// The artifact and delivery labels are the ones that motivated the change — each
+// was answering with a copy of the console, and each must reach its own service.
+func TestBrandApexRefusesReserved(t *testing.T) {
 	s := New(Config{
-		Apex: "hanzo.app", Reserved: []string{"app", "api", "admin"},
-		SelfDomains:    []string{"hanzo.ai"},
-		FirstPartyApex: "hanzo.ai", FirstPartySites: []string{"cd", "flow", "gallery", "api", "login", "wallet"},
-		FirstPartyOrg: "hanzo",
+		Apex: "hanzo.app", SelfDomains: []string{"hanzo.ai"},
+		FirstPartyApex: "hanzo.ai", FirstPartyOrg: "hanzo",
 	}, luxlog.New("test"))
-	for _, l := range []string{"cd", "flow", "gallery"} {
+	for _, l := range []string{"gallery", "flow", "world"} {
 		if _, _, ok := s.siteSlug(l + ".hanzo.ai"); !ok {
-			t.Errorf("%s.hanzo.ai (clean label) should serve as a first-party site", l)
+			t.Errorf("%s.hanzo.ai is not reserved and should serve as a site", l)
 		}
 	}
-	for _, l := range []string{"api", "login", "wallet"} {
+	for _, l := range []string{"api", "login", "wallet", "console", "iam", "kms",
+		"oci", "pkg", "ci", "cd", "s3", "git"} {
 		if _, _, ok := s.siteSlug(l + ".hanzo.ai"); ok {
-			t.Errorf("%s.hanzo.ai (reserved) must be DROPPED from the first-party allowlist", l)
+			t.Errorf("%s.hanzo.ai is RESERVED and must never resolve as a site", l)
 		}
 	}
 }
