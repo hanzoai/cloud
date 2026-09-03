@@ -13,7 +13,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/plane"
-	gitplane "github.com/hanzoai/cloud/plane/git"
+	gitpeer "github.com/hanzoai/cloud/plane/git"
 	"github.com/zap-proto/zip"
 )
 
@@ -333,7 +333,7 @@ func tell(ctx context.Context, org, slug string, w want, p Project) error {
 	if who := cloud.Who(ctx).Org; who != org {
 		return fmt.Errorf("git: %s %s/%s: this call acts for %q", w, org, slug, who)
 	}
-	_, err := gitplane.GitPublish(ctx, &plane.Visibility{
+	_, err := gitpeer.GitPublish(ctx, &plane.Visibility{
 		Slug: slug, Name: p.Name, Description: p.Description, State: string(w),
 	})
 	if err != nil {

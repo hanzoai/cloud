@@ -8,7 +8,7 @@
 //
 // So platform reads the canonical store, and the ONLY question left is how it
 // reaches a process it does not share. It is a peer, so it is reached over the
-// peer plane: iamplane.IAMProjects, a ZAP call by NAME on iam's own socket.
+// peer plane: iampeer.IAMProjects, a ZAP call by NAME on iam's own socket.
 //
 // # What went away with the URL
 //
@@ -38,7 +38,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	iamplane "github.com/hanzoai/cloud/plane/iam"
+	iampeer "github.com/hanzoai/cloud/plane/iam"
 	model "github.com/hanzoai/iam/pkg/model"
 )
 
@@ -66,7 +66,7 @@ type canonicalProjects struct{}
 // contract or it depends on the callee's implementation, and only one of those
 // survives the two being deployed separately.
 func (canonicalProjects) List(ctx context.Context, org string) ([]*model.Project, error) {
-	out, err := iamplane.IAMProjects(cloud.For(ctx, org))
+	out, err := iampeer.IAMProjects(cloud.For(ctx, org))
 	if err != nil {
 		return nil, err
 	}

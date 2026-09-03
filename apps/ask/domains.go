@@ -33,8 +33,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/plane"
-	booksplane "github.com/hanzoai/cloud/plane/books"
-	projectsplane "github.com/hanzoai/cloud/plane/projects"
+	bookspeer "github.com/hanzoai/cloud/plane/books"
+	projectspeer "github.com/hanzoai/cloud/plane/projects"
 )
 
 // domain is one grounded peer behind the advisor: the name the answer is tagged
@@ -99,13 +99,13 @@ func domains() []Contributor {
 			name:     "books",
 			source:   "books/figures",
 			keywords: booksKeywords,
-			ask:      booksplane.BooksFigures,
+			ask:      bookspeer.BooksFigures,
 		},
 		domain{
 			name:     "projects",
 			source:   "projects/figures",
 			keywords: projectKeywords,
-			ask:      projectsplane.ProjectsFigures,
+			ask:      projectspeer.ProjectsFigures,
 		},
 		domain{
 			name:     "git",
