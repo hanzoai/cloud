@@ -93,3 +93,48 @@ func Model(ctx context.Context, role, floor string) string {
 	}
 	return ZenModel(name)
 }
+
+// Route is the ordered list of models an unnamed request runs on: the configured
+// default first, then the free tier of the same family.
+//
+// The free hop is what makes an unnamed request always answerable. A paid tier
+// can be unavailable on a deployment that does not carry it, or unaffordable for
+// an org that has spent its balance, and neither is a reason to answer a customer
+// with an error when a model we serve to everyone is sitting right there.
+//
+// It is the SAME family on purpose. Falling from enso to zen-free would answer as
+// a different product; falling to enso-free answers as a cheaper enso, which is
+// what the family means. A deployment whose default IS a free tier gets a one-hop
+// route rather than the same name twice.
+func Route(ctx context.Context) []string {
+	primary := Model(ctx, RoleDefault, DefaultModel)
+	free := FreeModel(primary)
+	if free == "" || free == primary {
+		return []string{primary}
+	}
+	return []string{primary, free}
+}
+
+// FreeModel is the free tier of a model's own family, or "" when it has none.
+//
+// The families are ours, so this is a fact about our own catalog rather than a
+// guess: enso and zen each publish a free tier, and `free` is the generic one for
+// anything else we serve. An upstream name has no family here and gets "" — its
+// price is upstream cost and there is no free tier of somebody else's model.
+func FreeModel(name string) string {
+	name = strings.TrimSpace(strings.ToLower(name))
+	switch {
+	case name == "":
+		return ""
+	case strings.HasSuffix(name, "-free"), name == "free":
+		return "" // already the floor of its family
+	case strings.HasPrefix(name, "enso"):
+		return "enso-free"
+	case strings.HasPrefix(name, "zen"):
+		return "zen-free"
+	case UpstreamModel(name):
+		return "" // not ours; no family, no free tier
+	default:
+		return "free"
+	}
+}
