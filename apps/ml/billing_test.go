@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/zap-proto/zip"
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -48,7 +48,7 @@ func (b *billDouble) lastDebit() (string, []byte) { return b.peer.Org(), b.peer.
 
 func newBilledMLService(t *testing.T, commerceURL string) *cloud.Service[state] {
 	t.Helper()
-	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-token", Org: "hanzo"})
+	m, err := metering.New(metering.Config{BaseURL: commerceURL, Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}

@@ -28,7 +28,7 @@ import (
 // catches.
 func TestRelayedEndpointsAreMountedAndFailClosed(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `{}`}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 
 	for _, r := range []struct{ method, path string }{
 		{http.MethodGet, "/v1/billing/accounts"},
@@ -92,7 +92,7 @@ func TestRelayedEndpointsAreMountedAndFailClosed(t *testing.T) {
 // page that requires a session is a paywall in front of the prices.
 func TestTheCatalogAnswersAnonymously(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `{}`}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 
 	code, body := call(t, app, http.MethodGet, "/v1/billing/plans", "", "")
 	if code == http.StatusNotFound {

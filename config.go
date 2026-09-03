@@ -234,16 +234,11 @@ type Config struct {
 	// CommerceHTTPURL is the commerce service base over HTTP (the metering
 	// client speaks net/http, not ZAP). Empty disables the gate entirely.
 	//
-	// CommerceServiceToken is the admin-scoped commerce S2S token. It is a
-	// SECRET sourced from a KMS-backed secret the operator injects as
-	// COMMERCE_SERVICE_TOKEN — never hard-coded or read from disk here.
-	//
 	// BillingFailOpen flips the gate to allow-on-error. Default is
 	// fail-closed (deny when balance can't be determined), matching the
 	// gateway. Set only where availability outranks billing.
-	CommerceHTTPURL      string
-	CommerceServiceToken string
-	BillingFailOpen      bool
+	CommerceHTTPURL string
+	BillingFailOpen bool
 
 	// The spend gate (middleware_spend.go) is deliberately NOT configured here. It reads
 	// the `paywall_enforced` platform switch and nothing else, so the admin cockpit is
@@ -354,10 +349,9 @@ func LoadConfig() *Config {
 		ShardPeers:        environ.Or("CLOUD_PEERS", ""),
 		ShardSelf:         cmp.Or(environ.Or("CLOUD_POD_NAME", ""), environ.Or("POD_NAME", "")),
 		PeerSelector:      environ.Or("CLOUD_PEER_SELECTOR", ""),
-		// Billing gate (KMS-backed COMMERCE_SERVICE_TOKEN; never plaintext).
-		CommerceHTTPURL:      environ.Or("CLOUD_COMMERCE_HTTP_URL", ""),
-		CommerceServiceToken: environ.Or("COMMERCE_SERVICE_TOKEN", ""),
-		BillingFailOpen:      getenvBool("BILLING_FAIL_OPEN"),
+		// Billing gate.
+		CommerceHTTPURL: environ.Or("CLOUD_COMMERCE_HTTP_URL", ""),
+		BillingFailOpen: getenvBool("BILLING_FAIL_OPEN"),
 		// AI inference gateway. CLOUD_AI_API_KEY (KMS-backed) is an optional static
 		// override; absent it, the AI client authenticates via M2M using the
 		// binary's own IAM identity (IAM_CLIENT_ID / IAM_CLIENT_SECRET) — no static

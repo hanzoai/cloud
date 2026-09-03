@@ -116,10 +116,9 @@ func TestCampaignDanglingProductRejectedOnWrite(t *testing.T) {
 	}
 }
 
-// ---- commerceStorefront.ProductExists: the real S2S lookup (in-process transport) ----
+// ---- commerceStorefront.ProductExists: the real lookup (in-process transport) ----
 
 func TestCommerceStorefrontProductExists(t *testing.T) {
-	t.Setenv(commerceTokenEnv, "svc-admin-token")
 	t.Setenv(commerceURLEnv, "") // force the in-process placeholder base
 
 	var gotPath, gotOrg, gotAuth string
@@ -142,7 +141,7 @@ func TestCommerceStorefrontProductExists(t *testing.T) {
 		t.Fatalf("valentina must exist: ok=%v err=%v", ok, err)
 	}
 	// Tenant-pinned + admin-bearer, exactly like the publish edge.
-	if gotPath != "/v1/product/valentina" || gotOrg != "karma" || gotAuth != "Bearer svc-admin-token" {
+	if gotPath != "/v1/product/valentina" || gotOrg != "karma" || gotAuth != "" {
 		t.Errorf("lookup not correctly pinned: path=%q org=%q auth=%q", gotPath, gotOrg, gotAuth)
 	}
 
@@ -152,9 +151,10 @@ func TestCommerceStorefrontProductExists(t *testing.T) {
 		t.Fatalf("ghost must resolve-absent (ok=false,nil): ok=%v err=%v", ok, err)
 	}
 
-	// No service token ⇒ errNotConfigured ⇒ the integrity gate skips.
-	t.Setenv(commerceTokenEnv, "")
+	// No commerce edge — no co-resident handler and no URL — ⇒ errNotConfigured ⇒
+	// the integrity gate skips.
+	transport.SetHandler(nil)
 	if _, err := newStorefront().ProductExists(context.Background(), "karma", "valentina"); err != errNotConfigured {
-		t.Fatalf("no token must be errNotConfigured, got %v", err)
+		t.Fatalf("no commerce edge must be errNotConfigured, got %v", err)
 	}
 }

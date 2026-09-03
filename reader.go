@@ -3,59 +3,51 @@
 package cloud
 
 import (
-	"crypto/subtle"
-	"strings"
+	"context"
+	"net/http"
 
+	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
 
-// Who a money READ is for, where the two facts it reads already live.
+// Who a money READ is for, and how a caller's identity crosses the in-process hop
+// to commerce.
 //
-// This was exported from apps/account and billing and commerce imported that app
-// to reach it. Neither function touches account: one compares a bearer to an
-// environment value, the other composes that with [principal.Org]. The root
-// already imports principal, so the import edge bought an indirection and nothing
-// else.
-//
-// It is NOT a call to another subsystem and must not become one. Both answers are
-// derived from the request in hand — a header and a validated claim — so asking a
-// peer would be a network round trip to re-read what the caller already sent.
-
-// IsServiceToken reports whether the request bears the trusted service credential.
-//
-// Constant-time, and false whenever the credential is unset, so a deployment that
-// configures none admits nobody by this route rather than everybody.
-func IsServiceToken(c *zip.Ctx) bool {
-	token := strings.TrimSpace(environ.Or("COMMERCE_SERVICE_TOKEN", ""))
-	if token == "" {
-		return false
-	}
-	bearer := strings.TrimSpace(strings.TrimPrefix(c.Header("Authorization"), "Bearer "))
-	return bearer != "" && subtle.ConstantTimeCompare([]byte(bearer), []byte(token)) == 1
-}
+// ReaderOrg was exported from apps/account and billing and commerce imported that
+// app to reach it; it is [principal.Org] and nothing else. It used to also admit
+// a shared service token naming any tenant in X-Org-Id — commerce authenticating
+// a caller IAM had never seen — and that arm is gone with the token. A service
+// that reads a tenant's books over the plane states the tenant through cloud.For
+// and reaches callerOrg there; over HTTP it is a validated principal or nobody.
 
 // ReaderOrg answers which tenant a money read is scoped to: the validated
-// principal's org, or — for a trusted service — the org it names in X-Org-Id.
-//
-// ONE rule, in one place, because it drifted twice and both drifts were outages.
-// Every app is its own process, so an in-process reader hook cannot reach ai; it
-// asks bearing the service credential and no session, and a handler consulting
-// only the validated principal can answer nothing but "who are you".
-// /v1/billing/balance learned that, /v1/billing/tier did not, and neither did the
-// plane op behind it — one host, one token, three answers.
-//
-// It widens nothing. A validated principal still wins, and a service is believed
-// about the org only because it holds a credential no customer has.
+// principal's org, or nothing.
 func ReaderOrg(c *zip.Ctx) (string, bool) {
-	if org, ok := principal.Org(c); ok {
-		return org, true
-	}
-	if IsServiceToken(c) {
-		if org := strings.TrimSpace(c.Org()); org != "" {
-			return org, true
+	return principal.Org(c)
+}
+
+// carryIdentity is the transport's identity carrier (transport.SetIdentity): it
+// says who a request the commerce transport dispatches in-process is from. It
+// is the platform — the reserved admin org as home owner, which is what IAM
+// mints for the platform's own application — scoped to the org the sender named
+// in X-Org-Id, or failing that the org this call acts for (a validated
+// principal's, or the one a background job stated through cloud.For). A call
+// that acts for nobody names no org, and commerce refuses it.
+//
+// That is exactly what the shared service token used to assert, minus the
+// secret: nothing outside this process can dispatch through the transport, so
+// the hop itself is the proof, the way a plane call's caller is. Commerce's
+// money routes are Admin-masked for the platform, not for a tenant's user, and
+// this is the platform reading a tenant's books on its own behalf — the edge
+// gate authorizing a spend, the billing app answering a balance — never the
+// user acting as themselves.
+func carryIdentity(ctx context.Context, h http.Header) {
+	if h.Get(authz.HeaderOrg) == "" {
+		if org, ok := Tenant(ctx); ok {
+			h.Set(authz.HeaderOrg, org)
 		}
 	}
-	return "", false
+	h.Set(authz.HeaderUser, "platform")
+	h.Set(authz.HeaderUserOwner, authz.AdminOrg)
 }

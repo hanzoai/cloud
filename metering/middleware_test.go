@@ -76,7 +76,7 @@ func TestMiddleware_PrePayLifecycle(t *testing.T) {
 	srv := stub.server()
 	defer srv.Close()
 
-	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Token: "t", Org: "hanzo"})
+	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Org: "hanzo"})
 	served := 0
 	h := c.Middleware(metering.MiddlewareConfig{
 		Provider: "enso",
@@ -135,7 +135,7 @@ func TestMiddleware_GatesAndRecords(t *testing.T) {
 	srv := stub.server()
 	defer srv.Close()
 
-	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Token: "t", Org: "hanzo"})
+	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Org: "hanzo"})
 
 	handlerHit := false
 	h := c.Middleware(metering.MiddlewareConfig{
@@ -184,7 +184,7 @@ func TestMiddleware_Denies402_WhenNoBalance(t *testing.T) {
 	srv := stub.server()
 	defer srv.Close()
 
-	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Token: "t", Org: "hanzo"})
+	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Org: "hanzo"})
 	handlerHit := false
 	h := c.Middleware(metering.MiddlewareConfig{
 		Provider: "search",
@@ -219,7 +219,7 @@ func TestMiddleware_Denies402_SpendCap_WhenFundedButOverCap(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Token: "t", Org: "hanzo"})
+	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Org: "hanzo"})
 	handlerHit := false
 	h := c.Middleware(metering.MiddlewareConfig{
 		Provider: "search",
@@ -246,7 +246,7 @@ func TestMiddleware_FailClosed503_WhenCommerceDown(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Token: "t", Org: "hanzo"})
+	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Org: "hanzo"})
 	h := c.Middleware(metering.MiddlewareConfig{
 		Provider: "search",
 		Price:    func(*http.Request, int, metering.AuthInput) int64 { return 7 },
@@ -266,7 +266,7 @@ func TestMiddleware_Skip_Bypasses(t *testing.T) {
 	srv := stub.server()
 	defer srv.Close()
 
-	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Token: "t", Org: "hanzo"})
+	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Org: "hanzo"})
 	handlerHit := false
 	h := c.Middleware(metering.MiddlewareConfig{
 		Provider: "search",
@@ -295,7 +295,7 @@ func TestMiddleware_OnlyChargesSuccess(t *testing.T) {
 	srv := stub.server()
 	defer srv.Close()
 
-	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Token: "t", Org: "hanzo"})
+	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Org: "hanzo"})
 	h := c.Middleware(metering.MiddlewareConfig{
 		Provider: "search",
 		Price: func(_ *http.Request, status int, _ metering.AuthInput) int64 {

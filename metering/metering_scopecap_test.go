@@ -37,7 +37,7 @@ func (rc *routingCommerce) server(t *testing.T) *httptest.Server {
 
 func capClient(t *testing.T, srv *httptest.Server) *metering.Client {
 	t.Helper()
-	c, err := metering.New(metering.Config{BaseURL: srv.URL, Token: "svc", Org: "acme"})
+	c, err := metering.New(metering.Config{BaseURL: srv.URL, Org: "acme"})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestAuthorizeVerdict_ProjectValidatedForwarded(t *testing.T) {
 		_, _ = w.Write([]byte(`{"allow":true}`))
 	}))
 	t.Cleanup(srv.Close)
-	c, err := metering.New(metering.Config{BaseURL: srv.URL, Token: "svc", Org: "acme"})
+	c, err := metering.New(metering.Config{BaseURL: srv.URL, Org: "acme"})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

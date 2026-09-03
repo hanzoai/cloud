@@ -51,7 +51,7 @@ var untypedByDesign = map[string]string{
 // under the same prefix and holding this package to another's surface would make
 // the gate fail for work it cannot do.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
-	app := mountApp(t, "", "")
+	app := mountApp(t, "")
 	doc, err := openapi.Spec(app, openapi.Info{Title: "billing", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
@@ -107,7 +107,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 // description reaches the document, every generated SDK and the MCP tool list as
 // a name and a shape with nothing saying what it does.
 func TestEveryTypedOpIsDescribed(t *testing.T) {
-	doc, err := openapi.Spec(mountApp(t, "", ""), openapi.Info{Title: "billing", Version: "v1"})
+	doc, err := openapi.Spec(mountApp(t, ""), openapi.Info{Title: "billing", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}

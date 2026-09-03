@@ -16,9 +16,9 @@ import (
 
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/org"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/ha"
@@ -29,11 +29,11 @@ import (
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
-	"github.com/hanzoai/cloud/s3admin"
 	"github.com/hanzoai/cloud/clients"
+	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/money"
+	"github.com/hanzoai/cloud/s3admin"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -64,6 +64,7 @@ import (
 // (plane.Ask — ZAP bytes on the peer's own socket, addressed by name). JSON
 // happens only at the gateway/ingress edge, through the zip jsonenc helper.
 func BuildDeps(cfg *Config) Deps {
+	transport.SetIdentity(carryIdentity)
 	logger := luxlog.New("cloud")
 
 	// ONE logger, and this is where it becomes reachable without being carried.
@@ -202,7 +203,6 @@ func buildMeteringClient(cfg *Config, log luxlog.Logger) *metering.Client {
 	}
 	m, err := metering.New(metering.Config{
 		BaseURL: base,
-		Token:   cfg.CommerceServiceToken,
 		Org:     cfg.Brand, // X-Org-Id default for S2S; per-request org overrides.
 		// Honor the documented METERING_TEST env: when "true", route every debit to
 		// commerce's TEST/sandbox books (fin.RecordUsage in.Test=true) so a staging /

@@ -19,7 +19,7 @@ const multiProductLedger = `{"user":"maxpower","count":3,"usage":[` +
 // metadata.product), from the SAME charged ledger — no filter given.
 func TestUsageHandler_InjectsProduct(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: multiProductLedger}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 
 	code, body := call(t, app, http.MethodGet, "/v1/billing/usage", "maxpower/dave", "maxpower")
 	if code != 200 {
@@ -47,7 +47,7 @@ func TestUsageHandler_InjectsProduct(t *testing.T) {
 // ?product= filters server-side through the real route (was silently ignored).
 func TestUsageHandler_FilterByProduct(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: multiProductLedger}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 
 	code, body := call(t, app, http.MethodGet, "/v1/billing/usage?product=s3", "maxpower/dave", "maxpower")
 	if code != 200 {
@@ -75,7 +75,7 @@ func TestUsageHandler_FilterByProduct(t *testing.T) {
 // ?groupBy=product reduces to a per-product spend rollup through the real route.
 func TestUsageHandler_GroupByProduct(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: multiProductLedger}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 
 	code, body := call(t, app, http.MethodGet, "/v1/billing/usage?groupBy=product", "maxpower/dave", "maxpower")
 	if code != 200 {
@@ -108,7 +108,7 @@ func TestUsageHandler_GroupByProduct(t *testing.T) {
 // a non-200, so an upstream failure is never masked as an (empty) success.
 func TestUsageHandler_UpstreamErrorPassthrough(t *testing.T) {
 	f := &fakeCommerce{status: 500, body: `{"error":"boom"}`}
-	app := mountApp(t, f.server(t).URL, "svc-token")
+	app := mountApp(t, f.server(t).URL)
 
 	code, body := call(t, app, http.MethodGet, "/v1/billing/usage?product=functions", "maxpower/dave", "maxpower")
 	if code != 500 || string(body) != `{"error":"boom"}` {

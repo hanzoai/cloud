@@ -14,11 +14,6 @@ const (
 	// Default: http://commerce.hanzo.svc.cluster.local:8001
 	EnvBaseURL = "COMMERCE_URL"
 
-	// EnvToken is the commerce service token (admin-scoped S2S). The operator
-	// wires this from a KMS-backed secret; it is NEVER stored in plaintext in
-	// the repo or image.
-	EnvToken = "COMMERCE_SERVICE_TOKEN"
-
 	// EnvOrg is the default tenant org slug (X-Org-Id) for S2S calls when a
 	// request carries no org. Default: hanzo.
 	EnvOrg = "COMMERCE_SERVICE_ORG"
@@ -63,7 +58,6 @@ func ConfigFromEnv() Config {
 
 	return Config{
 		BaseURL:   base,
-		Token:     environ.Or(EnvToken, ""),
 		Org:       org,
 		TierAware: envTrue(EnvTierAware),
 		FailOpen:  envTrue(EnvFailOpen),

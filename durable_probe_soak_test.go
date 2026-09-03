@@ -34,8 +34,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/hanzoai/cloud/s3admin"
 	"github.com/hanzoai/cloud/internal/org"
+	"github.com/hanzoai/cloud/s3admin"
 )
 
 func TestProbeCASSoak_Staging(t *testing.T) {

@@ -1,12 +1,12 @@
 package content
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"net/url"
@@ -47,8 +47,7 @@ const (
 	// (clients/{account,admin,authors,affiliates,referrals}). The token is the
 	// deployment-wide admin service bearer; commerce's EdgeAuth trusts the X-Org-Id
 	// header ONLY behind it, so every call stays pinned to the validated tenant.
-	commerceURLEnv   = "CLOUD_COMMERCE_HTTP_URL"
-	commerceTokenEnv = "COMMERCE_SERVICE_TOKEN"
+	commerceURLEnv = "CLOUD_COMMERCE_HTTP_URL"
 
 	// assetBaseEnv is the public object-store base the org's studio output is served
 	// from; an Asset's `file` is an object KEY under it (orgs/<org>/output/...). The
@@ -123,9 +122,8 @@ type StorefrontResult struct {
 // read at call time so a late-provisioned deployment arms without a remount; http is the
 // self-routing commerce transport (in-process dispatch when co-resident).
 type commerceStorefront struct {
-	base  string
-	token func() string
-	http  *http.Client
+	base string
+	http *http.Client
 }
 
 // newStorefront builds the real commerce Storefront. Wired at Mount as the ONE place
@@ -133,9 +131,8 @@ type commerceStorefront struct {
 // a deployment sources from KMS) on every call, so it is never held in a manifest.
 func newStorefront() Storefront {
 	return commerceStorefront{
-		base:  transport.BaseURL(environ.Or(commerceURLEnv, "")),
-		token: func() string { return environ.Or(commerceTokenEnv, "") },
-		http:  transport.Client(storefrontTimeout),
+		base: transport.BaseURL(environ.Or(commerceURLEnv, "")),
+		http: transport.Client(storefrontTimeout),
 	}
 }
 
@@ -192,11 +189,10 @@ func (s commerceStorefront) Publish(ctx context.Context, org string, req Storefr
 // resolved-but-absent (a real dangling handle); a missing token / unreachable commerce
 // or an auth rejection ⇒ errNotConfigured (the gate skips); anything else ⇒ errUpstream.
 func (s commerceStorefront) ProductExists(ctx context.Context, org, handle string) (bool, error) {
-	token := s.token()
-	if s.base == "" || token == "" {
+	if s.base == "" {
 		return false, errNotConfigured
 	}
-	status, _, err := s.do(ctx, http.MethodGet, "/v1/product/"+url.PathEscape(handle), org, token, nil)
+	status, _, err := s.do(ctx, http.MethodGet, "/v1/product/"+url.PathEscape(handle), org, nil)
 	if err != nil {
 		return false, err
 	}
@@ -215,7 +211,7 @@ func (s commerceStorefront) ProductExists(ctx context.Context, org, handle strin
 // do performs one S2S commerce request: admin bearer + X-Org-Id (commerce trusts the
 // org header ONLY behind the service token), over the self-routing commerce transport.
 // apps/account/topup.go carried the same commerceDo until 0b0f2599a deleted it.
-func (s commerceStorefront) do(ctx context.Context, method, path, org, token string, body []byte) (int, []byte, error) {
+func (s commerceStorefront) do(ctx context.Context, method, path, org string, body []byte) (int, []byte, error) {
 	var rdr io.Reader
 	if body != nil {
 		rdr = bytes.NewReader(body)
@@ -228,7 +224,6 @@ func (s commerceStorefront) do(ctx context.Context, method, path, org, token str
 	if body != nil {
 		reqHTTP.Header.Set("Content-Type", "application/json")
 	}
-	reqHTTP.Header.Set("Authorization", "Bearer "+token)
 	reqHTTP.Header.Set("X-Org-Id", org)
 
 	resp, err := s.http.Do(reqHTTP)

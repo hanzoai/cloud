@@ -284,7 +284,7 @@ func (o ops) detachMethod(ctx context.Context, in *methodRef) (*plane.Detachment
 		return commercepeer.BillingMethodDetach(ctx, &plane.MethodRef{
 			ID:         in.ID,
 			Subject:    subject,
-			Privileged: principal.IsSuperAdmin(c) || cloud.IsServiceToken(c),
+			Privileged: principal.IsSuperAdmin(c),
 		})
 	})
 }

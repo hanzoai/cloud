@@ -214,7 +214,7 @@ func TestCommerceGateRefusesAnOverCapRequest(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	m, err := metering.New(metering.Config{BaseURL: srv.URL, Token: "t", Org: "acme"})
+	m, err := metering.New(metering.Config{BaseURL: srv.URL, Org: "acme"})
 	if err != nil {
 		t.Fatal(err)
 	}

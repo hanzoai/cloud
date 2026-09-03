@@ -20,8 +20,8 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // ── Workers AI model validation (the SSRF guard) ────────────────────────────────
@@ -334,7 +334,7 @@ func TestWorkersAIMetersUnifiedSpine(t *testing.T) {
 	t.Setenv("CLOUD_AI_BYO_FLOOR_UUSD", "0")       // isolate the token-proportional debit (floor tested separately)
 
 	bill := &billStub{}
-	m, err := metering.New(metering.Config{BaseURL: bill.server(t).URL, Token: "svc", Org: "hanzo"})
+	m, err := metering.New(metering.Config{BaseURL: bill.server(t).URL, Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestWorkersAIBrokeOrgRefusedOnNonText(t *testing.T) {
 	t.Setenv("CLOUD_AI_BYO_FLOOR_UUSD", "100") // floor on ⇒ gate always runs
 
 	bill := &billStub{broke: true} // 0 balance
-	m, err := metering.New(metering.Config{BaseURL: bill.server(t).URL, Token: "svc", Org: "hanzo"})
+	m, err := metering.New(metering.Config{BaseURL: bill.server(t).URL, Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
@@ -412,7 +412,7 @@ func TestWorkersAINoUsageBillsFloor(t *testing.T) {
 	t.Setenv("CLOUD_AI_BYO_FLOOR_UUSD", "100")
 
 	bill := &billStub{}
-	m, err := metering.New(metering.Config{BaseURL: bill.server(t).URL, Token: "svc", Org: "hanzo"})
+	m, err := metering.New(metering.Config{BaseURL: bill.server(t).URL, Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}

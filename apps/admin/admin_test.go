@@ -66,7 +66,7 @@ func mountService(t *testing.T, iamURL, commerceURL, healthURL string) (func(met
 	compose(app)
 	s := &cloud.Service[core.State]{State: core.State{
 		IAM:      iam.New(iamURL),
-		Commerce: commerce.New(commerceURL, "test-token"),
+		Commerce: commerce.New(commerceURL),
 		Health:   health.New(healthURL),
 		DO:       digitalocean.New(""), // no token → honest not-configured unless a test overrides s.State.DO
 		// The harness enables ONE white-label tenant — "maxpower" (the org orgAdminHdr

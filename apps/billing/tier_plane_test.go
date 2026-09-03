@@ -40,7 +40,6 @@ import (
 // the op is invoked for. The stub stands in for commerce and records what it
 // was told.
 func TestTheOrgTheEndpointResolvedIsTheOrgThePlaneOpActsFor(t *testing.T) {
-	const token = "test-commerce-service-token"
 
 	// The stub has to be REACHABLE as commerce, not merely registered: plane.Ask
 	// resolves the peer by name (zip.Serving), and without that it answers
@@ -71,11 +70,11 @@ func TestTheOrgTheEndpointResolvedIsTheOrgThePlaneOpActsFor(t *testing.T) {
 	}
 	defer func() { _ = stop() }()
 
-	app := mountApp(t, "", token)
+	app := mountApp(t, "")
 
-	code, body := s2sCall(t, app, "/v1/billing/tier?user=hanzo", token, "hanzo")
+	code, body := userCall(t, app, "/v1/billing/tier?user=hanzo", "u1", "hanzo")
 	if code != http.StatusOK {
-		t.Fatalf("the trusted service did not reach the op: %d %s", code, body)
+		t.Fatalf("the validated principal did not reach the op: %d %s", code, body)
 	}
 	// The whole point: the op was invoked FOR the tenant the endpoint admitted,
 	// not for nobody. Empty here is the production 403 — the op reached, and
@@ -91,5 +90,5 @@ func TestTheOrgTheEndpointResolvedIsTheOrgThePlaneOpActsFor(t *testing.T) {
 	// whether the service path ought to name the org as the subject, is a
 	// question about which wallet a tenant-wide read belongs to — not about
 	// whether the tenant survived the hop, which is what this test is for.
-	t.Logf("subject on the service path: %q (no user header to resolve one from)", sawSubject)
+	t.Logf("subject on the endpoint path: %q", sawSubject)
 }

@@ -32,6 +32,7 @@
 package transport
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -159,6 +160,18 @@ func goroutineID() int64 {
 // roundTripper dispatches to the in-process commerce handler when one is published,
 // else to fallback (plain HTTP). The gin engine routes on req.URL.Path, so the host
 // in the (placeholder or real) base is irrelevant when co-resident.
+// identity is how the caller crosses the in-process hop. The co-resident
+// commerce boundary authenticates from the gateway-minted identity headers, and
+// a request built here carries none of them, so a dispatch without this would
+// arrive as nobody. The root registers it at boot — only the root can reach the
+// request a context is bound to, and this package must not import the root
+// (build.go imports this package). It sets the headers the sender did not set,
+// and nothing else. It replaced a shared bearer every sender used to attach.
+var identity atomic.Pointer[func(context.Context, http.Header)]
+
+// SetIdentity registers the identity carrier. Called once, at boot, by the root.
+func SetIdentity(fn func(ctx context.Context, h http.Header)) { identity.Store(&fn) }
+
 type roundTripper struct{ fallback http.RoundTripper }
 
 func (rt roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -186,6 +199,9 @@ func (rt roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		// Callers build CLIENT-style requests (http.NewRequest → empty
 		// RequestURI); the in-process dispatch is SERVER-side, and the fiber
 		// pipeline routes on RequestURI. Normalize here — the one client.
+		if fn := identity.Load(); fn != nil {
+			(*fn)(req.Context(), req.Header)
+		}
 		if req.RequestURI == "" {
 			req.RequestURI = req.URL.RequestURI()
 		}

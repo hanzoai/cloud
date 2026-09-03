@@ -35,10 +35,10 @@ package admin
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/url"
 	"sort"
 	"strconv"
@@ -88,7 +88,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		Base: b,
 		State: core.State{
 			IAM:        iam.New(iamBase(deps)),
-			Commerce:   commerce.New(transport.BaseURL(environ.Or("CLOUD_COMMERCE_HTTP_URL", "")), environ.Or("COMMERCE_SERVICE_TOKEN", "")),
+			Commerce:   commerce.New(transport.BaseURL(environ.Or("CLOUD_COMMERCE_HTTP_URL", ""))),
 			Health:     health.New(o11yHealthURL()),
 			DO:         digitalocean.New(doTokenFromEnv()),
 			AuditStore: deps.Audit,

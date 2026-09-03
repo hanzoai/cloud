@@ -187,5 +187,5 @@ func mayMint(ctx context.Context) bool {
 	if !ok {
 		return false
 	}
-	return principal.IsSuperAdmin(c) || cloud.IsServiceToken(c)
+	return principal.IsSuperAdmin(c)
 }

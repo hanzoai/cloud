@@ -193,12 +193,11 @@ func TestTransitionSkipsNonCatalogAsset(t *testing.T) {
 	}
 }
 
-// With no commerce edge configured (no service token, no co-resident handler), a
+// With no commerce edge configured (no URL, no co-resident handler), a
 // published catalog asset records an honest "not_configured" storefront status and the
 // status change still succeeds — never a 5xx, never a rollback.
 func TestTransitionStorefrontFailClosed(t *testing.T) {
 	transport.SetHandler(nil) // ensure no co-resident commerce
-	t.Setenv(commerceTokenEnv, "")
 	t.Setenv(commerceURLEnv, "")
 
 	app := mountContent(t)
@@ -323,7 +322,6 @@ func TestCommerceStorefrontWire(t *testing.T) {
 // An org with no provisioned store (store/current returns the "default" placeholder)
 // fails closed — there is nowhere to attach the image, so it is not_configured, not a 5xx.
 func TestCommerceStorefrontNoStore(t *testing.T) {
-	t.Setenv(commerceTokenEnv, "svc-admin-token")
 	t.Setenv(commerceURLEnv, "")
 	transport.SetHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

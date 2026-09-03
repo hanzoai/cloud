@@ -34,7 +34,7 @@ func fundedBiller(t *testing.T, seedCents int64) (finance.Client, *meterBiller) 
 	}
 	// A configured meter that never speaks HTTP: finance is published, so the debit takes
 	// the co-resident native path.
-	meter, err := metering.New(metering.Config{BaseURL: "http://127.0.0.1:1", Token: "svc"})
+	meter, err := metering.New(metering.Config{BaseURL: "http://127.0.0.1:1"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
