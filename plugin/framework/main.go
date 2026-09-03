@@ -24,6 +24,13 @@ import (
 	_ "github.com/hanzoai/cloud/apps/cms"
 	_ "github.com/hanzoai/cloud/apps/crm"
 	_ "github.com/hanzoai/cloud/apps/erp"
+	// knowledge's init registers the kb module (kb.page/memory/source/connector/
+	// link) the same way — without it, installing kb answers "unknown module" in
+	// every deployment where framework is its own process, which is all of them.
+	// Its index hooks also register here and FAIL OPEN in this process (no embed
+	// client, no lexical store): a knowledge write lands and is picked up by
+	// knowledge's own reindex, which is that subsystem's rebuild path.
+	_ "github.com/hanzoai/cloud/apps/knowledge"
 )
 
 // Standalone entry for the framework app.
