@@ -469,7 +469,7 @@ func run(addr, zapAddr string) error {
 	// MOUNTED EITHER WAY, because the Source is polled: webui takes an empty one
 	// and answers 503 until a poll fills it, which is the same answer it gave when
 	// nothing was mounted — with the difference that this one can stop being true.
-	if err := webui.Use(app, release.FS(consoleSrc)); err != nil {
+	if err := webui.Use(app, release.FS(consoleSrc), servesConsole); err != nil {
 		return fmt.Errorf("console: %w", err)
 	}
 
@@ -945,3 +945,29 @@ func startTimeout() time.Duration {
 
 // enabled parses the subsystem allowlist. nil means every app, which is the
 // default and the shape a full deployment runs.
+
+// servesConsole answers which request Hosts this entry point serves the console
+// for. Every other name that reaches the terminal catch-all gets a 404.
+//
+// It is deliberately NARROWER than apps/sites.IsSelfHost. That predicate answers
+// "is this one of our registrable domains", which is true of oci.hanzo.ai,
+// pkg.hanzo.ai and ci.hanzo.ai — the three hosts that were serving a byte-
+// identical copy of the console to every caller, so `helm pull` parsed an HTML
+// page as a manifest and every status-code check reported them healthy. Using it
+// here would have kept exactly the defect this closes.
+//
+// A console is served at the console name, at the cloud name (which has always
+// answered there and is what the operator types), and on a loopback or .local
+// name so a laptop needs no configuration. Bound site hosts never arrive here —
+// the sites edge serves them first.
+func servesConsole(host string) bool {
+	if host == "" {
+		return false
+	}
+	if host == "localhost" || host == "127.0.0.1" || host == "[::1]" ||
+		strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	label, _, ok := strings.Cut(host, ".")
+	return ok && (label == "console" || label == "cloud")
+}

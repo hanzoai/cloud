@@ -121,14 +121,30 @@ func consoleTitle(host string) string {
 // at the address the server lives (see mcp.go). Nothing is configured and
 // nothing is duplicated; the console is simply handed the server the app
 // already has.
-func Use(app *zip.App, fsys fs.FS) error {
+func Use(app *zip.App, fsys fs.FS, ours ...Ours) error {
 	h, err := Handler(fsys, app.MCP, routerAllow(app))
 	if err != nil {
 		return err
 	}
+	if len(ours) > 0 {
+		h.(*consoleHandler).ours = ours[0]
+	}
 	app.All("/*", zip.AdaptNetHTTP(h))
 	return nil
 }
+
+// Ours answers whether a request Host is one this deployment serves a console
+// for. It is a VALUE rather than an import because this package is a leaf: the
+// set of self-domains lives in apps/sites, which imports package cloud, so
+// naming it here would close a cycle.
+//
+// It is supplied ONLY by the process that terminates public HTTP. A plugin must
+// not be given one: apps/sites is not mounted there, so its predicate answers
+// false for every host — including the real console — and the console would 404
+// fleet-wide. reserved.go records exactly that failure.
+//
+// nil means "no host policy in this process", which serves the console as before.
+type Ours func(host string) bool
 
 // Allow answers which methods this process serves at a path. An empty answer
 // means the address itself is unserved.
@@ -212,6 +228,8 @@ type consoleHandler struct {
 	// not implement MCP and holds no tool list; it holds the one address a machine
 	// calls and the value that answers there.
 	mcp zapmcp.Handler
+	// ours decides whether this Host gets a console at all. See Ours.
+	ours Ours
 	// allow is the router's answer to "what methods serve this path". nil means
 	// nobody can be asked, and then an unserved METHOD is indistinguishable from an
 	// unserved ADDRESS — which is the whole defect this field exists to close.
@@ -312,6 +330,24 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	// A HOST WE DO NOT SERVE A CONSOLE FOR GETS 404, NOT THE SHELL.
+	//
+	// The catch-all used to answer every unmatched Host with the console SPA at
+	// 200. That is the worst available answer: oci.hanzo.ai, pkg.hanzo.ai and
+	// ci.hanzo.ai each returned a byte-identical copy of the console to every
+	// caller, so `helm pull` read an HTML page where a manifest belongs, npm read
+	// one where a registry index belongs, and every status-code check in the
+	// estate reported those hosts healthy. A 200 that carries the wrong product
+	// is indistinguishable from a working one until something parses it.
+	//
+	// Bound site hosts never reach here — the sites edge serves them first — so a
+	// Host arriving at this handler that is not ours is a name pointed at this
+	// deployment with nothing behind it. That is a 404.
+	if h.ours != nil && !h.ours(hostOf(r)) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -530,3 +566,14 @@ func contentType(name string) string {
 // compile-time assertion: consoleHandler is a stdlib handler (so it adapts onto
 // the zip router via zip.AdaptNetHTTP).
 var _ http.Handler = (*consoleHandler)(nil)
+
+// hostOf is the request Host without its port, lower-cased — the form every host
+// predicate here compares against. r.Host carries the port when the client sent
+// one, and a bare strings comparison against it silently fails to match.
+func hostOf(r *http.Request) string {
+	h := r.Host
+	if i := strings.LastIndex(h, ":"); i > 0 && !strings.Contains(h[i:], "]") {
+		h = h[:i]
+	}
+	return strings.ToLower(strings.TrimSpace(h))
+}
