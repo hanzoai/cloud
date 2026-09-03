@@ -57,7 +57,6 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
@@ -315,7 +314,7 @@ func csrf(ctx context.Context, act bool) error {
 	if act == reads {
 		return nil
 	}
-	return account.CSRF(ctx)
+	return cloud.CSRF(ctx)
 }
 
 // unsafe is the set of methods that CHANGE a board. Everything else is a read.
@@ -357,7 +356,7 @@ var unsafe = map[string]bool{
 // account's own gate is a no-op for a Bearer/gateway caller, which cannot be
 // CSRF'd — so this costs an API client nothing.
 func requireCSRFOnWrites() zip.Handler {
-	gate := account.RequireCSRF()
+	gate := cloud.RequireCSRF()
 	return func(c *zip.Ctx) error {
 		if !unsafe[c.Method()] {
 			return c.Next()

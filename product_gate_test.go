@@ -42,8 +42,8 @@ var mismatched = map[string]string{
 // functionality is (at least partly) duplicated on the cloud side. The worst
 // bucket, and the front of the migration worklist.
 var unwired = []string{
-	"admin", "billing", "bot", "datastore", "dns",
-	"engine", "eval", "event", "functions", "gateway", "git", "idv", "ingress", "kms",
+	"admin", "billing", "bot", "dns",
+	"engine", "eval", "event", "functions", "gateway", "git", "ingress", "kms",
 	"marketing", "ml", "mpc", "network", "platform", "research", "skills",
 	"social", "team", "usage", "visor", "world",
 }
@@ -60,11 +60,11 @@ var unextracted = []string{
 	// The pin says so on purpose: it is unextracted, not forgotten, and it comes
 	// off when the functionality moves to hanzoai/market or proves it belongs here.
 	"market",
-	"code", "coding", "company", "compliance", "connectorruntime", "content",
-	"crawl", "crm", "cron", "dataset", "graph",
+	"code", "coding", "company", "compliance", "content",
+	"crawl", "crm", "dataset", "graph",
 	"destination", "domain", "entitlement", "erp", "esign", "exec",
-	"experiment", "explorer", "finance", "fleet", "flow", "goja", "guide",
-	"help", "index", "integrations", "k8s", "knowledge",
+	"experiment", "explorer", "flow", "guide",
+	"help", "index", "integrations", "knowledge",
 	// kv is the key-value endpoint. The STORE is hanzoai/pubsub's — one embedded
 	// JetStream node, reached through apps/pubsub — so nothing here duplicates a
 	// product; what lives here is the tenant-scoped endpoint onto it, and no
@@ -75,7 +75,7 @@ var unextracted = []string{
 	"kv",
 	"label",
 	"leaderboard", "legal", "link", "lsp", "marketplace", "meet",
-	"metering", "mq",
+	"mq",
 	// nodes is the machine control plane, split out of bots (HIP-0139 §7.2). It
 	// carries the pin bots carried for it: no hanzoai/nodes exists, and what lives
 	// here — the presence registry over Hanzo KV, the socket, and the policy that
@@ -84,10 +84,9 @@ var unextracted = []string{
 	// connects your machines and runs commands on them is a product somebody would
 	// fork, not cloud's own machinery.
 	"node",
-	"payout", "plan", "plugin", "pref", "principal",
+	"plan", "plugin", "pref", "principal",
 	"projects", "prompt", "provisioning", "reference",
-	"referral", "registry", "risk", "s3", "s3admin",
-	"samples", "sandbox", "sbom", "search", "security", "space",
+	"referral", "registry", "risk", "s3", "sandbox", "sbom", "search", "security", "space",
 	// seo is the search-visibility surface: a typed proxy onto a measurement
 	// vendor, metered at that vendor's own published prices. It imports only
 	// hanzoai/cloud and no hanzoai/seo exists to mount, so the functionality lives
@@ -117,7 +116,7 @@ var unextracted = []string{
 	// hanzoai/cloud, and no hanzoai/tel exists to mount — so the functionality
 	// lives here and nowhere else, which is what this bucket means.
 	"tel",
-	"template", "tenant", "tools", "todo", "translate",
+	"template", "tools", "todo", "translate",
 	"treasury", "validator", "wallet", "webhook", "websearch",
 	// web3 is the chain-access surface. It REPLACES the api/ half of
 	// hanzoai/bootnode rather than extracting from it — that half was Python

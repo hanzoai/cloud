@@ -20,7 +20,6 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
@@ -79,7 +78,7 @@ func capAdmin(ctx context.Context) error {
 	if !ok {
 		return zip.ErrForbidden("org admin required to change spend caps")
 	}
-	if principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c) || account.IsServiceToken(c) {
+	if principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c) || cloud.IsServiceToken(c) {
 		return nil
 	}
 	return zip.ErrForbidden("org admin required to change spend caps")
@@ -133,7 +132,7 @@ func (o ops) alerts(ctx context.Context, _ *cloud.Unit) (*caps, error) {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) raiseAlert(ctx context.Context, in *plane.AlertSpec) (*plane.Alert, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	if err := capAdmin(ctx); err != nil {
@@ -162,7 +161,7 @@ func (o ops) raiseAlert(ctx context.Context, in *plane.AlertSpec) (*plane.Alert,
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) amendAlert(ctx context.Context, in *plane.AlertPatch) (*plane.Alert, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	if err := capAdmin(ctx); err != nil {

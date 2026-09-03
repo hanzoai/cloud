@@ -52,55 +52,6 @@ const KeyEnv = attest.KeyEnv
 // that serves the avatar, the appearance and the API keys, and it was refusing all
 // of them over a value none of them read.
 
-// CSRF is the control as a PREDICATE, in the shape a typed op holds: a context. It
-// is how an operation on a surface cloud.Intent does not yet govern asks the same
-// question, and every one of them — apps/billing, apps/company, apps/wallet,
-// apps/admin, apps/todo, apps/referral, apps/s3, apps/websearch — asks it here
-// rather than carrying a copy.
-//
-// IT IS THE ROLLOUT'S OTHER HALF AND IT ENDS. Every op that calls this is one
-// cloud.Intent will cover the moment its surface joins that list, at which point
-// this call is a second ask of a question already answered and comes out. Until
-// then the two agree by construction: both are cloud.Intended.
-//
-// FAIL CLOSED off the HTTP path. There is no request there to judge and no ambient
-// credential to abuse, and it refuses anyway, so "this write is controlled" is a
-// property of the control rather than of whichever check happens to run after it.
-// cloud.Intent takes the other reading for the same fact — an in-process invoke is
-// the CLI, which is not forgeable — and the difference is deliberate: the surfaces
-// that call this are the ones that MOVE MONEY, where the money rule refuses an
-// unattested caller too (toll.go's ErrNoLedger), so refusing here agrees with it.
-func CSRF(ctx context.Context) error {
-	c, ok := cloud.Request(ctx)
-	if !ok {
-		return zip.ErrForbidden(Unattested)
-	}
-	return cloud.Intended(c)
-}
-
-// Unattested is what the off-the-HTTP-path refusal SAYS. Exported because a test
-// has to tell it apart from the other refusals a write meets: every one of them
-// is a 403 an unattested caller would get anyway, so a suite that only asked
-// whether something refused would pass with this control removed. One string, so
-// the words a test asserts are the words the control speaks.
-const Unattested = "a change is made by an attested caller"
-
-// RequireCSRF is the same control as a STANDALONE ROUTE HANDLER, for a RAW route —
-// apps/meet's recording write and apps/todo's repository lifecycle routes.
-//
-// IT IS NOT WHAT CONTROLS A TYPED OP, and unlike [CSRF] it does not end with the
-// rollout: a raw route has no registry entry, so cloud.Intent never sees it and
-// never will. A typed op is reachable five ways and answers to the rule; a raw
-// handler is reachable one way and answers to this.
-func RequireCSRF() zip.Handler {
-	return func(c *zip.Ctx) error {
-		if err := cloud.Intended(c); err != nil {
-			return err
-		}
-		return c.Next()
-	}
-}
-
 // requireCSRF is the same control as MIDDLEWARE, which is the shape a route chain
 // takes: it wraps the leaf handler at registration rather than standing in front of
 // it. Both are one line over [cloud.Intended] — one decision, three shapes, never
@@ -113,34 +64,6 @@ func requireCSRF() zip.Middleware {
 			}
 			return next(c)
 		}
-	}
-}
-
-// RequireCSRFOnSpend is [RequireCSRF] narrowed to the requests that COST the
-// caller money, for a surface whose READ is the paid unit of work.
-//
-// The ordinary rule is that a read needs no token: a GET changes nothing, and
-// requiring one to list a board would break every server-side reader. That rule
-// rests on a read being free, and on these surfaces it is not — the answer is
-// synthesized through a model, or embedded, or bought from a vendor, and the
-// caller's balance pays for it. So a page the caller never visited can send their
-// browser to one of these addresses, the cookie they already hold authenticates
-// it, and the debit lands on them. Nothing leaks — the answer is unreadable
-// cross-origin — what moves is money.
-//
-// WHICH REQUESTS SPEND IS NOT RESTATED HERE. It asks [cloud.Consumes], which is
-// where the money rule lives and where the paid reads are named beside it, so this
-// control and the balance gate can never disagree about what a read is, and a
-// surface added to that list is covered without anyone remembering this function.
-// cloud.Intent asks the same function, so a paid read is covered on every seam the
-// moment its surface joins the governed list, and this comes out with it.
-func RequireCSRFOnSpend() zip.Handler {
-	gate := RequireCSRF()
-	return func(c *zip.Ctx) error {
-		if !cloud.Consumes(c.Method(), c.Path()) {
-			return c.Next()
-		}
-		return gate(c)
 	}
 }
 

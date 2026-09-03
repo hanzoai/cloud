@@ -35,9 +35,8 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
@@ -124,7 +123,7 @@ func admit[S Surface](s *cloud.Service[S], c *zip.Ctx) (string, error) {
 	if !ok {
 		return "", principal.Refused(c)
 	}
-	if err := account.CSRF(c.Context()); err != nil {
+	if err := cloud.CSRF(c.Context()); err != nil {
 		return "", err
 	}
 	kind, cents := s.State.Fee()

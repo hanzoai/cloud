@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
@@ -351,7 +350,7 @@ type beginIn struct {
 //
 // Example: {"structure": "c-corp", "jurisdiction": "DE", "name": "AgentCo, LLC"}
 func (o ops) begin(ctx context.Context, in *beginIn) (*formationView, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	org, err := principal.Acting(ctx)
@@ -410,7 +409,7 @@ type structureIn struct {
 //
 // Example: {"structure": "c-corp", "jurisdiction": "DE", "name": "AgentCo, LLC"}
 func (o ops) setStructure(ctx context.Context, in *structureIn) (*formationView, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, _, err := load(ctx, o.s)
@@ -450,7 +449,7 @@ type foundersIn struct {
 //
 // Example: {"founders": [{"name": "Ada", "email": "ada@acme.com", "equityBps": 10000}]}
 func (o ops) setFounders(ctx context.Context, in *foundersIn) (*formationView, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, _, err := load(ctx, o.s)
@@ -517,7 +516,7 @@ type kycStartOut struct {
 // here. A terminal status arrives only from POST /v1/company/kyc/refresh (the
 // provider) or POST /v1/company/kyc/decision (a Hanzo platform reviewer).
 func (o ops) startKYC(ctx context.Context, _ *cloud.Unit) (*kycStartOut, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, org, err := load(ctx, o.s)
@@ -572,7 +571,7 @@ type kycRefreshOut struct {
 // so a client cannot force a pass here, and an already-passing founder (e.g. a
 // reviewer confirmation) is left untouched.
 func (o ops) kycRefresh(ctx context.Context, _ *cloud.Unit) (*kycRefreshOut, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, _, err := load(ctx, o.s)
@@ -629,7 +628,7 @@ type decisionIn struct {
 //
 // Example: {"email": "ada@acme.com", "status": "reviewer_confirmed"}
 func (o ops) kycDecision(ctx context.Context, in *decisionIn) (*formationView, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, _, err := load(ctx, o.s)
@@ -688,7 +687,7 @@ func (o ops) kycDecision(ctx context.Context, in *decisionIn) (*formationView, e
 // That ordering is why the gate cannot lift into middleware, where it would run
 // first. Both facts are pinned: TestPaymentDenialWire, TestPaymentChargesLast.
 func (o ops) pay(ctx context.Context, _ *cloud.Unit) (*formationView, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, org, err := load(ctx, o.s)
@@ -735,7 +734,7 @@ func (o ops) pay(ctx context.Context, _ *cloud.Unit) (*formationView, error) {
 // With no filing partner wired the filing is recorded honestly as "manual" — no
 // filing id is fabricated. Available only at the documents stage.
 func (o ops) generateDocuments(ctx context.Context, _ *cloud.Unit) (*formationView, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, org, err := load(ctx, o.s)
@@ -786,7 +785,7 @@ type esignOut struct {
 // founder and records the provider's reference on the formation. Available only
 // at the esign stage.
 func (o ops) requestEsign(ctx context.Context, _ *cloud.Unit) (*esignOut, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, org, err := load(ctx, o.s)
@@ -827,7 +826,7 @@ type esignCompleteIn struct {
 //
 // Example: {"signed": true}
 func (o ops) completeEsign(ctx context.Context, in *esignCompleteIn) (*formationView, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, org, err := load(ctx, o.s)
@@ -867,7 +866,7 @@ func (o ops) completeEsign(ctx context.Context, in *esignCompleteIn) (*formation
 // the on-chain submit fails, because the root is the tamper-evident witness and
 // must not be recomputed on retry. Available only at the genesis stage.
 func (o ops) recordGenesis(ctx context.Context, _ *cloud.Unit) (*formationView, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, org, err := load(ctx, o.s)
@@ -921,7 +920,7 @@ type advanceIn struct {
 //
 // Example: {"to": "founders"}
 func (o ops) advance(ctx context.Context, in *advanceIn) (*formationView, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, _, err := load(ctx, o.s)
@@ -957,7 +956,7 @@ func (o ops) advance(ctx context.Context, in *advanceIn) (*formationView, error)
 // so an existing company brings its documents and cap table in instead of forming
 // a new entity. Available only at the structure stage.
 func (o ops) skip(ctx context.Context, _ *cloud.Unit) (*formationView, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, _, err := load(ctx, o.s)
@@ -997,7 +996,7 @@ type importDocumentsOut struct {
 //
 // Example: {"folderId": "1AbCdEfGhIjKlMnOpQrStUvWxYz"}
 func (o ops) importDocuments(ctx context.Context, in *importDocumentsIn) (*importDocumentsOut, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, org, err := load(ctx, o.s)
@@ -1067,7 +1066,7 @@ type importCapTableOut struct {
 //
 // Example: {"spreadsheetId": "1AbCdEfGhIjKlMnOpQrStUvWxYz", "range": "Cap Table!A1:E100"}
 func (o ops) importCapTable(ctx context.Context, in *importCapTableIn) (*importCapTableOut, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, org, err := load(ctx, o.s)
@@ -1113,7 +1112,7 @@ type roundOut struct {
 //
 // Example: {"name": "Seed", "roundType": "PRICED", "targetAmount": 2000000}
 func (o ops) fundraiseRound(ctx context.Context, in *RoundInput) (*roundOut, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, org, err := load(ctx, o.s)
@@ -1153,7 +1152,7 @@ type deckOut struct {
 // request and this response ARE declared, through openapi.Register (see init).
 func fundraiseDeck(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return err
 	}
 	f, org, err := load(ctx, s)
@@ -1201,7 +1200,7 @@ type safeOut struct {
 //
 // Example: {"documentIds": ["doc_safe"], "signers": [{"name": "Ada", "email": "ada@acme.com"}]}
 func (o ops) fundraiseSafe(ctx context.Context, in *safeIn) (*safeOut, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	f, org, err := load(ctx, o.s)

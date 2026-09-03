@@ -4,6 +4,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -90,7 +92,16 @@ var allowedTokenPrimitives = map[string]string{
 		"method+URL+params base string under consumerSecret&accessSecret, X's contract. It " +
 		"signs an OUTBOUND call under credentials the tenant configured; it mints nothing " +
 		"this deployment would honour.",
-	"apps/idv/webhook.go": "provider webhook verification — HMAC-SHA256 over the raw body under the " +
+	"internal/iamtest/iamtest.go": "a REAL IAM issuer, for TESTS — a keypair, a JWKS endpoint and tokens " +
+		"signed with it, so a suite drives the claim mapping rather than stubbing past it. Imported by " +
+		"_test.go files alone and on no serving path; the walk sees it only because it is not itself a " +
+		"_test.go file.",
+
+	"internal/org/cipher.go": "seals a NON-IDENTITY value: the per-org snapshot envelope, AES-GCM under a " +
+		"key derived from the data-plane master, with HMAC deriving that key rather than authenticating a " +
+		"caller. This is the 'seals a non-identity value' case the refusal names.",
+
+	"idv/webhook.go": "provider webhook verification — HMAC-SHA256 over the raw body under the " +
 		"provider's signing secret (sha256= scheme). Verifies THEIR signature; grants nothing here.",
 	"apps/integrations/github_webhook.go": "GitHub webhook verification — X-Hub-Signature-256 over " +
 		"the raw body, GitHub's contract.",
@@ -162,7 +173,13 @@ func callsHS256(t *testing.T, path string) bool {
 
 func TestOnlyIAMMintsTokens(t *testing.T) {
 	found := map[string]string{}
-	for name, ff := range appFiles(t) {
+	// EVERY package in the module, not only apps/. The claim is about the
+	// REPOSITORY — "outside apps/iam, nothing mints a bearer" — and scanning one
+	// directory was always narrower than that. Thirteen libraries moving up a
+	// level made the gap visible: idv/webhook.go still verifies an HMAC and the
+	// walk had stopped seeing it, so shrinking the ledger would have retired a pin
+	// on live code.
+	for name, ff := range moduleFiles(t) {
 		if name == "iam" {
 			continue // the authority
 		}
@@ -208,4 +225,42 @@ func TestOnlyIAMMintsTokens(t *testing.T) {
 		sort.Strings(have)
 		t.Logf("primitive imports now: %s", strings.Join(have, ", "))
 	}
+}
+
+// moduleFiles is every Go file in the module, grouped by top-level directory, so a
+// gate asking a question about the REPOSITORY is not answered by one directory.
+func moduleFiles(t *testing.T) map[string][]string {
+	t.Helper()
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read module root: %v", err)
+	}
+	files := map[string][]string{}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if name == "testdata" || name == "vendor" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+			continue
+		}
+		if err := filepath.WalkDir(name, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				if d.Name() == "testdata" || strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "_") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+				files[name] = append(files[name], path)
+			}
+			return nil
+		}); err != nil {
+			t.Fatalf("walk %s: %v", name, err)
+		}
+	}
+	return files
 }

@@ -72,7 +72,6 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	accountclient "github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/plane"
 	riskpeer "github.com/hanzoai/cloud/plane/risk"
@@ -982,7 +981,7 @@ func chargedOrg(c *zip.Ctx) string {
 // resolver answers for it. Both facts are the same org on that lane: a service token
 // names one organisation, charges in it and credits it, and cannot masquerade.
 func serviceOrg(c *zip.Ctx) string {
-	if accountclient.IsServiceToken(c) {
+	if cloud.IsServiceToken(c) {
 		return strings.TrimSpace(c.Org())
 	}
 	return ""

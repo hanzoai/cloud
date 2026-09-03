@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	financeclient "github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
@@ -43,7 +42,7 @@ import (
 // its own PROCESS, so `ai` cannot reach an in-process reader and asks over HTTP
 // bearing COMMERCE_SERVICE_TOKEN and no session. A service has no validated
 // principal to resolve — that is what being a service means here — so the base
-// rule refuses it and account.ReaderOrg is what admits it: the token is checked
+// rule refuses it and cloud.ReaderOrg is what admits it: the token is checked
 // against the request, and only then is the org it names taken.
 //
 // Composed this way the addition is visible AS an addition. Restating the base
@@ -54,7 +53,7 @@ func callerOrg(ctx context.Context, op string) (string, error) {
 		return org, nil
 	}
 	if c, onRequest := cloud.Request(ctx); onRequest {
-		if org, ok := account.ReaderOrg(c); ok {
+		if org, ok := cloud.ReaderOrg(c); ok {
 			return org, nil
 		}
 	}

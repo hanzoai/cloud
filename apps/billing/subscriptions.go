@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
@@ -65,7 +64,7 @@ func (o ops) subscriptions(ctx context.Context, _ *cloud.Unit) (*plane.Subscript
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) cancelSubscription(ctx context.Context, in *plane.SubscriptionRef) (*plane.Subscription, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	org, err := principalOrg(ctx)
@@ -90,7 +89,7 @@ func (o ops) cancelSubscription(ctx context.Context, in *plane.SubscriptionRef) 
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) reactivateSubscription(ctx context.Context, _ *plane.SubscriptionRef) (*plane.Subscription, error) {
-	if err := account.CSRF(ctx); err != nil {
+	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
 	org, err := principalOrg(ctx)

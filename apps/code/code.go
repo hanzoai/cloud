@@ -37,7 +37,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -114,7 +113,7 @@ func routes(app cloud.Router, s *service) error {
 	// balance gate does and applies only to the requests it says cost something —
 	// so /tree and /file, which are free, pass untouched, and a caller presenting
 	// any credential pays nothing for it either.
-	g := app.Group("/v1/code", account.RequireCSRFOnSpend())
+	g := app.Group("/v1/code", cloud.RequireCSRFOnSpend())
 	// cloud.Bridge is not installed here: the composer installs it once at the
 	// root, after the identity check that mints the validated org and before any
 	// subsystem registers a route — an order only the whole program can assert.

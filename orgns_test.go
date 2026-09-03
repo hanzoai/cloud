@@ -58,8 +58,8 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 	// validated claim every OrgNamespace caller passes. A THIRD place is not a thing
 	// to add; move the caller above cloud, or take the namespace as a parameter.
 	endpoints := map[string]bool{
-		"orgns.go":                true,
-		"apps/finance/finance.go": true,
+		"orgns.go":           true,
+		"finance/finance.go": true,
 	}
 
 	root, err := filepath.Abs(".")
@@ -73,7 +73,7 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 		if d.IsDir() {
 			// A dot-directory is not this module's source. It is .git, or a
 			// worktree an agent parked under .claude — a whole second copy of
-			// this repository, whose orgns.go and apps/finance/finance.go are
+			// this repository, whose orgns.go and finance/finance.go are
 			// the SAME two places reported at paths that exist for nobody else.
 			// This gate read one and went red while nothing in the module had
 			// changed. Every other source-walking gate here already states the
