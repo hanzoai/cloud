@@ -101,20 +101,28 @@ type httpAI struct {
 // still wins — this is only a ceiling.
 const aiHTTPTimeout = 120 * time.Second
 
-// ModelFor answers which model a request runs on when the caller named none.
+// ModelFor answers the ROUTE a request runs on when the caller named none: an
+// ordered list, tried in order, first hop first.
 //
-// It is a FUNCTION rather than a string because AI routing is configured at
-// runtime and read per request: a tier can be repriced or a backend retired
-// without rebuilding this binary. package cloud supplies one that asks the
-// platform's own `ai` configuration (cloud.Model); this package holds no policy
-// and cannot — it is below cloud in the import graph.
-type ModelFor func(context.Context) string
+// A list rather than a name because that is what our families ARE. `enso` is a
+// router over several backends, not an alias for one, so a single name could
+// only ever be the first hop of something this type can hold whole.
+//
+// It is a FUNCTION because AI routing is configured at runtime and read per
+// request: a tier can be repriced or a backend retired without rebuilding this
+// binary. package cloud supplies one that asks the platform's own `ai`
+// configuration (cloud.Route); this package holds no policy and cannot — it is
+// below cloud in the import graph.
+//
+// An empty or nil answer means no route is configured, and the caller's own
+// request model (if any) is all there is.
+type ModelFor func(context.Context) []string
 
-// FixedModel is the constant case, spelled out. A caller that genuinely has one
-// model — a test, or a client pinned to a single backend — says so here rather
+// FixedModel is the one-hop route, spelled out. A caller that genuinely has a
+// single model — a test, or a client pinned to one backend — says so here rather
 // than getting a second constructor that takes a string.
 func FixedModel(name string) ModelFor {
-	return func(context.Context) string { return name }
+	return func(context.Context) []string { return []string{name} }
 }
 
 // AIHTTPAt returns a types.AIClient that POSTs OpenAI-compatible chat
@@ -215,12 +223,74 @@ func AIHTTPM2MOn(baseURL, tokenURL, clientID, clientSecret string, defaultModel 
 // non-2xx upstream status, or a response with no choices it returns an explicit
 // wrapped error — executeRun records that as an honest error-status run, never a
 // fabricated "ok". The error text names the model but never the key or prompt.
+// ChatCompletion answers on the first hop of the route that can.
+//
+// A caller who NAMED a model gets that model and no substitution: they asked for
+// something specific and quietly answering from somewhere else is a lie about
+// what produced the text. A caller who named none gets the configured route, and
+// a hop that cannot serve falls through to the next — so a paid tier being
+// unavailable or unaffordable degrades to the free one instead of failing.
+//
+// Only a MODEL-shaped refusal moves to the next hop (see routeOn). A bad prompt,
+// a missing credential or a transient overload are answered as themselves: the
+// first is the caller's, the second is ours, and the third already has a retry
+// that does not need to change which model is being asked.
 func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*types.ChatResponse, error) {
-	model := strings.TrimSpace(req.Model)
-	if model == "" {
-		model = a.defaultModel(ctx)
+	route := a.route(ctx, req.Model)
+	var lastErr error
+	for i, model := range route {
+		resp, err := a.chatOnce(ctx, req, model)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if i == len(route)-1 || !routeOn(err) {
+			return nil, err
+		}
 	}
+	return nil, lastErr
+}
 
+// route is the ordered list of models to try: the caller's own if they named one,
+// otherwise whatever the platform has configured.
+func (a *httpAI) route(ctx context.Context, named string) []string {
+	if m := strings.TrimSpace(named); m != "" {
+		return []string{m}
+	}
+	if a.defaultModel == nil {
+		return nil
+	}
+	return a.defaultModel(ctx)
+}
+
+// routeOn reports whether a failure is about the MODEL rather than the request,
+// so the next hop is worth trying.
+//
+// It matches the two shapes a tier that cannot serve produces: the gateway
+// refusing a model it does not carry, and the money plane refusing one this
+// caller cannot afford. Anything else stops the walk — retrying a malformed
+// prompt on a cheaper model just fails twice and bills for both.
+func routeOn(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	for _, shape := range []string{
+		"is not available",     // gateway: model not in this deployment's catalog
+		"model_not_found",      // OpenAI-compatible spelling of the same
+		"unknown model",        //
+		"insufficient_balance", // money plane: this tier is unaffordable
+		"spend_cap_exceeded",   //
+		"payment required",     //
+	} {
+		if strings.Contains(s, shape) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *httpAI) chatOnce(ctx context.Context, req *types.ChatRequest, model string) (*types.ChatResponse, error) {
 	// GenAI client span (OTel semantic conventions) — one span per LLM call,
 	// nested under any active agent-run span carried on ctx.
 	ctx, span := StartGenAISpan(ctx, "hanzo", "chat", model, req.Org, req.Project)
@@ -417,12 +487,28 @@ func readToolCalls(calls []openai.ToolCall) []types.ToolCall {
 // the read and returns what was accumulated: the client hung up, the completion
 // did not fail. Transport failures are tagged types.ErrUpstreamBusy on the same
 // terms as ChatCompletion, so a caller's model-failover logic is unchanged.
+// ChatStream walks the same route ChatCompletion does, with one difference that
+// is forced by the wire: a hop is only retryable while NOTHING has been emitted.
+// Once a delta has reached the client, the answer has started, and starting again
+// on another model would splice two completions into one stream.
 func (a *httpAI) ChatStream(ctx context.Context, req *types.ChatRequest, emit func(delta string) error) (*types.ChatResponse, error) {
-	model := strings.TrimSpace(req.Model)
-	if model == "" {
-		model = a.defaultModel(ctx)
+	route := a.route(ctx, req.Model)
+	var lastErr error
+	for i, model := range route {
+		var sent bool
+		resp, err := a.streamOnce(ctx, req, model, func(d string) error { sent = true; return emit(d) })
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if sent || i == len(route)-1 || !routeOn(err) {
+			return nil, err
+		}
 	}
+	return nil, lastErr
+}
 
+func (a *httpAI) streamOnce(ctx context.Context, req *types.ChatRequest, model string, emit func(delta string) error) (*types.ChatResponse, error) {
 	ctx, span := StartGenAISpan(ctx, "hanzo", "chat", model, req.Org, req.Project)
 	setRunAttr(span, req.RunID)
 	defer span.End()

@@ -1583,6 +1583,6 @@ func (p *provenStore) PutIfVersion(ctx context.Context, key string, data []byte,
 // none": the platform's `ai` configuration, edited at admin.hanzo.ai, read on the
 // request rather than at boot. DefaultModel is the floor it falls back to, so a
 // deployment that has configured nothing behaves exactly as this binary shipped.
-func defaultModelFor(ctx context.Context) string {
-	return Model(ctx, RoleDefault, DefaultModel)
+func defaultModelFor(ctx context.Context) []string {
+	return Route(ctx)
 }
