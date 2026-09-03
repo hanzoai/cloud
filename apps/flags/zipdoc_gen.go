@@ -59,10 +59,37 @@ func init() {
 		},
 		Response: json.RawMessage(`{"ok":true,"engine":"hanzo-flags"}`),
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /flags/board", zip.Doc{
+		Description: "Answers the switchboard through this app's own [Board], so the plane and\n/v1/flags render one value. A second projection here would be a second answer to\n\"what is in force\", and the two would disagree the day a default moves.",
+		Fields: map[string]string{
+			"FlagBoard.auditUrl":     "AuditURL is where the change log for those writes lives.",
+			"FlagBoard.configured":   "Configured is whether the definition stores opened. False means every value\nbelow is a default or an env fallback and a write will be refused.",
+			"FlagBoard.engine":       "Engine names the evaluator that answered.",
+			"FlagBoard.manageUrl":    "ManageURL is where the definitions behind these switches are read and written.",
+			"FlagBoard.switches":     "Switches is every declared switch with the value in force.",
+			"FlagSwitch.category":    "Category groups it on the board.",
+			"FlagSwitch.description": "Description says what turning it does.",
+			"FlagSwitch.env":         "Env names the environment variable supplying a fallback, when one does.",
+			"FlagSwitch.key":         "Key is the flag's key.",
+			"FlagSwitch.label":       "Label is the switch's name as an operator reads it.",
+			"FlagSwitch.readOnly":    "ReadOnly marks a switch the board shows but cannot write. NOT omitempty: the\nboard it replaces always wrote the field, and dropping a false would change\nthe shape a rendered switch has.",
+			"FlagSwitch.source":      "Source is where that value came from: \"flags\", \"env\" or \"default\".",
+			"FlagSwitch.type":        "Type is \"bool\", \"int\" or \"string\". The field is spelled as the admin board\nalready spells it on the wire, because this type replaces flags.SwitchView\nin that response and a rename here would move a live API.",
+			"FlagSwitch.value":       "Value is the value in force.",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /flags/hold", zip.Doc{
 		Description: "Evaluates one flag FOR THE CALLER'S OWN ORG.\n\nThe subject is the org, not a person: a capability flag says whether a customer\nhas been let into a product, which is a fact about the tenant. So the org is\nboth the tenant whose definitions are read and the distinct_id they are\nevaluated against, and a caller has no way to name either.\n\nIt goes through [Assign], which is the ONE bucketing in this app — the same\npure function of (key, subject, definition) that /v1/flags and the experiments\nprimitive run. A second evaluator here would be a second answer to \"does this\norg hold X\", and the two would disagree on the day a rollout percentage is set.\n\nA flag this org has no definition for is OFF, which is a real answer and the\nright one: a capability nobody was let into is held by nobody. An engine that\ncannot answer is an ERROR, never a false — the caller fails closed on it, and\nsilently reporting \"not held\" would make an outage indistinguishable from a\ndecision.",
 		Fields: map[string]string{
 			"FlagIn.key": "the flag's key; for a capability's stage it is the capability's name",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /flags/set", zip.Doc{
+		Description: "Writes one switch through [SetPlatformSwitch], the ONE write path, so the\nstore's audit records this exactly as it records a write made here.\n\nThe definition is kept byte-for-byte: it is the engine's document rather than\nthis package's, carrying fields no Go type here names, and re-encoding it would\ndrop whatever we do not model.",
+		Fields: map[string]string{
+			"FlagSetIn.actor":      "Actor is the human the write is recorded against.",
+			"FlagSetIn.definition": "Definition is the flag-definition document, kept byte-for-byte.",
+			"FlagSetIn.key":        "Key is the flag to write.",
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/flags POST /flags/value", zip.Doc{
