@@ -14,8 +14,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/plane"
-	agentspeer "github.com/hanzoai/cloud/plane/agents"
-	channelspeer "github.com/hanzoai/cloud/plane/channels"
+	agentspeer "github.com/hanzoai/cloud/plane/agent"
+	channelspeer "github.com/hanzoai/cloud/plane/channel"
 	iampeer "github.com/hanzoai/cloud/plane/iam"
 )
 

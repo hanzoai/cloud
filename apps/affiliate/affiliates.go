@@ -70,7 +70,7 @@ import (
 	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 
-	flagsplane "github.com/hanzoai/cloud/plane/flags"
+	flagsplane "github.com/hanzoai/cloud/plane/flag"
 )
 
 // The affiliate economy — ONE place. Amounts are USD minor units (cents); a credits

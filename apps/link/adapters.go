@@ -6,7 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/agents"
 	"github.com/hanzoai/cloud/plane"
-	agentspeer "github.com/hanzoai/cloud/plane/agents"
+	agentspeer "github.com/hanzoai/cloud/plane/agent"
 )
 
 // adapters.go binds the Sessions client to the agents in-process control plane

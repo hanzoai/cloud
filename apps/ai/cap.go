@@ -25,7 +25,7 @@ import (
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/plane"
 
-	flagsplane "github.com/hanzoai/cloud/plane/flags"
+	flagsplane "github.com/hanzoai/cloud/plane/flag"
 )
 
 // cap.go is the gate's TRAILING-WINDOW spend ceiling: the burst limit that resets

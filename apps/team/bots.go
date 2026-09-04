@@ -18,7 +18,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/plane"
-	agentspeer "github.com/hanzoai/cloud/plane/agents"
+	agentspeer "github.com/hanzoai/cloud/plane/agent"
 )
 
 // botsBridge holds the transactor + account stores the bots routes read/write.

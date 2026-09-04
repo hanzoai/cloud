@@ -12,7 +12,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
-	channelspeer "github.com/hanzoai/cloud/plane/channels"
+	channelspeer "github.com/hanzoai/cloud/plane/channel"
 	"github.com/zap-proto/zip"
 )
 

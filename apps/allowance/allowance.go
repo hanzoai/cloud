@@ -75,7 +75,7 @@ import (
 	"github.com/hanzoai/cloud/tenant"
 	"github.com/zap-proto/zip"
 
-	flagsplane "github.com/hanzoai/cloud/plane/flags"
+	flagsplane "github.com/hanzoai/cloud/plane/flag"
 )
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
