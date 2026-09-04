@@ -22,7 +22,7 @@ require (
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
-	github.com/hanzoai/iam v1.34.97
+	github.com/hanzoai/iam v1.34.98
 	github.com/hanzoai/kafka v1.3.2
 	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
@@ -111,6 +111,7 @@ require (
 	github.com/go-resty/resty/v2 v2.17.2 // indirect
 	github.com/go-webauthn/webauthn v0.17.4 // indirect
 	github.com/go-webauthn/x v0.2.6 // indirect
+	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
