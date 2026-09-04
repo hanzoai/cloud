@@ -344,7 +344,7 @@ var Apps = []App{
 	{Name: "ci", Prefixes: []string{"/v1/ci"}},
 	{Name: "git", Prefixes: []string{"/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
-	{Name: "visor", Prefixes: []string{"/v1/visor"}},
+	{Name: "compute", Prefixes: []string{"/v1/compute"}},
 	{Name: "captable", Prefixes: []string{"/v1/captable"}},
 	{Name: "code", Prefixes: []string{"/v1/code"}},
 	// lsp answers at its OWN root. code and lsp are two reads of one repository

@@ -52,7 +52,11 @@ const (
 	SourceAgent = "agent" // a linked run-target's heartbeat (clients/agents)
 	SourceBYO   = "byo"   // a bring-your-own worker or cluster that dialed in
 	SourceCloud = "cloud" // a cloud workload
-	SourceVisor = "visor" // a Visor-provisioned machine
+	// SourceCompute is the dimension VALUE, and it stays "visor" though the app is
+	// now compute: it is stored on every sample under a 90-day TTL, it is the
+	// ?source= a caller filters on, and it is the key the fleet board joins a unit
+	// to its latest sample by. Renaming it orphans every row already written.
+	SourceCompute = "visor" // a Hanzo Compute-provisioned machine
 )
 
 // Kinds — the CLOSED vocabulary of compute units. The first five mirror the agent
@@ -97,7 +101,7 @@ var ErrInvalid = errors.New("samples: invalid request")
 var (
 	errOrg    = fmt.Errorf("%w: org required", ErrInvalid)
 	errUnit   = fmt.Errorf("%w: unit required", ErrInvalid)
-	errSource = fmt.Errorf("%w: source must be %s|%s|%s|%s", ErrInvalid, SourceAgent, SourceBYO, SourceCloud, SourceVisor)
+	errSource = fmt.Errorf("%w: source must be %s|%s|%s|%s", ErrInvalid, SourceAgent, SourceBYO, SourceCloud, SourceCompute)
 	errKind   = fmt.Errorf("%w: kind must be %s|%s|%s|%s|%s|%s", ErrInvalid,
 		KindLaptop, KindCloud, KindGPU, KindCluster, KindMachine, KindWorker)
 )
@@ -135,7 +139,7 @@ type Sample struct {
 
 func validSource(s string) bool {
 	switch s {
-	case SourceAgent, SourceBYO, SourceCloud, SourceVisor:
+	case SourceAgent, SourceBYO, SourceCloud, SourceCompute:
 		return true
 	}
 	return false

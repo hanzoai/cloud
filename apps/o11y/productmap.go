@@ -73,7 +73,7 @@ var knownServices = map[string]bool{
 	"hanzo-playground": true, "iam": true, "insights-capture": true, "kms": true,
 	"models": true, "nats": true, "o11y": true, "paas": true, "pricing": true,
 	"rag-api": true, "s3": true, "search": true, "studio": true, "vector": true,
-	"visor": true,
+	"compute": true,
 }
 
 // knownServices answers "does a WORKLOAD answer at an address"; manifest.Apps

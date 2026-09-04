@@ -166,7 +166,7 @@ func tierOf(v plane.App) string {
 		return "data" // the managed-DB / storage ring
 	case "ingress", "dns", "static":
 		return "edge" // the ingress / DNS / static edge
-	case "arcbuild", "o11y", "visor", "livekit", "git", "mpc", "zt", "analytics", "analytics-collector":
+	case "arcbuild", "o11y", "compute", "livekit", "git", "mpc", "zt", "analytics", "analytics-collector":
 		return "daemon" // external daemons (build / observability / realtime / vcs / mpc / zt)
 	}
 	return "app" // a general platform service (chat, iam, console, engine, …)

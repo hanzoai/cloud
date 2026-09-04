@@ -47,7 +47,7 @@ var intentRefused = map[string]string{
 	// Cluster-manager surface the authored spec carried and this product (the
 	// hanzoai/engine serving runtime) has never served — each family lives on
 	// the cluster plane where it is real.
-	"/v1/engine/clusters":        "GPU cluster registration is the cluster plane: /v1/visor/clusters (apps/visor) merges managed clusters with the BYO fleet registry; the engine is the serving runtime, not a cluster manager",
+	"/v1/engine/clusters":        "GPU cluster registration is the cluster plane: /v1/compute/clusters (apps/visor) merges managed clusters with the BYO fleet registry; the engine is the serving runtime, not a cluster manager",
 	"/v1/engine/jobs":            "fine-tuning is the hanzoai/ai broker at /v1/finetune/jobs; the engine runs no job queue",
 	"/v1/engine/ray/clusters":    "no Ray operator backs the fleet; the engine is a single-process runtime, not a Ray head",
 	"/v1/engine/pipelines":       "ML pipeline orchestration has no backend behind this product; the engine executes inference, not DAGs",

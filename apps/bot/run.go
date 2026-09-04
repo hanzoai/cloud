@@ -19,7 +19,7 @@
 // listing runs that do not exist and stopping runs never started.
 //
 // A bot run is ONE value with ONE home. It is not the bot MACHINE that hosts an
-// executor (/v1/visor/compute/bots — a machine you rent), and it is not a NODE
+// executor (/v1/compute/bots — a machine you rent), and it is not a NODE
 // you already own and connect (apps/nodes, /v1/node).
 //
 // Isolation: the org is the gateway-minted X-Org-Id (HIP-0026) resolved via

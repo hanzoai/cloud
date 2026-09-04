@@ -1,4 +1,4 @@
-package visor
+package compute
 
 import (
 	"encoding/json"
@@ -248,9 +248,9 @@ func (f *botVM) server(t *testing.T) *httptest.Server {
 func mountBots(t *testing.T, f *botVM, agentsURL string) *zip.App {
 	t.Helper()
 	srv := f.server(t)
-	t.Setenv("VISOR_URL", srv.URL)
-	t.Setenv("VISOR_CLIENT_ID", "")
-	t.Setenv("VISOR_CLIENT_SECRET", "")
+	t.Setenv("COMPUTE_URL", srv.URL)
+	t.Setenv("COMPUTE_CLIENT_ID", "")
+	t.Setenv("COMPUTE_CLIENT_SECRET", "")
 	if agentsURL != "" {
 		t.Setenv("CLOUD_AGENTS_URL", agentsURL)
 	}
@@ -265,21 +265,21 @@ func mountBots(t *testing.T, f *botVM, agentsURL string) *zip.App {
 func TestBotsGatedNoPrincipal(t *testing.T) {
 	app := mountBots(t, newBotVM(), "")
 	// Every bot + machine-agent route must 403 (not 404) without a validated
-	// principal — routed and org-gated exactly like /v1/visor/machines.
+	// principal — routed and org-gated exactly like /v1/compute/machines.
 	cases := []struct {
 		method, path string
 	}{
-		{http.MethodGet, "/v1/visor/compute/bots"},
-		{http.MethodPost, "/v1/visor/compute/bots/launch"},
-		{http.MethodGet, "/v1/visor/compute/bots/launch"}, // matches /v1/compute/bots/:id — still gated
-		{http.MethodGet, "/v1/visor/compute/bots/drop-x"},
-		{http.MethodDelete, "/v1/visor/compute/bots/drop-x"},
-		{http.MethodPost, "/v1/visor/compute/bots/drop-x/stop"},
-		{http.MethodPost, "/v1/visor/compute/bots/drop-x/message"},
-		{http.MethodPut, "/v1/visor/machines/drop-x/agent"},
-		{http.MethodGet, "/v1/visor/machines/drop-x/agent"},
-		{http.MethodDelete, "/v1/visor/machines/drop-x/agent"},
-		{http.MethodGet, "/v1/visor/machines/agents"},
+		{http.MethodGet, "/v1/compute/bots"},
+		{http.MethodPost, "/v1/compute/bots/launch"},
+		{http.MethodGet, "/v1/compute/bots/launch"}, // matches /v1/compute/bots/:id — still gated
+		{http.MethodGet, "/v1/compute/bots/drop-x"},
+		{http.MethodDelete, "/v1/compute/bots/drop-x"},
+		{http.MethodPost, "/v1/compute/bots/drop-x/stop"},
+		{http.MethodPost, "/v1/compute/bots/drop-x/message"},
+		{http.MethodPut, "/v1/compute/machines/drop-x/agent"},
+		{http.MethodGet, "/v1/compute/machines/drop-x/agent"},
+		{http.MethodDelete, "/v1/compute/machines/drop-x/agent"},
+		{http.MethodGet, "/v1/compute/machines/agents"},
 	}
 	for _, tc := range cases {
 		if code, _ := do(t, app, tc.method, tc.path, "", nil); code != http.StatusForbidden {
@@ -294,7 +294,7 @@ func TestBotLaunchQuoteAndReal(t *testing.T) {
 	app := mountBots(t, f, fa.server(t).URL)
 
 	// dryRun → the price quote verbatim, no machine, no bind, NO agent created.
-	code, body := do(t, app, http.MethodPost, "/v1/visor/compute/bots/launch", "acme",
+	code, body := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "helper", "dryRun": true})
 	if code != http.StatusOK || !strings.Contains(string(body), `"priceHourly"`) {
 		t.Fatalf("dryRun want 200 quote, got %d %s", code, body)
@@ -305,7 +305,7 @@ func TestBotLaunchQuoteAndReal(t *testing.T) {
 	}
 
 	// A real launch → 201 botView with the agent bound (agent defaults to name).
-	code, body = do(t, app, http.MethodPost, "/v1/visor/compute/bots/launch", "acme",
+	code, body = do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "helper"})
 	if code != http.StatusCreated {
 		t.Fatalf("launch want 201, got %d %s", code, body)
@@ -326,7 +326,7 @@ func TestBotLaunchQuoteAndReal(t *testing.T) {
 	}
 
 	// An explicit agent overrides the name default.
-	_, body = do(t, app, http.MethodPost, "/v1/visor/compute/bots/launch", "acme",
+	_, body = do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "sup", "agent": "support"})
 	_ = json.Unmarshal(body, &bv)
 	if f.lastBindName != "support" || bv.Agent != "support" {
@@ -334,10 +334,10 @@ func TestBotLaunchQuoteAndReal(t *testing.T) {
 	}
 
 	// size required; real launch requires a name.
-	if code, _ := do(t, app, http.MethodPost, "/v1/visor/compute/bots/launch", "acme", map[string]any{"region": "sfo3"}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme", map[string]any{"region": "sfo3"}); code != http.StatusBadRequest {
 		t.Fatalf("launch without size want 400, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/visor/compute/bots/launch", "acme", map[string]any{"size": "s-2vcpu-4gb"}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme", map[string]any{"size": "s-2vcpu-4gb"}); code != http.StatusBadRequest {
 		t.Fatalf("real launch without name want 400, got %d", code)
 	}
 }
@@ -347,14 +347,14 @@ func TestBotListGetDelete(t *testing.T) {
 	app := mountBots(t, f, newFakeAgents().server(t).URL)
 	// Launch two bots for acme.
 	for _, n := range []string{"a", "b"} {
-		if code, body := do(t, app, http.MethodPost, "/v1/visor/compute/bots/launch", "acme",
+		if code, body := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 			map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": n}); code != http.StatusCreated {
 			t.Fatalf("seed launch %s: %d %s", n, code, body)
 		}
 	}
 
 	// list → both bots, kind=bot, each joined with its binding.
-	code, body := do(t, app, http.MethodGet, "/v1/visor/compute/bots", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/compute/bots", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d %s", code, body)
 	}
@@ -374,7 +374,7 @@ func TestBotListGetDelete(t *testing.T) {
 	}
 
 	// get one → botView.
-	code, body = do(t, app, http.MethodGet, "/v1/visor/compute/bots/drop-a", "acme", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/compute/bots/drop-a", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("get want 200, got %d %s", code, body)
 	}
@@ -386,12 +386,12 @@ func TestBotListGetDelete(t *testing.T) {
 
 	// a non-bot machine (no kind tag, no binding) is not a bot → 404.
 	f.bots["plain"] = map[string]any{"owner": "acme", "name": "plain", "id": "plain", "state": "running"}
-	if code, _ := do(t, app, http.MethodGet, "/v1/visor/compute/bots/plain", "acme", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/compute/bots/plain", "acme", nil); code != http.StatusNotFound {
 		t.Fatalf("get non-bot want 404, got %d", code)
 	}
 
 	// delete → 204, and the bot unbinds AND the machine is gone.
-	if code, _ := do(t, app, http.MethodDelete, "/v1/visor/compute/bots/drop-a", "acme", nil); code != http.StatusNoContent {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/compute/bots/drop-a", "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("delete want 204, got %d", code)
 	}
 	if f.lastUnbind != "drop-a" {
@@ -405,12 +405,12 @@ func TestBotListGetDelete(t *testing.T) {
 func TestBotStopPause(t *testing.T) {
 	f := newBotVM()
 	app := mountBots(t, f, newFakeAgents().server(t).URL)
-	if code, _ := do(t, app, http.MethodPost, "/v1/visor/compute/bots/launch", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "c"}); code != http.StatusCreated {
 		t.Fatal("seed launch")
 	}
 	// stop → unbind (halt the agent), 200 {status:stopped}. Machine stays.
-	code, body := do(t, app, http.MethodPost, "/v1/visor/compute/bots/drop-c/stop", "acme", nil)
+	code, body := do(t, app, http.MethodPost, "/v1/compute/bots/drop-c/stop", "acme", nil)
 	if code != http.StatusOK || !strings.Contains(string(body), `"stopped"`) {
 		t.Fatalf("stop want 200 stopped, got %d %s", code, body)
 	}
@@ -422,14 +422,14 @@ func TestBotStopPause(t *testing.T) {
 	}
 	// pause routes to the same halt.
 	f.lastUnbind = ""
-	if code, _ := do(t, app, http.MethodPost, "/v1/visor/compute/bots/drop-c/pause", "acme", nil); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/drop-c/pause", "acme", nil); code != http.StatusOK {
 		t.Fatalf("pause want 200, got %d", code)
 	}
 	if f.lastUnbind != "drop-c" {
 		t.Fatalf("pause must unbind, lastUnbind=%q", f.lastUnbind)
 	}
 	// an unknown action is a clean 400.
-	if code, _ := do(t, app, http.MethodPost, "/v1/visor/compute/bots/drop-c/frobnicate", "acme", nil); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/drop-c/frobnicate", "acme", nil); code != http.StatusBadRequest {
 		t.Fatalf("unknown action want 400, got %d", code)
 	}
 }
@@ -440,7 +440,7 @@ func TestBotMessageRunsAgent(t *testing.T) {
 	app := mountBots(t, f, fa.server(t).URL)
 
 	// Launch a bot with an explicit agent name — launch auto-creates that agent.
-	if code, _ := do(t, app, http.MethodPost, "/v1/visor/compute/bots/launch", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "chat", "agent": "concierge"}); code != http.StatusCreated {
 		t.Fatal("seed launch")
 	}
@@ -450,7 +450,7 @@ func TestBotMessageRunsAgent(t *testing.T) {
 
 	// message → runs the BOUND agent with the caller's input; because launch
 	// created it, Resolve succeeds and the response passes through (200 pong).
-	code, body := do(t, app, http.MethodPost, "/v1/visor/compute/bots/drop-chat/message", "acme",
+	code, body := do(t, app, http.MethodPost, "/v1/compute/bots/drop-chat/message", "acme",
 		map[string]any{"input": "ping"})
 	if code != http.StatusOK || !strings.Contains(string(body), `"pong"`) {
 		t.Fatalf("message want 200 pong, got %d %s", code, body)
@@ -468,7 +468,7 @@ func TestBotMessageRunsAgent(t *testing.T) {
 	// own terms. Without that recognition the caller is told "not found" about a
 	// bot that exists and is running.
 	f.bots["drop-mute"] = map[string]any{"owner": "acme", "name": "mute", "id": "drop-mute", "state": "running", "tag": "hanzo-kind:bot"}
-	code, body = do(t, app, http.MethodPost, "/v1/visor/compute/bots/drop-mute/message", "acme",
+	code, body = do(t, app, http.MethodPost, "/v1/compute/bots/drop-mute/message", "acme",
 		map[string]any{"input": "ping"})
 	if code != http.StatusBadRequest {
 		t.Fatalf("message an unbound bot want 400, got %d %s", code, body)
@@ -492,32 +492,32 @@ func TestBotLaunchAutoCreateClosesTheGap(t *testing.T) {
 	// un-messageable — run Resolves nothing → 404. We reproduce it by binding an
 	// agent directly (the thin proxy does NOT auto-create), then messaging it.
 	f.bots["drop-ghost"] = map[string]any{"owner": "acme", "name": "ghost", "id": "drop-ghost", "state": "running", "tag": "hanzo-kind:bot"}
-	if code, _ := do(t, app, http.MethodPut, "/v1/visor/machines/drop-ghost/agent", "acme",
+	if code, _ := do(t, app, http.MethodPut, "/v1/compute/machines/drop-ghost/agent", "acme",
 		map[string]any{"agentName": "ghost"}); code != http.StatusOK {
 		t.Fatal("seed direct bind")
 	}
 	if fa.wasCreated("ghost") {
 		t.Fatalf("precondition: a direct bind must NOT create the agent")
 	}
-	if code, body := do(t, app, http.MethodPost, "/v1/visor/compute/bots/drop-ghost/message", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/compute/bots/drop-ghost/message", "acme",
 		map[string]any{"input": "hi"}); code != http.StatusNotFound {
 		t.Fatalf("bug repro: messaging an uncreated agent must 404, got %d %s", code, body)
 	}
 
 	// NEW path (the fix): launchBot auto-creates the bound agent, so the very same
 	// message now Resolves and runs → 200. launch → message works.
-	if code, _ := do(t, app, http.MethodPost, "/v1/visor/compute/bots/launch", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "helper"}); code != http.StatusCreated {
 		t.Fatal("launch")
 	}
-	if code, body := do(t, app, http.MethodPost, "/v1/visor/compute/bots/drop-helper/message", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/compute/bots/drop-helper/message", "acme",
 		map[string]any{"input": "hi"}); code != http.StatusOK || !strings.Contains(string(body), `"pong"`) {
 		t.Fatalf("launched bot must be messageable, got %d %s", code, body)
 	}
 
 	// Idempotent: relaunching the same bot (agent already exists → 409 create) is
 	// NOT an error — launch still 201s and the bot stays messageable.
-	if code, body := do(t, app, http.MethodPost, "/v1/visor/compute/bots/launch", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "helper"}); code != http.StatusCreated {
 		t.Fatalf("relaunch (idempotent create) want 201, got %d %s", code, body)
 	}
@@ -525,7 +525,7 @@ func TestBotLaunchAutoCreateClosesTheGap(t *testing.T) {
 	// Model validation propagates: a launch naming a non-catalog model fails fast
 	// with the agent surface's 400 — and provisions NO machine (fail-fast order).
 	botsBefore := len(f.bots)
-	if code, body := do(t, app, http.MethodPost, "/v1/visor/compute/bots/launch", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "badmodel", "model": "claude-sonnet-4-5"}); code != http.StatusBadRequest {
 		t.Fatalf("launch with non-catalog model want 400, got %d %s", code, body)
 	}
@@ -541,7 +541,7 @@ func TestMachineAgentBindingProxies(t *testing.T) {
 	f.bots["drop-m"] = map[string]any{"owner": "acme", "name": "m", "id": "drop-m", "state": "running"}
 
 	// PUT agent → 200 binding, org forwarded from the validated principal.
-	code, body := do(t, app, http.MethodPut, "/v1/visor/machines/drop-m/agent", "acme",
+	code, body := do(t, app, http.MethodPut, "/v1/compute/machines/drop-m/agent", "acme",
 		map[string]any{"agentName": "worker", "botVersion": "1.2.3"})
 	if code != http.StatusOK {
 		t.Fatalf("bind want 200, got %d %s", code, body)
@@ -551,19 +551,19 @@ func TestMachineAgentBindingProxies(t *testing.T) {
 	if b.AgentName != "worker" || f.lastBindOrg != "acme" || f.lastBindName != "worker" {
 		t.Fatalf("bind mismatch: view=%+v bindOrg=%q", b, f.lastBindOrg)
 	}
-	if code, _ := do(t, app, http.MethodPut, "/v1/visor/machines/drop-m/agent", "acme", map[string]any{}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPut, "/v1/compute/machines/drop-m/agent", "acme", map[string]any{}); code != http.StatusBadRequest {
 		t.Fatalf("bind without agentName want 400, got %d", code)
 	}
 
 	// GET the binding → 200; a machine with none → 404.
-	if code, _ := do(t, app, http.MethodGet, "/v1/visor/machines/drop-m/agent", "acme", nil); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodGet, "/v1/compute/machines/drop-m/agent", "acme", nil); code != http.StatusOK {
 		t.Fatalf("get binding want 200, got %d", code)
 	}
 	// A machine with none is 404 — and the 404 is THIS route's, not vm's passed
 	// through. Both paths answer 404, so only the message tells them apart, and
 	// only the message proves the upstream miss was recognised as a fact about
 	// the machine rather than relayed as an upstream fault.
-	code, body = do(t, app, http.MethodGet, "/v1/visor/machines/nope/agent", "acme", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/compute/machines/nope/agent", "acme", nil)
 	if code != http.StatusNotFound {
 		t.Fatalf("get missing binding want 404, got %d %s", code, body)
 	}
@@ -575,7 +575,7 @@ func TestMachineAgentBindingProxies(t *testing.T) {
 	}
 
 	// list machine agents → 200 {agentBindings:[...]} with the one we bound.
-	code, body = do(t, app, http.MethodGet, "/v1/visor/machines/agents", "acme", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/compute/machines/agents", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list bindings want 200, got %d", code)
 	}
@@ -588,7 +588,7 @@ func TestMachineAgentBindingProxies(t *testing.T) {
 	}
 
 	// DELETE the binding → 204, and it is gone.
-	if code, _ := do(t, app, http.MethodDelete, "/v1/visor/machines/drop-m/agent", "acme", nil); code != http.StatusNoContent {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/compute/machines/drop-m/agent", "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("unbind want 204, got %d", code)
 	}
 	if f.lastUnbind != "drop-m" || len(f.bindings) != 0 {

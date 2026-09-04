@@ -166,7 +166,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// status, and the co-resident leg writes the same envelope from the ledger.
 	app.Get("/v1/billing/balance", cloud.Handle(s, balance))
 	// A GPU is a metered resource like any other, so it has no charge route here: a
-	// machine is launched through /v1/visor/machines, which fronts the compute provider's
+	// machine is launched through /v1/compute/machines, which fronts the compute provider's
 	// resell endpoint (apps/visor) where the balance gate and the per-hour meter both
 	// live, keyed on the server-minted machine id. One meter bills every resource.
 	//

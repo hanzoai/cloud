@@ -166,7 +166,7 @@ func newDeployCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 }
 
 // ---------------------------------------------------------------------------
-// clusters — GET /v1/visor/clusters: the org's compute fleet (Visor-managed + BYO),
+// clusters — GET /v1/compute/clusters: the org's compute fleet (Visor-managed + BYO),
 // tenant-scoped server-side by the IAM identity.
 // ---------------------------------------------------------------------------
 

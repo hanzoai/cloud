@@ -263,7 +263,7 @@ var allowedRequestUses = map[string]string{
 		"founder KYC decision. Hanzo forms the entity and carries the KYC/AML obligation, so the decision is " +
 		"a SuperAdmin one and is ATTRIBUTED: it needs X-User-IsAdmin and X-User-Id, neither of which " +
 		"principal.OrgFrom carries. Fails closed off the HTTP path: no request, no attested reviewer.",
-	"apps/visor/visor.go": "A tenant-scoped PROXY: client.go forwards the caller's own identity headers " +
+	"apps/compute/compute.go": "A tenant-scoped PROXY: client.go forwards the caller's own identity headers " +
 		"(and their bearer where no service credential is configured) upstream, so an op without the request " +
 		"drops the caller's identity on the far side of the hop.",
 	"apps/tools/typed.go": "projectOf / callerOf / audit — the tool plane is scoped to (org, PROJECT), and " +

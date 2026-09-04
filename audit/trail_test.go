@@ -43,7 +43,7 @@ func TestNameIsPerProcess(t *testing.T) {
 		{"", "audit"},      // unknown proc must not invent a second host chain
 		{"tasks", "audit-tasks"},
 		{"integrations", "audit-integrations"},
-		{"visor", "audit-visor"},
+		{"compute", "audit-compute"},
 	} {
 		t.Run(tc.proc, func(t *testing.T) {
 			if got := Name(tc.proc); got != tc.want {
@@ -54,7 +54,7 @@ func TestNameIsPerProcess(t *testing.T) {
 
 	// The property that actually matters: distinct processes never collide.
 	seen := map[string]string{}
-	for _, p := range []string{"cloud", "tasks", "integrations", "visor", "commerce", "iam"} {
+	for _, p := range []string{"cloud", "tasks", "integrations", "compute", "commerce", "iam"} {
 		n := Name(p)
 		if prev, dup := seen[n]; dup {
 			t.Fatalf("processes %q and %q share audit chain %q — two writers on one hash chain", prev, p, n)
@@ -71,7 +71,7 @@ func TestNameIsPerProcess(t *testing.T) {
 // store that is not a chain and reports it unread forever. Neither shows up as a
 // failure anywhere else, so it is asserted here over the real generator.
 func TestMemberIsTheInverseOfName(t *testing.T) {
-	for _, proc := range []string{"", "cloud", "tasks", "iam", "admin", "visor", "o11y", "commerce"} {
+	for _, proc := range []string{"", "cloud", "tasks", "iam", "admin", "compute", "o11y", "commerce"} {
 		if n := Name(proc); !member(n) {
 			t.Errorf("Name(%q) = %q, which member() does not recognise — that chain would be invisible to the trail", proc, n)
 		}

@@ -1,4 +1,4 @@
-package visor
+package compute
 
 import (
 	"encoding/json"
@@ -10,9 +10,9 @@ import (
 	"github.com/hanzoai/cloud/samples"
 )
 
-// board_test.go proves the /v1/visor/fleet contract: it is tenant-gated, it unions the
+// board_test.go proves the /v1/compute/fleet contract: it is tenant-gated, it unions the
 // sources it can reach, it NEVER fails because one of them is broken, and it does
-// not disturb /v1/visor/fleet/workers.
+// not disturb /v1/compute/fleet/workers.
 //
 // The agents subsystem is not mounted in these tests, so agentUnits is exercised
 // on its fail-soft path (an unmounted source contributes nothing) — which is
@@ -24,10 +24,10 @@ import (
 // A validated tenant is required; nothing below it is reachable without one.
 func TestFleetBoardRequiresTenant(t *testing.T) {
 	app := mountApp(t, &fakeVisor{})
-	if code, _ := do(t, app, http.MethodGet, "/v1/visor/fleet", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/compute/fleet", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org board want 403, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/visor/fleet/samples", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/compute/fleet/samples", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org samples want 403, got %d", code)
 	}
 }
@@ -44,7 +44,7 @@ func TestFleetBoardRendersWithSourcesErroring(t *testing.T) {
 	}}
 	app := mountApp(t, f)
 
-	code, body := do(t, app, http.MethodGet, "/v1/visor/fleet", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/compute/fleet", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("board want 200 despite unreachable sources, got %d (%s)", code, body)
 	}
@@ -58,7 +58,7 @@ func TestFleetBoardRendersWithSourcesErroring(t *testing.T) {
 		t.Fatalf("want the 1 reachable visor machine, got %d: %+v", len(got.Units), got.Units)
 	}
 	u := got.Units[0]
-	if u.Source != samples.SourceVisor || u.Kind != samples.KindMachine {
+	if u.Source != samples.SourceCompute || u.Kind != samples.KindMachine {
 		t.Fatalf("a visor machine must be tagged (visor, machine), got (%s, %s)", u.Source, u.Kind)
 	}
 	if u.Unit != "gpu-1" || u.Label != "GPU One" {
@@ -76,8 +76,8 @@ func TestFleetBoardRendersWithSourcesErroring(t *testing.T) {
 // Visor itself being down must not 500 the board — it renders empty.
 func TestFleetBoardSurvivesVisorDown(t *testing.T) {
 	app := mountApp(t, &fakeVisor{}) // no machines for anyone
-	t.Setenv("VISOR_URL", "http://127.0.0.1:1")
-	code, body := do(t, app, http.MethodGet, "/v1/visor/fleet", "acme", nil)
+	t.Setenv("COMPUTE_URL", "http://127.0.0.1:1")
+	code, body := do(t, app, http.MethodGet, "/v1/compute/fleet", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("board want 200 with visor down, got %d (%s)", code, body)
 	}
@@ -99,7 +99,7 @@ func TestFleetBoardIsTenantScoped(t *testing.T) {
 	}}
 	app := mountApp(t, f)
 
-	code, body := do(t, app, http.MethodGet, "/v1/visor/fleet", "other", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/compute/fleet", "other", nil)
 	if code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", code, body)
 	}
@@ -117,12 +117,12 @@ func TestFleetBoardIsTenantScoped(t *testing.T) {
 	}
 }
 
-// ---- /v1/visor/fleet/samples ----
+// ---- /v1/compute/fleet/samples ----
 
 // With no warehouse the series is an honest empty list, not a 500 and not zeros.
 func TestFleetSamplesHonestEmptyWithoutDatastore(t *testing.T) {
 	app := mountApp(t, &fakeVisor{})
-	code, body := do(t, app, http.MethodGet, "/v1/visor/fleet/samples?range=24h", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/compute/fleet/samples?range=24h", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", code, body)
 	}
@@ -145,7 +145,7 @@ func TestFleetSamplesHonestEmptyWithoutDatastore(t *testing.T) {
 // about our internals.
 func TestFleetSamplesRejectsUnknownSource(t *testing.T) {
 	app := mountApp(t, &fakeVisor{})
-	code, body := do(t, app, http.MethodGet, "/v1/visor/fleet/samples?source=evil", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/compute/fleet/samples?source=evil", "acme", nil)
 	if code != http.StatusBadRequest {
 		t.Fatalf("unknown source want 400, got %d (%s)", code, body)
 	}
@@ -156,7 +156,7 @@ func TestFleetSamplesRejectsUnknownSource(t *testing.T) {
 	if strings.Contains(string(body), "compute_samples") || strings.Contains(string(body), "hanzo.") {
 		t.Fatalf("the 400 leaked our internals: %s", body)
 	}
-	code, _ = do(t, app, http.MethodGet, "/v1/visor/fleet/samples?source=agent", "acme", nil)
+	code, _ = do(t, app, http.MethodGet, "/v1/compute/fleet/samples?source=agent", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("an allowlisted source want 200, got %d", code)
 	}
@@ -166,7 +166,7 @@ func TestFleetSamplesRejectsUnknownSource(t *testing.T) {
 // truncated onto some other unit's series.
 func TestFleetSamplesRejectsOversizedUnit(t *testing.T) {
 	app := mountApp(t, &fakeVisor{})
-	code, _ := do(t, app, http.MethodGet, "/v1/visor/fleet/samples?unit="+strings.Repeat("u", 400), "acme", nil)
+	code, _ := do(t, app, http.MethodGet, "/v1/compute/fleet/samples?unit="+strings.Repeat("u", 400), "acme", nil)
 	if code != http.StatusBadRequest {
 		t.Fatalf("an over-long unit want 400, got %d", code)
 	}
@@ -177,22 +177,22 @@ func TestFleetSamplesRejectsOversizedUnit(t *testing.T) {
 func TestFleetSamplesToleratesHostileRange(t *testing.T) {
 	app := mountApp(t, &fakeVisor{})
 	code, _ := do(t, app, http.MethodGet,
-		"/v1/visor/fleet/samples?range=1h%3B+DROP+TABLE+hanzo.compute_samples", "acme", nil)
+		"/v1/compute/fleet/samples?range=1h%3B+DROP+TABLE+hanzo.compute_samples", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("a hostile range must fall back to the default, got %d", code)
 	}
 }
 
-// ---- (f) /v1/visor/fleet/workers is unchanged ----
+// ---- (f) /v1/compute/fleet/workers is unchanged ----
 
 // The new routes must not shadow or alter the existing BYO inventory face: it
 // answers on its own path with its own shape.
 func TestFleetWorkersUnchanged(t *testing.T) {
 	app := mountApp(t, &fakeVisor{})
-	if code, _ := do(t, app, http.MethodGet, "/v1/visor/fleet/workers", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/compute/fleet/workers", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org workers want 403 (unchanged), got %d", code)
 	}
-	code, body := do(t, app, http.MethodGet, "/v1/visor/fleet/workers", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/compute/fleet/workers", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("workers want 200 (unchanged), got %d (%s)", code, body)
 	}

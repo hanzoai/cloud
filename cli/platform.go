@@ -215,7 +215,7 @@ func driftSeverity(raw json.RawMessage) string {
 }
 
 // ---------------------------------------------------------------------------
-// Clusters — GET /v1/visor/clusters. The live Go cloud's compute fleet (clients/visor):
+// Clusters — GET /v1/compute/clusters. The live Go cloud's compute fleet (clients/visor):
 // Visor-managed node pools + the org's BYO clusters, tenant-scoped server-side by
 // the validated org (?owner is the caller's IAM org). No org in the path.
 // ---------------------------------------------------------------------------
@@ -261,7 +261,7 @@ func (p *Platform) Clusters(ctx context.Context) ([]Cluster, error) {
 	var out struct {
 		Clusters []Cluster `json:"clusters"`
 	}
-	err := p.do(ctx, http.MethodGet, "/v1/visor/clusters", p.token, nil, &out)
+	err := p.do(ctx, http.MethodGet, "/v1/compute/clusters", p.token, nil, &out)
 	return out.Clusters, err
 }
 

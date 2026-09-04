@@ -45,7 +45,7 @@ var unwired = []string{
 	"admin", "billing", "bot", "dns",
 	"engine", "eval", "event", "functions", "gateway", "git", "ingress", "kms",
 	"marketing", "ml", "mpc", "network", "platform", "research", "skills",
-	"social", "team", "usage", "visor", "world",
+	"social", "team", "usage", "compute", "world",
 }
 
 // unextracted apps have no upstream repo at all: the functionality lives only

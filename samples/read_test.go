@@ -134,7 +134,7 @@ func TestCallerValuesAreBoundNeverBuilt(t *testing.T) {
 // `source` is a CLOSED allowlist: an unknown value is rejected outright rather
 // than reaching the statement in any form.
 func TestSourceIsAllowlisted(t *testing.T) {
-	for _, s := range []string{SourceAgent, SourceBYO, SourceCloud, SourceVisor, "AGENT", " byo "} {
+	for _, s := range []string{SourceAgent, SourceBYO, SourceCloud, SourceCompute, "AGENT", " byo "} {
 		if _, _, err := buildSeries(Query{Org: "acme", Source: s}); err != nil {
 			t.Fatalf("source %q must be accepted, got %v", s, err)
 		}

@@ -1,4 +1,4 @@
-package visor
+package compute
 
 import "testing"
 

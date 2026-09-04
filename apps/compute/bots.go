@@ -1,5 +1,5 @@
-// bots.go mounts the bot-MACHINE surface (/v1/visor/compute/bots) plus a
-// machine's AGENT (/v1/visor/machines/agents, /v1/visor/machines/:id/agent). It
+// bots.go mounts the bot-MACHINE surface (/v1/compute/bots) plus a
+// machine's AGENT (/v1/compute/machines/agents, /v1/compute/machines/:id/agent). It
 // is the SIBLING of
 // machines: a bot machine is not a new
 // state this subsystem owns, it is a composition of two things vm already owns — a
@@ -9,7 +9,7 @@
 //
 // The noun is the MACHINE that hosts a bot runtime — distinct from the bot RUN at
 // /v1/bot (clients/bots), which is a task the runtime executes. Two values, two
-// namespaces: this one nests under /v1/visor/compute because what it rents you
+// namespaces: this one nests under /v1/compute because what it rents you
 // is compute.
 //
 // A bot machine = Agent (cloud /v1/agent) + Machine (vm, kind=bot) + the binding
@@ -31,7 +31,7 @@
 // ?owner=<org>, so a caller can only ever read or mutate its OWN bots. No
 // validated principal ⇒ 403, before anything reaches vm.
 
-package visor
+package compute
 
 import (
 	"github.com/hanzoai/cloud/internal/environ"
@@ -103,7 +103,7 @@ func (b agentBinding) identifies() bool {
 	return b.Name != "" || b.MachineId != "" || b.AgentName != ""
 }
 
-// botView is what /v1/visor/compute/bots emits: the bot's machine (the clean machineView the
+// botView is what /v1/compute/bots emits: the bot's machine (the clean machineView the
 // console already consumes) with the bound agent surfaced. binding carries the
 // honest, vm-reconciled lifecycle status when present.
 type botView struct {
@@ -190,7 +190,7 @@ func (o ops) listBots(ctx context.Context, _ *cloud.Unit) (*botList, error) {
 	return &botList{Bots: out}, nil
 }
 
-// botLaunchReq is the POST /v1/visor/compute/bots/launch body. A bot needs a machine size and,
+// botLaunchReq is the POST /v1/compute/bots/launch body. A bot needs a machine size and,
 // for a real launch, a name; agent is the cloud /v1/agent identity the bot runs
 // (defaulting to the bot's name so a bot is self-named by default). Model and
 // Instructions configure the auto-created bound agent — both optional: an empty
@@ -384,7 +384,7 @@ func (o ops) deleteBot(ctx context.Context, in *botRef) (*cloud.Unit, error) {
 	return nil, nil
 }
 
-// botAction dispatches /v1/visor/compute/bots/:id/:action. message routes to the AGENT path;
+// botAction dispatches /v1/compute/bots/:id/:action. message routes to the AGENT path;
 // stop and pause both halt the bot's agent runtime (one honest capability — see
 // the package doc). An unknown action is a clean 400, never a silent no-op.
 func botAction(s *cloud.Service[state], c *zip.Ctx) error {
@@ -403,7 +403,7 @@ func botAction(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 // stopBot halts the bot's runtime by unbinding its agent — the machine stays
-// (re-bind to resume, or DELETE /v1/visor/compute/bots/:id to tear it down).
+// (re-bind to resume, or DELETE /v1/compute/bots/:id to tear it down).
 // Idempotent: a bot with no binding still reports stopped.
 func stopBot(s *cloud.Service[state], c *zip.Ctx, org, id string) error {
 	if err := s.State.cl.op(c, http.MethodDelete, machine(org, id)+"/agent", "", nil, nil); err != nil {
@@ -483,8 +483,8 @@ func botOp(ctx context.Context, in *botRef) (c *zip.Ctx, org, id string, err err
 
 // ---- a machine's agent (thin proxies over vm's binding surface) ----
 //
-// ONE address, both sides: /v1/visor/machines/agents and
-// /v1/visor/machines/:id/agent, the method carrying the verb. vm answers the same
+// ONE address, both sides: /v1/compute/machines/agents and
+// /v1/compute/machines/:id/agent, the method carrying the verb. vm answers the same
 // shape under its own /v1/machines, so there is no translation left here to keep
 // in step — it used to spell create at .../bind-agent and read/delete at
 // .../agent-binding, and the two spellings were collapsed in vm and here together.

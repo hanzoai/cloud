@@ -43,7 +43,7 @@ func TestAuditChainIsPerProcess(t *testing.T) {
 		{"", "audit"},      // unknown proc must not invent a second host chain
 		{"tasks", "audit-tasks"},
 		{"integrations", "audit-integrations"},
-		{"visor", "audit-visor"},
+		{"compute", "audit-compute"},
 	} {
 		t.Run(tc.proc, func(t *testing.T) {
 			if got := audit.Name(tc.proc); got != tc.want {
@@ -54,7 +54,7 @@ func TestAuditChainIsPerProcess(t *testing.T) {
 
 	// The property that actually matters: distinct processes never collide.
 	seen := map[string]string{}
-	for _, p := range []string{"cloud", "tasks", "integrations", "visor", "commerce", "iam"} {
+	for _, p := range []string{"cloud", "tasks", "integrations", "compute", "commerce", "iam"} {
 		n := audit.Name(p)
 		if prev, dup := seen[n]; dup {
 			t.Fatalf("processes %q and %q share audit chain %q — two writers on one hash chain", prev, p, n)
