@@ -3,7 +3,6 @@ package cloud_test
 import (
 	"context"
 	"errors"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"net"
 	"reflect"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/zap-proto/zip"
 )
 
@@ -38,7 +38,7 @@ var books = map[string]int64{"acme": 5000, "initech": 99}
 // so what the tests below attack is the real declare/call path.
 func serveBank(t *testing.T) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 
 	app := zip.New(zip.Config{AppName: "bank"})
 	zip.Post[client.BalanceIn, client.Balance](app, "/bank/balance",
@@ -158,7 +158,7 @@ func TestNoPlaneInputCanNameAnOrg(t *testing.T) {
 // "unfunded" vs "not yours" vs "no such thing" vs "not ready", and collapsing
 // them is how a board ends up lying about why something failed.
 func TestStatusCrossesWhole(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	app := zip.New(zip.Config{AppName: "moody"})
 	zip.Post[struct{}, struct{}](app, "/moody/refuse",
 		func(context.Context, *struct{}) (*struct{}, error) {
@@ -185,7 +185,7 @@ func TestStatusCrossesWhole(t *testing.T) {
 // returning a zero value. A zero balance and an unreachable ledger must never
 // look alike.
 func TestAbsentPeerNamesTheApp(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	_, err := cloud.Ask[struct{}, struct{}](context.Background(), "nowhere", "nowhere_op", &struct{}{})
 	if err == nil {
 		t.Fatal("a call to an app that is not running succeeded")

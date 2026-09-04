@@ -11,7 +11,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/graph"
 	"github.com/hanzoai/cloud/client"
-	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/valyala/fasthttp"
 	"github.com/zap-proto/zip"
@@ -43,7 +43,7 @@ type stub struct {
 // would report nothing about the request.
 func echo(t *testing.T, reply string) *stub {
 	t.Helper()
-	s := &stub{addr: filepath.Join(planetest.Dir(t), "echo.sock"), reply: reply}
+	s := &stub{addr: filepath.Join(sock.Dir(t), "echo.sock"), reply: reply}
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	app.All("/*", func(c *zip.Ctx) error {
 		fc := c.Fiber()

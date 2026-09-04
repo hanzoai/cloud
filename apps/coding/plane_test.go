@@ -12,7 +12,7 @@ import (
 
 	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/forge"
-	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/zap-proto/zip"
 )
 
@@ -108,7 +108,7 @@ func serveForge(t *testing.T, p *peers) {
 func servePeers(t *testing.T, p *peers) {
 	t.Helper()
 	serveForge(t, p)
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 
 	agentsApp := zip.New(zip.Config{AppName: "agents", DisableStartupMessage: true})
 	zip.Post[client.SessionOpenIn, client.SessionOpened](agentsApp, "/agents/session/open",
@@ -301,7 +301,7 @@ func TestRun_OverThePlane_UnverifiedRefFilesNoPR(t *testing.T) {
 // A peer that is not part of the deployment is an honest error, not a run that
 // proceeds without it. This is the shape the whole path had in production.
 func TestRun_OverThePlane_MissingPeerFailsHonestly(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // nothing listening at all
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t)) // nothing listening at all
 	res := planeDispatcher(&fakeRunner{}).Run(context.Background(), Req{
 		Org: "hanzo", UserID: "u_1", Actor: "zoe", Repo: "api", Prompt: "fix",
 		Remote: "git@git.test:hanzoai/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN",

@@ -2,13 +2,13 @@ package metering_test
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"net"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/zap-proto/zip"
 )
 
@@ -31,7 +31,7 @@ type planeCall struct {
 
 func (p *planeCommerce) serve(t *testing.T) *planeCommerce {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	client.Unbind()
 	t.Cleanup(client.Unbind)
 

@@ -3,7 +3,6 @@ package tasks
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/sock"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -22,7 +22,7 @@ import (
 // cloud.EmbeddedTasks (which durable.go/Serve wires in the real binary).
 func testEngine(t *testing.T) *tasks.Embedded {
 	t.Helper()
-	dir := planetest.Dir(t)
+	dir := sock.Dir(t)
 	srv, err := tasks.Embed(t.Context(), tasks.EmbedConfig{
 		Address: filepath.Join(dir, "tasks.sock"),
 		DataDir: dir,

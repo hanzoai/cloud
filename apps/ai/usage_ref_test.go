@@ -5,7 +5,6 @@ package ai
 import (
 	"context"
 	"fmt"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"net"
 	"reflect"
 	"testing"
@@ -23,6 +22,7 @@ import (
 	// devmaster keys this test binary: cek opens no ledger file without a master, and a
 	// test process has no KMS to resolve one from.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/cloud/internal/sock"
 )
 
 // serveCommerce stands the REAL money peer up on a real socket: the finance ledger the
@@ -35,7 +35,7 @@ import (
 // would show the ref arriving and say nothing about the money.
 func serveCommerce(t *testing.T, seedSubject string, seedCents int64) (finance.Client, *metering.Client) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 

@@ -2,10 +2,10 @@ package auto
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"path/filepath"
 	"testing"
 
+	"github.com/hanzoai/cloud/internal/sock"
 	tasksengine "github.com/hanzoai/tasks/pkg/tasks"
 )
 
@@ -20,7 +20,7 @@ import (
 // with the port: a path in this test's own directory cannot be taken by anyone.
 func embedEngine(ctx context.Context, t *testing.T, namespace string) (*tasksengine.Embedded, string) {
 	t.Helper()
-	dir := planetest.Dir(t)
+	dir := sock.Dir(t)
 	addr := filepath.Join(dir, "tasks.sock")
 	srv, err := tasksengine.Embed(ctx, tasksengine.EmbedConfig{
 		Address: addr, Namespace: namespace, DataDir: dir,

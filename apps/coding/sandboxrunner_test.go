@@ -23,10 +23,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hanzoai/cloud/internal/planetest"
-
 	"github.com/hanzoai/cloud/client"
 	sandboxpeer "github.com/hanzoai/cloud/client/sandbox"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/zap-proto/zip"
 )
 
@@ -120,7 +119,7 @@ func (p *pod) gitVerb(verb string) bool {
 // production one with a production transport.
 func servePod(t *testing.T, p *pod) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 
 	sandboxes := zip.New(zip.Config{AppName: sandboxpeer.App, DisableStartupMessage: true})
 	zip.Post[client.LeaseIn, client.Leased](sandboxes, "/sandbox/lease",

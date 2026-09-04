@@ -30,6 +30,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/money"
 	"github.com/zap-proto/zip"
@@ -393,7 +394,7 @@ func TestMeter_UnconfiguredIsNoop(t *testing.T) {
 	}
 
 	t.Run("no commerce in this deployment", func(t *testing.T) {
-		t.Setenv(runDirEnv, planetest.Dir(t)) // no commerce socket, no router
+		t.Setenv(runDirEnv, sock.Dir(t)) // no commerce socket, no router
 		if err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
 			t.Fatalf("Authorize = %v, want nil — there is no biller to refuse on behalf of", err)
 		}
@@ -553,7 +554,7 @@ func TestMeter_RecordBillsAnExactAmount(t *testing.T) {
 // plane socket, receiving the same RecordIn — what it sees is what commerce
 // would have debited.
 func TestMeterPeer_CarriesTheExactDebit(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	ResetPlane()
 
 	got := make(chan client.RecordIn, 1)

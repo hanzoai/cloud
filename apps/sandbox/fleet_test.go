@@ -5,13 +5,13 @@ package sandbox
 import (
 	"context"
 	"encoding/json"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/zap-proto/zip"
 )
 
@@ -23,7 +23,7 @@ import (
 // test would prove only that the derivation reads a field.
 func serveFleet(t *testing.T, runtime string) {
 	t.Helper()
-	dir := planetest.Dir(t)
+	dir := sock.Dir(t)
 	t.Setenv("ZIP_RUNTIME_DIR", dir)
 	client.Unbind()
 	cloud.ResetPlane()
@@ -111,7 +111,7 @@ func TestAMistypedSettingFallsToTheBoundaryThatServes(t *testing.T) {
 // unconfigured isolates — so an outage in the settings app cannot move a tenant's
 // sandbox onto the node's kernel.
 func TestNoSettingsPeerStillIsolates(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	client.Unbind()
 	cloud.ResetPlane()
 	t.Cleanup(func() { cloud.ResetPlane(); client.Unbind() })

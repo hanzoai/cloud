@@ -23,7 +23,7 @@ import (
 	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/internal/sock"
 )
 
 // THE TENANT HAS TO SURVIVE THE HOP, and nothing tested that it did.
@@ -50,7 +50,7 @@ func TestTheOrgTheEndpointResolvedIsTheOrgThePlaneOpActsFor(t *testing.T) {
 	// sun_path total, so the socket under it did not bind — as "invalid argument",
 	// which names neither the limit nor the length. Every other plane test in this
 	// repo already takes the short dir; this was the one that did not.
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	client.Unbind()
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)

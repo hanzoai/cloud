@@ -29,6 +29,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/zap-proto/zip"
 )
 
@@ -185,7 +186,7 @@ func post(t *testing.T, app *zip.App, path, ctype, body string) string {
 // only the rule could have produced it: no gate is installed here, the operation
 // itself returns a value, and an unpriced sibling driven the same way runs.
 func TestTheProgramArmsItsRule(t *testing.T) {
-	t.Setenv(zip.RuntimeDirEnv, planetest.Dir(t))
+	t.Setenv(zip.RuntimeDirEnv, sock.Dir(t))
 	led := planetest.Money(t, 0) // an empty ledger: a priced operation cannot be afforded
 
 	app := cloud.App("probe", &cloud.Config{Brand: "hanzo"},
@@ -251,7 +252,7 @@ func refusal(answer string) bool {
 // drives the real bind twice: once with an ordinary internal operation, which comes
 // up, and once with one declared at a PRICED address, which does not.
 func TestTheInternalPlaneIsOutsideThePricedSurface(t *testing.T) {
-	t.Setenv(zip.RuntimeDirEnv, planetest.Dir(t))
+	t.Setenv(zip.RuntimeDirEnv, sock.Dir(t))
 	free := func(ctx context.Context, _ *cloud.Unit) (*ok, error) { return &ok{OK: true}, nil }
 
 	cloud.ResetPlane()

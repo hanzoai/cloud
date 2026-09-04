@@ -33,7 +33,6 @@ package client_test
 
 import (
 	"encoding/json"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -43,6 +42,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/exec"
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/webui"
 )
@@ -67,7 +67,7 @@ func darkChild(t *testing.T, name string, mount cloud.UseFunc) *child {
 		t.Fatalf("console %s: %v", name, err)
 	}
 
-	sock := filepath.Join(planetest.Dir(t), name+".sock")
+	sock := filepath.Join(sock.Dir(t), name+".sock")
 	go func() { _ = app.Listen(sock) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	waitFor(t, sock)

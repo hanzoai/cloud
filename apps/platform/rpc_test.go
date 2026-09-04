@@ -35,10 +35,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/internal/planetest"
-
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/k8s"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -79,7 +78,7 @@ func twoTenantFleet() []runtime.Object {
 // plane answered, so every check below is a statement about the callee's decision.
 func planeProbe(t *testing.T, objs ...runtime.Object) *zip.App {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	cloud.ResetPlane()
 
 	s := fakeService(objs...)
@@ -276,7 +275,7 @@ func TestFleetPlane_RoleGateIsFailClosed(t *testing.T) {
 // the board must be TOLD — "no kubernetes client" is a different fact from "no
 // workloads deployed", and only one of them is an operator's cue to panic.
 func TestFleetPlane_UnreadyClusterIsAnErrorNotAnEmptyFleet(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	cloud.ResetPlane()
 	s := &cloud.Service[fleetState]{
 		Base:  cloud.Base{Log: luxlog.New("test")},
@@ -318,7 +317,7 @@ func TestFleetPlane_UnreadyClusterIsAnErrorNotAnEmptyFleet(t *testing.T) {
 // alone — must be an error the board can show. The in-process client this replaced
 // returned nil there, and nil became an empty registry with no error at all.
 func TestFleetPlane_NoSocketIsAnError(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	cloud.ResetPlane() // nothing listening
 	_, err := cloud.Ask[struct{}, client.Fleet](adminCtx(), "platform", client.PlatformFleet, &struct{}{})
 	if err == nil {

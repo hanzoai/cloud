@@ -18,12 +18,13 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zap-proto/zip"
 
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/openapi"
 )
 
 func servingProbe(t *testing.T, name string) *zip.App {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 
 	app := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
 	zip.Get(app, "/v1/"+name+"/ping", func(context.Context, *struct{}) (*struct {
@@ -50,7 +51,7 @@ func servingProbe(t *testing.T, name string) *zip.App {
 func TestSendAnswersFromMemoryWhenTheAppIsHere(t *testing.T) {
 	servingProbe(t, "probe")
 
-	dead := filepath.Join(t.TempDir(), "nothing-listens.sock")
+	dead := filepath.Join(sock.Dir(t), "nothing-listens.sock")
 	g := &Graph{at: func(string) (string, string, error) { return dead, "/mcp", nil }}
 
 	from := fasthttp.AcquireRequest()
@@ -71,7 +72,7 @@ func TestSendStillDialsAPeerThisProcessDoesNotServe(t *testing.T) {
 	// which is a different defect wearing the same green.
 	servingProbe(t, "probe")
 
-	dead := filepath.Join(t.TempDir(), "nothing-listens.sock")
+	dead := filepath.Join(sock.Dir(t), "nothing-listens.sock")
 	g := &Graph{at: func(string) (string, string, error) { return dead, "/mcp", nil }}
 
 	from := fasthttp.AcquireRequest()

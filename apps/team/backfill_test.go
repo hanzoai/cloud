@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/orm/query"
 )
 
@@ -79,7 +80,7 @@ func TestBackfillKeepsTheTableWhenIAMRefuses(t *testing.T) {
 	}
 	seedLegacy(t, s, w.ID, "bbbbbbbb-0000-4000-8000-000000000002", "member")
 
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // no peer answers here
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t)) // no peer answers here
 	if err := backfill(ctx, s); err == nil {
 		t.Fatal("backfill reported success with no IAM to take the rows")
 	}

@@ -23,7 +23,6 @@ package client_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -31,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
@@ -73,7 +73,7 @@ func corpus(t *testing.T) map[string][]client.CorpusOp {
 // measurement below a measurement — an enum's prose is a projection of it.
 func serving(t *testing.T, by map[string][]client.CorpusOp) *zip.App {
 	t.Helper()
-	dir := planetest.Dir(t)
+	dir := sock.Dir(t)
 	kids := map[string]*child{}
 	apps := make([]string, 0, len(by))
 	for app := range by {
@@ -316,7 +316,7 @@ func textOf(t *testing.T, res map[string]any) string {
 // nothing above exercises this at all.
 func routed(t *testing.T, name string, routes ...string) *child {
 	t.Helper()
-	sock := filepath.Join(planetest.Dir(t), name+".sock")
+	sock := filepath.Join(sock.Dir(t), name+".sock")
 	a := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
 	for _, r := range routes {
 		zip.Post(a, r, func(_ context.Context, in *thingIn) (*thingOut, error) {

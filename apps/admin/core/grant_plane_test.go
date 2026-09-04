@@ -7,7 +7,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
-	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/internal/sock"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -30,7 +30,7 @@ type creditCall struct {
 func servePlaneCredit(t *testing.T, got *creditCall, balance string) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", "")
-	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t))
+	t.Setenv("CLOUD_RUN_DIR", sock.Dir(t))
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 
@@ -150,7 +150,7 @@ func TestSplitDeployGrantAddressesAMember(t *testing.T) {
 // anybody, and ErrNoPeer must fail the grant rather than be read as absence.
 func TestSplitDeployGrantFailsRatherThanReportingSuccess(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", "")
-	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t))
+	t.Setenv("CLOUD_RUN_DIR", sock.Dir(t))
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 

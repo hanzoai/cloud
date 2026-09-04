@@ -40,7 +40,6 @@ package cloud
 import (
 	"context"
 	"encoding/json"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net"
 	"net/http"
@@ -51,6 +50,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/finance"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 	"github.com/valyala/fasthttp"
@@ -109,7 +109,7 @@ func tollApp(t *testing.T) *tollRig { return tollRigWith(t, true) }
 // "nobody does".
 func tollRigWith(t *testing.T, edge bool) *tollRig {
 	t.Helper()
-	t.Setenv(zip.RuntimeDirEnv, planetest.Dir(t))
+	t.Setenv(zip.RuntimeDirEnv, sock.Dir(t))
 
 	led := e2eLedger(t)
 	index(t, &Config{},

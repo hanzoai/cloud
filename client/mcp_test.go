@@ -19,7 +19,6 @@ package client_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net"
 	"net/http"
@@ -31,6 +30,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
@@ -55,7 +55,7 @@ type thingOut struct {
 // once its socket accepts.
 func start(t *testing.T, name string, ops int) *child {
 	t.Helper()
-	sock := filepath.Join(planetest.Dir(t), name+".sock")
+	sock := filepath.Join(sock.Dir(t), name+".sock")
 	app := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
 	for i := range ops {
 		id := opID(name, i)

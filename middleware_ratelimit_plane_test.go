@@ -22,10 +22,10 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/client/commerce"
-	"github.com/hanzoai/cloud/internal/planetest"
 
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -36,7 +36,7 @@ import (
 func servePlaneRules(t *testing.T, rules map[string][]client.ScopeRule, calls *atomic.Int32) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", "")
-	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t))
+	t.Setenv("CLOUD_RUN_DIR", sock.Dir(t))
 	ResetPlane()
 	t.Cleanup(ResetPlane)
 
@@ -112,7 +112,7 @@ func TestScopeRulesComeOverThePlaneNotThroughTheApp(t *testing.T) {
 // gates still apply, and a config outage must not take down paid traffic.
 func TestScopeRulesFailOpenWhenCommerceIsNotDeployed(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", "")
-	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t)) // an empty run dir: no commerce socket.
+	t.Setenv("CLOUD_RUN_DIR", sock.Dir(t)) // an empty run dir: no commerce socket.
 	ResetPlane()
 	t.Cleanup(ResetPlane)
 

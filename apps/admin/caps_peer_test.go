@@ -10,7 +10,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
-	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/internal/sock"
 )
 
 // capsPeer serves the spend-cap ops as app "commerce" on this process's plane,
@@ -36,7 +36,7 @@ func newCapsPeer(t *testing.T) *capsPeer {
 	t.Helper()
 	p := &capsPeer{}
 	t.Setenv("ZIP_RUNTIME_DIR", "")
-	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t))
+	t.Setenv("CLOUD_RUN_DIR", sock.Dir(t))
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 

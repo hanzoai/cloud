@@ -17,13 +17,13 @@ package cloud_test
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"net"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/zap-proto/zip"
 )
 
@@ -54,7 +54,7 @@ func serve(t *testing.T, name string, declare func(*zip.App)) {
 // nothing here can reach a real app or be reached by one.
 func alone(t *testing.T) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	t.Setenv("ZIP_ADDR", "")
 	t.Setenv("CLOUD_RUN_DIR", "")
 }
