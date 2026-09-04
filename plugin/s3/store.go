@@ -94,8 +94,15 @@ func startStore(dataDir string) error {
 	if mini == nil {
 		return fmt.Errorf("github.com/hanzoai/s3 has no runnable mini command")
 	}
+	// Who the store will take orders from — see iam.go. Written before the store
+	// starts because the file is a startup flag, and empty on a deployment that
+	// names no issuer, which then runs on the admin credential alone.
+	iam, err := configure(dataDir)
+	if err != nil {
+		return err
+	}
 	util_http.InitGlobalHttpClient()
-	if err := mini.Flag.Parse([]string{
+	args := []string{
 		"-dir=" + dir,
 		"-ip=" + host,
 		"-ip.bind=" + host,
@@ -110,7 +117,11 @@ func startStore(dataDir string) error {
 		"-s3.port.iceberg=0",
 		"-webdav=false",
 		"-admin.ui=false",
-	}); err != nil {
+	}
+	if iam != "" {
+		args = append(args, "-s3.iam.config="+iam)
+	}
+	if err := mini.Flag.Parse(args); err != nil {
 		return fmt.Errorf("s3 store flags: %w", err)
 	}
 	go mini.Run(mini, mini.Flag.Args())

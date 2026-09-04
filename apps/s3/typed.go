@@ -38,8 +38,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/s3admin"
 	"github.com/hanzoai/cloud/internal/fare"
+	"github.com/hanzoai/cloud/s3admin"
 	s3 "github.com/hanzos3/go"
 	"github.com/zap-proto/zip"
 )
@@ -206,6 +206,14 @@ func (o ops) createBucket(ctx context.Context, in *bucketIn) (*bucketItem, error
 	cli, err := o.client()
 	if err != nil {
 		return nil, err
+	}
+	// Before the bucket, the standing to reach it: a tenant with objects and no
+	// role could be served through this surface and refused at the store's own
+	// door, which reads as the object having gone missing.
+	if Enroll != nil {
+		if err := Enroll(ctx, org); err != nil {
+			return nil, zip.Errorf(http.StatusBadGateway, "enroll: %v", err)
+		}
 	}
 	physical := physicalBucket(org, name)
 	exists, err := cli.BucketExists(ctx, physical)

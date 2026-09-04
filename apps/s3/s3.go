@@ -57,6 +57,7 @@
 package s3
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -67,8 +68,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/provisioning"
-	"github.com/hanzoai/cloud/s3admin"
 	"github.com/hanzoai/cloud/internal/fare"
+	"github.com/hanzoai/cloud/s3admin"
 	"github.com/zap-proto/zip"
 )
 
@@ -236,6 +237,15 @@ func (st state) Fee() (string, int64) { return "op", cloud.ResourceFeeCents(opFe
 // provisioning.BucketName uses (bucketName(physicalName(org,name)) — org-hash
 // prefixed AND '_'→'-' folded to a DNS-safe S3 name), so a bucket provisioned via
 // POST /v1/s3 is browsable here and a bucket created here is a valid S3 name.
+// Enroll, when set, gives an org whatever standing it needs in the store before
+// its first bucket exists.
+//
+// A hook rather than a call, because what it does belongs to the process that
+// RUNS the store (plugin/s3, which holds the store's IAM) and this package is
+// only the route surface in front of it. Unset — a deployment whose store lives
+// somewhere else — a bucket is created exactly as before.
+var Enroll func(ctx context.Context, org string) error
+
 func physicalBucket(org, friendly string) string { return provisioning.BucketName(org, friendly) }
 
 // orgPrefix is the S3-bucket-name prefix that ALL of a caller's buckets share
