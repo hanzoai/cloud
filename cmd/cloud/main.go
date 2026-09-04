@@ -554,6 +554,9 @@ func mount(app *zip.App, a manifest.App, eager bool, absent map[string]string) e
 	}
 	p := a.Plugin()
 	p.Lazy = !eager
+	if eager {
+		p.IdleAfter = 0
+	}
 	// NO BUILD-TIME TOOL CATALOGUE. zip.Plugin.Tools took the array this app's
 	// binary projected when it was BUILT (plugin/<app>/mcp.json) so the host could
 	// answer tools/list without running anything. That artifact was a second
@@ -593,6 +596,9 @@ func mount(app *zip.App, a manifest.App, eager bool, absent map[string]string) e
 	// fails again, which is zip's existing answer for a cold plugin and heals the
 	// common cause of a boot failure: a dependency that was not up yet.
 	p.Lazy = true
+	if a.Eager {
+		p.IdleAfter = 0
+	}
 	lazy, lerr := zip.Load(p, a.Prefixes...)
 	if lerr != nil {
 		return fmt.Errorf("%s: composing it absent failed too: %w", a.Name, lerr)

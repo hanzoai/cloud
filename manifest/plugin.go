@@ -302,7 +302,7 @@ func (a App) resolve() zip.Plugin {
 	// An explicit path is honoured as given: the operator named this file, so
 	// silently running something else instead would be a lie.
 	if path := strings.TrimSpace(os.Getenv(env + "_BIN")); path != "" {
-		return zip.Plugin{Name: a.Name, Path: path, Lazy: !a.Eager, IdleAfter: idleAfter}
+		return zip.Plugin{Name: a.Name, Path: path, Lazy: !a.Eager, IdleAfter: a.idleAfter()}
 	}
 	dir := ""
 	if self, err := os.Executable(); err == nil {
@@ -320,6 +320,13 @@ func (a App) resolve() zip.Plugin {
 	return a.pluginIn(dir)
 }
 
+func (a App) idleAfter() time.Duration {
+	if a.Eager {
+		return 0
+	}
+	return idleAfter
+}
+
 func found(path string) bool { _, err := os.Stat(path); return err == nil }
 
 // pluginIn is the sibling-directory half of the ladder, split out because the
@@ -332,7 +339,7 @@ func (a App) pluginIn(dir string) zip.Plugin {
 	// <dir>/<name> or it does not resolve on disk at all. A missing one is named
 	// in the failure, because that is the binary a developer expects to have
 	// built (or the release ladder below fills in over the network).
-	return zip.Plugin{Name: a.Name, Path: filepath.Join(dir, a.Name), Lazy: !a.Eager, IdleAfter: idleAfter}
+	return zip.Plugin{Name: a.Name, Path: filepath.Join(dir, a.Name), Lazy: !a.Eager, IdleAfter: a.idleAfter()}
 }
 
 // NameFor is the app whose code lives in apps/<pkg> — the inverse of App.Pkg,
