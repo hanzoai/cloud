@@ -95,6 +95,13 @@ DEV_KMS_KEY := AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 DEV_CSRF_KEY := ZGV2LWNzcmYta2V5LWZvci10ZXN0cy1vbmx5LTAwMDA=
 TEST_ENV     = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)}" CONSOLE_CSRF_KEY="$${CONSOLE_CSRF_KEY:-$(DEV_CSRF_KEY)}"
 
+# macOS cannot mount tmpfs without root; a test run opts out of the encrypted-store
+# codec's RAM-backed scratch rather than put sudo in front of the suite (still
+# shredded on close). Linux keeps the strict /dev/shm path; the environment wins.
+ifeq ($(shell uname),Darwin)
+TEST_ENV     += HANZO_SQLITE_INSECURE_DEV=$${HANZO_SQLITE_INSECURE_DEV:-1}
+endif
+
 # Carry the tags the SHIPPED build carries. The release image builds and tests
 # with -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" (Dockerfile:213), and
 # its own comment says sqlite_math_functions "is not optional under cgo" because
