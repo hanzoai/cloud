@@ -215,6 +215,12 @@ const (
 	// push that removes one removes it, and nothing is configured to make that so.
 	ToolsSkills = "tools_skills"
 
+	FrameworkInstalled = "framework_installed"
+	FrameworkDocs      = "framework_docs"
+	FrameworkDoc       = "framework_doc"
+	FrameworkIngest    = "framework_ingest"
+	FrameworkFind      = "framework_find"
+
 	GitFiles   = "git_files"
 	GitImport  = "git_import"
 	GitInbound = "git_inbound"
@@ -1389,6 +1395,76 @@ type FederatedIn struct {
 // Federated is the member it resolved to: the IAM user id, or "" for none.
 type Federated struct {
 	User string `json:"user"`
+}
+
+// FwRef names one DocType by its address ("kb.page") in the caller's org.
+type FwRef struct {
+	Doctype string `json:"doctype" validate:"required"`
+}
+
+// FwInstalled answers whether the org holds that DocType.
+type FwInstalled struct {
+	Installed bool `json:"installed"`
+}
+
+// FwFilter is one field-equality clause; the encoder carries no maps, so
+// filters cross as pairs.
+type FwFilter struct {
+	Field string `json:"field"`
+	Value string `json:"value"`
+}
+
+// FwDocsIn lists documents of one DocType, optionally filtered by field
+// equality, bounded by Limit (the server bounds it again).
+type FwDocsIn struct {
+	Doctype string     `json:"doctype" validate:"required"`
+	Filters []FwFilter `json:"filters,omitempty"`
+	Limit   int        `json:"limit,omitempty"`
+}
+
+// FwDoc is a document as it crosses the plane: its name, and its field data as
+// the JSON object it is — the DocType defines the fields at run time, so raw
+// bytes are the honest carrier, exactly as IndexReconcileIn relays its corpus.
+type FwDoc struct {
+	Name string          `json:"name"`
+	Data json.RawMessage `json:"data"`
+}
+
+// FwDocs is a page of documents.
+type FwDocs struct {
+	Docs []FwDoc `json:"docs"`
+}
+
+// FwDocIn names one document.
+type FwDocIn struct {
+	Doctype string `json:"doctype" validate:"required"`
+	Name    string `json:"name" validate:"required"`
+}
+
+// FwIngestIn creates a document from already-trusted field data, through the
+// full validate + hook pipeline; Name requests a name, "" lets the DocType's
+// naming rule decide. Data is the field object as JSON.
+type FwIngestIn struct {
+	Doctype string          `json:"doctype" validate:"required"`
+	Data    json.RawMessage `json:"data" validate:"required"`
+	Name    string          `json:"name,omitempty"`
+}
+
+// FwIngested is the created document's name.
+type FwIngested struct {
+	Name string `json:"name"`
+}
+
+// FwFindIn asks for the first document whose field equals value.
+type FwFindIn struct {
+	Doctype string `json:"doctype" validate:"required"`
+	Field   string `json:"field" validate:"required"`
+	Value   string `json:"value"`
+}
+
+// FwFound carries the found name, "" for none.
+type FwFound struct {
+	Name string `json:"name"`
 }
 
 // SkillFile is one SKILL.md as a repository holds it: the repo-relative Path,

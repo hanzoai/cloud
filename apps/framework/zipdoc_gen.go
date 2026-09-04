@@ -78,6 +78,11 @@ func init() {
 			"summaryView.documents": "Documents is how many documents exist across them.",
 		},
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/framework POST /framework/doc", zip.Doc{})
+	zip.Describe("github.com/hanzoai/cloud/apps/framework POST /framework/docs", zip.Doc{})
+	zip.Describe("github.com/hanzoai/cloud/apps/framework POST /framework/find", zip.Doc{})
+	zip.Describe("github.com/hanzoai/cloud/apps/framework POST /framework/ingest", zip.Doc{})
+	zip.Describe("github.com/hanzoai/cloud/apps/framework POST /framework/installed", zip.Doc{})
 	zip.Describe("github.com/hanzoai/cloud/apps/framework POST /v1/framework/:doctype/:name/cancel", zip.Doc{
 		Description: "Moves a submitted document to cancelled (docstatus 1 → 2) after\nits on_cancel hooks agree. Cancelling is terminal — a cancelled document\ncannot be re-submitted — but it CAN then be deleted.",
 		Fields: map[string]string{
