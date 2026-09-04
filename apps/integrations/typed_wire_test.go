@@ -65,8 +65,6 @@ var untypedByDesign = map[string]string{
 	"POST /v1/integration/whatsapp/webhook": "Meta's HMAC covers the RAW received bytes, and it answers 200 to " +
 		"anything it cannot act on — a status callback carries no message, and a non-2xx is retried with backoff " +
 		"until the subscription is disabled.",
-	"POST /v1/integration/forge/webhook": "the HMAC covers the raw bytes and is verified BEFORE the payload is parsed, " +
-		"so an unauthenticated body is never decoded — and a typed op decodes first.",
 	"POST /v1/integration/openrouter/webhook": "the credential is read from the destination's own Headers map BEFORE the " +
 		"body is touched, so a caller with no key never buys a decode — an order zip's pre-handler unmarshal inverts.",
 
