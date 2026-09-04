@@ -14,7 +14,6 @@ package client_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -23,6 +22,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/zap-proto/zip"
 )
 
@@ -31,7 +31,7 @@ import (
 // for the subsystem that serves them.
 func startNamed(t *testing.T, name string, ops ...string) *child {
 	t.Helper()
-	sock := filepath.Join(planetest.Dir(t), name+".sock")
+	sock := filepath.Join(sock.Dir(t), name+".sock")
 	app := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
 	for i, id := range ops {
 		route := "/v1/" + name + "/op" + string(rune('a'+i))

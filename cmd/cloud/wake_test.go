@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"net"
 	"os"
 	"os/exec"
@@ -29,6 +28,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/manifest"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -72,7 +72,7 @@ func TestMain(m *testing.M) {
 // endpoint on it. Nothing is running when it returns; that is the point.
 func router(t *testing.T, name string) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	cloud.ResetPlane()
 
 	app := zip.New(zip.Config{AppName: "cloud", Logger: luxlog.New("test")})
@@ -178,7 +178,7 @@ func TestWakeRefusesAnAppThisFleetDoesNotRun(t *testing.T) {
 // that can start anything, so "not deployed here" is simply true — and it is answered
 // at once, from a connect that is refused, never a timeout.
 func TestWakeWithNoRouterIsNoPeer(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	cloud.ResetPlane()
 
 	_, err := cloud.Ask[struct{}, client.Started](context.Background(), "sleepy", "wake_alive", &struct{}{})
@@ -201,7 +201,7 @@ func TestWakeWithNoRouterIsNoPeer(t *testing.T) {
 // absence now travels as a FIELD on a 200, and a router that cannot answer this op
 // cannot claim anything about the fleet.
 func TestWakeAgainstAnOlderRouterIsAnOutage(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	cloud.ResetPlane()
 
 	// A router of the previous generation: a plane socket at the host's name, with

@@ -25,7 +25,6 @@ package cloud
 import (
 	"context"
 	"encoding/json"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -35,6 +34,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
@@ -70,7 +70,7 @@ func subsystem(t *testing.T) (edge, plane string) {
 
 	UseMCP(app)
 
-	dir := planetest.Dir(t)
+	dir := sock.Dir(t)
 	edge, plane = filepath.Join(dir, "edge.sock"), filepath.Join(dir, "plane.sock")
 	go func() { _ = app.Listen(edge) }()
 	go func() { _ = Plane().Listen(plane) }()

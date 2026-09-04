@@ -3,15 +3,17 @@ package team
 import (
 	"context"
 	"errors"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"sync"
 	"testing"
+
+	"github.com/hanzoai/cloud/internal/planetest"
 
 	"github.com/hanzoai/cloud/apps/team/token"
 
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/cloud/internal/sock"
 )
 
 func newAccountStore(t *testing.T) *accountStore {
@@ -131,7 +133,7 @@ func TestSeatsForwardsIAMsCount(t *testing.T) {
 // under-bills silently, where an error retries.
 func TestSeatsSurfacesReadError(t *testing.T) {
 	s := newAccountStore(t)
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // no identity peer answers here
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t)) // no identity peer answers here
 	seats, guests, err := s.Seats(context.Background(), "acme")
 	if err == nil {
 		t.Fatal("Seats must surface a read error, not a silent 0-seat count")

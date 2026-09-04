@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/client/commerce"
-	"github.com/hanzoai/cloud/internal/planetest"
 
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -352,7 +352,7 @@ func TestMicrosToGateCents(t *testing.T) {
 // true, and is TestMeter_UnconfiguredIsNoop's job, not theirs.
 func serveCommerceOK(t *testing.T) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	app := zip.New(zip.Config{AppName: commerce.App})
 	zip.Post[client.AuthorizeIn, client.Verdict](app, "/finance/authorize",
 		func(context.Context, *client.AuthorizeIn) (*client.Verdict, error) {

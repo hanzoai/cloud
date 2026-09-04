@@ -32,7 +32,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net"
 	"net/http"
@@ -52,6 +51,7 @@ import (
 	"github.com/hanzoai/cloud/apps/x402"
 	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/finance"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/money"
 	"github.com/luxfi/crypto"
@@ -256,7 +256,7 @@ func splitFleet(t *testing.T) *fleet {
 	if testing.Short() {
 		t.Skip("spawns real child processes")
 	}
-	run := planetest.Dir(t)
+	run := sock.Dir(t)
 	t.Setenv("ZIP_RUNTIME_DIR", run)
 
 	master := make([]byte, 32)
@@ -314,7 +314,7 @@ func splitFleet(t *testing.T) *fleet {
 // reported. A child that dies before READY fails the test with its own stderr.
 func (f *fleet) start(role string, env ...string) string {
 	f.t.Helper()
-	dir := planetest.Dir(f.t)
+	dir := sock.Dir(f.t)
 	cmd := exec.Command(os.Args[0], "-test.run=TestMain")
 	cmd.Env = append(os.Environ(), append([]string{roleEnv + "=" + role, "CLOUD_SPLIT_DIR=" + dir}, env...)...)
 	stdout, err := cmd.StdoutPipe()

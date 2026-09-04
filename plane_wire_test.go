@@ -2,11 +2,11 @@ package cloud_test
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"testing"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/zap-proto/zip"
 )
 
@@ -30,7 +30,7 @@ import (
 // it to the kernel, reading it back and parsing a fresh copy, to reach a function
 // pointer that was in memory the whole time.
 func TestCoresidentCallTakesNoWire(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	cloud.ResetPlane()
 
 	var seen []byte

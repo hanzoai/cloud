@@ -5,7 +5,6 @@ package cron
 import (
 	"context"
 	"fmt"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/sock"
 	tasksclient "github.com/hanzoai/tasks/pkg/sdk/client"
 	tasksworker "github.com/hanzoai/tasks/pkg/sdk/worker"
 	tasksengine "github.com/hanzoai/tasks/pkg/tasks"
@@ -71,7 +71,7 @@ func newTestEngine(t *testing.T, k kube) (*tasksengine.Embedded, tasksengine.Vie
 	setWiring(k, luxlog.NewNoOpLogger())
 	// A socket in this test's own dir: no port to pick, and nothing for a parallel
 	// test to collide with.
-	dir := planetest.Dir(t)
+	dir := sock.Dir(t)
 	eng, err := tasksengine.Embed(context.Background(), tasksengine.EmbedConfig{
 		Address: filepath.Join(dir, "tasks.sock"),
 		DataDir: dir,

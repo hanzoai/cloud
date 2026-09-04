@@ -23,7 +23,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
-	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
@@ -34,7 +34,7 @@ import (
 // refusal is tested against is what it will call in production.
 func serveFlags(t *testing.T, held map[string][]string) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 
 	app := zip.New(zip.Config{AppName: "flags"})
 	zip.Post[client.FlagIn, client.Flag](app, "/flags/hold",
@@ -131,7 +131,7 @@ func TestTheFlagLetsTheOrgIn(t *testing.T) {
 // opens every unfinished product to every customer at once, which is the one
 // failure this refusal exists to prevent.
 func TestFlagsUnreachableRefuses(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // nothing is listening in it
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t)) // nothing is listening in it
 	app := staged("research")
 
 	if code, body := fetch(t, app, "/v1/research/runs", member); code != http.StatusNotFound {
@@ -166,7 +166,7 @@ func TestGAInstallsNoRefusal(t *testing.T) {
 	}
 
 	// And it is live: with no flags peer anywhere, ga still serves.
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	app := staged("iam", "research")
 	if code, body := fetch(t, app, "/v1/iam/keys", member); code != http.StatusOK {
 		t.Errorf("GET /v1/iam/keys = %d %s, want 200 — a ga capability was made to depend on flags", code, body)
@@ -177,7 +177,7 @@ func TestGAInstallsNoRefusal(t *testing.T) {
 // on every request the process serves, so a beta capability that answered for its
 // neighbours would take the fleet down one prefix at a time.
 func TestTheRefusalStaysOnItsOwnPrefixes(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // flags is unreachable: a refusal would be loud
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t)) // flags is unreachable: a refusal would be loud
 	app := staged("research")
 
 	for _, path := range []string{"/v1/health", "/v1/iam/keys"} {

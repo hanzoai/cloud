@@ -23,13 +23,14 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 )
 
 // servingApp brings an app up on the canonical socket for name, which is what
 // makes zip.Serving(name) answer with it.
 func servingApp(t *testing.T, name string) *zip.App {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 
 	app := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
 	zip.Get(app, "/v1/"+name+"/ping", func(context.Context, *struct{}) (*struct {
@@ -58,7 +59,7 @@ func servingApp(t *testing.T, name string) *zip.App {
 // that is the whole point.
 func deadEnd(t *testing.T) client.At {
 	t.Helper()
-	dead := filepath.Join(t.TempDir(), "nothing-listens-here.sock")
+	dead := filepath.Join(sock.Dir(t), "nothing-listens-here.sock")
 	return func(string) (string, string, error) { return dead, "/mcp", nil }
 }
 

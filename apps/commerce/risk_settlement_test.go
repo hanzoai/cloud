@@ -22,7 +22,6 @@ package commerce
 import (
 	"context"
 	"errors"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -36,6 +35,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 )
 
 // The settlement fixture: a real [TakePaymentOut] shape, because what this endpoint
@@ -82,7 +82,7 @@ func watchTeaching(t *testing.T) <-chan caught {
 // endpointApp is the credit endpoint with a handler that answers like the real one.
 func endpointApp(t *testing.T, status int, body string) *zip.App {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	client.Unbind()
 	t.Cleanup(client.Unbind)
 	t.Cleanup(func() { cloud.SetRiskScorer(nil) })

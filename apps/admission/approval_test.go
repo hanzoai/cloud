@@ -6,7 +6,6 @@ package admission
 import (
 	"bytes"
 	"context"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net"
 	"net/http/httptest"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -174,7 +174,7 @@ func TestApprovals_PlaneAnswerDecidesTheGate(t *testing.T) {
 // restarting would be a worse outage than the one it is guarding against — and
 // caching that verdict would keep them locked out after iam came back.
 func TestApprovals_AbsentPeerFailsOpenAndIsNotCached(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	client.Unbind()
 	cloud.ResetPlane() // nothing listening
 
@@ -211,7 +211,7 @@ func TestApprovals_AbsentPeerFailsOpenAndIsNotCached(t *testing.T) {
 // the same guarantee: even a forwarded credential would have nothing to read it.)
 func TestApprovals_NoCredentialCrossesTheWire(t *testing.T) {
 	const secret = "super-secret-credential"
-	front, back := planetest.Dir(t), planetest.Dir(t)
+	front, back := sock.Dir(t), sock.Dir(t)
 
 	t.Setenv("ZIP_RUNTIME_DIR", back)
 	client.Unbind()
@@ -318,7 +318,7 @@ func waitAccept(t *testing.T, path string) {
 // set, observes the call's context on the callee side.
 func servePeerApproval(t *testing.T, status string) func() error {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 	client.Unbind()
 	cloud.ResetPlane()
 	zip.Post[struct{}, client.Approval](cloud.Plane(), "/iam/approval",

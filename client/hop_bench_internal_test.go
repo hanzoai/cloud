@@ -24,13 +24,14 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zap-proto/zip"
 
+	"github.com/hanzoai/cloud/internal/sock"
 	luxlog "github.com/luxfi/log"
 )
 
 // benchApp brings a subsystem up on its canonical socket.
 func benchApp(b *testing.B, name string) {
 	b.Helper()
-	b.Setenv("ZIP_RUNTIME_DIR", b.TempDir())
+	b.Setenv("ZIP_RUNTIME_DIR", sock.Dir(b))
 
 	app := zip.New(zip.Config{
 		AppName:               name,
@@ -63,7 +64,7 @@ func listFrame() *fasthttp.Request {
 func BenchmarkHopHere(b *testing.B) {
 	benchApp(b, "probe")
 	// An address nothing serves, so a dial could not answer even by accident.
-	dead := filepath.Join(b.TempDir(), "no.sock")
+	dead := filepath.Join(sock.Dir(b), "no.sock")
 	at := func(string) (string, string, error) { return dead, "/mcp", nil }
 
 	req := listFrame()

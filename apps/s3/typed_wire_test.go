@@ -17,7 +17,7 @@ import (
 	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/s3"
 	"github.com/hanzoai/cloud/client"
-	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/valyala/fasthttp"
@@ -363,7 +363,7 @@ func TestTheGraphCanAimTheDelete(t *testing.T) {
 
 	// The child speaks the transport the fleet dials, on its own socket, exactly as
 	// the host starts one.
-	sock := filepath.Join(planetest.Dir(t), "s3.sock")
+	sock := filepath.Join(sock.Dir(t), "s3.sock")
 	go func() { _ = app.Listen(sock) }()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {

@@ -15,7 +15,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/client"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/money"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
@@ -25,6 +24,7 @@ import (
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/apps/admin/customer"
 	"github.com/hanzoai/cloud/apps/admin/revenue"
+	"github.com/hanzoai/cloud/internal/sock"
 )
 
 // ── rich stateful fakes for the customer-management surfaces ──────────────────
@@ -635,7 +635,7 @@ func TestAnalytics_HandlerRealWiring(t *testing.T) {
 func (f *cockpitFakes) servePlaneBooks(t *testing.T) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", "")
-	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t))
+	t.Setenv("CLOUD_RUN_DIR", sock.Dir(t))
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 

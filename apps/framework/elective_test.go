@@ -12,6 +12,7 @@ import (
 	"github.com/hanzoai/cloud/internal/planetest"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/doctype"
 	engine "github.com/hanzoai/framework"
 	"github.com/zap-proto/zip"
@@ -92,7 +93,7 @@ func TestEnablingTheModuleLetsTheOrgIn(t *testing.T) {
 // What no module owns is not gated: a static segment, and an org's own DocType
 // in a namespace no lane registered. Both fall out of the same empty answer.
 func TestWhatNoModuleOwnsIsServed(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // no peer: proves neither asks
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t)) // no peer: proves neither asks
 	app := gated()
 
 	for _, path := range []string{prefix + "/modules", prefix + "/mine.own-doctype"} {
@@ -104,7 +105,7 @@ func TestWhatNoModuleOwnsIsServed(t *testing.T) {
 
 // An entitlement outage fails closed.
 func TestEntitlementUnreachableRefusesTheModule(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // nothing is listening in it
+	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t)) // nothing is listening in it
 	app := gated()
 
 	if code, body := fetch(t, app, prefix+"/lane.thing", member); code != http.StatusNotFound {
