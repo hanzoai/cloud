@@ -46,8 +46,8 @@
     "/v1/git/keys": {
       "get": {
         "operationId": "get_git_keys",
-        "summary": "Returns the SSH public keys registered to the caller's org — the keys that authenticate `git clone git@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git`.",
-        "description": "Returns the SSH public keys registered to the caller's org — the keys\nthat authenticate `git clone git@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git`. Keys are org-scoped\non read even though the fingerprint index is global, so one org never sees\nanother's.",
+        "summary": "Returns the SSH public keys registered to the caller's org — the keys that authenticate `git clone git@<host>:<org>/<repo>.git`.",
+        "description": "Returns the SSH public keys registered to the caller's org — the keys\nthat authenticate `git clone git@<host>:<org>/<repo>.git`. Keys are org-scoped\non read even though the fingerprint index is global, so one org never sees\nanother's.",
         "tags": [
           "git"
         ],
@@ -79,8 +79,8 @@
       },
       "post": {
         "operationId": "post_git_keys",
-        "summary": "Registers an SSH public key so it can authenticate `git clone git@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git` for the caller's org.",
-        "description": "Registers an SSH public key so it can authenticate `git clone\ngit@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git` for the caller's org. The key line is parsed and\ncanonicalized before storage, its SHA256 fingerprint becomes the auth lookup\nhandle, and the full public key round-trips (it is public). Answers 201.\nFingerprints are globally unique, so a key already registered — to this org or\nany other — is a 409: one key belongs to exactly one org.",
+        "summary": "Registers an SSH public key so it can authenticate `git clone git@<host>:<org>/<repo>.git` for the caller's org.",
+        "description": "Registers an SSH public key so it can authenticate `git clone\ngit@<host>:<org>/<repo>.git` for the caller's org. The key line is parsed and\ncanonicalized before storage, its SHA256 fingerprint becomes the auth lookup\nhandle, and the full public key round-trips (it is public). Answers 201.\nFingerprints are globally unique, so a key already registered — to this org or\nany other — is a 409: one key belongs to exactly one org.",
         "tags": [
           "git"
         ],
@@ -849,7 +849,7 @@
                 "branch": "main",
                 "files": [
                   {
-                    "content": "\u003ch1\u003ehi\u003c/h1\u003e",
+                    "content": "<h1>hi</h1>",
                     "path": "index.html"
                   }
                 ],
@@ -1364,8 +1364,8 @@
     "/v1/git/webhook": {
       "post": {
         "operationId": "post_git_webhook",
-        "summary": "Retired — forge pushes build via platform.hanzo.ai",
-        "description": "GONE (410). Push-to-deploy belongs to POST https://platform.hanzo.ai/v1/git-webhook, which owns the build system-of-record and dispatches BuildKit Jobs. git.hanzo.ai delivers there through ONE forge-wide system webhook covering every repository; a repo opts in by committing hanzo.yml, not by owning a hook of its own.\n\nEvery delivery answers 410 whatever it carries — this endpoint reads no body and authenticates nothing.\n\n410 rather than 404, because the address was real and its meaning moved, which is the distinction 410 carries. A 404 from this estate is ambiguous: Hanzo Git serves /v1, so /api/v1 404s too and reads as \"the API is switched off\". A retired endpoint says it is retired and names its replacement, so the answer carries its own fix.",
+        "summary": "Retired — a forge push is delivered to /v1/platform/hook",
+        "description": "GONE (410). Push-to-deploy belongs to POST https://api.hanzo.ai/v1/platform/hook, the platform app's receiver, which holds the builder. A push into this host's own git server needs no webhook: it fires the builder over the host's plugin transport. git.hanzo.ai, while it remains a separate process, delivers there through ONE forge-wide system webhook covering every repository; a repo opts in by committing hanzo.yml, not by owning a hook of its own.\n\nEvery delivery answers 410 whatever it carries — this endpoint reads no body and authenticates nothing.\n\n410 rather than 404, because the address was real and its meaning moved, which is the distinction 410 carries. A 404 from this estate is ambiguous: Hanzo Git serves /v1, so /api/v1 404s too and reads as \"the API is switched off\". A retired endpoint says it is retired and names its replacement, so the answer carries its own fix.no such route",
         "tags": [
           "git"
         ],
@@ -1601,7 +1601,7 @@
       "post": {
         "operationId": "post_git_by_org_by_repo_git-receive-pack",
         "summary": "Accept a push, and turn it into a build",
-        "description": "The pack-transfer phase of a push, and the point at which a push becomes an EVENT. NEVER ANONYMOUS: a push always requires an authenticated org, and the org in the path must equal it.\n\nOnce the pack is on disk the repository's storage usage is metered and a build is fired for every branch whose tip actually moved, computed from the before/after branch diff rather than from what the client claimed. That runs on a cancel-immune context, so a client that hangs up the moment its push lands still gets its build, and it runs even when git itself exited non-zero — the refs on disk are the ground truth. Repacking housekeeping is detached and never blocks the response.\n\nA Content-Type other than `application/x-git-receive-pack-request` is 400. Addressed under the API prefix, so `git clone https://\u003chost\u003e/v1/git/\u003corg\u003e/\u003crepo\u003e.git` works on any host the binary serves. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
+        "description": "The pack-transfer phase of a push, and the point at which a push becomes an EVENT. NEVER ANONYMOUS: a push always requires an authenticated org, and the org in the path must equal it.\n\nOnce the pack is on disk the repository's storage usage is metered and a build is fired for every branch whose tip actually moved, computed from the before/after branch diff rather than from what the client claimed. That runs on a cancel-immune context, so a client that hangs up the moment its push lands still gets its build, and it runs even when git itself exited non-zero — the refs on disk are the ground truth. Repacking housekeeping is detached and never blocks the response.\n\nA Content-Type other than `application/x-git-receive-pack-request` is 400. Addressed under the API prefix, so `git clone https://<host>/v1/git/<org>/<repo>.git` works on any host the binary serves. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
           "git"
         ],
@@ -1640,7 +1640,7 @@
       "post": {
         "operationId": "post_git_by_org_by_repo_git-upload-pack",
         "summary": "Serve a clone or fetch",
-        "description": "The pack-transfer phase of a clone or fetch: the request and the response are git's binary pack protocol, streamed straight through git itself — request body to git's stdin, git's stdout to the response — so a multi-gigabyte clone never lands in this process's memory.\n\nA PUBLIC repository is fetched anonymously; a private one requires its own org, and a wrong or absent org is 404 rather than a hint that the repository exists. A Content-Type other than `application/x-git-upload-pack-request` is 400. Addressed under the API prefix, so `git clone https://\u003chost\u003e/v1/git/\u003corg\u003e/\u003crepo\u003e.git` works on any host the binary serves. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
+        "description": "The pack-transfer phase of a clone or fetch: the request and the response are git's binary pack protocol, streamed straight through git itself — request body to git's stdin, git's stdout to the response — so a multi-gigabyte clone never lands in this process's memory.\n\nA PUBLIC repository is fetched anonymously; a private one requires its own org, and a wrong or absent org is 404 rather than a hint that the repository exists. A Content-Type other than `application/x-git-upload-pack-request` is 400. Addressed under the API prefix, so `git clone https://<host>/v1/git/<org>/<repo>.git` works on any host the binary serves. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
           "git"
         ],
@@ -1679,7 +1679,7 @@
       "get": {
         "operationId": "get_git_by_org_by_repo_info_refs",
         "summary": "Advertise a repository's refs to a git client",
-        "description": "The ref-advertisement phase of git's smart-HTTP protocol — the first request a clone, a fetch and a push all make. `?service=` selects which: `git-upload-pack` advertises for a fetch, `git-receive-pack` for a push, and any other value is 400.\n\nANONYMOUS ONLY FOR FETCH, AND ONLY ON A PUBLIC REPOSITORY. The push advertisement always requires an authenticated org, and where a path org is present it must equal the authenticated one. A private repository reached without its org is 404, indistinguishable from one that does not exist. Addressed under the API prefix, so `git clone https://\u003chost\u003e/v1/git/\u003corg\u003e/\u003crepo\u003e.git` works on any host the binary serves. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
+        "description": "The ref-advertisement phase of git's smart-HTTP protocol — the first request a clone, a fetch and a push all make. `?service=` selects which: `git-upload-pack` advertises for a fetch, `git-receive-pack` for a push, and any other value is 400.\n\nANONYMOUS ONLY FOR FETCH, AND ONLY ON A PUBLIC REPOSITORY. The push advertisement always requires an authenticated org, and where a path org is present it must equal the authenticated one. A private repository reached without its org is 404, indistinguishable from one that does not exist. Addressed under the API prefix, so `git clone https://<host>/v1/git/<org>/<repo>.git` works on any host the binary serves. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
           "git"
         ],
@@ -2450,7 +2450,7 @@
       "bearer": {
         "type": "http",
         "scheme": "bearer",
-        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+        "description": "The caller's credential, sent as `Authorization: Bearer <token>`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
       }
     }
   }
