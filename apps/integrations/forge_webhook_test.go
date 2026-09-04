@@ -1,4 +1,4 @@
-package platform
+package integrations
 
 // hook_test.go drives the forge's push endpoint over REAL HTTP against the real
 // route, because the two properties that matter are both properties of the wire:
@@ -91,7 +91,7 @@ func (f *fired) settle(t *testing.T, pushes, events int) {
 	}
 }
 
-// hookApp mounts the forge endpoint the way Mount does — the raw route over a Service
+// forgeApp mounts the forge endpoint the way Mount does — the raw route over a Service
 // whose KMS holds `key` — and registers both clients so the test observes exactly
 // what production dispatches. An empty key seals nothing, which is how the
 // no-secret refusal is exercised.
@@ -99,16 +99,16 @@ func (f *fired) settle(t *testing.T, pushes, events int) {
 // The Service carries NO STORE, and that is an assertion rather than a shortcut:
 // this endpoint verifies, resolves and dispatches, and reads nothing of platform's
 // own state. A version of it that grew a read would stop building here.
-func hookApp(t *testing.T, key string) (*zip.App, *fired) {
+func forgeApp(t *testing.T, key string) (*zip.App, *fired) {
 	t.Helper()
-	return hookAppOn(t, key, "api.hanzo.ai")
+	return forgeAppOn(t, key, "api.hanzo.ai")
 }
 
-// hookAppOn is hookApp for a deployment on a given API host — the one thing the
+// forgeAppOn is forgeApp for a deployment on a given API host — the one thing the
 // forge host is derived from, so an empty one is a deployment that names no forge.
-func hookAppOn(t *testing.T, key, domain string) (*zip.App, *fired) {
+func forgeAppOn(t *testing.T, key, domain string) (*zip.App, *fired) {
 	t.Helper()
-	return hookAppWith(t, sealed(t, key), domain, nil)
+	return forgeAppWith(t, sealed(t, key), domain, nil)
 }
 
 // sealed is a KMS holding key at the ref the endpoint reads. An empty key seals
@@ -124,10 +124,10 @@ func sealed(t *testing.T, key string) *fakeKMS {
 	return kms
 }
 
-// hookAppWith is hookAppOn over a caller-supplied KMS and builder, so a test can
+// forgeAppWith is forgeAppOn over a caller-supplied KMS and builder, so a test can
 // make either FAIL the way production can — a KMS that stops answering, a
 // draining platform, no peer to ask.
-func hookAppWith(t *testing.T, kms cloud.KMSClient, domain string, build func(context.Context, cloud.GitPushEvent) (int, error)) (*zip.App, *fired) {
+func forgeAppWith(t *testing.T, kms cloud.KMSClient, domain string, build func(context.Context, cloud.GitPushEvent) (int, error)) (*zip.App, *fired) {
 	t.Helper()
 	s := &cloud.Service[state]{
 		Base: cloud.Base{KMS: kms, Log: luxlog.New("test"), Brand: "hanzo", Domain: domain},
@@ -154,7 +154,7 @@ func hookAppWith(t *testing.T, kms cloud.KMSClient, domain string, build func(co
 	// fleet edge admits 16 MiB (cloud.Config BodyLimit), which is the size a
 	// delivery really arrives at with.
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), BodyLimit: 16 << 20})
-	app.Post(hookPath, cloud.Terminal(cloud.Handle(s, hook)))
+	app.Post(forgeWebhookPath, cloud.Terminal(cloud.Handle(s, forgeWebhook)))
 	return app, f
 }
 
@@ -178,7 +178,7 @@ func pushBody(t *testing.T, owner, repo, ref, before, after, pusher string) []by
 }
 
 // sign is the forge's own signature over body: bare hex, no prefix.
-func sign(key string, body []byte) string {
+func forgeSign(key string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(key))
 	mac.Write(body)
 	return hex.EncodeToString(mac.Sum(nil))
@@ -187,7 +187,7 @@ func sign(key string, body []byte) string {
 // deliver POSTs body with the given signature headers set (name/value pairs).
 func deliver(t *testing.T, app *zip.App, body []byte, headers ...string) (int, verdict) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, hookPath, strings.NewReader(string(body)))
+	req := httptest.NewRequest(http.MethodPost, forgeWebhookPath, strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	for i := 0; i+1 < len(headers); i += 2 {
 		req.Header.Set(headers[i], headers[i+1])
@@ -206,7 +206,7 @@ func deliver(t *testing.T, app *zip.App, body []byte, headers ...string) (int, v
 // signedDelivery POSTs body signed with the forge's own header.
 func signedDelivery(t *testing.T, app *zip.App, body []byte) (int, verdict) {
 	t.Helper()
-	return deliver(t, app, body, "X-Gitea-Signature", sign(hookSecret, body))
+	return deliver(t, app, body, "X-Gitea-Signature", forgeSign(hookSecret, body))
 }
 
 // ── the signature is the whole authentication ────────────────────────────────
@@ -215,10 +215,10 @@ func signedDelivery(t *testing.T, app *zip.App, body []byte) (int, verdict) {
 // is the assertion: a 401 that had already dispatched would be a build started by
 // an unauthenticated caller.
 func TestHook_RefusesAWrongSignature(t *testing.T) {
-	app, f := hookApp(t, hookSecret)
+	app, f := forgeApp(t, hookSecret)
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 
-	code, _ := deliver(t, app, body, "X-Gitea-Signature", sign("not-the-secret", body))
+	code, _ := deliver(t, app, body, "X-Gitea-Signature", forgeSign("not-the-secret", body))
 	if code != http.StatusUnauthorized {
 		t.Fatalf("wrong-key delivery: want 401, got %d", code)
 	}
@@ -230,11 +230,11 @@ func TestHook_RefusesAWrongSignature(t *testing.T) {
 // The signature covers the BODY. A valid signature over different bytes than the
 // ones delivered is refused, so a body cannot be swapped after signing.
 func TestHook_RefusesASignatureOverOtherBytes(t *testing.T) {
-	app, f := hookApp(t, hookSecret)
+	app, f := forgeApp(t, hookSecret)
 	signedOver := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 	delivered := pushBody(t, hookOwner, "other", "refs/heads/main", hookBefore, hookCommit, "z")
 
-	code, _ := deliver(t, app, delivered, "X-Gitea-Signature", sign(hookSecret, signedOver))
+	code, _ := deliver(t, app, delivered, "X-Gitea-Signature", forgeSign(hookSecret, signedOver))
 	if code != http.StatusUnauthorized {
 		t.Fatalf("swapped-body delivery: want 401, got %d", code)
 	}
@@ -246,7 +246,7 @@ func TestHook_RefusesASignatureOverOtherBytes(t *testing.T) {
 // No signature header at all is refused. An unsigned delivery is the shape an
 // arbitrary internet caller sends, since this endpoint takes no session.
 func TestHook_RefusesAnUnsignedDelivery(t *testing.T) {
-	app, f := hookApp(t, hookSecret)
+	app, f := forgeApp(t, hookSecret)
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 
 	code, _ := deliver(t, app, body)
@@ -271,11 +271,11 @@ func TestHook_RefusesAnUnsignedDelivery(t *testing.T) {
 func TestHook_AcceptsEverySpellingTheForgeSends(t *testing.T) {
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 	for _, h := range []struct{ name, value string }{
-		{"X-Git-Signature", sign(hookSecret, body)},
-		{"X-Gitea-Signature", sign(hookSecret, body)},
-		{"X-Hub-Signature-256", "sha256=" + sign(hookSecret, body)},
+		{"X-Git-Signature", forgeSign(hookSecret, body)},
+		{"X-Gitea-Signature", forgeSign(hookSecret, body)},
+		{"X-Hub-Signature-256", "sha256=" + forgeSign(hookSecret, body)},
 	} {
-		app, f := hookApp(t, hookSecret)
+		app, f := forgeApp(t, hookSecret)
 		code, v := deliver(t, app, body, h.name, h.value)
 		if code != http.StatusOK || !v.Fired {
 			t.Fatalf("%s: want 200 fired, got %d %+v", h.name, code, v)
@@ -288,12 +288,12 @@ func TestHook_AcceptsEverySpellingTheForgeSends(t *testing.T) {
 // processes nothing — 503, because the fault is ours and not the caller's, and
 // the forge redelivers once KMS answers.
 func TestHook_FailsClosedWithNoSecret(t *testing.T) {
-	app, f := hookApp(t, "") // nothing sealed at forge.WebhookRef
+	app, f := forgeApp(t, "") // nothing sealed at forge.WebhookRef
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 
 	// Even a delivery signed under the empty string is refused: an unset secret is
 	// never a secret whose value happens to be "".
-	code, _ := deliver(t, app, body, "X-Gitea-Signature", sign("", body))
+	code, _ := deliver(t, app, body, "X-Gitea-Signature", forgeSign("", body))
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("no-secret delivery: want 503, got %d", code)
 	}
@@ -319,12 +319,12 @@ func TestHook_RefusesAnEncodedBodyBeforeReadingIt(t *testing.T) {
 	wire := buf.Bytes()
 
 	for _, enc := range []string{"gzip", "deflate", "br", "zstd", "gzip, gzip"} {
-		app, f := hookApp(t, hookSecret)
+		app, f := forgeApp(t, hookSecret)
 		var before, after runtime.MemStats
 		runtime.GC()
 		runtime.ReadMemStats(&before)
 
-		req := httptest.NewRequest(http.MethodPost, hookPath, bytes.NewReader(wire))
+		req := httptest.NewRequest(http.MethodPost, forgeWebhookPath, bytes.NewReader(wire))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Content-Encoding", enc)
 		req.Header.Set("X-Git-Signature", strings.Repeat("ab", 32))
@@ -339,7 +339,7 @@ func TestHook_RefusesAnEncodedBodyBeforeReadingIt(t *testing.T) {
 		if resp.StatusCode != http.StatusUnsupportedMediaType {
 			t.Fatalf("Content-Encoding %q: want 415, got %d", enc, resp.StatusCode)
 		}
-		if alloc := after.TotalAlloc - before.TotalAlloc; alloc >= maxHookBody {
+		if alloc := after.TotalAlloc - before.TotalAlloc; alloc >= forgeMaxBody {
 			t.Fatalf("Content-Encoding %q: %d bytes on the wire allocated %d — the body was expanded before it was refused",
 				enc, len(wire), alloc)
 		}
@@ -361,10 +361,10 @@ func (zeroes) Read(p []byte) (int, error) {
 
 // A body over the bound is refused before it is hashed or parsed.
 func TestHook_RefusesAnOversizedBody(t *testing.T) {
-	app, f := hookApp(t, hookSecret)
-	body := []byte(`{"ref":"refs/heads/main","pad":"` + strings.Repeat("x", maxHookBody) + `"}`)
+	app, f := forgeApp(t, hookSecret)
+	body := []byte(`{"ref":"refs/heads/main","pad":"` + strings.Repeat("x", forgeMaxBody) + `"}`)
 
-	code, _ := deliver(t, app, body, "X-Gitea-Signature", sign(hookSecret, body))
+	code, _ := deliver(t, app, body, "X-Gitea-Signature", forgeSign(hookSecret, body))
 	if code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized delivery: want 413, got %d", code)
 	}
@@ -378,7 +378,7 @@ func TestHook_RefusesAnOversizedBody(t *testing.T) {
 // THE PROPERTY THIS ENDPOINT EXISTS FOR: a verified push reaches BOTH clients, exactly
 // once each, carrying what each one reads.
 func TestHook_FiresBothClientsOnce(t *testing.T) {
-	app, f := hookApp(t, hookSecret)
+	app, f := forgeApp(t, hookSecret)
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 
 	code, v := signedDelivery(t, app, body)
@@ -418,7 +418,7 @@ func TestHook_FiresBothClientsOnce(t *testing.T) {
 // here would stop publishing with nothing failing to say so. It leaves the
 // lifecycle branch empty, which is what the mirror and the indexer skip on.
 func TestHook_ATagBuildsAndNamesNoBranch(t *testing.T) {
-	app, f := hookApp(t, hookSecret)
+	app, f := forgeApp(t, hookSecret)
 	body := pushBody(t, hookOwner, "cloud", "refs/tags/v1.2.3", hookBefore, hookCommit, "z")
 
 	if code, v := signedDelivery(t, app, body); code != http.StatusOK || !v.Fired {
@@ -444,7 +444,7 @@ func TestHook_DerivesTheCloneURLAndIgnoresThePayloadsOwn(t *testing.T) {
 		"https://github.com/hanzoai/cloud", // cloud's own upstream: the release trigger
 		"https://evil.example/hanzoai/cloud.git",
 	} {
-		app, f := hookApp(t, hookSecret)
+		app, f := forgeApp(t, hookSecret)
 		body, err := json.Marshal(map[string]any{
 			"ref": "refs/heads/main", "before": hookBefore, "after": hookCommit,
 			"repository": map[string]any{
@@ -470,7 +470,7 @@ func TestHook_DerivesTheCloneURLAndIgnoresThePayloadsOwn(t *testing.T) {
 // is the empty origin, which every mirror reads as "a native push, send it on" —
 // the one loop this endpoint must not start.
 func TestHook_RefusesWhenTheDeploymentNamesNoForge(t *testing.T) {
-	app, f := hookAppOn(t, hookSecret, "")
+	app, f := forgeAppOn(t, hookSecret, "")
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 
 	if code, _ := signedDelivery(t, app, body); code != http.StatusServiceUnavailable {
@@ -489,7 +489,7 @@ func TestHook_RefusesWhenTheDeploymentNamesNoForge(t *testing.T) {
 // and whose compute pays.
 func TestHook_RefusesAnUnmappedNamespace(t *testing.T) {
 	for _, owner := range []string{"acme", "hanzo", "luxfi", "admin"} {
-		app, f := hookApp(t, hookSecret)
+		app, f := forgeApp(t, hookSecret)
 		body := pushBody(t, owner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 
 		code, v := signedDelivery(t, app, body)
@@ -559,7 +559,7 @@ func TestHook_DeclinesWithAReason(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			app, f := hookApp(t, hookSecret)
+			app, f := forgeApp(t, hookSecret)
 			code, v := signedDelivery(t, app, tc.body(t))
 			if code != http.StatusOK {
 				t.Fatalf("want a benign 200, got %d", code)
@@ -578,7 +578,7 @@ func TestHook_DeclinesWithAReason(t *testing.T) {
 // the outside — the bytes are ours by then — so it reports a broken forge rather
 // than being smoothed into an ignore.
 func TestHook_RefusesAMalformedPayload(t *testing.T) {
-	app, f := hookApp(t, hookSecret)
+	app, f := forgeApp(t, hookSecret)
 	body := []byte(`{"ref":`)
 	if code, _ := signedDelivery(t, app, body); code != http.StatusBadRequest {
 		t.Fatalf("malformed payload: want 400, got %d", code)
@@ -595,7 +595,7 @@ func TestHook_RefusesAMalformedPayload(t *testing.T) {
 // compute. The FACT is the key, so the second delivery is declined and the counts
 // stay at one.
 func TestHook_ARedeliveryFiresOnce(t *testing.T) {
-	app, f := hookApp(t, hookSecret)
+	app, f := forgeApp(t, hookSecret)
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 
 	if code, v := signedDelivery(t, app, body); code != http.StatusOK || !v.Fired {
@@ -628,7 +628,7 @@ func TestHook_ARedeliveryFiresOnce(t *testing.T) {
 // thing standing between a redelivery and a second build, and it must not depend
 // on that.
 func TestHook_ARedeliveryUnderAnotherCaseFiresOnce(t *testing.T) {
-	app, f := hookApp(t, hookSecret)
+	app, f := forgeApp(t, hookSecret)
 	for _, owner := range []string{"hanzoai", "HanzoAI", "HANZOAI", "hanzoAI"} {
 		body := pushBody(t, owner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 		code, v := signedDelivery(t, app, body)
@@ -654,7 +654,7 @@ func TestHook_ARedeliveryUnderAnotherCaseFiresOnce(t *testing.T) {
 func TestHook_ADispatchFailureIsRefusedAndLeavesNoDedup(t *testing.T) {
 	var fail atomic.Bool
 	fail.Store(true)
-	app, f := hookAppWith(t, sealed(t, hookSecret), "api.hanzo.ai",
+	app, f := forgeAppWith(t, sealed(t, hookSecret), "api.hanzo.ai",
 		func(context.Context, cloud.GitPushEvent) (int, error) {
 			if fail.Load() {
 				return 0, fmt.Errorf("store read failed: platform draining")
@@ -695,7 +695,7 @@ func TestHook_ADispatchFailureIsRefusedAndLeavesNoDedup(t *testing.T) {
 // one green for a push that built eleven services and one that built none.
 func TestHook_TheVerdictCarriesWhatWasBuilt(t *testing.T) {
 	for _, want := range []int{0, 1, 7} {
-		app, f := hookAppWith(t, sealed(t, hookSecret), "api.hanzo.ai",
+		app, f := forgeAppWith(t, sealed(t, hookSecret), "api.hanzo.ai",
 			func(context.Context, cloud.GitPushEvent) (int, error) { return want, nil })
 		body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 		code, v := signedDelivery(t, app, body)
@@ -725,7 +725,7 @@ func TestHook_TheVerdictCarriesWhatWasBuilt(t *testing.T) {
 // function standing between the internet and a build.
 func TestSigned(t *testing.T) {
 	body := []byte(`{"ref":"refs/heads/main"}`)
-	good := sign(hookSecret, body)
+	good := forgeSign(hookSecret, body)
 
 	if !signed(hookSecret, body, good) {
 		t.Fatal("the forge's own bare-hex signature was refused")
@@ -747,7 +747,7 @@ func TestSigned(t *testing.T) {
 	if signed(hookSecret, body) {
 		t.Fatal("a delivery with no signature header at all was admitted")
 	}
-	if signed(hookSecret, body, sign("other", body)) {
+	if signed(hookSecret, body, forgeSign("other", body)) {
 		t.Fatal("the wrong key was admitted")
 	}
 	if signed(hookSecret, []byte(`{"ref":"refs/heads/other"}`), good) {
@@ -761,21 +761,21 @@ func TestSigned(t *testing.T) {
 	}
 }
 
-// seen is the redelivery memory: held inside the window, and free again once it
+// forgeLanded is the redelivery memory: held inside the window, and free again once it
 // has expired, so a branch pushed to the same commit weeks later still builds.
 func TestSeen(t *testing.T) {
-	var k seen
+	var k forgeLanded
 	now := time.Now()
 	if !k.hold("a", now) {
-		t.Fatal("a key never seen was not held")
+		t.Fatal("a key never forgeLanded was not held")
 	}
-	if k.hold("a", now.Add(hookWindow-time.Second)) {
+	if k.hold("a", now.Add(forgeWindow-time.Second)) {
 		t.Fatal("a key inside the window was held twice")
 	}
 	if !k.hold("b", now) {
 		t.Fatal("a different key was not held")
 	}
-	if !k.hold("a", now.Add(hookWindow+time.Second)) {
+	if !k.hold("a", now.Add(forgeWindow+time.Second)) {
 		t.Fatal("a key past the window was not held again")
 	}
 	// Swept on write: the expired entries are gone rather than held for the
@@ -786,7 +786,7 @@ func TestSeen(t *testing.T) {
 	// A hold given back is free at once: nothing fired, so there is nothing to
 	// remember, and the next delivery naming that push is a fresh attempt.
 	k.drop("a")
-	if !k.hold("a", now.Add(hookWindow+time.Second)) {
+	if !k.hold("a", now.Add(forgeWindow+time.Second)) {
 		t.Fatal("a dropped key was still held")
 	}
 }
@@ -801,7 +801,7 @@ func TestSecretIsHeldAndRefused(t *testing.T) {
 	}
 	s := &cloud.Service[state]{Base: cloud.Base{KMS: kms, Log: luxlog.New("test")}}
 
-	got, err := s.State.hook.read(s, context.Background())
+	got, err := s.State.forgeKey.read(s, context.Background())
 	if err != nil || got != "key-one" {
 		t.Fatalf("read = %q, %v; want the trimmed value", got, err)
 	}
@@ -810,18 +810,18 @@ func TestSecretIsHeldAndRefused(t *testing.T) {
 	if err := kms.PutSecret(context.Background(), forge.WebhookRef, []byte("key-two")); err != nil {
 		t.Fatalf("rotate: %v", err)
 	}
-	if got, _ := s.State.hook.read(s, context.Background()); got != "key-one" {
+	if got, _ := s.State.forgeKey.read(s, context.Background()); got != "key-one" {
 		t.Fatalf("held value = %q, want the one inside the window", got)
 	}
 	// Past the window, the rotation is live with no restart.
-	s.State.hook.when = time.Now().Add(-hookFresh - time.Second)
-	if got, err := s.State.hook.read(s, context.Background()); err != nil || got != "key-two" {
+	s.State.forgeKey.when = time.Now().Add(-forgeFresh - time.Second)
+	if got, err := s.State.forgeKey.read(s, context.Background()); err != nil || got != "key-two" {
 		t.Fatalf("after the window: %q, %v; want the rotated value", got, err)
 	}
 
 	// Fail-closed: no KMS at all, and an empty secret, are errors and never a value.
 	none := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}}
-	if got, err := none.State.hook.read(none, context.Background()); err == nil {
+	if got, err := none.State.forgeKey.read(none, context.Background()); err == nil {
 		t.Fatalf("an unmounted KMS produced a key: %q", got)
 	}
 	blank := newFakeKMS()
@@ -829,7 +829,7 @@ func TestSecretIsHeldAndRefused(t *testing.T) {
 		t.Fatalf("seal blank: %v", err)
 	}
 	empty := &cloud.Service[state]{Base: cloud.Base{KMS: blank, Log: luxlog.New("test")}}
-	if got, err := empty.State.hook.read(empty, context.Background()); err == nil {
+	if got, err := empty.State.forgeKey.read(empty, context.Background()); err == nil {
 		t.Fatalf("an empty secret produced a key: %q", got)
 	}
 }
@@ -844,25 +844,25 @@ func TestSecretSurvivesAFailedRefresh(t *testing.T) {
 		t.Fatalf("seal: %v", err)
 	}
 	s := &cloud.Service[state]{Base: cloud.Base{KMS: kms, Log: luxlog.New("test")}}
-	if v, err := s.State.hook.read(s, context.Background()); err != nil || v != hookSecret {
+	if v, err := s.State.forgeKey.read(s, context.Background()); err != nil || v != hookSecret {
 		t.Fatalf("first read: %q %v", v, err)
 	}
 
 	// KMS goes down exactly at the window boundary.
 	kms.down = fmt.Errorf("dial kms: connection refused")
-	s.State.hook.when = time.Now().Add(-hookFresh - time.Second)
-	if v, err := s.State.hook.read(s, context.Background()); err != nil || v != hookSecret {
+	s.State.forgeKey.when = time.Now().Add(-forgeFresh - time.Second)
+	if v, err := s.State.forgeKey.read(s, context.Background()); err != nil || v != hookSecret {
 		t.Fatalf("a failed refresh answered %q, %v — the key that works was discarded", v, err)
 	}
 	// And every caller behind it inside the window gets the same answer, not the
 	// error: one rule, wherever you arrived.
-	if v, err := s.State.hook.read(s, context.Background()); err != nil || v != hookSecret {
+	if v, err := s.State.forgeKey.read(s, context.Background()); err != nil || v != hookSecret {
 		t.Fatalf("a caller inside the window got %q, %v", v, err)
 	}
 	// The failure is still RECORDED — kept, not swallowed.
-	s.State.hook.mu.Lock()
-	held := s.State.hook.err
-	s.State.hook.mu.Unlock()
+	s.State.forgeKey.mu.Lock()
+	held := s.State.forgeKey.err
+	s.State.forgeKey.mu.Unlock()
 	if held == nil {
 		t.Fatal("the failed refresh left no error behind; the degradation is invisible")
 	}
@@ -871,8 +871,8 @@ func TestSecretSurvivesAFailedRefresh(t *testing.T) {
 	if err := kms.PutSecret(context.Background(), forge.WebhookRef, []byte("key-two")); err != nil {
 		t.Fatalf("rotate: %v", err)
 	}
-	s.State.hook.when = time.Now().Add(-hookFresh - time.Second)
-	if v, err := s.State.hook.read(s, context.Background()); err != nil || v != "key-two" {
+	s.State.forgeKey.when = time.Now().Add(-forgeFresh - time.Second)
+	if v, err := s.State.forgeKey.read(s, context.Background()); err != nil || v != "key-two" {
 		t.Fatalf("after recovery: %q, %v; want the rotated value", v, err)
 	}
 }
@@ -887,18 +887,18 @@ func TestSecretRefreshSurvivesAPanickingKMS(t *testing.T) {
 
 	func() {
 		defer func() { _ = recover() }() // the edge recovers; the endpoint must settle
-		_, _ = s.State.hook.read(s, context.Background())
+		_, _ = s.State.forgeKey.read(s, context.Background())
 	}()
 
-	s.State.hook.mu.Lock()
-	busy := s.State.hook.busy
-	s.State.hook.mu.Unlock()
+	s.State.forgeKey.mu.Lock()
+	busy := s.State.forgeKey.busy
+	s.State.forgeKey.mu.Unlock()
 	if busy {
 		t.Fatal("the refresh is still marked in flight; every later delivery is 503 forever")
 	}
 	// The recorded outcome is a FAILURE, never the empty value settled as a
 	// success — which would 401 every delivery and blame the forge's config.
-	if v, err := s.State.hook.read(s, context.Background()); err == nil || v != "" {
+	if v, err := s.State.forgeKey.read(s, context.Background()); err == nil || v != "" {
 		t.Fatalf("a panicked read settled as %q, %v", v, err)
 	}
 	// KMS is healthy again, the window turns, and the endpoint recovers by itself.
@@ -906,8 +906,8 @@ func TestSecretRefreshSurvivesAPanickingKMS(t *testing.T) {
 	if err := kms.PutSecret(context.Background(), forge.WebhookRef, []byte(hookSecret)); err != nil {
 		t.Fatalf("seal: %v", err)
 	}
-	s.State.hook.when = time.Now().Add(-hookFresh - time.Second)
-	if v, err := s.State.hook.read(s, context.Background()); err != nil || v != hookSecret {
+	s.State.forgeKey.when = time.Now().Add(-forgeFresh - time.Second)
+	if v, err := s.State.forgeKey.read(s, context.Background()); err != nil || v != hookSecret {
 		t.Fatalf("after the panic cleared: %q, %v", v, err)
 	}
 }
@@ -918,8 +918,8 @@ func TestSecretRefreshSurvivesAPanickingKMS(t *testing.T) {
 // refresh open behind it as well.
 func TestHookReadFailsInsideTheDeliveryWindow(t *testing.T) {
 	const forgeDelivers = 5 * time.Second // services/webhook: DeliverTimeout
-	if hookRead >= forgeDelivers {
-		t.Fatalf("hookRead = %v, which is not inside the %v the forge waits: a slow read answers nobody", hookRead, forgeDelivers)
+	if forgeRead >= forgeDelivers {
+		t.Fatalf("forgeRead = %v, which is not inside the %v the forge waits: a slow read answers nobody", forgeRead, forgeDelivers)
 	}
 }
 
@@ -927,19 +927,92 @@ func TestHookReadFailsInsideTheDeliveryWindow(t *testing.T) {
 // the router's own pattern, so a route moved without its declaration publishes an
 // operation with no body and an SDK with nowhere to put a delivery.
 func TestHookIsDeclaredAtTheAddressItServes(t *testing.T) {
-	app, _ := hookApp(t, hookSecret)
+	app, _ := forgeApp(t, hookSecret)
 	doc, err := openapi.Spec(app, openapi.Info{Title: "platform", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
-	op := doc.Paths[hookPath]["post"]
+	op := doc.Paths[forgeWebhookPath]["post"]
 	if op == nil {
-		t.Fatalf("%s is served and undeclared; paths: %v", hookPath, doc.Paths)
+		t.Fatalf("%s is served and undeclared; paths: %v", forgeWebhookPath, doc.Paths)
 	}
 	if strings.TrimSpace(op.Summary) == "" || strings.TrimSpace(op.Description) == "" {
-		t.Fatalf("%s publishes an operationId and nothing a consumer can read", hookPath)
+		t.Fatalf("%s publishes an operationId and nothing a consumer can read", forgeWebhookPath)
 	}
 	if op.RequestBody == nil {
-		t.Fatalf("%s declares no request body; every generated SDK offers a webhook with nowhere to put the delivery", hookPath)
+		t.Fatalf("%s declares no request body; every generated SDK offers a webhook with nowhere to put the delivery", forgeWebhookPath)
 	}
+}
+
+// fakeKMS is the in-memory KMS the receiver's tests drive, carried with it.
+// fakeKMS is an in-memory types.KMSClient for hermetic secret-sealing tests. It
+// models the embedded KMS closely enough for the platform seal path: PutSecret
+// stores by ref, GetSecret reads it back. `fail` models an unconfigured KMS
+// (master key missing) so the fail-closed path is exercised.
+//
+// `down` and `panics` model a KMS that is REACHABLE-then-not: a read that errors,
+// and a client that does not return at all. Both are read paths, so they are
+// distinct from `fail` — a deployment can hold a key it read cleanly and then
+// lose the ability to read the next one.
+type fakeKMS struct {
+	mu     sync.Mutex
+	data   map[string][]byte
+	fail   bool
+	down   error
+	panics bool
+	reads  int
+}
+
+func newFakeKMS() *fakeKMS { return &fakeKMS{data: map[string][]byte{}} }
+
+// readCount is how many times the secret has actually been fetched — the whole
+// measurement behind "a flood costs one read per window, not one per request".
+func (f *fakeKMS) readCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.reads
+}
+
+func (f *fakeKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reads++
+	if f.panics {
+		panic("kms: the client did not return")
+	}
+	if f.down != nil {
+		return nil, f.down
+	}
+	v, ok := f.data[ref]
+	if !ok {
+		return nil, fmt.Errorf("kms: secret not found")
+	}
+	return append([]byte(nil), v...), nil
+}
+
+func (f *fakeKMS) PutSecret(_ context.Context, ref string, value []byte) error {
+	if f.fail {
+		return fmt.Errorf("kms: master key not configured")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.data == nil {
+		f.data = map[string][]byte{}
+	}
+	f.data[ref] = append([]byte(nil), value...)
+	return nil
+}
+
+func (f *fakeKMS) DeleteSecret(_ context.Context, ref string) error {
+	if f.fail {
+		return fmt.Errorf("kms: master key not configured")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.data, ref)
+	return nil
+}
+
+func (f *fakeKMS) Sign(_ context.Context, _ string, _ []byte) ([]byte, error) {
+	return nil, fmt.Errorf("kms: sign not supported in tests")
 }

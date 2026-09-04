@@ -13,9 +13,10 @@ import (
 // Push-to-deploy is the platform app's, which holds the builder. A push into
 // this host's own git server needs no webhook at all: it fires the builder over
 // the host's plugin transport (build_on_push.go). A forge that is still a
-// separate process delivers to the platform app's receiver, POST
-// /v1/platform/hook on api.hanzo.ai — ONE forge-wide system webhook covering
-// every repository; a repo opts in by committing hanzo.yml, not by owning a hook.
+// separate process delivers to its address in the integrations app, POST
+// /v1/integration/forge/webhook on api.hanzo.ai, beside every other provider's —
+// ONE forge-wide system webhook covering every repository; a repo opts in by
+// committing hanzo.yml, not by owning a hook.
 //
 // The route is KEPT rather than deleted, because a deleted route 404s and a 404
 // from this estate is ambiguous: Hanzo Git serves /v1, so /api/v1 404s too and
@@ -51,10 +52,10 @@ import (
 // cloud.Terminal (git.go) therefore stays: it writes the 410 in-band so a
 // co-mounted /v1 ErrorHandlerJSON cannot flatten the propagated error to 500.
 
-// buildEndpoint is where a separate-process forge delivers: the platform app's
-// receiver on the fleet's one endpoint. Stated once, in the message a caller
+// buildEndpoint is where a separate-process forge delivers: its address in the
+// integrations app, on the fleet's one endpoint. Stated once, in the message a caller
 // actually receives, so the answer carries its own fix.
-const buildEndpoint = "https://api.hanzo.ai/v1/platform/hook"
+const buildEndpoint = "https://api.hanzo.ai/v1/integration/forge/webhook"
 
 // The prose. "Cannot be a typed op" is not "must be undocumented": a raw route
 // carries an operationId and a tag and nothing else, which no consumer of the
@@ -72,9 +73,10 @@ const buildEndpoint = "https://api.hanzo.ai/v1/platform/hook"
 // runs once per Mount.
 func init() {
 	openapi.Describe("/v1/git/webhook", http.MethodPost,
-		"Retired — a forge push is delivered to /v1/platform/hook",
-		"GONE (410). Push-to-deploy belongs to POST "+buildEndpoint+", the platform app's "+
-			"receiver, which holds the builder. A push into this host's own git server "+
+		"Retired — a forge push is delivered to /v1/integration/forge/webhook",
+		"GONE (410). Push-to-deploy belongs to POST "+buildEndpoint+", the forge's address "+
+			"in the integrations app beside every other provider's; the build it triggers is "+
+			"platform's. A push into this host's own git server "+
 			"needs no webhook: it fires the builder over the host's plugin transport. "+
 			"git.hanzo.ai, while it remains a separate process, delivers there through ONE "+
 			"forge-wide system webhook covering every repository; a repo opts in by "+

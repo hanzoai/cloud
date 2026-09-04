@@ -1,4 +1,4 @@
-package platform
+package integrations
 
 // red_hook_test.go — red's adversarial probes against the forge's push endpoint,
 // kept.
@@ -36,7 +36,7 @@ import (
 // hanzoai/git with an unset hook secret sends X-Git-Signature: "" and the literal
 // X-Hub-Signature-256: "sha256=" (services/webhook/deliver.go:101,137,149).
 func TestRED_ForgeUnsignedDeliveryShapeIsRefused(t *testing.T) {
-	app, f := hookApp(t, hookSecret)
+	app, f := forgeApp(t, hookSecret)
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 	code, _ := deliver(t, app, body,
 		"X-Git-Signature", "",
@@ -54,7 +54,7 @@ func TestRED_ForgeUnsignedDeliveryShapeIsRefused(t *testing.T) {
 // X-Git-/X-Gitea- are BARE hex; X-Hub-Signature-256 is "sha256="-prefixed.
 func TestRED_EveryRealForgeSpellingIsAccepted(t *testing.T) {
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
-	hex := sign(hookSecret, body)
+	hex := forgeSign(hookSecret, body)
 	for _, c := range []struct{ h, v string }{
 		{"X-Git-Signature", hex},
 		{"X-Gitea-Signature", hex},
@@ -63,14 +63,14 @@ func TestRED_EveryRealForgeSpellingIsAccepted(t *testing.T) {
 		{"X-Hub-Signature-256", hex},          // bare tolerated on the prefixed header
 		{"X-Gitea-Signature", " " + hex + ""}, // leading space
 	} {
-		app, _ := hookApp(t, hookSecret)
+		app, _ := forgeApp(t, hookSecret)
 		if code, v := deliver(t, app, body, c.h, c.v); code != http.StatusOK || !v.Fired {
 			t.Errorf("%s=%.12s… → %d %+v", c.h, c.v, code, v)
 		}
 	}
 	// The fork ALSO emits X-Hub-Signature: sha1=<hex> and X-Gogs-Signature.
 	// Neither is accepted. SHA-1 must never be.
-	app, _ := hookApp(t, hookSecret)
+	app, _ := forgeApp(t, hookSecret)
 	if code, _ := deliver(t, app, body, "X-Gogs-Signature", hex); code != http.StatusUnauthorized {
 		t.Errorf("X-Gogs-Signature (emitted by the fork, bare hex) → %d, want 401", code)
 	}
@@ -83,7 +83,7 @@ func TestRED_EveryRealForgeSpellingIsAccepted(t *testing.T) {
 func TestRED_FloodAgainstAFailingKMSCostsOneRead(t *testing.T) {
 	kms := newFakeKMS()
 	kms.down = fmt.Errorf("kms: secret not found")
-	app, _ := hookAppWith(t, kms, "api.hanzo.ai", nil)
+	app, _ := forgeAppWith(t, kms, "api.hanzo.ai", nil)
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 	for i := 0; i < 200; i++ {
 		if code, _ := signedDelivery(t, app, body); code != http.StatusServiceUnavailable {
@@ -98,15 +98,15 @@ func TestRED_FloodAgainstAFailingKMSCostsOneRead(t *testing.T) {
 
 // ── the bound this endpoint does NOT hold: the allocation ────────────────────
 //
-// maxHookBody bounds what is HASHED, and it cannot bound what is ALLOCATED: the
+// forgeMaxBody bounds what is HASHED, and it cannot bound what is ALLOCATED: the
 // request is in memory before any handler can measure it. The real bound is the
 // edge's BodyLimit, and it is the reason the encoded-body refusal (hook.go) has
 // to run before the body is read — decoding is the one path where a few bytes on
 // the wire buy the whole of that limit.
 func TestRED_OversizedBodyIsFullyReadBeforeItIsRefused(t *testing.T) {
-	app, _ := hookApp(t, hookSecret)
+	app, _ := forgeApp(t, hookSecret)
 	big := strings.Repeat("A", (12<<20)+1) // > 8 MiB cap, < 16 MiB edge limit
-	req := httptest.NewRequest(http.MethodPost, hookPath, strings.NewReader(big))
+	req := httptest.NewRequest(http.MethodPost, forgeWebhookPath, strings.NewReader(big))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
@@ -118,7 +118,7 @@ func TestRED_OversizedBodyIsFullyReadBeforeItIsRefused(t *testing.T) {
 		t.Fatalf("want 413, got %d", resp.StatusCode)
 	}
 	t.Log("CONFIRMED and accepted: a 12 MiB anonymous body is admitted by the edge, " +
-		"materialised in full, and only then refused 413. maxHookBody bounds the HASH; " +
+		"materialised in full, and only then refused 413. forgeMaxBody bounds the HASH; " +
 		"the edge's 16 MiB BodyLimit is the allocation bound, and no header can lift it.")
 }
 
@@ -141,7 +141,7 @@ func BenchmarkRED_UnauthenticatedHMACCost(b *testing.B) {
 // cross-replica answer belongs to the build store, and giving it here would put
 // one question in two places.
 func TestRED_DedupIsPerReplica(t *testing.T) {
-	a, b := &seen{}, &seen{}
+	a, b := &forgeLanded{}, &forgeLanded{}
 	key := "hanzoai/cloud refs/heads/main " + hookCommit
 	now := time.Now()
 	if !a.hold(key, now) || !b.hold(key, now) {
@@ -161,7 +161,7 @@ func TestRED_DedupIsPerReplica(t *testing.T) {
 // not a receiver change.
 func TestRED_ACapturedDeliveryStillVerifies(t *testing.T) {
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
-	sig := sign(hookSecret, body)
+	sig := forgeSign(hookSecret, body)
 	if !signed(hookSecret, body, sig) {
 		t.Fatal("REFUTED: the body carries something that expires")
 	}
@@ -170,7 +170,7 @@ func TestRED_ACapturedDeliveryStillVerifies(t *testing.T) {
 		"would have to sign a timestamp or a nonce to bound the window itself.")
 }
 
-// Concurrency: hammer claim/settle/fetch and the seen map from many goroutines
+// Concurrency: hammer claim/settle/fetch and the forgeLanded map from many goroutines
 // while the window keeps expiring, under -race.
 func TestRED_SecretRefreshUnderConcurrency(t *testing.T) {
 	kms := sealed(t, hookSecret)
@@ -178,7 +178,7 @@ func TestRED_SecretRefreshUnderConcurrency(t *testing.T) {
 	// Read once first, so what is measured is the property that holds AFTER a key
 	// has been read cleanly. Before that there is genuinely nothing to serve, and
 	// a caller arriving inside the very first read is told so.
-	if v, err := s.State.hook.read(s, t.Context()); err != nil || v != hookSecret {
+	if v, err := s.State.forgeKey.read(s, t.Context()); err != nil || v != hookSecret {
 		t.Fatalf("prime: %q %v", v, err)
 	}
 	var wg sync.WaitGroup
@@ -190,9 +190,9 @@ func TestRED_SecretRefreshUnderConcurrency(t *testing.T) {
 			case <-stop:
 				return
 			default:
-				s.State.hook.mu.Lock()
-				s.State.hook.when = time.Now().Add(-hookFresh - time.Second)
-				s.State.hook.mu.Unlock()
+				s.State.forgeKey.mu.Lock()
+				s.State.forgeKey.when = time.Now().Add(-forgeFresh - time.Second)
+				s.State.forgeKey.mu.Unlock()
 			}
 		}
 	}()
@@ -201,12 +201,12 @@ func TestRED_SecretRefreshUnderConcurrency(t *testing.T) {
 		go func(n int) {
 			defer wg.Done()
 			for j := 0; j < 200; j++ {
-				if v, err := s.State.hook.read(s, t.Context()); err != nil || v != hookSecret {
+				if v, err := s.State.forgeKey.read(s, t.Context()); err != nil || v != hookSecret {
 					refused.Add(1)
 				} else {
 					served.Add(1)
 				}
-				s.State.landed.hold(fmt.Sprintf("hanzoai/cloud refs/heads/b%d %d", n, j), time.Now())
+				s.State.forgeLanded.hold(fmt.Sprintf("hanzoai/cloud refs/heads/b%d %d", n, j), time.Now())
 			}
 		}(i)
 	}

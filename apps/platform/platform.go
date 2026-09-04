@@ -107,8 +107,6 @@ type state struct {
 	appLock     appMutex           // per-app serialization of apply-CR→finalize-live (applylive.go, RED LOW-1)
 	deployGate  inflightGate       // per-org in-flight synchronous-deploy cap (deploy.go, RED LOW L1)
 	resolver    fqdn.Resolver      // custom-domain ownership verification (domains.go); nil ⇒ system resolver
-	hook        secret             // the forge's webhook key, held for a window (hook.go)
-	landed      seen               // pushes already fired, so a redelivery builds once (hook.go)
 }
 
 // mounted is the active service so Shutdown can release the store.
@@ -215,16 +213,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	exposePush()
 	exposeBuild()
 
-	// The same trigger from the FORGE. Pushes land on git.hanzo.ai, a separate
-	// server whose refs never touch this fleet's receive-pack, so the two clients
-	// above are reached from there by a signed delivery (hook.go) — registered here,
-	// in the process holding the builder, which is the whole reason the endpoint
-	// apps/git used to serve could accept a push and build nothing.
-	//
-	// Raw, not a typed op: the HMAC covers the bytes and has to run before the
-	// decode. Terminal keeps its 401/413 intact under an outer /v1 error filter,
-	// exactly as the GitHub webhook does.
-	app.Post(hookPath, cloud.Terminal(cloud.Handle(s, hook)))
+	// The same trigger from the FORGE reaches this builder through
+	// apps/integrations' receiver (forge_webhook.go), like every other provider's
+	// delivery: in-process when co-resident, over the plane when not. Platform
+	// holds the builder and no receiver.
 
 	// Own the git build→deploy handoff: a background reconciler that applies the
 	// Service CR once a build Job succeeds (reconcile.go). Restart-safe — it reads

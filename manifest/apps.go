@@ -194,10 +194,9 @@ var Apps = []App{
 	// is the defect this table exists to prevent, and a 501 that names what is
 	// missing is a better answer than commerce's bare-"/v1" 404.
 	//
-	// /v1/platform/hook is where the FORGE delivers a push (apps/platform hook.go).
-	// It is platform's because the deploy trigger is: the endpoint that used to take
-	// these deliveries was in git's process, where that trigger is nil, so it
-	// answered every push 204 and built nothing.
+	// The forge delivers a push to /v1/integration/forge/webhook, beside every other
+	// provider (apps/integrations forge_webhook.go); platform holds the builder and no
+	// receiver, and the trigger reaches it over the plane when it is not co-resident.
 	{Name: "platform", Prefixes: []string{"/v1/platform"}},
 	{Name: "project", Pkg: "projects", Prefixes: []string{"/v1/project"}},
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
