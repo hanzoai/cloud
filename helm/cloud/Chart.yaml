@@ -4,6 +4,11 @@ description: Hanzo Cloud — unified Go binary mounting iam/base/kms/gateway/o11
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
+# The Deployment's preStop is a SleepAction, because the image ships no shell to
+# run `sleep` in. An API server older than 1.29 does not know the field, prunes
+# it, and renders a pod with no preStop at all — so the floor is stated here,
+# where helm refuses the install instead of quietly dropping the delay.
+kubeVersion: ">= 1.29.0-0"
 home: https://hanzo.ai
 sources:
   - https://github.com/hanzoai/cloud
