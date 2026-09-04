@@ -147,7 +147,10 @@ var Apps = []App{
 	// route it has ever served is under /v1/s3, s3 is a word HIP-0139 §2.5 admits
 	// and the one every client already speaks, and a package called one thing
 	// while its whole surface says another is the pair §7.3 closes by rename.
-	{Name: "s3", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
+	// Eager for kafka's reason: s3 owns a listener (S3_ADMIN_ENDPOINT) that the
+	// ingress dials straight, so no request through the host ever wakes it — a
+	// lazy store was dark after every host restart until something asked /v1/s3.
+	{Name: "s3", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}, Eager: true},
 	// space is where work lives: drives, folders and the files in them. It is the
 	// PRODUCT over the same backend s3 is the raw plane for — one bucket per
 	// (org, space), a drive as the first key segment inside it — so the two are
