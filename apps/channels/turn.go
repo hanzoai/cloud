@@ -216,7 +216,7 @@ func turnContext(org string) (context.Context, context.CancelFunc) {
 // failures are logged and surfaced as one terse line, never as an error a
 // platform would render.
 func answer(ctx context.Context, s *cloud.Service[state], org string, m Message) (reply string, ephemeral bool, runID string, err error) {
-	who, err := plane.Ask[plane.ChatIdentityIn, plane.ChatIdentityOut](ctx, "integrations", plane.ChatIdentity,
+	who, err := plane.Ask[plane.ChatIdentityIn, plane.ChatIdentityOut](ctx, "integration", plane.ChatIdentity,
 		&plane.ChatIdentityIn{Org: org, Provider: m.Channel, ExternalID: m.Account, User: m.Sender.ExternalID})
 	if err != nil || who == nil {
 		// ERROR, not warn, and SAID. Someone asked a question; a bot that goes quiet
@@ -234,7 +234,7 @@ func answer(ctx context.Context, s *cloud.Service[state], org string, m Message)
 		return who.Say, who.Ephemeral, "", nil
 	}
 
-	run, err := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](ctx, "agents", plane.AgentsRunOnBehalf,
+	run, err := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](ctx, "agent", plane.AgentsRunOnBehalf,
 		&plane.RunOnBehalfIn{Org: org, Subject: who.Subject, Ref: agentFor(ctx, s.State.store, org, m), Input: m.Text, Model: who.Model})
 	if err != nil {
 		s.Log.Error("channels: agent run", "channel", m.Channel, "org", org, "err", err) // never a token

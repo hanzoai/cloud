@@ -346,7 +346,7 @@ type chatChannels struct {
 // the whole listing, which is the same rule the policy read beside it follows: one
 // unreachable peer must not blank every channel a console renders.
 func askConnection(ctx context.Context, provider string) plane.Connection {
-	out, err := plane.Ask[plane.ConnectionIn, plane.Connection](ctx, "integrations",
+	out, err := plane.Ask[plane.ConnectionIn, plane.Connection](ctx, "integration",
 		plane.IntegrationsConnection, &plane.ConnectionIn{Provider: provider})
 	if err != nil || out == nil {
 		return plane.Connection{}

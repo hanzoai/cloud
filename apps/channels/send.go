@@ -35,7 +35,7 @@ var ask = plane.Ask[plane.ChatSendIn, plane.ChatSendOut]
 // field can.
 func post(ctx context.Context, org string, in plane.ChatSendIn) (string, error) {
 	in.Org = org
-	out, err := ask(ctx, "integrations", plane.ChatSend, &in)
+	out, err := ask(ctx, "integration", plane.ChatSend, &in)
 	if err != nil {
 		return "", err
 	}

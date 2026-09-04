@@ -29,7 +29,7 @@ func (planeKeys) Resolve(ctx context.Context, key string) (Attribution, bool, er
 	// Org-less by construction: the KEY is the tenant key, and the answer names
 	// the org. Passing one would let a caller file a beacon under someone else's.
 	out, err := cloud.Ask[planeops.KeyIn, planeops.Attribution](
-		cloud.For(ctx, ""), "projects", planeops.ProjectsResolveKey, &planeops.KeyIn{Key: key})
+		cloud.For(ctx, ""), "project", planeops.ProjectsResolveKey, &planeops.KeyIn{Key: key})
 	if err != nil {
 		return Attribution{}, false, fmt.Errorf("analytics: ask projects: %w", err)
 	}
