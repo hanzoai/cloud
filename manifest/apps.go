@@ -65,7 +65,9 @@ var Apps = []App{
 	{Name: "mq", Prefixes: []string{"/v1/mq"}},
 	{Name: "skills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/:product/index.json", "/.well-known/agent-skills/index.json"}},
 	{Name: "flag", Pkg: "flags", Prefixes: []string{"/v1/flag"}},
-	{Name: "kms", Prefixes: []string{"/v1/kms"}},
+	// Eager for kafka's reason: kms is the master key and secret broker every
+	// other subsystem pulls data-plane keys and credentials from during boot.
+	{Name: "kms", Prefixes: []string{"/v1/kms"}, Eager: true},
 	// One store, three signals, one root: the logs and traces endpoints fold under
 	// /v1/metrics (HIP-1241), so the capability's routes are all under its own
 	// name. The code moved with them — github.com/hanzoai/metrics is retired and

@@ -7832,3 +7832,68 @@ model under a live org, and the way back after a vector outage. Production
 serves `qwen3-embedding` (4096) and `qwen3-reranker`; the `zen-*` names are not
 served there, so `CLOUD_EMBED_MODEL`/`CLOUD_RERANK_MODEL`/`KB_EMBED_DIMS` must
 say so in universe before a reindex.
+
+## The Slack bridge is a member, and its secret has two names
+
+`routeSlackEvent` now takes a message on all four surfaces Slack can deliver —
+`channel`, `group`, `mpim`, `im` — where it took only `im`, so @hanzo was deaf
+in every room it had been invited to unless someone spelled its name out.
+Membership is the whole subscription: Slack delivers `message.channels` only for
+channels the app has joined, so there is no channel list to keep and
+`member_joined_channel` records the moment rather than enabling anything.
+An @mention threads under itself (a summons leaves the room as it found it);
+every other message answers where the conversation already is — in its thread if
+it has one, in the room otherwise. `POST /v1/integrations/slack/join` (org admin)
+walks `conversations.list` and `conversations.join`, skipping on `is_member`, so
+a run stopped by Slack's rate limit is finished by running it again.
+
+`apps/integrations/slack.manifest.json` is embedded and is the ONE home for the
+bot scopes and the event subscriptions: the consent URL is built from it, so the
+old "keep this list equal to the manifest" comment has nothing left to guard.
+Adding a scope still needs the workspace to re-install — Slack never widens a
+token it has already issued.
+
+THE LIVE FAULT, unrelated to any of that: `slackSigningSecret` resolves
+`SLACK_SIGNING_SECRET_REF` (a KMS *reference*, fetched through
+`Base.SecretFromEnv`), and universe sets `SLACK_SIGNING_SECRET` (the *value*,
+KMSSecret `cloud-slack-kms-sync` → secret `cloud-slack-secret`, path
+`/team-go-secret`). `SLACK_SIGNING_SECRET_REF` appears nowhere in universe, so
+the secret never resolves and `POST /v1/integrations/slack/events` answers
+503 "slack events not configured" on api.hanzo.ai today — the whole bridge, DMs
+included, is off. The fix is in universe, not here: publish the ref name.
+
+Adding a typed op means three regenerations, not one — `zipdoc` for the lifted
+field prose (`make -C apps/<app> describe` does NOT do this; the prose test
+fails until zipdoc runs), `make -f mk/fleet.mk describe/<app>` for
+`plugin/<app>/{openapi.json,app.zap}`, and `make -f mk/fleet.mk openapi` for the
+composed pair. The last one is currently unrunnable: composing HEAD's own
+subsets yields 1745 paths against a committed `private.yaml` and floor of 1750,
+and `closure-check` reports 122 stale app documents. Both predate any one
+change, so the composed pair has to be left alone until whatever dropped those
+five paths is found.
+
+## Eager apps must never be evicted on idle, and KMS must start eagerly
+
+The S3 store and Traefik ingress dial S3_ADMIN_ENDPOINT (:8333) directly.
+Because zero traffic hits /v1/s3/* through the host HTTP router, zip's
+Reap(time.Minute) idle check was evicting s3 after 15 minutes of idle:
+	zip warning: name not matched: plugin
+	zip warning: name not matched: evicted
+
+zip error: Nothing to do! (idle.zip).
+
+Two distinct causes produced this:
+1. s3 was declared Eager: true, but failed eager start during host boot
+   because plugin/s3/iam.go (sessionKey()) invokes kms.GetSecret() before
+   the router's wake socket existed and while kms was still cold/lazy.
+   On start failure, mount() in cmd/cloud/main.go demoted s3 to p.Lazy = true
+   with IdleAfter = 15m. Later, ExecStartPost (curl /v1/s3/health) started
+   s3 as a lazy plugin, which zip then evicted after 15 minutes of inactivity.
+2. manifest/plugin.go was setting IdleAfter: idleAfter (15m) unconditionally
+   even for a.Eager apps.
+
+Fix:
+- Declare kms as Eager: true in manifest/apps.go so it starts before s3 and
+  listens on its socket for secrets resolution at boot.
+- For all eager apps (a.Eager), configure IdleAfter = 0 in manifest/plugin.go
+  and ensure p.IdleAfter = 0 in cmd/cloud/main.go (both primary mount and lazy fallback).
