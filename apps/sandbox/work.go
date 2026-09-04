@@ -201,7 +201,7 @@ func (t *tell) say(kind string, l line) {
 	// there is no request behind the context, which a fresh Background is.
 	ctx, cancel := context.WithTimeout(plane.For(context.Background(), t.org), tellPatience)
 	defer cancel()
-	if _, err := plane.Ask[plane.SessionEventIn, plane.CodingAck](ctx, "agents", plane.AgentsSessionEvent,
+	if _, err := plane.Ask[plane.SessionEventIn, plane.CodingAck](ctx, "agent", plane.AgentsSessionEvent,
 		&plane.SessionEventIn{Org: t.org, SessionID: t.session, Kind: kind, Payload: payload}); err != nil {
 		t.mu.Lock()
 		t.dead = true
