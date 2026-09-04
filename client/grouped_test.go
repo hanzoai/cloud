@@ -349,7 +349,7 @@ func TestACallByThePUBLISHEDNameReachesTheSameHandler(t *testing.T) {
 	for _, tl := range kid.app.MCPTools() {
 		served[tl["name"].(string)] = true
 	}
-	if !served["post_projects_by_slug_deploy"] {
+	if !served["post_project_by_slug_deploy"] {
 		t.Fatalf("fixture is wrong: the child derived %v, not the route id this renames", served)
 	}
 
@@ -363,11 +363,11 @@ func TestACallByThePUBLISHEDNameReachesTheSameHandler(t *testing.T) {
 	as := rpc(t, h, `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"projects",`+
 		`"arguments":{"op":"deploy_project","input":{"which":"ship-it"}}}}`)
 	id := rpc(t, h, `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"projects",`+
-		`"arguments":{"op":"post_projects_by_slug_deploy","input":{"which":"ship-it"}}}}`)
+		`"arguments":{"op":"post_project_by_slug_deploy","input":{"which":"ship-it"}}}}`)
 	byName, _ := json.Marshal(as)
 	byID, _ := json.Marshal(id)
 	if string(byName) != string(byID) {
-		t.Fatalf("deploy_project answered\n  %s\nand post_projects_by_slug_deploy answered\n  %s", byName, byID)
+		t.Fatalf("deploy_project answered\n  %s\nand post_project_by_slug_deploy answered\n  %s", byName, byID)
 	}
 
 	// 3. …and that one handler is the child's, with the model's own argument in
@@ -384,7 +384,7 @@ func TestACallByThePUBLISHEDNameReachesTheSameHandler(t *testing.T) {
 	//    has to keep working.
 	desc := rpc(t, h, `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"`+client.Describe+
 		`","arguments":{"op":"deploy_project"}}}`)
-	if text := textOf(t, desc); !strings.Contains(text, `"name":"post_projects_by_slug_deploy"`) ||
+	if text := textOf(t, desc); !strings.Contains(text, `"name":"post_project_by_slug_deploy"`) ||
 		!strings.Contains(text, `"which"`) {
 		t.Fatalf("describe deploy_project returned %q", text)
 	}

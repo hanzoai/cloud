@@ -486,7 +486,7 @@ func TestThePublicContractDropsWhatIsOutsideTheRule(t *testing.T) {
 	d := committed(t, publicPath)
 	for _, path := range []string{
 		"/health", "/", "/.well-known/openapi.json",
-		"/v1/admin/orgs", "/v1/task/{wildcard1}",
+		"/v1/admin/orgs", "/v1/tasks/{wildcard1}",
 	} {
 		if _, published := d.Paths[path]; published {
 			t.Errorf("%s reached the public contract", path)

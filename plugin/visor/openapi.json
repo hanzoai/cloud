@@ -1377,7 +1377,7 @@
       "agentBinding": {
         "properties": {
           "agentName": {
-            "description": "AgentName is the cloud Agent (/v1/agents) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
+            "description": "AgentName is the cloud Agent (/v1/agent) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
             "type": "string"
           },
           "botVersion": {
@@ -1430,7 +1430,7 @@
       "bindAgentReq": {
         "properties": {
           "agentName": {
-            "description": "AgentName is the cloud Agent (/v1/agents) the machine will run. Required.",
+            "description": "AgentName is the cloud Agent (/v1/agent) the machine will run. Required.",
             "type": "string"
           },
           "botVersion": {
@@ -1971,7 +1971,7 @@
             "type": "integer"
           },
           "source": {
-            "description": "Source is the plane this row came from: \"agent\" (a linked run-target), \"byo\"\n(a worker or cluster the org dialed in) or \"visor\" (a machine Hanzo\nprovisioned). It is half the row's identity, and it says which face owns the\nunit — /v1/agents/targets, /v1/visor/fleet/workers, /v1/visor/machines.",
+            "description": "Source is the plane this row came from: \"agent\" (a linked run-target), \"byo\"\n(a worker or cluster the org dialed in) or \"visor\" (a machine Hanzo\nprovisioned). It is half the row's identity, and it says which face owns the\nunit — /v1/agent/targets, /v1/visor/fleet/workers, /v1/visor/machines.",
             "type": "string"
           },
           "spec": {

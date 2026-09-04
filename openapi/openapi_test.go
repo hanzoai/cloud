@@ -167,7 +167,7 @@ func TestLiveDropsMiddleware(t *testing.T) {
 // drop both — see the `methods` doc comment.
 func TestLiveDropsUnrepresentableMethods(t *testing.T) {
 	app := newApp()
-	app.All("/v1/task", func(c *zip.Ctx) error { return c.JSON(200, "ok") })
+	app.All("/v1/tasks", func(c *zip.Ctx) error { return c.JSON(200, "ok") })
 
 	for _, r := range Live(app) {
 		if r.Method == "CONNECT" || r.Method == "HEAD" {

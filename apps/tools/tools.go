@@ -133,43 +133,43 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := toolOps{s: s}
 
 	// Discovery + activation.
-	zip.Get(v1, "/tools", o.listTools)
+	zip.Get(v1, "/tool", o.listTools)
 	// The catalog (catalog.go): our canonical copy of what the public MCP
 	// registries publish, and the two decisions we make about each entry. It hangs
 	// under /v1/tool because it is the SHELF this plane's servers are picked
 	// from — one noun, not a fifth top-level one.
-	zip.Get(v1, "/tools/catalog", o.listCatalog)
-	zip.Post(v1, "/tools/catalog/sync", o.syncCatalog)
-	zip.Get(v1, "/tools/catalog/:id", o.getListing)
-	zip.Patch(v1, "/tools/catalog/:id", o.curateListing)
-	zip.Get(v1, "/tools/activation", o.getActivation)
-	zip.Put(v1, "/tools/activation", o.putActivation)
-	zip.Post(v1, "/tools/call", o.callTool)
+	zip.Get(v1, "/tool/catalog", o.listCatalog)
+	zip.Post(v1, "/tool/catalog/sync", o.syncCatalog)
+	zip.Get(v1, "/tool/catalog/:id", o.getListing)
+	zip.Patch(v1, "/tool/catalog/:id", o.curateListing)
+	zip.Get(v1, "/tool/activation", o.getActivation)
+	zip.Put(v1, "/tool/activation", o.putActivation)
+	zip.Post(v1, "/tool/call", o.callTool)
 
 	// The separately-listed registries (see registries.go): skills and mcp are
 	// Source views of the SAME registry; plugins is the mounted-subsystem
 	// inventory, which is a different thing entirely. All three are views of this
 	// plane, so all three hang under it — the rows they read are tools' own.
-	zip.Get(v1, "/tools/skills", o.listSkills)
-	zip.Post(v1, "/tools/skills", o.putSkill, zip.WithStatus(http.StatusCreated))
-	zip.Get(v1, "/tools/skills/authored", o.listAuthoredSkills)
-	zip.Delete(v1, "/tools/skills/:id", o.deleteSkill)
-	zip.Get(v1, "/tools/plugins", o.listPlugins)
+	zip.Get(v1, "/tool/skills", o.listSkills)
+	zip.Post(v1, "/tool/skills", o.putSkill, zip.WithStatus(http.StatusCreated))
+	zip.Get(v1, "/tool/skills/authored", o.listAuthoredSkills)
+	zip.Delete(v1, "/tool/skills/:id", o.deleteSkill)
+	zip.Get(v1, "/tool/plugins", o.listPlugins)
 
 	// The builder (pluginbuild.go). /v1/tool/plugins lists what this deployment
 	// mounted; /authored is what THIS ORG built, which is a different set with a
 	// different lifecycle, so it is a subpath rather than a mixed collection.
-	zip.Post(v1, "/tools/plugins/build", o.buildPlugin, zip.WithStatus(http.StatusCreated))
-	zip.Get(v1, "/tools/plugins/authored", o.listAuthoredPlugins)
-	zip.Delete(v1, "/tools/plugins/authored/:id", o.deleteAuthoredPlugin)
+	zip.Post(v1, "/tool/plugins/build", o.buildPlugin, zip.WithStatus(http.StatusCreated))
+	zip.Get(v1, "/tool/plugins/authored", o.listAuthoredPlugins)
+	zip.Delete(v1, "/tool/plugins/authored/:id", o.deleteAuthoredPlugin)
 
 	// The external MCP server registry: a server is a record an org creates, not a
 	// tool the registry enumerates. /v1/mcp is the HOST's agent MCP address,
 	// wire-fixed for every MCP client (HIP-0139 §3.2), so this plane vacates that
 	// root entirely and keeps its servers where its rows are.
-	zip.Get(v1, "/tools/mcp/servers", o.listServers)
-	zip.Post(v1, "/tools/mcp/servers", o.createServer, zip.WithStatus(http.StatusCreated))
-	zip.Delete(v1, "/tools/mcp/servers/:id", o.deleteServer)
+	zip.Get(v1, "/tool/mcp/servers", o.listServers)
+	zip.Post(v1, "/tool/mcp/servers", o.createServer, zip.WithStatus(http.StatusCreated))
+	zip.Delete(v1, "/tool/mcp/servers/:id", o.deleteServer)
 }
 
 // Shutdown closes the stores. Idempotent.

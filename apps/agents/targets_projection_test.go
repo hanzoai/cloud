@@ -20,7 +20,7 @@ import (
 func TestTargetOpsProjectEverywhere(t *testing.T) {
 	app := mountApp(t, nil)
 
-	const opID = "post_agents_targets"
+	const opID = "post_agent_targets"
 	const path = "/v1/agent/targets"
 
 	// ---- 1. OpenAPI: the document the SDK repos generate from -------------
@@ -89,8 +89,8 @@ func TestTargetOpsProjectEverywhere(t *testing.T) {
 			}
 		}
 	}
-	if cmd.service != "agents" || cmd.name != "targets-create" {
-		t.Errorf("command = %q %q, want %q %q", cmd.service, cmd.name, "agents", "targets-create")
+	if cmd.service != "agent" || cmd.name != "targets-create" {
+		t.Errorf("command = %q %q, want %q %q", cmd.service, cmd.name, "agent", "targets-create")
 	}
 	if !slices.Contains(cmd.flags, "label") || !slices.Contains(cmd.flags, "host") {
 		t.Errorf("command flags = %v, want the In fields", cmd.flags)

@@ -1086,7 +1086,7 @@ func (w *worker) register(ctx context.Context) error {
 	// (observed at 141 restarts, machine offline the whole time). If a namespace truly
 	// is missing, the presence write below fails and surfaces the real error.
 	for _, ns := range []string{fleetNS, w.jobsNS} {
-		if _, err := w.call(ctx, http.MethodPost, "/v1/task/namespaces", map[string]any{
+		if _, err := w.call(ctx, http.MethodPost, "/v1/tasks/namespaces", map[string]any{
 			"namespaceInfo": map[string]any{"name": ns},
 		}, nil); err != nil {
 			fmt.Fprintf(os.Stderr, "ensure namespace %q (continuing): %v\n", ns, err)
@@ -1111,7 +1111,7 @@ func (w *worker) register(ctx context.Context) error {
 	var err error
 	for attempt := range registerAttempts {
 		var code int
-		if code, err = w.call(ctx, http.MethodPost, "/v1/task/namespaces/"+fleetNS+"/activities", map[string]any{
+		if code, err = w.call(ctx, http.MethodPost, "/v1/tasks/namespaces/"+fleetNS+"/activities", map[string]any{
 			"activityId":       w.identity,
 			"runId":            w.identity,
 			"activityType":     map[string]any{"name": "fleet.worker"},
@@ -1263,7 +1263,7 @@ func (w *worker) studioBlockReason() string {
 }
 
 func (w *worker) heartbeat(ctx context.Context) error {
-	path := fmt.Sprintf("/v1/task/namespaces/%s/activities/%s/%s/heartbeat", fleetNS, w.identity, w.identity)
+	path := fmt.Sprintf("/v1/tasks/namespaces/%s/activities/%s/%s/heartbeat", fleetNS, w.identity, w.identity)
 	_, err := w.call(ctx, http.MethodPost, path, map[string]any{
 		"details": map[string]any{"gpus": len(w.gpus), "ts": time.Now().UTC().Format(time.RFC3339)},
 	}, nil)
@@ -1280,7 +1280,7 @@ func (w *worker) gpuQueue() string { return gpuQueuePrefix + w.identity }
 // (act, true, nil) when a job was claimed, (_, false, nil) on an empty queue (204).
 func (w *worker) claimFrom(ctx context.Context, taskQueue string) (claimedActivity, bool, error) {
 	var act claimedActivity
-	code, err := w.call(ctx, http.MethodPost, "/v1/task/namespaces/"+w.jobsNS+"/activities/claim", map[string]any{
+	code, err := w.call(ctx, http.MethodPost, "/v1/tasks/namespaces/"+w.jobsNS+"/activities/claim", map[string]any{
 		"taskQueue":    taskQueue,
 		"identity":     w.identity,
 		"leaseSeconds": claimLeaseSecs,
@@ -1389,7 +1389,7 @@ func (w *worker) claimAndRun(ctx context.Context, out io.Writer) error {
 }
 
 func (w *worker) actPath(wf, run, verb string) string {
-	return fmt.Sprintf("/v1/task/namespaces/%s/activities/%s/%s/%s", w.jobsNS, wf, run, verb)
+	return fmt.Sprintf("/v1/tasks/namespaces/%s/activities/%s/%s/%s", w.jobsNS, wf, run, verb)
 }
 
 type claimedActivity struct {
@@ -1472,7 +1472,7 @@ func runDisconnect(cmd *cobra.Command, env *Env) error {
 	}
 	w, _ := newWorker(env, "")
 	out := cmd.OutOrStdout()
-	path := fmt.Sprintf("/v1/task/namespaces/%s/activities/%s/%s/complete", fleetNS, w.identity, w.identity)
+	path := fmt.Sprintf("/v1/tasks/namespaces/%s/activities/%s/%s/complete", fleetNS, w.identity, w.identity)
 	code, err := w.call(ctx, http.MethodPost, path, map[string]any{
 		"result":   map[string]any{"disconnected": true},
 		"identity": w.identity,
