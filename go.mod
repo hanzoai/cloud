@@ -31,7 +31,7 @@ require (
 	github.com/hanzoai/pricing v1.4.10
 	github.com/hanzoai/pubsub v1.4.6
 	github.com/hanzoai/sign v1.0.0
-	github.com/hanzoai/sqlite v0.5.9
+	github.com/hanzoai/sqlite v0.5.10
 	github.com/hanzoai/trust v0.2.4
 	github.com/hanzoai/types v0.1.1
 	github.com/hanzokv/go/v9 v9.22.0

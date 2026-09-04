@@ -90,7 +90,7 @@ APP_BINS := $(addprefix bin/,$(APPS))
 # gate (check) sat behind an endpoint with no handle.
 include mk/fleet.mk
 
-.PHONY: help setup deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe ramfs ramfs-check run dev smoke zipdoc-check closure closure-check test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
+.PHONY: help setup deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke zipdoc-check closure closure-check test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -305,14 +305,6 @@ DEV_KMS_KEY := AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 DEV_CSRF_KEY := ZGV2LWNzcmYta2V5LWZvci10ZXN0cy1vbmx5LTAwMDA=
 TEST_ENV = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)}" CONSOLE_CSRF_KEY="$${CONSOLE_CSRF_KEY:-$(DEV_CSRF_KEY)}"
 
-# macOS cannot mount tmpfs without root, so the encrypted-store codec's RAM-backed
-# scratch would put `sudo mount_tmpfs` in front of `make test`. A test run opts out
-# instead — it decrypts into ordinary scratch, still shredded on close, trading the
-# at-rest guarantee nothing in the suite asserts. Linux keeps the real /dev/shm
-# path and stays strict; a value already set in the environment always wins.
-ifeq ($(shell uname),Darwin)
-TEST_ENV += HANZO_SQLITE_INSECURE_DEV=$${HANZO_SQLITE_INSECURE_DEV:-1}
-endif
 
 # TAGS is what a SHIPPED binary is built with, and `make ship` carries it, so a
 # binary built here is the binary that runs.
