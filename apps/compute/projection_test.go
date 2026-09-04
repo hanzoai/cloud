@@ -134,11 +134,6 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 	// bytes through. Modelling upstream's shape would have been the mistake; refusing
 	// to publish the ADDRESS because of it was a smaller one, and cost them a tool, a
 	// CLI command and an SDK method each.
-	for _, p := range []string{"/v1/compute/bots/launch"} {
-		if _, ok := doc.Paths[p]; ok {
-			t.Errorf("%s is raw by design but appears in the document", p)
-		}
-	}
 	// And the catalog reads ARE in the document, with an open schema rather than an
 	// invented one — the assertion that keeps the fix above from being reverted into
 	// a modelled copy of somebody else's contract.
@@ -178,7 +173,7 @@ func TestMCPPublishesTheSurface(t *testing.T) {
 	tools := body(t, projectionApp(t), "POST", "/mcp",
 		`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 	for _, name := range []string{"listMachines", "getMachine", "deleteMachine",
-		"listFleet", "cancelFleetJob", "createKubernetesCluster", "listBots"} {
+		"listFleet", "cancelFleetJob", "createKubernetesCluster"} {
 		if !strings.Contains(tools, `"`+name+`"`) {
 			t.Errorf("MCP tools/list is missing %s", name)
 		}
@@ -207,9 +202,7 @@ var untypedByDesign = map[string]string{
 		"`dryRun: true` — 200 with the upstream PRICE QUOTE passed through verbatim, nothing launched " +
 		"and nothing spent. An op declares one Out, and this one SPENDS REAL MONEY, so collapsing the " +
 		"two would mean a caller could not tell a quote from a launch by its shape.",
-	"POST /v1/compute/bots/launch": "the same dryRun quote-or-launch split as the machine " +
-		"launch, and the same money.",
-	"POST /v1/compute/bots/{id}/{action}": "a verb dispatch that streams the agent's answer " +
+	"POST /v1/compute/machines/{id}/{action}": "a verb dispatch that streams the agent's answer " +
 		"back VERBATIM; a typed op answers one marshalled value.",
 }
 

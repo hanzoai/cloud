@@ -1358,10 +1358,6 @@
    "doc": "Adds a node pool to one of the caller org's clusters and answers 201\nwith the created pool. Only the CreateNodePoolSpec fields are forwarded;\nowner/provider/clusterId ride in the query exactly as Visor expects them."
   },
   {
-   "id": "deleteBot",
-   "doc": "Tears down both halves of a bot: it unbinds the agent (best-effort — a\nbot with no binding still deletes), then terminates the machine. Answers 204."
-  },
-  {
    "id": "deleteKubernetesCluster",
    "doc": "Destroys a DOKS cluster by id and answers 204. ADMIN-GATED, like\ncreate. Visor scopes the delete to the org (refuses a foreign id), so this can\nonly ever remove the caller org's own cluster."
   },
@@ -1376,11 +1372,6 @@
   {
    "id": "detachCluster",
    "doc": "Removes a BYO cluster from the caller org's fleet. It only ever\ntouches BYO clusters — a managed cluster's nodes are removed through the node-pool\nroutes — and answers 404 when the name is not in this org's fleet."
-  },
-  {
-   "id": "getBot",
-   "doc": "Returns one of the caller org's bot machines with its agent binding.\n\nA machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent\nbinding — either signal is authoritative, so a bot resolves even before its\ncloud-init has stamped every tag. A machine that is neither is 404: this route\nanswers for bots, not for machines.",
-   "read": true
   },
   {
    "id": "getKubernetesCluster",
@@ -1405,11 +1396,6 @@
   {
    "id": "get_compute_sizes",
    "doc": "Sizes lists the machine sizes available to launch, with their specifications.\n\nGlobal and org-gated, exactly as the region catalog is, and for the same reasons.",
-   "read": true
-  },
-  {
-   "id": "listBots",
-   "doc": "Returns the caller org's bot machines — the kind=bot machines — each\njoined with the agent binding that says which cloud Agent it runs.\n\nThe bindings are read ONCE and joined by machine id, so the list is O(1) upstream\ncalls, not N+1. A bindings read that fails only costs the reconciled status: a bot\nstill lists without it.",
    "read": true
   },
   {

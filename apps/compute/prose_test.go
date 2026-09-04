@@ -38,7 +38,7 @@ import (
 // entry here that starts publishing prose goes red too — that is the day zipdoc
 // learns, and the ledger must shrink then rather than outlive the gap.
 var proseless = map[string]bool{
-	// EMBEDDED STRUCT. botView embeds machineView and clusterDetailView embeds
+	// EMBEDDED STRUCT. clusterDetailView embeds
 	// clusterView, and zip's schema builder INLINES an embedded struct's fields into
 	// the outer component (openapi.go wireFields) while zipdoc files a field's prose
 	// under the type that DECLARES it (internal/zipdoc extract.go structFields). So
@@ -47,20 +47,6 @@ var proseless = map[string]bool{
 	// the outer name. The two workarounds both cost more than the gap: unrolling the
 	// embedding into copies, or writing a schema by hand beside the struct, each
 	// replace one true statement with two that can drift.
-	"botView.createdTime":             true,
-	"botView.gpu":                     true,
-	"botView.id":                      true,
-	"botView.image":                   true,
-	"botView.mem":                     true,
-	"botView.name":                    true,
-	"botView.os":                      true,
-	"botView.privateIp":               true,
-	"botView.provider":                true,
-	"botView.publicIp":                true,
-	"botView.region":                  true,
-	"botView.status":                  true,
-	"botView.type":                    true,
-	"botView.vcpu":                    true,
 	"clusterDetailView.amdGpu":        true,
 	"clusterDetailView.createdAt":     true,
 	"clusterDetailView.doClusterId":   true,
