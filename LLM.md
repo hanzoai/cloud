@@ -5540,6 +5540,17 @@ transport — a push into apps/git fires the builder over the host's plugin
 transport with no webhook — and git.hanzo.ai served by apps/git is where the
 separate-process forge, and its HTTP delivery, retire to.
 
+**2026-09-04 — one door for every provider.** The forge receiver moved from
+platform to integrations (`apps/integrations/forge_webhook.go`,
+`/v1/integration/forge/webhook`), beside GitHub, Linear, Telegram, WhatsApp and
+OpenRouter; platform holds the builder and no receiver. It works because
+`OnGitPush` reaches the builder over the plane when platform is not co-resident
+(build.go) — the nil registrant the old placement guarded against no longer
+exists. One verifier (`signed`, `apps/integrations/signed.go`) serves GitHub, Linear
+and the forge; the three copies it replaced differed only in which header they
+read. No tombstone in platform: nothing was ever configured to deliver to
+`/v1/platform/hook`, and apps/git's retired route names the new address.
+
 **The forge does not retry, so the answer is the recovery.** hanzoai/git marks a
 delivery delivered before it attempts it; the only redelivery is a person clicking
 Replay. So the endpoint records a push as landed only after a SUCCESSFUL dispatch

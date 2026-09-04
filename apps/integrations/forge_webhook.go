@@ -1,20 +1,13 @@
-// hook.go is the forge's push endpoint: git.hanzo.ai POSTs every push here, this
-// verifies the signature, and the landed ref becomes a build (buildFromPush) and
-// a lifecycle fact (notify, code-index, mirror).
+// forge_webhook.go is the forge's delivery address, beside every other provider's:
+// git.hanzo.ai POSTs each push here, the signature is verified over the raw bytes,
+// and the landed ref becomes a build and a lifecycle fact.
 //
-// IT IS IN PLATFORM BECAUSE THE BUILD IS. cloud runs each app as its own OS
-// process, and the deploy trigger has exactly one registrant — platform's, next
-// to this file. The receiver that used to take these deliveries lived in
-// apps/git, a different process, where that registrant is nil forever: every
-// delivery was signed, accepted, answered 204, and built nothing. A receiver has
-// to sit in the process that can act, which is why moving the address was the fix
-// and not a rename. apps/git's route is a 410 naming this receiver.
-//
-// The forge and native pushes now travel the SAME two clients. apps/git's
-// fireBranchBuild fires OnGitPush + EmitLifecycle for a push its own receive-pack
-// took; this fires the same pair for a push the forge took. One trigger, two
-// transports — the build decision stays downstream in buildFromPush, which is the
-// one place that knows what a push MEANS.
+// The build itself is platform's. A verified push is handed to cloud.OnGitPush,
+// which reaches the builder in-process when platform is co-resident and over the
+// plane when it is not — the same call the host's own git server makes for a push
+// its receive-pack took. One trigger, however a push arrives; and one place, this
+// app, where a provider's delivery is received. Platform holds the builder and no
+// receiver.
 //
 // PUBLIC at the JWT layer, because the forge holds no Hanzo session:
 // AUTHENTICATION IS THE SIGNATURE. It covers the raw bytes and is checked before
@@ -29,7 +22,7 @@
 // which covers every repository and every namespace at once, so a repo opts in by
 // having an application that tracks it rather than by owning a hook):
 //
-//	Target URL    https://api.hanzo.ai/v1/platform/hook
+//	Target URL    https://api.hanzo.ai/v1/integration/forge/webhook
 //	HTTP method   POST
 //	Content type  application/json
 //	Secret        the value at KMS forge.WebhookRef
@@ -37,27 +30,22 @@
 //	Branch filter *
 //
 // api.hanzo.ai is the fleet's one endpoint and the only host that reaches this
-// receiver; it is the address apps/git's 410 names. Nothing delivers to
-// platform.hanzo.ai: a native push needs no webhook, and a forge that is still a
-// separate process delivers here.
+// receiver; it is the address apps/git's retired route names.
 //
 // The secret is CONFIGURED, not generated here: the forge and this receiver share
 // one value, and the KMS ref is where the deployment keeps it. Rotating means
 // writing the new value at that ref and pasting the same value on the forge's
-// hook; deliveries signed with the old one are refused within one [hookFresh]
+// hook; deliveries signed with the old one are refused within one [forgeFresh]
 // window — of a KMS that ANSWERS. A refresh that fails keeps serving the last
-// value that read cleanly ([secret.read]), so a rotation done to burn a leaked
+// value that read cleanly ([forgeKey.read]), so a rotation done to burn a leaked
 // secret is only as fast as the read that carries it: if KMS is unreachable,
 // restart the pods rather than waiting for a window that cannot turn.
 
-package platform
+package integrations
 
 import (
 	"cmp"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -72,7 +60,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// hookPath is where the forge delivers, and it is under this app because the
+// forgeWebhookPath is where the forge delivers, and it is under this app because the
 // build trigger is: one capability, one prefix (HIP-0139 §3.1). The leaf is
 // `hook` — the noun for what arrives here — and not `git-webhook`, which is a
 // compound §2.3 refuses and a second spelling of the transport the first
@@ -81,26 +69,29 @@ import (
 // This is the address a separate-process forge is pointed at, and the one
 // apps/git's 410 names, so moving this leaf changes the forge's system-webhook
 // configuration. Nothing else outside this repo follows it.
-const hookPath = "/v1/platform/hook"
+// forgeWebhookPath is the forge's address, shaped like every other provider's in
+// this app: /v1/integrations/<provider>/webhook. Moving it changes the forge's
+// system-webhook configuration; nothing else outside this repo follows it.
+const forgeWebhookPath = "/v1/integration/forge/webhook"
 
 const (
-	// maxHookBody bounds what is HASHED and acted on: the bytes verified are
+	// forgeMaxBody bounds what is HASHED and acted on: the bytes verified are
 	// exactly the bytes acted on, and a body past this is refused before the MAC
 	// runs. What it does not bound is the allocation — by the time it can be
 	// checked the request is already in memory — so the two bounds that do are the
 	// edge's own BodyLimit and the refusal of an encoded body below, which is the
 	// one that keeps a few bytes on the wire from buying unbounded work.
-	maxHookBody = 8 << 20 // 8 MiB
-	// hookFresh bounds how long the verifying secret is held. A rotation is live
+	forgeMaxBody = 8 << 20 // 8 MiB
+	// forgeFresh bounds how long the verifying secret is held. A rotation is live
 	// within this window with no restart, and an unauthenticated flood costs one
 	// KMS read per window rather than one per request.
-	hookFresh = 5 * time.Minute
-	// hookWindow is how long a fired push is remembered for. It covers a replay of
+	forgeFresh = 5 * time.Minute
+	// forgeWindow is how long a fired push is remembered for. It covers a replay of
 	// a delivery whose clients already ran and whose answer never arrived — which is
 	// the only way one push arrives twice, since a delivery that FAILED is not
 	// remembered at all (seen.drop).
-	hookWindow = 30 * time.Minute
-	// hookRead bounds one KMS read of the verifying secret. The read runs on a
+	forgeWindow = 30 * time.Minute
+	// forgeRead bounds one KMS read of the verifying secret. The read runs on a
 	// context detached from the request (fetch), so this is the only thing that
 	// stops a hung read from pinning the refresh open and answering errUnread for
 	// every delivery behind it.
@@ -111,7 +102,7 @@ const (
 	// that outlives the delivery has already lost the push and is only choosing
 	// whether to also hold the refresh open behind it. Failing inside the window
 	// the forge still cares about is what lets the answer reach the delivery page.
-	hookRead = 4 * time.Second
+	forgeRead = 4 * time.Second
 	// zeroSHA is git's all-zero object id: the `after` of a deleted ref.
 	zeroSHA = "0000000000000000000000000000000000000000"
 )
@@ -132,7 +123,7 @@ const (
 // family to X-Webhook-, that spelling is added HERE, with a delivery to show for
 // it — the cost of a wrong guess in this list is that every push 401s and the
 // answer blames the secret.
-var sigHeaders = []string{"X-Git-Signature", "X-Gitea-Signature", "X-Hub-Signature-256"}
+var forgeSigHeaders = []string{"X-Git-Signature", "X-Gitea-Signature", "X-Hub-Signature-256"}
 
 // push is the subset of the forge's push payload this receiver acts on. Owner and
 // pusher each carry both spellings the payload has used across forge versions
@@ -234,8 +225,8 @@ type verdict struct {
 // and prose are stated here, next to the route, rather than being left as an
 // operationId every generated SDK offers with nowhere to put the delivery.
 func init() {
-	openapi.Register(hookPath, "POST", push{}, verdict{})
-	openapi.Describe(hookPath, "POST",
+	openapi.Register(forgeWebhookPath, "POST", push{}, verdict{})
+	openapi.Describe(forgeWebhookPath, "POST",
 		"Receive a push from the forge and trigger its build",
 		"The forge's push-to-deploy endpoint. git.hanzo.ai runs as a separate server, so its pushes "+
 			"never reach this fleet's own receive-pack; without this a push to the host we call "+
@@ -276,7 +267,7 @@ var errUnread = fmt.Errorf("%s has not been read yet", forge.WebhookRef)
 var errNoAnswer = fmt.Errorf("read %s: the KMS client did not return", forge.WebhookRef)
 
 // secret is the verifying key. It holds the last value that READ CLEANLY, and
-// the outcome of the last read whether or not that was one, for [hookFresh].
+// the outcome of the last read whether or not that was one, for [forgeFresh].
 //
 // HOLDING THE FAILURE IS THE POINT, and it is what makes this receiver survivable
 // while it is unauthenticated. Verifying needs the key, so the key is read before
@@ -292,7 +283,7 @@ var errNoAnswer = fmt.Errorf("read %s: the KMS client did not return", forge.Web
 // costs one round trip per window instead of one per request, but every arrival
 // inside that trip is a goroutine parked in the build process — which is the
 // pile-up, not a fix for it.
-type secret struct {
+type forgeKey struct {
 	mu   sync.Mutex
 	v    string    // the last value that read cleanly; a failure never replaces it
 	err  error     // the last read's outcome, kept for observability
@@ -301,14 +292,14 @@ type secret struct {
 }
 
 // read returns the forge's webhook secret, refreshing it at most once per
-// [hookFresh] however the last read turned out.
+// [forgeFresh] however the last read turned out.
 //
 // Fail-closed at every step: no KMS, a KMS that cannot answer, an empty secret,
 // or a refresh still in flight with nothing held yet each return an error and
 // never a value, because a receiver that starts builds must refuse rather than
 // trust. The error names the REF and never the value — a ref is a path and is
 // safe to log.
-func (k *secret) read(s *cloud.Service[state], ctx context.Context) (string, error) {
+func (k *forgeKey) read(s *cloud.Service[state], ctx context.Context) (string, error) {
 	if v, err, mine := k.claim(); !mine {
 		return v, err
 	}
@@ -337,12 +328,12 @@ func (k *secret) read(s *cloud.Service[state], ctx context.Context) (string, err
 
 // claim answers from what is held, and reports whether THIS caller is the one that
 // must go and refresh it. Exactly one caller is, per window.
-func (k *secret) claim() (string, error, bool) {
+func (k *forgeKey) claim() (string, error, bool) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	// Someone is already fetching, or what is held is still fresh: answer now,
 	// without a call and without waiting for one.
-	if k.busy || time.Since(k.when) < hookFresh {
+	if k.busy || time.Since(k.when) < forgeFresh {
 		if k.when.IsZero() {
 			return "", errUnread, false
 		}
@@ -359,15 +350,15 @@ func (k *secret) claim() (string, error, bool) {
 }
 
 // good is the last value that read cleanly, or empty when there has never been one.
-func (k *secret) good() string {
+func (k *forgeKey) good() string {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	return k.v
 }
 
 // settle records an outcome and releases the refresh. A failed read records the
-// failure and KEEPS the last value that read cleanly — see [secret.read].
-func (k *secret) settle(v string, err error) {
+// failure and KEEPS the last value that read cleanly — see [forgeKey.read].
+func (k *forgeKey) settle(v string, err error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	k.err, k.when, k.busy = err, time.Now(), false
@@ -388,7 +379,7 @@ func fetch(s *cloud.Service[state], ctx context.Context) (string, error) {
 	if s.KMS == nil {
 		return "", fmt.Errorf("no KMS client in use: cannot read %s", forge.WebhookRef)
 	}
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), hookRead)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), forgeRead)
 	defer cancel()
 	b, err := s.KMS.GetSecret(ctx, forge.WebhookRef)
 	if err != nil {
@@ -402,8 +393,8 @@ func fetch(s *cloud.Service[state], ctx context.Context) (string, error) {
 }
 
 // seen is the set of pushes this receiver is firing, or has fired, within
-// [hookWindow].
-type seen struct {
+// [forgeWindow].
+type forgeLanded struct {
 	mu sync.Mutex
 	at map[string]time.Time
 }
@@ -417,7 +408,7 @@ type seen struct {
 // however the forge chooses to identify them.
 //
 // TAKING IT IS HALF THE ACT: what a hold becomes is decided by whether the
-// dispatch succeeded, and a failed one gives it back ([seen.drop]). Recording the
+// dispatch succeeded, and a failed one gives it back ([forgeLanded.drop]). Recording the
 // fact up front and never rolling it back is what turned a transient trigger
 // failure into a push lost for the whole window — and into a Replay, the ONE
 // recovery this fork has, refused "already landed".
@@ -427,19 +418,19 @@ type seen struct {
 // the clients already ran, and that retry reaches the replica the load balancer
 // sends it to. A cross-replica answer is the build store's to give, and giving it
 // here would put the same question in two places.
-func (k *seen) hold(key string, now time.Time) bool {
+func (k *forgeLanded) hold(key string, now time.Time) bool {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	if k.at == nil {
 		k.at = map[string]time.Time{}
 	}
-	if was, ok := k.at[key]; ok && now.Sub(was) < hookWindow {
+	if was, ok := k.at[key]; ok && now.Sub(was) < forgeWindow {
 		return false
 	}
 	// Swept on write, so the map is bounded by one window's pushes rather than by
 	// uptime, and there is no goroutine to stop at shutdown.
 	for k2, was := range k.at {
-		if now.Sub(was) >= hookWindow {
+		if now.Sub(was) >= forgeWindow {
 			delete(k.at, k2)
 		}
 	}
@@ -450,7 +441,7 @@ func (k *seen) hold(key string, now time.Time) bool {
 // drop gives a held key back, so the next delivery naming that push is a fresh
 // attempt rather than a duplicate. It is what a dispatch failure does with its
 // hold: nothing fired, so there is nothing to remember.
-func (k *seen) drop(key string) {
+func (k *forgeLanded) drop(key string) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	delete(k.at, key)
@@ -488,35 +479,6 @@ func coordinate(owner, repo, ref, commit string) bool {
 		commitRE.MatchString(commit)
 }
 
-// signed reports whether any of sigs carries the hex HMAC-SHA256 of body under
-// secret, compared in constant time.
-//
-// The MAC is computed ONCE and each candidate compared against it, so reading
-// several header spellings costs several comparisons rather than several hashes
-// of the body. An empty secret, an absent header or malformed hex is false —
-// fail-closed, never a bypass — and no candidate can admit a delivery without
-// the secret, so accepting whichever spelling the forge sent widens nothing.
-func signed(secret string, body []byte, sigs ...string) bool {
-	if secret == "" {
-		return false
-	}
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	want := mac.Sum(nil)
-	for _, sig := range sigs {
-		// "sha256=<hex>" is the GitHub spelling the forge emits beside its own bare
-		// hex; the digest is identical.
-		got, err := hex.DecodeString(strings.TrimPrefix(strings.TrimSpace(sig), "sha256="))
-		if err != nil || len(got) == 0 {
-			continue
-		}
-		if hmac.Equal(got, want) {
-			return true
-		}
-	}
-	return false
-}
-
 // ignored answers 200 naming why nothing fired.
 //
 // 200 and not an error: the delivery is well-formed and CORRECTLY declined, so
@@ -531,11 +493,11 @@ func ignored(c *zip.Ctx, why string) error {
 	return c.JSON(http.StatusOK, verdict{Reason: why})
 }
 
-// hook verifies and processes one forge delivery.
-func hook(s *cloud.Service[state], c *zip.Ctx) error {
+// forgeWebhook verifies and processes one forge delivery.
+func forgeWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	// AN ENCODED BODY IS REFUSED BEFORE IT IS TOUCHED, and the order is the whole
 	// control. Reading the body DECOMPRESSES it when the request declares a
-	// Content-Encoding, so maxHookBody — checked on what comes back — bounds the
+	// Content-Encoding, so forgeMaxBody — checked on what comes back — bounds the
 	// INFLATED size and can only ever be told about an allocation that has already
 	// happened. 8 KB of gzip on the wire bought 8 MiB of it, in the process that
 	// owns builds, deploys and the reconciler, from a caller holding no credential
@@ -545,7 +507,7 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusUnsupportedMediaType, "this receiver reads an uncompressed body")
 	}
 	body := c.Body()
-	if len(body) > maxHookBody {
+	if len(body) > forgeMaxBody {
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "payload too large")
 	}
 	// The forge this deployment owns, resolved once: the delivery's clone URL is
@@ -558,7 +520,7 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 		s.Log.Error("forge hook: this deployment names no forge", "domain", s.Domain)
 		return zip.Errorf(http.StatusServiceUnavailable, "no forge host for this deployment")
 	}
-	key, err := s.State.hook.read(s, c.Context())
+	key, err := s.State.forgeKey.read(s, c.Context())
 	if err != nil {
 		// 503 and not 401. A deployment that cannot read its own secret has not been
 		// handed a bad signature, and saying so would send an operator to look at the
@@ -571,8 +533,8 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 		s.Log.Error("forge hook: no secret to verify against", "err", err)
 		return zip.Errorf(http.StatusServiceUnavailable, "forge webhook secret unavailable")
 	}
-	sigs := make([]string, len(sigHeaders))
-	for i, h := range sigHeaders {
+	sigs := make([]string, len(forgeSigHeaders))
+	for i, h := range forgeSigHeaders {
 		sigs[i] = c.Header(h)
 	}
 	if !signed(key, body, sigs...) {
@@ -624,7 +586,7 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 	// again — on the tenant's compute — while every other decision on this path has
 	// already agreed they are one namespace.
 	fact := strings.ToLower(owner) + "/" + ev.Repository.Name + " " + ev.Ref + " " + ev.After
-	if !s.State.landed.hold(fact, time.Now()) {
+	if !s.State.forgeLanded.hold(fact, time.Now()) {
 		return ignored(c, "already landed")
 	}
 
@@ -648,7 +610,7 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 		CloneURL: "https://" + host + "/" + owner + "/" + ev.Repository.Name + ".git",
 	})
 	if err != nil {
-		s.State.landed.drop(fact)
+		s.State.forgeLanded.drop(fact)
 		s.Log.Error("forge hook: build trigger failed",
 			"org", org, "repo", ev.Repository.Name, "ref", ev.Ref, "err", err)
 		return zip.Errorf(http.StatusInternalServerError, "the push was verified but no build could be started; replay this delivery")
@@ -677,9 +639,17 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 
 	s.Log.Info("forge push landed", "org", org, "repo", ev.Repository.Name,
-		"ref", ev.Ref, "commit", shortTag(ev.After), "pusher", pusher, "builds", builds)
+		"ref", ev.Ref, "commit", shortSHA(ev.After), "pusher", pusher, "builds", builds)
 	return c.JSON(http.StatusOK, verdict{
 		Org: org, Repo: ev.Repository.Name, Ref: ev.Ref, Commit: ev.After,
 		Fired: true, Builds: builds,
 	})
+}
+
+// shortSHA is the seven characters a person recognises a commit by in a log line.
+func shortSHA(commit string) string {
+	if len(commit) > 7 {
+		return commit[:7]
+	}
+	return commit
 }

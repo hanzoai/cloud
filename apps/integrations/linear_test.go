@@ -129,7 +129,7 @@ func linearPost(t *testing.T, app *zip.App, sig, org string, payload []byte) htt
 func TestVerifyLinearSignature(t *testing.T) {
 	body := []byte(`{"a":1}`)
 	good := linearSign("s3cr3t", body)
-	if !verifyLinearSignature("s3cr3t", good, body) {
+	if !signed("s3cr3t", body, good) {
 		t.Fatal("valid signature must verify")
 	}
 	for name, tc := range map[string]struct{ secret, sig string }{
@@ -139,7 +139,7 @@ func TestVerifyLinearSignature(t *testing.T) {
 		"not hex":       {"s3cr3t", "zz"},
 		"tampered body": {"s3cr3t", linearSign("s3cr3t", []byte(`{"a":2}`))},
 	} {
-		if verifyLinearSignature(tc.secret, tc.sig, body) {
+		if signed(tc.secret, body, tc.sig) {
 			t.Fatalf("%s must fail closed", name)
 		}
 	}

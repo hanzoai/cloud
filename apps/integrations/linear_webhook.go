@@ -1,9 +1,6 @@
 package integrations
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -31,22 +28,6 @@ const linearMaxWebhookBody = 8 << 20
 // `webhookTimestamp`, and a signature that verifies is still a replay if the
 // delivery is stale; Linear's own guidance is one minute.
 var linearWebhookSkew = time.Minute
-
-// verifyLinearSignature reports whether sig is Linear's signature over body under
-// secret: "Linear-Signature: <hex(HMAC_SHA256(secret, body))>". Constant-time;
-// fail-closed on an empty secret, header or malformed hex.
-func verifyLinearSignature(secret, sig string, body []byte) bool {
-	if secret == "" || sig == "" {
-		return false
-	}
-	got, err := hex.DecodeString(strings.TrimSpace(sig))
-	if err != nil {
-		return false
-	}
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	return hmac.Equal(got, mac.Sum(nil))
-}
 
 // linearEvent is the envelope every delivery shares; Data is decoded per type.
 type linearEvent struct {
@@ -78,7 +59,7 @@ func linearWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]any{"ignored": "unknown organization"})
 	}
 	secret, err := kmsGet(s, kmsPath(org, "linear"), linearWebhookSecret)
-	if err != nil || !verifyLinearSignature(string(secret), c.Header("Linear-Signature"), body) {
+	if err != nil || !signed(string(secret), body, c.Header("Linear-Signature")) {
 		return zip.Errorf(http.StatusUnauthorized, "invalid signature")
 	}
 	sent := time.UnixMilli(ev.WebhookTimestamp)

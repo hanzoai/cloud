@@ -149,7 +149,7 @@ func ghSign(secret string, payload []byte) string {
 func TestVerifyGitHubSignature(t *testing.T) {
 	body := []byte(`{"a":1}`)
 	good := ghSign("s3cr3t", body)
-	if !verifyGitHubSignature("s3cr3t", good, body) {
+	if !signed("s3cr3t", body, good) {
 		t.Fatal("valid signature must verify")
 	}
 	// Fail closed on every degenerate input.
@@ -160,7 +160,7 @@ func TestVerifyGitHubSignature(t *testing.T) {
 		"no prefix":     {"s3cr3t", hex.EncodeToString([]byte("x"))},
 		"tampered body": {"s3cr3t", ghSign("s3cr3t", []byte(`{"a":2}`))},
 	} {
-		if verifyGitHubSignature(tc.secret, tc.sig, body) {
+		if signed(tc.secret, body, tc.sig) {
 			t.Fatalf("%s must fail closed", name)
 		}
 	}

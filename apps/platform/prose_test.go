@@ -28,7 +28,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -40,8 +39,7 @@ import (
 // that read only the typed half would pass while they went unread.
 func mountPublished(t *testing.T) *zip.App {
 	t.Helper()
-	app, s := mountSvcK8s(t, &k8sClient{initErr: "no cluster (test)", limits: testLimits()})
-	app.Post(hookPath, cloud.Terminal(cloud.Handle(s, hook)))
+	app, _ := mountSvcK8s(t, &k8sClient{initErr: "no cluster (test)", limits: testLimits()})
 	return app
 }
 
@@ -52,32 +50,7 @@ func mountPublished(t *testing.T) *zip.App {
 // It is exact in BOTH directions. A bare property anywhere else goes red, and an
 // entry here that starts publishing prose goes red too — that is the day the
 // generator learns, and the ledger must shrink then rather than outlive the gap.
-var proseless = map[string]bool{
-	// REFLECTION CLIENT. POST /v1/platform/hook is declared with openapi.Register
-	// (hook.go) and not as a typed op, because AUTHENTICATION IS THE SIGNATURE: the
-	// HMAC covers the raw bytes and is verified BEFORE the payload is parsed, and a
-	// typed op decodes first. Register derives its schema by REFLECTION, and Go
-	// drops comments at compile time, so zipdoc — which walks zip's TYPED
-	// registrations — can never reach a type that arrives this way.
-	"push.ref":                       true,
-	"push.before":                    true,
-	"push.after":                     true,
-	"push.repository":                true,
-	"push.repository.name":           true,
-	"push.repository.owner":          true,
-	"push.repository.owner.login":    true,
-	"push.repository.owner.username": true,
-	"push.pusher":                    true,
-	"push.pusher.login":              true,
-	"push.pusher.username":           true,
-	"verdict.org":                    true,
-	"verdict.repo":                   true,
-	"verdict.ref":                    true,
-	"verdict.commit":                 true,
-	"verdict.fired":                  true,
-	"verdict.builds":                 true,
-	"verdict.reason":                 true,
-}
+var proseless = map[string]bool{}
 
 // TestEveryPublishedFieldIsDescribed fails on any property of any published schema
 // that carries no description and is not named above.
@@ -88,10 +61,6 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	}
 	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
 		t.Fatal("platform publishes no schemas at all — the gate would pass vacuously")
-	}
-	if doc.Paths[hookPath]["post"] == nil {
-		t.Fatalf("%s is not in the document this gate reads, so the shapes it publishes are "+
-			"unchecked — mountPublished has drifted from Mount", hookPath)
 	}
 	published, err := openapi.Bare(doc)
 	if err != nil {

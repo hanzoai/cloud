@@ -99645,13 +99645,13 @@ paths:
   /v1/git/webhook:
     post:
       description: |-
-        GONE (410). Push-to-deploy belongs to POST https://api.hanzo.ai/v1/platform/hook, the platform app's receiver, which holds the builder. A push into this host's own git server needs no webhook: it fires the builder over the host's plugin transport. git.hanzo.ai, while it remains a separate process, delivers there through ONE forge-wide system webhook covering every repository; a repo opts in by committing hanzo.yml, not by owning a hook of its own.
+        GONE (410). Push-to-deploy belongs to POST https://api.hanzo.ai/v1/integration/forge/webhook, the forge's address in the integrations app beside every other provider's; the build it triggers is platform's. A push into this host's own git server needs no webhook: it fires the builder over the host's plugin transport. git.hanzo.ai, while it remains a separate process, delivers there through ONE forge-wide system webhook covering every repository; a repo opts in by committing hanzo.yml, not by owning a hook of its own.
 
         Every delivery answers 410 whatever it carries — this endpoint reads no body and authenticates nothing.
 
-        410 rather than 404, because the address was real and its meaning moved, which is the distinction 410 carries. A 404 from this estate is ambiguous: Hanzo Git serves /v1, so /api/v1 404s too and reads as "the API is switched off". A retired endpoint says it is retired and names its replacement, so the answer carries its own fix.no such route
+        410 rather than 404, because the address was real and its meaning moved, which is the distinction 410 carries. A 404 from this estate is ambiguous: Hanzo Git serves /v1, so /api/v1 404s too and reads as "the API is switched off". A retired endpoint says it is retired and names its replacement, so the answer carries its own fix.
       operationId: post_git_webhook
-      summary: Retired — a forge push is delivered to /v1/platform/hook
+      summary: Retired — a forge push is delivered to /v1/integration/forge/webhook
       tags:
       - git
       x-app: git
@@ -106613,6 +106613,34 @@ paths:
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
       operationId: get_integration_discord_link_discord
       summary: Discord sign-in return leg
+      tags:
+      - integration
+      x-app: integration
+      x-public: true
+  /v1/integration/forge/webhook:
+    post:
+      description: |-
+        The forge's push-to-deploy endpoint. git.hanzo.ai runs as a separate server, so its pushes never reach this fleet's own receive-pack; without this a push to the host we call canonical builds nothing. A verified push is handed to the SAME two clients a native push travels — the single-registrant deploy trigger, and the many-subscriber lifecycle stream that notifies and indexes — and the build decision itself stays downstream in the one place that knows what a push means.
+
+        PUBLIC at the JWT layer, because the forge carries no Hanzo session: AUTHENTICATION IS THE SIGNATURE. The HMAC covers the raw bytes and is verified BEFORE the payload is parsed, so an unauthenticated body is never decoded. The secret is read from KMS; a deployment that cannot read it answers 503 and processes nothing, rather than trusting a delivery it could not check. The body is read UNCOMPRESSED — a request declaring a Content-Encoding is refused 415 before it is touched, because decoding one is unbounded work bought with a few bytes and no credential. A bad signature is 401, a payload over 8 MiB is 413, and a malformed one 400.
+
+        A verified push that reaches both clients answers 200 with fired true and the NUMBER OF BUILDS it launched — zero is ordinary, since most pushes track no application, and it is the answer 'fired' cannot give. A push that could not be dispatched answers 500: the delivery page shows it red, and the Replay that prompts reaches a fresh attempt rather than being declined as already landed.
+
+        The deliveries deliberately ignored answer 200 with a reason and nothing else: a payload that is not a push, a ref DELETE (a zero `after` has no commit to build), a BOT-authored push (release automation pushes as the forge's own Actions user, and a release must never rebuild itself), a push from a forge namespace that maps to no org, and a redelivery of a push already fired. Branches and tags both reach the build trigger, because releases are cut by tag and filtering here would silently stop publishing.
+      operationId: post_integration_forge_webhook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/push'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/verdict'
+          description: Success
+      summary: Receive a push from the forge and trigger its build
       tags:
       - integration
       x-app: integration
@@ -126586,34 +126614,6 @@ paths:
       x-app: platform
       x-public: true
       x-tool: true
-  /v1/platform/hook:
-    post:
-      description: |-
-        The forge's push-to-deploy endpoint. git.hanzo.ai runs as a separate server, so its pushes never reach this fleet's own receive-pack; without this a push to the host we call canonical builds nothing. A verified push is handed to the SAME two clients a native push travels — the single-registrant deploy trigger, and the many-subscriber lifecycle stream that notifies and indexes — and the build decision itself stays downstream in the one place that knows what a push means.
-
-        PUBLIC at the JWT layer, because the forge carries no Hanzo session: AUTHENTICATION IS THE SIGNATURE. The HMAC covers the raw bytes and is verified BEFORE the payload is parsed, so an unauthenticated body is never decoded. The secret is read from KMS; a deployment that cannot read it answers 503 and processes nothing, rather than trusting a delivery it could not check. The body is read UNCOMPRESSED — a request declaring a Content-Encoding is refused 415 before it is touched, because decoding one is unbounded work bought with a few bytes and no credential. A bad signature is 401, a payload over 8 MiB is 413, and a malformed one 400.
-
-        A verified push that reaches both clients answers 200 with fired true and the NUMBER OF BUILDS it launched — zero is ordinary, since most pushes track no application, and it is the answer 'fired' cannot give. A push that could not be dispatched answers 500: the delivery page shows it red, and the Replay that prompts reaches a fresh attempt rather than being declined as already landed.
-
-        The deliveries deliberately ignored answer 200 with a reason and nothing else: a payload that is not a push, a ref DELETE (a zero `after` has no commit to build), a BOT-authored push (release automation pushes as the forge's own Actions user, and a release must never rebuild itself), a push from a forge namespace that maps to no org, and a redelivery of a push already fired. Branches and tags both reach the build trigger, because releases are cut by tag and filtering here would silently stop publishing.
-      operationId: post_platform_hook
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/push'
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/verdict'
-          description: Success
-      summary: Receive a push from the forge and trigger its build
-      tags:
-      - platform
-      x-app: platform
-      x-public: true
   /v1/platform/pipelines:
     get:
       description: |-

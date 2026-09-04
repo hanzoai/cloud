@@ -317,6 +317,9 @@ type state struct {
 	stateKey   []byte          // HMAC-SHA256 key for the CSRF/org-binding state
 	providers  map[string]*Provider
 	flight     *flight // keyed in-process mutex: refresh + device-poll serialization
+
+	forgeKey    forgeKey    // the forge's webhook key, held for a window (forge_webhook.go)
+	forgeLanded forgeLanded // forge pushes already fired, so a redelivery builds once
 }
 
 var mounted *cloud.Service[state]
@@ -964,6 +967,10 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// Linear delivers Issue and Comment events here (linear_webhook.go). Raw and
 	// Terminal for the same reason as GitHub's: the HMAC covers the raw body.
 	app.Post("/v1/integration/linear/webhook", cloud.Terminal(cloud.Handle(s, linearWebhook)))
+	// The forge delivers every push here (forge_webhook.go), like any other
+	// provider. Raw and Terminal for the same reason as GitHub's: the HMAC covers
+	// the raw body, and the build it triggers is platform's, reached over the plane.
+	app.Post(forgeWebhookPath, cloud.Terminal(cloud.Handle(s, forgeWebhook)))
 	// OpenRouter's Broadcast destination (openrouter.go). Raw and Terminal like its
 	// siblings, and public at the JWT layer for the same reason: the credential is a
 	// key in the destination's Headers map, admitted INSIDE the handler through the

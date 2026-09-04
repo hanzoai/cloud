@@ -1,9 +1,6 @@
 package integrations
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"github.com/hanzoai/cloud/internal/environ"
@@ -33,24 +30,6 @@ import (
 // bodies well under this; a hostile/oversized body can neither exhaust memory nor
 // slip past the HMAC (we verify exactly the bytes we act on).
 const githubMaxWebhookBody = 8 << 20 // 8 MiB
-
-// verifyGitHubSignature reports whether sigHeader is a valid GitHub webhook
-// signature over body under secret. GitHub sends
-// "X-Hub-Signature-256: sha256=<hex(HMAC_SHA256(secret, body))>". Constant-time
-// compare; fail-closed on an empty secret / header / malformed input (never a panic).
-func verifyGitHubSignature(secret, sigHeader string, body []byte) bool {
-	if secret == "" || sigHeader == "" {
-		return false
-	}
-	const prefix = "sha256="
-	if !strings.HasPrefix(sigHeader, prefix) {
-		return false
-	}
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	want := prefix + hex.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(sigHeader), []byte(want))
-}
 
 // githubPushEvent is the subset of GitHub's push payload we act on.
 type githubPushEvent struct {
@@ -86,7 +65,7 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "payload too large")
 	}
 	secret := environ.Or(githubWebhookSecretEnv, "")
-	if !verifyGitHubSignature(secret, c.Header("X-Hub-Signature-256"), body) {
+	if !signed(secret, body, c.Header("X-Hub-Signature-256")) {
 		return zip.Errorf(http.StatusUnauthorized, "invalid signature")
 	}
 	switch c.Header("X-GitHub-Event") {
