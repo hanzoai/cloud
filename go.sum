@@ -1142,6 +1142,8 @@ github.com/hanzoai/pubsub-go v1.53.0 h1:f8x+N00+n85e1fYd6JuUeGBkDalRQw5LsbINCe0U
 github.com/hanzoai/pubsub-go v1.53.0/go.mod h1:vkb15k9IaOARioJl70gU498YFYgT0hGc04KBnqzwM10=
 github.com/hanzoai/s3 v1.0.28 h1:hH0H/GxtMCH627z/tD8J2bRer861CXvr+2J0LQTh6xY=
 github.com/hanzoai/s3 v1.0.28/go.mod h1:7SrQvtIyjEb54bTF6aTp4oBf0gFP5/estnPyHckpg7U=
+github.com/hanzoai/s3 v1.0.29 h1:SUp4AhWlGtLAHF2nmoJYb55mMGTTUE6TnMHPGMoYVEQ=
+github.com/hanzoai/s3 v1.0.29/go.mod h1:7SrQvtIyjEb54bTF6aTp4oBf0gFP5/estnPyHckpg7U=
 github.com/hanzoai/search-go v0.36.0 h1:bQfbAs/bc/s3qZDCtSqEAxp48koHkb0Z4ezUknt2AQc=
 github.com/hanzoai/search-go v0.36.0/go.mod h1:jdcYUdG6exMfRfJvilWhaNdAR8XWQRPvZtuRxQBzn34=
 github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible h1:xmFYu3gTLpu78mIx6z0bgpYy3MVdMAEFFeKs2YPybVo=

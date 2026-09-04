@@ -877,7 +877,7 @@ replace (
 
 // The object store plugin/s3 embeds. Only that binary links it — the host
 // imports no subsystem, and this require does not change what cmd/cloud links.
-require github.com/hanzoai/s3 v1.0.28
+require github.com/hanzoai/s3 v1.0.29
 
 // github.com/google/flatbuffers/go is a SUBMODULE whose package path is also
 // served by the parent module, which luxfi/zapdb already brings. Two modules
