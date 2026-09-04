@@ -50,18 +50,6 @@ const TokenRef = "orgs/hanzo/deploy/FORGE_TRACKER_TOKEN@prod"
 // its own network.
 const HostKeyRef = "orgs/hanzo/deploy/FORGE_HOST_KEY@prod"
 
-// WebhookRef is the KMS coordinate of the secret the forge signs its deliveries
-// with — the value configured on the forge's system webhook, and read by the
-// receiver that turns a delivered push into a build (apps/platform).
-//
-// The forge carries no Hanzo session when it delivers, so the signature is that
-// endpoint's ONLY authentication and this value is the whole of the trust:
-// holding it is the ability to start a build. It lives in KMS for the reasons
-// [TokenRef] does, and it is the SAME secret for every repository — one
-// forge-wide system webhook covers the estate, so a repository opts in by having
-// an app that tracks it rather than by owning a hook and a secret of its own.
-const WebhookRef = "orgs/hanzo/deploy/FORGE_WEBHOOK_SECRET@prod"
-
 // fresh bounds how long a resolved credential is reused. A rotated token is
 // therefore live within this window without a restart, and a revoked one stops
 // working. Short enough to make rotation real, long enough that a read is not a

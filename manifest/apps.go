@@ -194,9 +194,10 @@ var Apps = []App{
 	// is the defect this table exists to prevent, and a 501 that names what is
 	// missing is a better answer than commerce's bare-"/v1" 404.
 	//
-	// The forge delivers a push to /v1/integration/forge/webhook, beside every other
-	// provider (apps/integrations forge_webhook.go); platform holds the builder and no
-	// receiver, and the trigger reaches it over the plane when it is not co-resident.
+	// Push-to-deploy has no inbound webhook. A push into this host's own git server
+	// (apps/git) fires the builder in-process over the plane; a repository whose
+	// canonical home is GitHub is delivered by the Hanzo Platform GitHub App to
+	// /v1/integration/github/webhook. platform holds the builder and receives nothing.
 	{Name: "platform", Prefixes: []string{"/v1/platform"}},
 	{Name: "project", Pkg: "projects", Prefixes: []string{"/v1/project"}},
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},

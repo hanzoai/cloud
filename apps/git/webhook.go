@@ -10,18 +10,18 @@ import (
 
 // webhook.go is a TOMBSTONE: this address is retired and answers 410.
 //
-// Push-to-deploy is the platform app's, which holds the builder. A push into
-// this host's own git server needs no webhook at all: it fires the builder over
-// the host's plugin transport (build_on_push.go). A forge that is still a
-// separate process delivers to its address in the integrations app, POST
-// /v1/integration/forge/webhook on api.hanzo.ai, beside every other provider's —
-// ONE forge-wide system webhook covering every repository; a repo opts in by
-// committing hanzo.yml, not by owning a hook.
+// Push-to-deploy has NO inbound webhook, and this route never becomes one again.
+// A push into this host's own git server fires the builder in-process, over the
+// plane — fireBranchBuild in push.go/smart_http.go, the same trigger every native
+// push takes. A repository whose canonical home is GitHub is delivered by the
+// Hanzo Platform GitHub App to /v1/integration/github/webhook. The forge does not
+// call us: it is our own server or a mirror of GitHub, and neither reports a push
+// over HTTP.
 //
 // The route is KEPT rather than deleted, because a deleted route 404s and a 404
 // from this estate is ambiguous: Hanzo Git serves /v1, so /api/v1 404s too and
 // reads as "the API is switched off". A retired endpoint SAYS it is retired and
-// NAMES its replacement, so the answer carries its own fix.
+// says where push-to-deploy actually lives, so the answer carries its own fix.
 //
 // It reads no body, holds no secret and verifies nothing: there is nothing left
 // here to authenticate. GIT_WEBHOOK_SECRET is no longer read by this binary.
@@ -52,11 +52,6 @@ import (
 // cloud.Terminal (git.go) therefore stays: it writes the 410 in-band so a
 // co-mounted /v1 ErrorHandlerJSON cannot flatten the propagated error to 500.
 
-// buildEndpoint is where a separate-process forge delivers: its address in the
-// integrations app, on the fleet's one endpoint. Stated once, in the message a caller
-// actually receives, so the answer carries its own fix.
-const buildEndpoint = "https://api.hanzo.ai/v1/integration/forge/webhook"
-
 // The prose. "Cannot be a typed op" is not "must be undocumented": a raw route
 // carries an operationId and a tag and nothing else, which no consumer of the
 // document can tell apart from a route that says nothing because there is nothing
@@ -73,14 +68,11 @@ const buildEndpoint = "https://api.hanzo.ai/v1/integration/forge/webhook"
 // runs once per Mount.
 func init() {
 	openapi.Describe("/v1/git/webhook", http.MethodPost,
-		"Retired — a forge push is delivered to /v1/integration/forge/webhook",
-		"GONE (410). Push-to-deploy belongs to POST "+buildEndpoint+", the forge's address "+
-			"in the integrations app beside every other provider's; the build it triggers is "+
-			"platform's. A push into this host's own git server "+
-			"needs no webhook: it fires the builder over the host's plugin transport. "+
-			"git.hanzo.ai, while it remains a separate process, delivers there through ONE "+
-			"forge-wide system webhook covering every repository; a repo opts in by "+
-			"committing hanzo.yml, not by owning a hook of its own.\n\n"+
+		"Retired — push-to-deploy has no inbound webhook",
+		"GONE (410). Push-to-deploy is not triggered by an inbound webhook. A push into "+
+			"this host's own git server fires the builder in-process, and a repository whose "+
+			"canonical home is GitHub is delivered by the Hanzo Platform GitHub App to POST "+
+			"/v1/integration/github/webhook. The forge does not report a push over HTTP.\n\n"+
 			"Every delivery answers 410 whatever it carries — this endpoint reads no body "+
 			"and authenticates nothing.\n\n"+
 			"410 rather than 404, because the address was real and its meaning moved, which "+
@@ -90,7 +82,7 @@ func init() {
 			"carries its own fix.")
 }
 
-// webhook answers every delivery 410 Gone, naming the endpoint that builds. It
+// webhook answers every delivery 410 Gone, saying where push-to-deploy lives. It
 // reads no body: there is nothing here to authenticate and nothing to parse.
 //
 // 410, not 404: the address was real and its meaning moved, which is exactly the
@@ -99,7 +91,7 @@ func init() {
 // mistake, since Hanzo Git serves /v1.
 func webhook(*cloud.Service[state], *zip.Ctx) error {
 	return zip.Errorf(http.StatusGone,
-		"POST /v1/git/webhook is retired. Send forge deliveries to %s instead — on "+
-			"git.hanzo.ai that is the forge-wide system webhook, and a repo opts in by "+
-			"committing hanzo.yml.", buildEndpoint)
+		"POST /v1/git/webhook is retired. Push-to-deploy has no inbound webhook: a push "+
+			"into this server builds in-process, and GitHub repositories are delivered by "+
+			"the Hanzo Platform GitHub App to /v1/integration/github/webhook.")
 }

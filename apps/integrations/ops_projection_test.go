@@ -89,7 +89,6 @@ var rawRoutes = map[string]string{
 	"POST /v1/integration/github/webhook":        "HMAC over the raw body",
 	"POST /v1/integration/linear/webhook":        "HMAC over the raw body, with the organization's own secret",
 	"POST /v1/integration/discord/interactions":  "Ed25519 over the raw body",
-	"POST /v1/integration/forge/webhook":         "HMAC over the raw body, under three header spellings",
 	"POST /v1/integration/openrouter/webhook":    "OTLP body, decoded as a subset",
 	"POST /v1/integration/slack/commands":        "HMAC over the raw form body",
 	"POST /v1/integration/slack/events":          "HMAC over the raw body",
