@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/plane"
+	sandboxpeer "github.com/hanzoai/cloud/plane/sandbox"
 	"github.com/zap-proto/zip"
 )
 
@@ -74,7 +75,7 @@ func ServeSandboxes(t *testing.T) *Sandboxes {
 	s := &Sandboxes{pods: map[string]*Pod{}}
 	runtimeDir(t)
 
-	app := zip.New(zip.Config{AppName: "sandboxes"})
+	app := zip.New(zip.Config{AppName: sandboxpeer.App})
 	zip.Post[plane.LeaseIn, plane.Leased](app, "/sandbox/lease", s.lease,
 		zip.WithOperationID(plane.SandboxLease))
 	zip.Post[plane.RunIn, plane.Ran](app, "/sandbox/run", s.run,
@@ -86,7 +87,7 @@ func ServeSandboxes(t *testing.T) *Sandboxes {
 	zip.Post[plane.EndIn, struct{}](app, "/sandbox/end", s.end,
 		zip.WithOperationID(plane.SandboxEnd))
 
-	listen(t, app, "sandboxes")
+	listen(t, app, sandboxpeer.App)
 	return s
 }
 

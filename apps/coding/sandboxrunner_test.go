@@ -26,6 +26,7 @@ import (
 	"github.com/hanzoai/cloud/internal/planetest"
 
 	"github.com/hanzoai/cloud/plane"
+	sandboxpeer "github.com/hanzoai/cloud/plane/sandbox"
 	"github.com/zap-proto/zip"
 )
 
@@ -121,7 +122,7 @@ func servePod(t *testing.T, p *pod) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 
-	sandboxes := zip.New(zip.Config{AppName: "sandboxes", DisableStartupMessage: true})
+	sandboxes := zip.New(zip.Config{AppName: sandboxpeer.App, DisableStartupMessage: true})
 	zip.Post[plane.LeaseIn, plane.Leased](sandboxes, "/sandbox/lease",
 		func(_ context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
 			p.mu.Lock()
@@ -145,7 +146,7 @@ func servePod(t *testing.T, p *pod) {
 			return &plane.Verdict{OK: true}, nil
 		}, zip.WithOperationID(plane.FinanceAuthorize))
 
-	for name, app := range map[string]*zip.App{"sandboxes": sandboxes, "commerce": commerce} {
+	for name, app := range map[string]*zip.App{sandboxpeer.App: sandboxes, "commerce": commerce} {
 		plane.Bind()
 		go func(path string) { _ = app.Listen(path) }(zip.SocketPath(name))
 		t.Cleanup(func() { _ = app.Shutdown() })

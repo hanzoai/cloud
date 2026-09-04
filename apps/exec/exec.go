@@ -74,6 +74,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
+	sandboxpeer "github.com/hanzoai/cloud/plane/sandbox"
 	"github.com/zap-proto/zip"
 )
 
@@ -93,14 +94,6 @@ import (
 // it, because three consumers once disagreed about it in production and nothing
 // could see the disagreement.
 const Path = "/v1/exec"
-
-// peer is the app that owns sandboxes. Reached over the internal plane and never
-// imported: apps ship as separate plugin binaries, so an import would give this
-// process a SECOND sandbox service — its own per-org SQLite handles on the same
-// files, its own reaper racing the real one. cloud.Ask collapses to an in-process
-// dispatch wherever the fleet fuses the two (plane.Ask, zip.Serving), so the hop is
-// a hop only where it is really a hop.
-const peer = "sandboxes"
 
 // marker is the file whose mtime separates "was already here" from "this run made
 // it". It lives in /tmp, which is deliberately NOT the artifact directory, so the
@@ -376,7 +369,7 @@ func Run(ctx context.Context, org string, in *CodeRun) (*CodeResult, error) {
 	// separate call would be older than the program file this call just wrote, and
 	// the collection below would then report the source as one of the run's outputs.
 	argv := append([]string{"sh", "-c", ": > " + marker + "\n" + l.run, "sh"}, in.Args...)
-	ran, err := cloud.Ask[plane.RunIn, plane.Ran](ctx, peer, plane.SandboxRun,
+	ran, err := sandboxpeer.SandboxRun(ctx,
 		&plane.RunIn{ID: sb.ID, Argv: argv})
 	if err != nil {
 		return nil, err
@@ -398,7 +391,7 @@ func Run(ctx context.Context, org string, in *CodeRun) (*CodeResult, error) {
 // answering 500 because the artifact sweep tripped would throw away the one thing
 // the caller asked for.
 func produced(ctx context.Context, id string) []CodeFile {
-	ran, err := cloud.Ask[plane.RunIn, plane.Ran](ctx, peer, plane.SandboxRun, &plane.RunIn{
+	ran, err := sandboxpeer.SandboxRun(ctx, &plane.RunIn{
 		ID: id, Argv: []string{"sh", "-c", "find . -type f -newer " + marker + " 2>/dev/null"}})
 	if err != nil || ran.ExitCode != 0 {
 		return nil
@@ -419,7 +412,7 @@ func produced(ctx context.Context, id string) []CodeFile {
 // about to run. Read then write — two plane calls, because the bytes have to cross
 // two pods and there is no third place for them to meet.
 func carry(ctx context.Context, f CodeFile, into string) error {
-	b, err := cloud.Ask[plane.PathIn, plane.Blob](ctx, peer, plane.SandboxRead,
+	b, err := sandboxpeer.SandboxRead(ctx,
 		&plane.PathIn{ID: f.Session(), Path: f.ID})
 	if err != nil || b.Dir {
 		return fmt.Errorf("read %s: %v", f.ID, err)
@@ -436,17 +429,17 @@ func carry(ctx context.Context, f CodeFile, into string) error {
 func End(ctx context.Context, org, session string) error {
 	cctx, done := callCtx(ctx, org)
 	defer done()
-	_, err := cloud.Ask[plane.EndIn, struct{}](cctx, peer, plane.SandboxEnd, &plane.EndIn{ID: session})
+	_, err := sandboxpeer.SandboxEnd(cctx, &plane.EndIn{ID: session})
 	return err
 }
 
 func lease(ctx context.Context, id string) (*plane.Leased, error) {
-	return cloud.Ask[plane.LeaseIn, plane.Leased](ctx, peer, plane.SandboxLease,
+	return sandboxpeer.SandboxLease(ctx,
 		&plane.LeaseIn{ID: id, Class: "exec"})
 }
 
 func write(ctx context.Context, id, p string, data []byte) (*plane.Wrote, error) {
-	return cloud.Ask[plane.WriteIn, plane.Wrote](ctx, peer, plane.SandboxWrite,
+	return sandboxpeer.SandboxWrite(ctx,
 		&plane.WriteIn{ID: id, Path: p, Data: data})
 }
 
@@ -566,7 +559,7 @@ func download(c *zip.Ctx) error {
 	}
 	ctx, done := callCtx(c.Context(), org)
 	defer done()
-	b, err := cloud.Ask[plane.PathIn, plane.Blob](ctx, peer, plane.SandboxRead,
+	b, err := sandboxpeer.SandboxRead(ctx,
 		&plane.PathIn{ID: sid, Path: p})
 	if err != nil {
 		return err
@@ -645,7 +638,7 @@ func listFiles(ctx context.Context, in *sessionRef) (*listings, error) {
 	// `name.startsWith(session/id)` found nothing and read the file as EXPIRED. Two
 	// traversals of one directory is two answers about what a session holds; there is
 	// one now.
-	ran, err := cloud.Ask[plane.RunIn, plane.Ran](ctx, peer, plane.SandboxRun, &plane.RunIn{
+	ran, err := sandboxpeer.SandboxRun(ctx, &plane.RunIn{
 		ID: sid, Argv: []string{"sh", "-c",
 			`find . -type f -exec date -u -r {} +%Y-%m-%dT%H:%M:%SZ \; -print`}})
 	if err != nil {
@@ -798,7 +791,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(reg, Path+"/files/:sid", listFiles)
 
 	luxlog.Default().New("subsystem", "exec").Info("code interpreter mounted over sandboxes",
-		"peer", peer, "langs", len(langs))
+		"peer", sandboxpeer.App, "langs", len(langs))
 	return nil
 }
 

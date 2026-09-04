@@ -70,6 +70,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
+	sandboxpeer "github.com/hanzoai/cloud/plane/sandbox"
 )
 
 // sandboxRunner is the Runner over apps/sandbox.
@@ -232,7 +233,7 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	//
 	// The work does not live on that disk anyway: deliver() commits it and pushes it
 	// to the run's ref, which is the only reason anything survives a run at all.
-	leased, err := plane.Ask[plane.LeaseIn, plane.Leased](ctx, "sandboxes", plane.SandboxLease,
+	leased, err := sandboxpeer.SandboxLease(ctx,
 		&plane.LeaseIn{Class: class, TTLSec: ttl})
 	if err != nil {
 		if isLocalDev() {
@@ -261,7 +262,7 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	defer func() {
 		end, cancel := context.WithTimeout(cloud.For(context.Background(), org), 30*time.Second)
 		defer cancel()
-		_, _ = plane.Ask[plane.EndIn, struct{}](end, "sandboxes", plane.SandboxEnd,
+		_, _ = sandboxpeer.SandboxEnd(end,
 			&plane.EndIn{ID: id})
 		// Said AFTER the lease is actually gone, so "ended" means the pod is
 		// released and not that we intended to release it.
@@ -655,7 +656,7 @@ const redacted = "[redacted]"
 // the command is over. Streamed from where they are produced, a twenty-five
 // minute agent edit loop is watchable; collected here, it is a silence.
 func runIn(ctx context.Context, id string, argv []string, ttl int, session, stdin string, blind ...string) (*plane.Ran, error) {
-	ran, err := plane.Ask[plane.RunIn, plane.Ran](ctx, "sandboxes", plane.SandboxRun,
+	ran, err := sandboxpeer.SandboxRun(ctx,
 		&plane.RunIn{ID: id, Argv: argv, TimeoutSec: ttl, Session: session, Stdin: stdin, Blind: blind})
 	if err != nil {
 		return nil, err
