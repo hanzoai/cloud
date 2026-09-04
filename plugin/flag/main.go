@@ -17,12 +17,12 @@ import (
 // `flags openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:       "flags",
+		Name:       "flag",
 		Price:      cloud.Free,
 		Use:        flags.Use,
 		Shutdown:   flags.Shutdown,
 		OwnsHealth: true,
-	}}, []string{"flags"}); err != nil {
+	}}, []string{"flag"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
