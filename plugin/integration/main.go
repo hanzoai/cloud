@@ -18,18 +18,18 @@ import (
 // `integrations openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name: "integrations",
+		Name: "integration",
 		// The paths this app answers, read from the fleet's one list rather than
 		// restated here (manifest/one_source_test.go). It reads as the /v1/<name>
 		// convention today because the whole surface is under that name now — the
 		// user-plane connectors were a second top-level prefix, and left unsaid
 		// they sat outside what the app claimed, so its own middleware skipped
 		// them while the host kept forwarding them: served, and served wrong.
-		Prefixes: manifest.PrefixesFor("integrations"),
+		Prefixes: manifest.PrefixesFor("integration"),
 		Price:    cloud.Free,
 		Use:      integrations.Use,
 		Shutdown: integrations.Shutdown,
-	}}, []string{"integrations"}); err != nil {
+	}}, []string{"integration"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
