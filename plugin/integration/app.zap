@@ -2,7 +2,7 @@
 # Every struct and method below is derived from one op's In and Out, and
 # every offset from the layout the op-call plane encodes against.
 
-package integrations
+package integration
 
 struct authorizeOut {
     AuthorizeURL text @0
@@ -272,39 +272,39 @@ struct verifyOut {
     Scopes     list<text> @40
 }
 
-interface integrations {
+interface integration {
     # Forgets a connector: every custodied secret, then the row.
     # Idempotent — dropping a never-connected id still answers {disconnected:true}
     # (disconnect() parity). No provider Revoke: none of the user-plane providers
     # exposes a revoke endpoint.
-    delete_integrations_connectors_by_id(req: connectorRef) returns (rep: disconnectOut)
+    delete_integration_connectors_by_id(req: connectorRef) returns (rep: disconnectOut)
     # Deletes the repo's Pages site. 404 when there is none, so a
     # caller can tell "turned it off" from "there was nothing on".
-    delete_integrations_github_repos_by_repo_pages(req: githubRepoRef) returns (rep: githubPagesDisabledOut)
+    delete_integration_github_repos_by_repo_pages(req: githubRepoRef) returns (rep: githubPagesDisabledOut)
     # Returns every registered integration provider together with THIS org's
     # connection status for it — the catalog the console's Integrations page renders.
     # Org-authed: a caller with no validated principal is 403, because the status is
-    # per-org and there is no org-less answer. User-plane providers (the /v1/integrations/connectors
+    # per-org and there is no org-less answer. User-plane providers (the /v1/integration/connectors
     # surface) are omitted; the two planes are disjoint.
-    get_integrations() returns (rep: listOut)
+    get_integration() returns (rep: listOut)
     # Returns ONE provider with this org's connection status — the same view list
     # carries, for a single id. An unknown id is 404, and so is a user-plane provider:
     # the org surface never resolves one.
-    get_integrations_by_provider(req: providerRef) returns (rep: providerView)
+    get_integration_by_provider(req: providerRef) returns (rep: providerView)
     # Lists the caller's OWN connectors across every provider — the set
     # `hanzo connector ls` prints. Rows are keyed (org,user), so this can never
     # surface another user's connector, and no secret is in the view.
-    get_integrations_connectors() returns (rep: connectorsOut)
+    get_integration_connectors() returns (rep: connectorsOut)
     # Hands the custodied access token to its owner — the ONE place
     # custody exits. The (org,user)-keyed row IS the same-user gate: another user's
     # id is simply "no row" → 404. fresh() auto-rotates within the refreshSkew
     # window; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh
     # tokens are NEVER returned — custody keeps the sink. The token is never logged.
-    get_integrations_connectors_by_id_token(req: connectorRef) returns (rep: connectorTokenOut)
+    get_integration_connectors_by_id_token(req: connectorRef) returns (rep: connectorTokenOut)
     # Lists the user-scoped provider cards — the catalog of what a
     # user can connect, and how. Methods derive from capabilities (Device/Adopt/Verify
     # — Mount asserts at least one), never from a parallel kind enum.
-    get_integrations_connectors_providers() returns (rep: connectorProvidersOut)
+    get_integration_connectors_providers() returns (rep: connectorProvidersOut)
     # Lists the GitHub accounts the caller may see the App
     # installed on, each confirmed against the App's own list, plus where to add
     # another.
@@ -325,21 +325,21 @@ interface integrations {
     # connected" and an operator asked "which GitHub orgs do you see" can only
     # answer for accounts already bound, which is precisely the accounts that were
     # never the question.
-    get_integrations_github_installations() returns (rep: githubInstallationsOut)
+    get_integration_github_installations() returns (rep: githubInstallationsOut)
     # Lists the org's granted GitHub repositories, each annotated with its
     # native import + sync status from the git object plane. Org-authed: the org comes
     # from the validated principal, and the granted set is bounded to THAT org's
     # installation token — an org can never enumerate another org's repos. The console
     # polls it to watch an import flip a repo to imported.
-    get_integrations_github_repos() returns (rep: githubReposOut)
+    get_integration_github_repos() returns (rep: githubReposOut)
     # Returns the repo's Pages status, live URL, custom domain and build
     # source. The repo is resolved against the org installation's GRANTED set, so a
     # caller can never address a repo the App was not granted; 404 when the repo has no
     # Pages site.
-    get_integrations_github_repos_by_repo_pages(req: githubRepoRef) returns (rep: githubPagesView)
+    get_integration_github_repos_by_repo_pages(req: githubRepoRef) returns (rep: githubPagesView)
     # Lists the projects the org's GitLab connection can reach —
     # membership projects, most recently active first.
-    get_integrations_gitlab_projects() returns (rep: gitlabProjectsOut)
+    get_integration_gitlab_projects() returns (rep: gitlabProjectsOut)
     # Acquires the org's credential for one provider. It has TWO paths and the
     # REQUEST picks which: a "token" key in the body seals that credential directly
     # (verify-before-store), and its absence begins the 3-legged OAuth flow — minting a
@@ -349,39 +349,39 @@ interface integrations {
     # AdminOnly connector without the caller's own-org admin bit → 403; not configured
     # → 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now
     # rather than dead-end at the callback).
-    post_integrations_by_provider_connect(req: connectIn) returns (rep: connectOut)
+    post_integration_by_provider_connect(req: connectIn) returns (rep: connectOut)
     # Revokes (best-effort) and forgets an org's connection: it deletes
     # every custodied KMS secret and the connection row. Idempotent — disconnecting a
     # provider that was never connected still returns {disconnected:true}. Symmetric
     # with connect: an AdminOnly connector needs the caller's own-org admin bit.
-    post_integrations_by_provider_disconnect(req: providerRef) returns (rep: disconnectOut)
+    post_integration_by_provider_disconnect(req: providerRef) returns (rep: disconnectOut)
     # Re-checks a CONNECTED apikey connector's stored credential against the
     # provider, live (`hanzo connector verify`). Org-scoped (any member may check
     # status); the credential is read from KMS, verified, and NEVER returned or logged.
     # A verification failure is reported as {active:false}, not an error — the console/
     # CLI renders it. Only apikey providers support verify (OAuth tokens are checked at
     # use, not re-verified here).
-    post_integrations_by_provider_verify(req: providerRef) returns (rep: verifyOut)
+    post_integration_by_provider_verify(req: providerRef) returns (rep: verifyOut)
     # Forces a token rotation for a connected connector, ahead of the
     # automatic rotation a token read would do inside the expiry window. Only
     # providers that declare a Refresh support it.
-    post_integrations_connectors_by_id_refresh(req: connectorRef) returns (rep: refreshOut)
+    post_integration_connectors_by_id_refresh(req: connectorRef) returns (rep: refreshOut)
     # Is the direct intake path: a customer-held token/setup-token
     # (Verify) or an externally obtained OAuth bundle from the CLI's local PKCE
     # (Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING
     # is persisted (connectByCredential's fail-closed order).
-    post_integrations_connectors_by_provider_credential(req: credentialIn) returns (rep: credentialOut)
+    post_integration_connectors_by_provider_credential(req: credentialIn) returns (rep: credentialOut)
     # Begins a device sign-in and returns the code to show the user plus
     # how to poll for completion. KMS readiness is checked NOW rather than dead-ending
     # the user at poll-done (connect() parity), and the per-provider connector cap is
     # checked before the provider is called. The provider's device code is persisted
     # only in the encrypted grants table and is NEVER returned.
-    post_integrations_connectors_by_provider_device(req: deviceStartIn) returns (rep: deviceStartOut)
+    post_integration_connectors_by_provider_device(req: deviceStartIn) returns (rep: deviceStartOut)
     # Advances a device sign-in. Terminal outcomes are DATA, not errors
     # (verifyConn {active:false} discipline) — the status set is closed:
     # pending|connected|denied|expired. pollSlow collapses to "pending" on the
     # wire; the raised cadence rides interval.
-    post_integrations_connectors_by_provider_device_by_flow_poll(req: devicePollIn) returns (rep: devicePollOut)
+    post_integration_connectors_by_provider_device_by_flow_poll(req: devicePollIn) returns (rep: devicePollOut)
     # Binds installations the App ALREADY holds to the org the caller is
     # acting in — the reconciliation for a grant that happened outside our connect
     # flow.
@@ -409,72 +409,72 @@ interface integrations {
     # minting tokens against a dead installation.
     # Claiming an account another org holds ADDS this org's row and leaves theirs
     # standing, so no org loses an integration it is using.
-    post_integrations_github_claim(req: githubClaimIn) returns (rep: githubClaimOut)
+    post_integration_github_claim(req: githubClaimIn) returns (rep: githubClaimOut)
     # Forks a granted repository.
     # GitHub's fork is ASYNCHRONOUS: it answers 202 with the target repo and
     # populates it in the background, and it answers the same 202 when the fork
     # already exists. So this reports what GitHub said rather than waiting — a call
     # that blocked until the clone finished would time out on a large repository and
     # tell the caller nothing it does not already know.
-    post_integrations_github_fork(req: githubForkReq) returns (rep: githubForkOut)
+    post_integration_github_fork(req: githubForkReq) returns (rep: githubForkOut)
     # Seeds the native todo with the EXISTING issues across the
     # org's granted repos (default state=open); the webhook keeps them live thereafter.
     # Org-scoped by the validated principal — a caller only ever backfills its OWN org.
     # Synchronous + bounded (a total time budget and an issue cap) so it returns the
     # counts directly; idempotent by ExtRef, so a re-run continues where a truncated
     # pass left off and never duplicates.
-    post_integrations_github_issues_backfill(req: githubBackfillIn) returns (rep: githubBackfillResult)
+    post_integration_github_issues_backfill(req: githubBackfillIn) returns (rep: githubBackfillResult)
     # Creates the repo's Pages site and answers 201 Created with it.
     # With buildType "workflow" the site builds via GitHub Actions; otherwise it builds
     # from a branch source, defaulting to the repo's own default branch when none is
     # given. Only "/" and "/docs" are legal source paths (GitHub's rule).
-    post_integrations_github_repos_by_repo_pages(req: githubPagesEnableReq) returns (rep: githubPagesView)
+    post_integration_github_repos_by_repo_pages(req: githubPagesEnableReq) returns (rep: githubPagesView)
     # Requests a Pages rebuild and returns the queued build's status.
     # The build is queued AT GITHUB, not completed here, so the answer is 202 Accepted
     # and its status is the one GitHub reported at queue time. 404 when the repository
     # has no Pages site, or when the org's installation was not granted it.
-    post_integrations_github_repos_by_repo_pages_builds(req: githubRepoRef) returns (rep: githubPagesBuildOut)
+    post_integration_github_repos_by_repo_pages_builds(req: githubRepoRef) returns (rep: githubPagesBuildOut)
     # Imports the selected (or all) granted repos into git.hanzo.ai. The
     # selection is intersected with the installation's GRANTED set, so a client can
     # never import a repo the App was not granted (org isolation + a grant check). The
     # import runs in a bounded background worker (don't block the request), so the
-    # answer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo
+    # answer is 202 Accepted; poll GET /v1/integration/github/repos for the per-repo
     # status to flip to imported.
-    post_integrations_github_repos_import(req: githubImportIn) returns (rep: githubImportOut)
+    post_integration_github_repos_import(req: githubImportIn) returns (rep: githubImportOut)
     # Finds repositories on GitHub.
     # This reads the PUBLIC index and returns nothing an installation unlocks: it is
     # how you find a repository to fork, not a way to see inside one. The org's own
     # token is used only so the query is rate-limited against the installation
     # rather than anonymously — the results are the same ones anyone would get.
-    post_integrations_github_search(req: githubSearchReq) returns (rep: githubSearchOut)
+    post_integration_github_search(req: githubSearchReq) returns (rep: githubSearchOut)
     # Binds the caller's Linear organization to the org and seals the
     # webhook secret. The organization is READ from the caller's own key, never taken
     # from the body: a person can only bind an organization they are a member of. An
     # organization another org already holds is refused.
-    post_integrations_linear_claim(req: linearClaimIn) returns (rep: linearClaimOut)
+    post_integration_linear_claim(req: linearClaimIn) returns (rep: linearClaimOut)
     # Posts a comment on a Linear issue with the caller's own key, so it
     # carries their name. This is the op an agent is offered when it should answer in
     # Linear rather than in chat.
-    post_integrations_linear_comments(req: linearCommentIn) returns (rep: linearCommentOut)
+    post_integration_linear_comments(req: linearCommentIn) returns (rep: linearCommentOut)
     # Seeds the native todo with the EXISTING Linear issues the
     # caller's key can see (default state=open); the webhook keeps them live
     # thereafter. Synchronous and bounded, idempotent by ExtRef.
-    post_integrations_linear_issues_backfill(req: linearBackfillIn) returns (rep: linearBackfillResult)
+    post_integration_linear_issues_backfill(req: linearBackfillIn) returns (rep: linearBackfillResult)
     # Joins every public channel in the caller org's workspace.
     # Org admin, because it changes what the whole workspace sees: after it the agent
     # is a member of every public room and answers in all of them.
-    post_integrations_slack_join() returns (rep: slackJoinOut)
+    post_integration_slack_join() returns (rep: slackJoinOut)
     # Mints a short, single-use deep-link code bound to the caller's
     # org and returns the t.me link the console navigates to. Org-authed: a caller with
     # no validated principal is 403 (same gate as the framework connect). The code is
     # stored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to
     # bind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`
     # payload limit.
-    post_integrations_telegram_connect() returns (rep: authorizeOut)
+    post_integration_telegram_connect() returns (rep: authorizeOut)
     # Sets or clears the custom domain (cname) and updates HTTPS
     # enforcement, build type, or source. ONLY the provided fields are sent to GitHub,
     # so an update never resets a setting the caller did not mention.
-    put_integrations_github_repos_by_repo_pages(req: githubPagesUpdateReq) returns (rep: githubPagesUpdatedOut)
+    put_integration_github_repos_by_repo_pages(req: githubPagesUpdateReq) returns (rep: githubPagesUpdatedOut)
 }
 
 # ---------------------------------------------------------------------

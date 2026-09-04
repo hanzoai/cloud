@@ -12,14 +12,14 @@ package tasks
 // most words on, and prose cannot go red. It said the bare noun's redirect was
 // "the engine's own ServeMux answering before anything of ours runs", and
 // therefore that "there is nothing for a typed op to BE". Both halves are false
-// and the tests below measure it: hanzoai/tasks v1.52.9 registers no /v1/task/
+// and the tests below measure it: hanzoai/tasks v1.52.9 registers no /v1/tasks/
 // subtree pattern, so its own handler answers that address 404 — the only such
 // pattern in the request path is CLOUD's (httpMux). The answer was cloud's the
 // whole time.
 //
 // What actually keeps it out of the registry is something nobody had measured:
 // the exact route at /v1/task IS NEVER ENTERED. The greedy sibling at
-// /v1/task/* matches the empty remainder and wins there in either registration
+// /v1/tasks/* matches the empty remainder and wins there in either registration
 // order, so the exact registration's only remaining job is to put the address in
 // the document. The reason a native handler there was tempting — cloud owns the
 // answer — is true and not sufficient.
@@ -54,17 +54,17 @@ import (
 // wire fact refuses every method at once. Keying by method would state one fact
 // five times and let four copies rot.
 var untypedByDesign = map[string]string{
-	"/v1/task": "answers 307 with Location /v1/task/ and a body that depends on the method — " +
+	"/v1/tasks": "answers 307 with Location /v1/tasks/ and a body that depends on the method — " +
 		"the short fallback HTML on a GET, nothing on the rest. A typed op's only response path " +
 		"is c.JSON(out) under a status it declared, which carries neither the header that is " +
 		"the whole point of the call nor two content types at one address.\n\n" +
-		"And a handler of ANY kind here is unreachable: the greedy /v1/task/* beside it claims " +
+		"And a handler of ANY kind here is unreachable: the greedy /v1/tasks/* beside it claims " +
 		"the bare noun, so this registration exists to publish the address and never to serve " +
 		"it. Its answer is the wildcard's, and so are the wildcard's blockers. " +
 		"TestTheBareNounAnswersEveryByte, TestTheGreedyRouteClaimsTheBareNoun, " +
 		"TestTheEngineDoesNotServeTheBareNoun.",
 
-	"/v1/task/{wildcard1}": "ONE route over the whole durable engine, whose operations are " +
+	"/v1/tasks/{wildcard1}": "ONE route over the whole durable engine, whose operations are " +
 		"matched by path SEGMENT inside hanzoai/tasks' own ServeMux rather than by patterns — " +
 		"so there is no route here to type, their inputs are anonymous structs local to that " +
 		"module's handlers, and the engine hands cloud its surface only as http.Handler. Four " +
@@ -182,7 +182,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 // TestTheEngineDoesNotServeTheBareNoun refutes the claim this file replaced.
 //
 // The redirect at /v1/task is net/http's subtree rule applied to a pattern, and
-// the only /v1/task/ pattern anywhere in the request path is the one CLOUD
+// the only /v1/tasks/ pattern anywhere in the request path is the one CLOUD
 // registers (httpMux). hanzoai/tasks' own handler — the thing that pattern fronts
 // — answers the bare noun 404 on every method, so it cannot be the source of the
 // answer the record attributed to it. The day the engine starts serving that
@@ -191,14 +191,14 @@ func TestTheEngineDoesNotServeTheBareNoun(t *testing.T) {
 	srv := testEngine(t)
 	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 		rec := httptest.NewRecorder()
-		srv.HTTPHandler().ServeHTTP(rec, httptest.NewRequest(m, "/v1/task", nil))
+		srv.HTTPHandler().ServeHTTP(rec, httptest.NewRequest(m, "/v1/tasks", nil))
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("engine HTTPHandler %s /v1/task = %d, want 404 — the engine now serves the "+
 				"bare noun, so the redirect is no longer cloud's alone", m, rec.Code)
 		}
 	}
 	rec := httptest.NewRecorder()
-	httpMux(srv).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/task", nil))
+	httpMux(srv).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/tasks", nil))
 	if rec.Code != http.StatusTemporaryRedirect {
 		t.Errorf("cloud's own mux GET /v1/task = %d, want 307 — the pattern the redirect is "+
 			"derived from has moved", rec.Code)
@@ -208,7 +208,7 @@ func TestTheEngineDoesNotServeTheBareNoun(t *testing.T) {
 // TestTheGreedyRouteClaimsTheBareNoun is the blocker itself, measured.
 //
 // Owning an answer is not enough to serve it: the greedy `*` matches the EMPTY
-// remainder, so /v1/task/* covers /v1/task and WINS there in either
+// remainder, so /v1/tasks/* covers /v1/task and WINS there in either
 // registration order. A handler registered at the exact address is never entered,
 // which makes a native one a second description of a wire it cannot produce —
 // and makes the exact registration a DOCUMENT entry rather than a route.
@@ -221,7 +221,7 @@ func TestTheGreedyRouteClaimsTheBareNoun(t *testing.T) {
 		t.Helper()
 		app := zip.New(zip.Config{Logger: luxlog.New("test")})
 		build(app)
-		resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/task", nil))
+		resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/tasks", nil))
 		if err != nil {
 			t.Fatalf("Test: %v", err)
 		}
@@ -235,7 +235,7 @@ func TestTheGreedyRouteClaimsTheBareNoun(t *testing.T) {
 		}
 	}
 
-	if got := who(func(a *zip.App) { a.All("/v1/task", mark("exact")) }); got != "exact" {
+	if got := who(func(a *zip.App) { a.All("/v1/tasks", mark("exact")) }); got != "exact" {
 		t.Fatalf("alone, the exact route answers %q — the premise of the rest of this test is gone", got)
 	}
 	for _, c := range []struct {
@@ -243,12 +243,12 @@ func TestTheGreedyRouteClaimsTheBareNoun(t *testing.T) {
 		build func(*zip.App)
 	}{
 		{"exact registered first", func(a *zip.App) {
-			a.All("/v1/task", mark("exact"))
-			a.All("/v1/task/*", mark("greedy"))
+			a.All("/v1/tasks", mark("exact"))
+			a.All("/v1/tasks/*", mark("greedy"))
 		}},
 		{"greedy registered first", func(a *zip.App) {
-			a.All("/v1/task/*", mark("greedy"))
-			a.All("/v1/task", mark("exact"))
+			a.All("/v1/tasks/*", mark("greedy"))
+			a.All("/v1/tasks", mark("exact"))
 		}},
 	} {
 		if got := who(c.build); got != "greedy" {
@@ -258,8 +258,8 @@ func TestTheGreedyRouteClaimsTheBareNoun(t *testing.T) {
 		}
 	}
 	if got := who(func(a *zip.App) {
-		a.All("/v1/task", mark("exact"))
-		a.All("/v1/task/:leaf", mark("param"))
+		a.All("/v1/tasks", mark("exact"))
+		a.All("/v1/tasks/:leaf", mark("param"))
 	}); got != "exact" {
 		t.Errorf("with a :param sibling GET /v1/task reached %q, want exact — the control for "+
 			"this being about greediness rather than precedence has changed", got)
@@ -283,7 +283,7 @@ func TestTheBareNounAnswersEveryByte(t *testing.T) {
 
 	const html = "text/html; charset=utf-8"
 	const plain = "text/plain; charset=utf-8"
-	body := `<a href="/v1/task/">Temporary Redirect</a>.` + "\n\n"
+	body := `<a href="/v1/tasks/">Temporary Redirect</a>.` + "\n\n"
 
 	for _, c := range []struct{ method, ct, body string }{
 		{http.MethodGet, html, body},
@@ -295,7 +295,7 @@ func TestTheBareNounAnswersEveryByte(t *testing.T) {
 		{http.MethodOptions, plain, ""},
 		{"TRACE", plain, ""},
 	} {
-		resp, err := app.Test(httptest.NewRequest(c.method, "/v1/task", nil))
+		resp, err := app.Test(httptest.NewRequest(c.method, "/v1/tasks", nil))
 		if err != nil {
 			t.Fatalf("%s: %v", c.method, err)
 		}
@@ -324,7 +324,7 @@ func TestTheBareNounFailsSoftWithNoEngine(t *testing.T) {
 		t.Skip("this process has an engine; the not-ready path is what is under test")
 	}
 	app := surfaceApp(t)
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/task", nil))
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/tasks", nil))
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestTheBareNounFailsSoftWithNoEngine(t *testing.T) {
 }
 
 // TestOneWildcardCarriesFourContentTypes pins the four answer shapes that ONE
-// route — app.All("/v1/task/*", …) in Mount — carries at once: the engine's
+// route — app.All("/v1/tasks/*", …) in Mount — carries at once: the engine's
 // JSON API, the text/plain 404 its ServeMux writes for a path or method it does
 // not serve, the text/plain 405 the MCP endpoint writes for a non-POST, and the
 // event stream.
@@ -359,9 +359,9 @@ func TestOneWildcardCarriesFourContentTypes(t *testing.T) {
 		code         int
 		contentType  string
 	}{
-		{http.MethodGet, "/v1/task/namespaces", 200, "application/json"},
-		{http.MethodPut, "/v1/task/namespaces", 404, "text/plain"},
-		{http.MethodGet, "/v1/task/mcp", 405, "text/plain"},
+		{http.MethodGet, "/v1/tasks/namespaces", 200, "application/json"},
+		{http.MethodPut, "/v1/tasks/namespaces", 404, "text/plain"},
+		{http.MethodGet, "/v1/tasks/mcp", 405, "text/plain"},
 	} {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, validated(httptest.NewRequest(c.method, c.path, nil)))
@@ -378,9 +378,9 @@ func TestOneWildcardCarriesFourContentTypes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, validated(httptest.NewRequest(http.MethodGet, "/v1/task/events", nil)).WithContext(ctx))
+	mux.ServeHTTP(rec, validated(httptest.NewRequest(http.MethodGet, "/v1/tasks/events", nil)).WithContext(ctx))
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
-		t.Errorf("GET /v1/task/events content-type = %q, want text/event-stream", ct)
+		t.Errorf("GET /v1/tasks/events content-type = %q, want text/event-stream", ct)
 	}
 }
 
@@ -405,9 +405,9 @@ func TestOneWildcardCarriesFourContentTypes(t *testing.T) {
 func TestEngineErrorEnvelopeIsNotZips(t *testing.T) {
 	mux := httpMux(testEngine(t))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/task/namespaces", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/tasks/namespaces", nil))
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("unvalidated GET /v1/task/namespaces = %d, want 403", rec.Code)
+		t.Fatalf("unvalidated GET /v1/tasks/namespaces = %d, want 403", rec.Code)
 	}
 	var engineBody map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &engineBody); err != nil {
@@ -453,7 +453,7 @@ func TestCancelIgnoresAMalformedBody(t *testing.T) {
 		return rec.Code, rec.Body.String()
 	}
 
-	if code, body := post("/v1/task/namespaces",
+	if code, body := post("/v1/tasks/namespaces",
 		`{"namespaceInfo":{"name":"smoke","state":"NAMESPACE_STATE_REGISTERED"},`+
 			`"config":{"workflowExecutionRetentionTtl":"24h"}}`); code != http.StatusOK {
 		t.Fatalf("register namespace = %d: %s", code, body)
@@ -461,7 +461,7 @@ func TestCancelIgnoresAMalformedBody(t *testing.T) {
 
 	// Malformed body, tolerated: the verb runs and fails on the workflow it was
 	// asked about, never on the bytes.
-	code, body := post("/v1/task/namespaces/smoke/workflows/nope/cancel", `{`)
+	code, body := post("/v1/tasks/namespaces/smoke/workflows/nope/cancel", `{`)
 	if code == http.StatusBadRequest {
 		t.Errorf("cancel now refuses a malformed body (%d %s) — re-check the refusal", code, body)
 	}
@@ -470,7 +470,7 @@ func TestCancelIgnoresAMalformedBody(t *testing.T) {
 	}
 
 	// The strict sibling, same bytes, same subtree.
-	if code, body := post("/v1/task/namespaces/smoke/workflows", `{`); code != http.StatusBadRequest {
+	if code, body := post("/v1/tasks/namespaces/smoke/workflows", `{`); code != http.StatusBadRequest {
 		t.Errorf("workflow start with a malformed body = %d %s, want 400", code, body)
 	}
 }

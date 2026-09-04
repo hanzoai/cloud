@@ -261,7 +261,7 @@ var tokenIsAnAsset = set("id", "ids", "symbol", "supply", "balance")
 var keyOfAStore = set(
 	"kv", "bucket", "buckets", "namespace", "namespaces",
 	"value", "values", "map", "cache", "store", "listing", "listings",
-	"project", "project", "def", "defs", "definition", "definitions",
+	"project", "projects", "def", "defs", "definition", "definitions",
 	"attribute", "attributes", "field", "fields", "label", "labels",
 	"tag", "tags", "index", "indexes", "column", "columns", "dimension",
 	"partition", "shard", "prefix", "sort", "group", "primary", "foreign",
@@ -344,8 +344,8 @@ var productStems = []string{
 	"embeddings",  //
 	"rerank",      //
 	"models",      // what can it call
-	"agent",       // the agent loop: conversations, presets
-	     // …sessions, runs, targets, and the run in a sandbox
+	"agent",       // the agent loop: conversations, presets, sessions, runs,
+	               // targets, and the run in a sandbox
 	"code",        // code intelligence: ask, context, index, search
 	"lsp",         // …and the live language server beside it
 	"search",      //

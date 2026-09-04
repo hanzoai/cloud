@@ -2,7 +2,7 @@
 # Every struct and method below is derived from one op's In and Out, and
 # every offset from the layout the op-call plane encodes against.
 
-package tools
+package tool
 
 struct MCPListing {
     ID          text        @0
@@ -168,37 +168,37 @@ struct toolQuery {
     Activated text @8
 }
 
-interface tools {
+interface tool {
     # Deregisters one of the caller org's external MCP servers, so its
     # tools leave the registry. Scoped to the caller's org, so an id belonging to
     # another tenant is a 404 and not a delete. Answers 204 with no body; a server
     # this org does not have is 404.
-    delete_tools_mcp_servers_by_id(req: serverRef)
+    delete_tool_mcp_servers_by_id(req: serverRef)
     # Removes one of the caller org's built plugins, so the
     # runtime can no longer load it. Scoped to the caller's org, so an id belonging
     # to another tenant answers 404 and is not deleted.
-    delete_tools_plugins_authored_by_id(req: pluginRef) returns (rep: pluginDeleted)
+    delete_tool_plugins_authored_by_id(req: pluginRef) returns (rep: pluginDeleted)
     # Removes one of the caller org's authored skills. Scoped to the
     # caller's org, so an id belonging to another tenant is never reached. Removing
     # what is not there is not an error — the caller's intent is "gone", and it is.
-    delete_tools_skills_by_id(req: skillRef) returns (rep: skillDeleted)
+    delete_tool_skills_by_id(req: skillRef) returns (rep: skillDeleted)
     # Lists every tool the caller's org and project can reach, from every
     # source, each flagged with whether it is activated. This is the discovery
     # surface: one flat set of names spanning connector actions, user functions,
     # zap-service routes, agents, skills and the org's own external MCP servers,
     # deduplicated by name so the highest-precedence source wins a collision. It
-    # lists; it does not call — dispatch is POST /v1/tools/call.
-    get_tools(req: toolQuery) returns (rep: toolList)
+    # lists; it does not call — dispatch is POST /v1/tool/call.
+    get_tool(req: toolQuery) returns (rep: toolList)
     # Reports which tools are switched on for the caller's org and
     # project. Activation is what makes a tool dispatchable and what makes it visible
     # to an agent, so this is the set the MCP tool list is drawn from — every other
     # tool in the registry is discoverable but refused at call time.
-    get_tools_activation() returns (rep: activationSet)
+    get_tool_activation() returns (rep: activationSet)
     # Lists the MCP servers the public registries publish, as we hold
     # them: our canonical copy of registry.modelcontextprotocol.io, plus what we
     # decided about each entry.
     # This is the SHELF an org picks from. A listing with a streamable-http endpoint
-    # can be enabled as-is — POST /v1/tools/mcp/servers with its id — and its tools then
+    # can be enabled as-is — POST /v1/tool/mcp/servers with its id — and its tools then
     # join the org's tool plane and the fleet's MCP server. A listing that only ships a
     # stdio package needs a process to run it, which is why the transports are on
     # every entry rather than implied.
@@ -208,7 +208,7 @@ interface tools {
     # It is PAGED — 50 by default, 200 at most. The public registry publishes tens of
     # thousands of servers, so an unbounded answer is a twenty-megabyte response and a
     # storefront that renders in a minute. total is the whole match, not the page.
-    get_tools_catalog(req: catalogQuery) returns (rep: mcpCatalog)
+    get_tool_catalog(req: catalogQuery) returns (rep: mcpCatalog)
     # Returns one catalog entry in full: the publisher's description, its
     # repository and site, every package form with the runtime that launches it, and
     # every hosted endpoint. It is what a branding page renders, and what tells a
@@ -217,12 +217,12 @@ interface tools {
     # A HIDDEN listing is not served to an org — a shelf that renders what it does
     # not list would be a way around the shelf — but is served to a SuperAdmin, who
     # is the one deciding whether to put it back.
-    get_tools_catalog_by_id(req: listingRef) returns (rep: MCPListing)
+    get_tool_catalog_by_id(req: listingRef) returns (rep: MCPListing)
     # Lists the external MCP servers the caller's org has registered.
     # Each record carries the URL and the name of the header its credential is
     # injected into; the credential VALUE lives only in KMS and is never returned,
     # so hasSecret is the whole of what this surface says about it.
-    get_tools_mcp_servers() returns (rep: mcpServerList)
+    get_tool_mcp_servers() returns (rep: mcpServerList)
     # Reports what this deployment actually mounted: every subsystem the
     # composition root declared and whether it is switched on. A plugin here is
     # MOUNTED CODE that extends the deployment's own surface — not a tool an agent
@@ -231,26 +231,26 @@ interface tools {
     # cannot drift from what is serving. Enabled-only by default, because a caller
     # asking what this deployment can do wants what is running; ?all=true adds the
     # configured-but-off ones.
-    get_tools_plugins(req: pluginQuery) returns (rep: pluginMountList)
+    get_tool_plugins(req: pluginQuery) returns (rep: pluginMountList)
     # Lists the plugins the caller's org BUILT, newest first,
     # each with the TypeScript as authored. That is a different set with a different
-    # lifecycle from GET /v1/tools/plugins, which reports the subsystems this deployment
+    # lifecycle from GET /v1/tool/plugins, which reports the subsystems this deployment
     # mounted. The bundled CommonJS the runtime executes is never included, and
     # neither is any credential — a plugin names the connectors provider it needs and
     # reads the credential from ctx.auth at run time.
-    get_tools_plugins_authored() returns (rep: authoredPluginList)
+    get_tool_plugins_authored() returns (rep: authoredPluginList)
     # Lists the skills the caller's org can reach — the brand's embedded
     # catalogue plus the org's own authored ones — with each one's activation flag.
     # A skill is discovery and activation metadata attached to an agent, never called
-    # directly, so every entry here is non-dispatchable. It is GET /v1/tools narrowed
+    # directly, so every entry here is non-dispatchable. It is GET /v1/tool narrowed
     # to one source, not a second store: a name a caller sees here is the same entry,
     # with the same activation state, that discovery reports.
-    get_tools_skills(req: sourceQuery) returns (rep: sourceToolList)
+    get_tool_skills(req: sourceQuery) returns (rep: sourceToolList)
     # Lists the caller org's OWN skills with their SKILL.md
-    # bodies. GET /v1/tools/skills is the registry view — the brand's catalogue plus this
+    # bodies. GET /v1/tool/skills is the registry view — the brand's catalogue plus this
     # org's, with activation flags and no bodies; this is the EDITABLE set, so it
     # carries the content that view omits and nothing the org did not write.
-    get_tools_skills_authored() returns (rep: authoredSkillList)
+    get_tool_skills_authored() returns (rep: authoredSkillList)
     # Sets what WE say about one catalog entry — hidden, featured,
     # official, logo — and answers with the stored listing. SuperAdmin only; every
     # other caller is refused.
@@ -258,7 +258,7 @@ interface tools {
     # thing that writes it. The upstream half is never editable here: a description
     # that disagreed with the publisher's would be a fork of their listing, and the
     # next sync would silently undo it.
-    patch_tools_catalog_by_id(req: curateReq) returns (rep: MCPListing)
+    patch_tool_catalog_by_id(req: curateReq) returns (rep: MCPListing)
     # Pulls the public MCP registry into our canonical copy and reports
     # what changed. SuperAdmin only; every other caller is refused.
     # It is IDEMPOTENT: a listing is keyed by the publisher's own reverse-DNS name,
@@ -267,7 +267,7 @@ interface tools {
     # one an org has already enabled, and dropping its description would not drop its
     # server. And it never touches CURATION: hidden, featured, an admin-set official
     # and a logo survive every sync, because the write does not name those columns.
-    post_tools_catalog_sync() returns (rep: mcpCatalogSync)
+    post_tool_catalog_sync() returns (rep: mcpCatalogSync)
     # Gives the caller's org one more external MCP server, so its tools
     # join the org's tool plane and the fleet's MCP server. It is the ONE way an org
     # gains a server, whether it typed the URL in or enabled a catalog listing: both
@@ -282,7 +282,7 @@ interface tools {
     # Enabling a listing the org already enabled REVISES that server rather than
     # adding a near-duplicate beside it, so a retried enable is the same one server.
     # Answers 201 with the stored record.
-    post_tools_mcp_servers(req: createServerReq) returns (rep: MCPServer)
+    post_tool_mcp_servers(req: createServerReq) returns (rep: MCPServer)
     # Builds and stores one plugin for the caller's org. The 201 carries
     # the bundle's size, whether a model wrote the source, and the plugin as stored.
     # Post `source` to build TypeScript as-is, or `spec` — an OpenAPI document or
@@ -301,7 +301,7 @@ interface tools {
     # it needs and reads that credential from `ctx.auth` at run time, under KMS
     # custody. Source that carries something key-shaped is REFUSED rather than
     # silently persisted — a scrubbed key looks like it worked.
-    post_tools_plugins_build(req: buildRequest) returns (rep: buildOut)
+    post_tool_plugins_build(req: buildRequest) returns (rep: buildOut)
     # Adds or revises one of the caller org's own skills, and answers 201
     # with the stored record. The id is derived from the name, so writing the same
     # name again REVISES that skill rather than accumulating near-duplicates that
@@ -309,22 +309,22 @@ interface tools {
     # construction — they live in a different store from the brand's embedded
     # catalogue and have no path into the public gallery — and a brand skill always
     # wins a name collision against an org's.
-    post_tools_skills(req: skillIn) returns (rep: skillWritten)
+    post_tool_skills(req: skillIn) returns (rep: skillWritten)
     # Switches tools on and off for the caller's org and project, and
     # answers with the resulting activated set. It is the ONE write path that turns
     # skills, plugins and connectors into callable tools — an unactivated tool is
     # listed by discovery but refused 403 at dispatch. Activate is applied before
     # Deactivate, so a name in both lists ends up off. More than 256 toggles in one
     # request is refused 413.
-    put_tools_activation(req: activationReq) returns (rep: activationSet)
+    put_tool_activation(req: activationReq) returns (rep: activationSet)
 }
 
 # ---------------------------------------------------------------------
 # 18 op(s) here. What follows is what this schema does not carry.
 #
 # blocked (2) — the op is absent; the field has no wire form:
-#   post_tools_call  toolCall.Arguments  map[string]interface {}  (map)
-#   post_tools_call  toolResult.Result  interface {}  (any)
+#   post_tool_call  toolCall.Arguments  map[string]interface {}  (map)
+#   post_tool_call  toolResult.Result  interface {}  (any)
 #
 # opaque (11) — crosses, arrives without its name:
 #   MCPListing.Packages  tools.MCPPackage (list element)

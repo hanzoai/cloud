@@ -91,7 +91,7 @@ var survivors = []struct{ name, why string }{
 	{"post_agents_sessions_by_id_message", "the turn itself"},
 	{"post_agents_sessions_by_id_stop", "…and stopping it"},
 	{"patch_agents_sessions_id", "…and steering it"},
-	{"get_agents_sessions_stream", "…and watching it"},
+	{"get_agent_sessions_stream", "…and watching it"},
 	{"post_agents_by_ref_run", "POST /v1/agent/{ref}/run"},
 	{"post_agents_targets_id_claim", "claiming a target is not minting its key"},
 
@@ -209,7 +209,7 @@ func TestRefuse_ClassifiesNamesItHasNeverSeen(t *testing.T) {
 	}
 	for _, n := range []string{
 		"post_chat_conversations", "get_zen_models", "post_code_review",
-		"get_agents_sessions_by_id_diff", "post_search_reindex",
+		"get_agent_sessions_by_id_diff", "post_search_reindex",
 	} {
 		if refuse(n) {
 			t.Errorf("refuse(%q) = true — a NEW product op was eaten; words: %v", n, words(n))
@@ -236,7 +236,7 @@ func TestRank_PutsTheProductSurfaceInFrontOfTheConsole(t *testing.T) {
 	}
 	// Stem matching is on a '_' boundary, so a longer name under the prefix is
 	// promoted and an unrelated one that merely starts with the same letters is not.
-	if got := rank("get_agents_sessions_stream"); got == len(productStems) {
+	if got := rank("get_agent_sessions_stream"); got == len(productStems) {
 		t.Error("a route UNDER a product stem must inherit its rank")
 	}
 	if got := rank("get_agentsomething"); got != len(productStems) {
@@ -258,15 +258,15 @@ func TestRank_TheProductSurfaceFitsATruncatingClient(t *testing.T) {
 	const window = 128
 	head := 0
 	for i, stem := range productStems {
-		if stem == "projects" {
+		if stem == "project" {
 			head = i
 		}
 	}
 	if head == 0 {
-		t.Fatal("projects left the surface; this test's premise is stale")
+		t.Fatal("project left the surface; this test's premise is stale")
 	}
 	if head >= len(productStems) {
-		t.Fatal("projects is last; nothing is being kept inside the window")
+		t.Fatal("project is last; nothing is being kept inside the window")
 	}
 	// The claim is about counts measured elsewhere (see the doc comment); what
 	// is checkable HERE is that the spill-over stems really are at the end.
@@ -330,14 +330,14 @@ func TestRefuse_ANamelessToolIsNotProjectable(t *testing.T) {
 // own or it would have fallen exactly as the run once did.
 func TestRank_AFoldedAddressKeepsItsBucket(t *testing.T) {
 	tail := len(productStems)
-	for _, name := range []string{"post_agents_coding", "post_lsp_hover", "post_lsp_locate"} {
+	for _, name := range []string{"post_agent_coding", "post_lsp_hover", "post_lsp_locate"} {
 		if got := rank(name); got == tail {
 			t.Errorf("rank(%q) = %d, the tail bucket — the op sorts last and loses its prose", name, got)
 		}
 	}
 	// Neither is a spelling of code intelligence: folding one into the other would
 	// let a stem match a name it does not name.
-	if rank("post_agents_coding") == rank("post_code_ask") {
+	if rank("post_agent_coding") == rank("post_code_ask") {
 		t.Error("the coding run and code intelligence share a bucket — a run is not a search")
 	}
 	if rank("post_lsp_hover") == rank("post_code_ask") {

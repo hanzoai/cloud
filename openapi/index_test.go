@@ -42,7 +42,7 @@ func parts() []Part {
 				"/v1/kms/secrets":        {"get": op("get_kms_secrets", "List the secrets you can open")},
 				"/v1/kms/secrets/{name}": {"put": op("put_kms_secret", "Seal a secret under a name")},
 			}}},
-		{App: "agents", Doc: &Document{
+		{App: "agent", Doc: &Document{
 			Info: Info{Description: "Package agents is your agents and their runs."},
 			Paths: map[string]PathItem{
 				"/v1/agent":      {"get": op("get_agents", "List your agents")},
@@ -93,7 +93,7 @@ func TestTheRootListsTheCustomerSurfaceAndNothingBeside(t *testing.T) {
 			t.Errorf("%s is listed at stage %q; only a generally available capability is listed at all", c.Name, c.Stage)
 		}
 	}
-	if want := "agents kms search"; strings.Join(got, " ") != want {
+	if want := "agent kms search"; strings.Join(got, " ") != want {
 		t.Errorf("the root lists %q, want %q — sorted, and neither the beta capability nor the operator's product",
 			strings.Join(got, " "), want)
 	}
@@ -150,8 +150,8 @@ func TestACapabilityIndexIsExactlyItsOwnOperations(t *testing.T) {
 func TestTheIndexYieldsWhereTheCapabilityAnswersItsOwnRoot(t *testing.T) {
 	root, per := Discover(fleet(t))
 
-	if _, mine := per["agents"]; mine {
-		t.Error("agents has an index at /v1/agent, and GET /v1/agent is its own operation — " +
+	if _, mine := per["agent"]; mine {
+		t.Error("agent has an index at /v1/agent, and GET /v1/agent is its own operation — " +
 			"the index would answer in front of the capability's collection")
 	}
 	// Per (method, path): search ACTS at its own root and reads nothing there, so
@@ -161,10 +161,10 @@ func TestTheIndexYieldsWhereTheCapabilityAnswersItsOwnRoot(t *testing.T) {
 	}
 	var listed bool
 	for _, c := range root.Capabilities {
-		listed = listed || c.Name == "agents"
+		listed = listed || c.Name == "agent"
 	}
 	if !listed {
-		t.Error("agents is not in the root either — the href is real and a client must be able to follow it")
+		t.Error("agent is not in the root either — the href is real and a client must be able to follow it")
 	}
 }
 

@@ -68,8 +68,8 @@ func routes(app cloud.Router, s *cloud.Service[state]) error {
 	// served — and op.Path is the identity every projection keys on.
 	terminal := func(next zip.Handler) zip.Handler { return cloud.Terminal(next) }
 	v1 := zapp.With(terminal).Group("/v1")
-	ch := v1.Group("/channels")
-	zip.Get(v1, "/channels", o.list)
+	ch := v1.Group("/channel")
+	zip.Get(v1, "/channel", o.list)
 	zip.Get(ch, "/inbox", o.inbox)
 	zip.Get(ch, "/pairing", o.pairingList)
 	zip.Post(ch, "/pairing/approve", o.pairingApprove)

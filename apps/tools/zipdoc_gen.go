@@ -9,27 +9,27 @@ import (
 )
 
 func init() {
-	zip.Describe("github.com/hanzoai/cloud/apps/tools DELETE /v1/tools/mcp/servers/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools DELETE /v1/tool/mcp/servers/:id", zip.Doc{
 		Description: "Deregisters one of the caller org's external MCP servers, so its\ntools leave the registry. Scoped to the caller's org, so an id belonging to\nanother tenant is a 404 and not a delete. Answers 204 with no body; a server\nthis org does not have is 404.",
 		Fields: map[string]string{
 			"serverRef.id": "ID is the server to deregister, from the path.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools DELETE /v1/tools/plugins/authored/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools DELETE /v1/tool/plugins/authored/:id", zip.Doc{
 		Description: "Removes one of the caller org's built plugins, so the\nruntime can no longer load it. Scoped to the caller's org, so an id belonging\nto another tenant answers 404 and is not deleted.",
 		Fields: map[string]string{
 			"pluginDeleted.deleted": "Deleted is the plugin id that is now gone.",
 			"pluginRef.id":          "ID is the plugin to remove, from the path.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools DELETE /v1/tools/skills/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools DELETE /v1/tool/skills/:id", zip.Doc{
 		Description: "Removes one of the caller org's authored skills. Scoped to the\ncaller's org, so an id belonging to another tenant is never reached. Removing\nwhat is not there is not an error — the caller's intent is \"gone\", and it is.",
 		Fields: map[string]string{
 			"skillDeleted.deleted": "Deleted is the skill id that is now gone.",
 			"skillRef.id":          "ID is the skill to remove, from the path. It is the skill's name.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tool", zip.Doc{
 		Description: "Lists every tool the caller's org and project can reach, from every\nsource, each flagged with whether it is activated. This is the discovery\nsurface: one flat set of names spanning connector actions, user functions,\nzap-service routes, agents, skills and the org's own external MCP servers,\ndeduplicated by name so the highest-precedence source wins a collision. It\nlists; it does not call — dispatch is POST /v1/tool/call.",
 		Fields: map[string]string{
 			"Currency.Code":       "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
@@ -51,13 +51,13 @@ func init() {
 			"toolQuery.source":    "Source keeps only tools from one source — connector, function, zap-service,\nagent, skill or mcp. Empty keeps every source.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools/activation", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tool/activation", zip.Doc{
 		Description: "Reports which tools are switched on for the caller's org and\nproject. Activation is what makes a tool dispatchable and what makes it visible\nto an agent, so this is the set the MCP tool list is drawn from — every other\ntool in the registry is discoverable but refused at call time.",
 		Fields: map[string]string{
 			"activationSet.enabled": "Enabled is every tool name activated for the caller's org and project.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools/catalog", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tool/catalog", zip.Doc{
 		Description: "Lists the MCP servers the public registries publish, as we hold\nthem: our canonical copy of registry.modelcontextprotocol.io, plus what we\ndecided about each entry.\n\nThis is the SHELF an org picks from. A listing with a streamable-http endpoint\ncan be enabled as-is — POST /v1/tool/mcp/servers with its id — and its tools then\njoin the org's tool plane and the fleet's MCP server. A listing that only ships a\nstdio package needs a process to run it, which is why the transports are on\nevery entry rather than implied.\n\nHidden entries are absent: they are the ones we took off the shelf. A platform\nSuperAdmin sees them, because the same query answers \"what is on the shelf\" and\n\"what is in the catalog\" and two queries would drift apart.\n\nIt is PAGED — 50 by default, 200 at most. The public registry publishes tens of\nthousands of servers, so an unbounded answer is a twenty-megabyte response and a\nstorefront that renders in a minute. total is the whole match, not the page.",
 		Fields: map[string]string{
 			"MCPListing.description": "Description is the publisher's one-line summary.",
@@ -95,7 +95,7 @@ func init() {
 			"mcpCatalog.total":       "Total is how many listings the filter matched, which is more than this page\nholds whenever there is a next one.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools/catalog/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tool/catalog/:id", zip.Doc{
 		Description: "Returns one catalog entry in full: the publisher's description, its\nrepository and site, every package form with the runtime that launches it, and\nevery hosted endpoint. It is what a branding page renders, and what tells a\ncaller whether the listing can be enabled here and now (a streamable-http\nremote) or needs somewhere to run first (a stdio package).\n\nA HIDDEN listing is not served to an org — a shelf that renders what it does\nnot list would be a way around the shelf — but is served to a SuperAdmin, who\nis the one deciding whether to put it back.",
 		Fields: map[string]string{
 			"MCPListing.description": "Description is the publisher's one-line summary.",
@@ -125,7 +125,7 @@ func init() {
 			"listingRef.id":          "ID is the listing, from the path. It is the publisher's reverse-DNS name\nwith its one slash written as an underscore — \"com.stripe_mcp\".",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools/mcp/servers", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tool/mcp/servers", zip.Doc{
 		Description: "Lists the external MCP servers the caller's org has registered.\nEach record carries the URL and the name of the header its credential is\ninjected into; the credential VALUE lives only in KMS and is never returned,\nso hasSecret is the whole of what this surface says about it.",
 		Fields: map[string]string{
 			"MCPServer.authHeader":  "AuthHeader is the request header the KMS-held credential is injected into,\ne.g. \"Authorization\". Absent when the server needs no credential.",
@@ -140,7 +140,7 @@ func init() {
 			"mcpServerList.servers": "Servers is every external MCP server this org has registered. No secret\nVALUE is ever included — only whether one is set.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools/plugins", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tool/plugins", zip.Doc{
 		Description: "Reports what this deployment actually mounted: every subsystem the\ncomposition root declared and whether it is switched on. A plugin here is\nMOUNTED CODE that extends the deployment's own surface — not a tool an agent\ncalls — so this is an inventory and not a tool source. It is read off the same\nboot snapshot every traced request resolves its subsystem label against, so it\ncannot drift from what is serving. Enabled-only by default, because a caller\nasking what this deployment can do wants what is running; ?all=true adds the\nconfigured-but-off ones.",
 		Fields: map[string]string{
 			"pluginMount.enabled":     "Enabled is whether this subsystem is switched on in this deployment.",
@@ -150,7 +150,7 @@ func init() {
 			"pluginQuery.all":         "All includes the configured-but-disabled subsystems too, but only when it is\nexactly the string \"true\". Otherwise only the running ones are reported.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools/plugins/authored", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tool/plugins/authored", zip.Doc{
 		Description: "Lists the plugins the caller's org BUILT, newest first,\neach with the TypeScript as authored. That is a different set with a different\nlifecycle from GET /v1/tool/plugins, which reports the subsystems this deployment\nmounted. The bundled CommonJS the runtime executes is never included, and\nneither is any credential — a plugin names the connectors provider it needs and\nreads the credential from ctx.auth at run time.",
 		Fields: map[string]string{
 			"AuthoredPlugin.createdAt":   "CreatedAt is when the plugin was last built, Unix seconds.",
@@ -162,7 +162,7 @@ func init() {
 			"authoredPluginList.plugins": "Plugins is every plugin this org built, newest first, each carrying the\nTypeScript as authored. The bundled artifact is never rendered.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools/skills", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tool/skills", zip.Doc{
 		Description: "Lists the skills the caller's org can reach — the brand's embedded\ncatalogue plus the org's own authored ones — with each one's activation flag.\nA skill is discovery and activation metadata attached to an agent, never called\ndirectly, so every entry here is non-dispatchable. It is GET /v1/tool narrowed\nto one source, not a second store: a name a caller sees here is the same entry,\nwith the same activation state, that discovery reports.",
 		Fields: map[string]string{
 			"Currency.Code":         "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
@@ -184,7 +184,7 @@ func init() {
 			"sourceToolList.tools":  "Tools is the caller's tools from that source. Never null.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tools/skills/authored", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools GET /v1/tool/skills/authored", zip.Doc{
 		Description: "Lists the caller org's OWN skills with their SKILL.md\nbodies. GET /v1/tool/skills is the registry view — the brand's catalogue plus this\norg's, with activation flags and no bodies; this is the EDITABLE set, so it\ncarries the content that view omits and nothing the org did not write.",
 		Fields: map[string]string{
 			"Skill.content":            "Content is the SKILL.md body, markdown.",
@@ -197,7 +197,7 @@ func init() {
 			"authoredSkillList.skills": "Skills is every skill this org authored, each with its SKILL.md content.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools PATCH /v1/tools/catalog/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools PATCH /v1/tool/catalog/:id", zip.Doc{
 		Description: "Sets what WE say about one catalog entry — hidden, featured,\nofficial, logo — and answers with the stored listing. SuperAdmin only; every\nother caller is refused.\n\nCuration is the half of a catalog row a sync cannot write, and this is the only\nthing that writes it. The upstream half is never editable here: a description\nthat disagreed with the publisher's would be a fork of their listing, and the\nnext sync would silently undo it.",
 		Fields: map[string]string{
 			"MCPListing.description": "Description is the publisher's one-line summary.",
@@ -235,7 +235,7 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/tools POST /tools/skills", zip.Doc{
 		Description: "Turns the files into skills and makes them the source's whole\ncontribution. The ORG is the caller's, from the plane context: a repository\ncan only ever write the skills of the org that holds it.",
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools POST /v1/tools/call", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools POST /v1/tool/call", zip.Doc{
 		Description: "Runs one of the caller's activated tools and answers with its output.\n\nThis is the endpoint onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 client or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tool — ?activated=true for the callable set.",
 		Fields: map[string]string{
 			"toolCall.arguments": "Arguments is the tool's own input object, passed through verbatim to\nwhichever source owns it.",
@@ -245,7 +245,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"slack_post_message","arguments":{"channel":"#general","text":"hi"}}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools POST /v1/tools/catalog/sync", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools POST /v1/tool/catalog/sync", zip.Doc{
 		Description: "Pulls the public MCP registry into our canonical copy and reports\nwhat changed. SuperAdmin only; every other caller is refused.\n\nIt is IDEMPOTENT: a listing is keyed by the publisher's own reverse-DNS name,\nso a second pass over an unchanged registry rewrites the same rows and reports\nadded=0, updated=0. It never deletes — a listing that vanishes upstream may be\none an org has already enabled, and dropping its description would not drop its\nserver. And it never touches CURATION: hidden, featured, an admin-set official\nand a logo survive every sync, because the write does not name those columns.",
 		Fields: map[string]string{
 			"mcpCatalogSync.added":    "Added is how many listings the catalog did not have before.",
@@ -254,7 +254,7 @@ func init() {
 			"mcpCatalogSync.updated":  "Updated is how many the publisher has changed since we last looked.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools POST /v1/tools/mcp/servers", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools POST /v1/tool/mcp/servers", zip.Doc{
 		Description: "Gives the caller's org one more external MCP server, so its tools\njoin the org's tool plane and the fleet's MCP server. It is the ONE way an org\ngains a server, whether it typed the URL in or enabled a catalog listing: both\nwrite the SAME record, and `source` says which it was. A second registration\npath would be a second place for a server to exist, and then a second place to\nforget to check the credential.\n\nThe credential VALUE is sealed in KMS under a per-org ref; the row keeps only\nthe URL, the header name to inject it into, and a has-secret flag — so a secret\nwith no KMS configured is refused 503 rather than stored in the clear. The URL\nis SSRF-validated here and re-checked by the dialer at connect time, which is\nthe DNS-rebinding defense.\n\nEnabling a listing the org already enabled REVISES that server rather than\nadding a near-duplicate beside it, so a retried enable is the same one server.\nAnswers 201 with the stored record.",
 		Fields: map[string]string{
 			"MCPServer.authHeader":       "AuthHeader is the request header the KMS-held credential is injected into,\ne.g. \"Authorization\". Absent when the server needs no credential.",
@@ -274,7 +274,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"listing":"com.stripe_mcp","authHeader":"Authorization","secret":"Bearer …"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools POST /v1/tools/plugins/build", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools POST /v1/tool/plugins/build", zip.Doc{
 		Description: "Builds and stores one plugin for the caller's org. The 201 carries\nthe bundle's size, whether a model wrote the source, and the plugin as stored.\n\nPost `source` to build TypeScript as-is, or `spec` — an OpenAPI document or\nplain prose describing the endpoints — to have one generated; the generated\nsource comes back in the answer, so a caller reads what will run before it\nruns. Exactly one of the two, and `name` must be one lowercase path segment;\nboth or neither is 400.\n\nCOMPILING IS THE GATE. The source goes through the same pipeline the committed\nconnectors do — esbuild to one CommonJS program, then compiled in the goja\nruntime that will actually execute it — and anything that fails is rejected and\nNEVER stored. So a plugin in the store is one this deployment has already\nloaded once, not one a model claimed was fine. A failed build answers 422\ncarrying the diagnostics a caller needs to fix it: the bundler's error\n(`detail`), the source that failed, and whether the model wrote it.\n\nCREDENTIALS ARE NOT PART OF A PLUGIN. A plugin names the connectors `provider`\nit needs and reads that credential from `ctx.auth` at run time, under KMS\ncustody. Source that carries something key-shaped is REFUSED rather than\nsilently persisted — a scrubbed key looks like it worked.",
 		Fields: map[string]string{
 			"AuthoredPlugin.createdAt": "CreatedAt is when the plugin was last built, Unix seconds.",
@@ -293,7 +293,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"acme","provider":"acme","spec":"POST /v1/things creates a thing"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools POST /v1/tools/skills", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools POST /v1/tool/skills", zip.Doc{
 		Description: "Adds or revises one of the caller org's own skills, and answers 201\nwith the stored record. The id is derived from the name, so writing the same\nname again REVISES that skill rather than accumulating near-duplicates that\nwould then collide in the registry. An org's skills are private to it by\nconstruction — they live in a different store from the brand's embedded\ncatalogue and have no path into the public gallery — and a brand skill always\nwins a name collision against an org's.",
 		Fields: map[string]string{
 			"Skill.content":       "Content is the SKILL.md body, markdown.",
@@ -310,7 +310,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"triage","description":"how we triage","content":"# Triage\n…"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/tools PUT /v1/tools/activation", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tools PUT /v1/tool/activation", zip.Doc{
 		Description: "Switches tools on and off for the caller's org and project, and\nanswers with the resulting activated set. It is the ONE write path that turns\nskills, plugins and connectors into callable tools — an unactivated tool is\nlisted by discovery but refused 403 at dispatch. Activate is applied before\nDeactivate, so a name in both lists ends up off. More than 256 toggles in one\nrequest is refused 413.",
 		Fields: map[string]string{
 			"activationReq.activate":   "Activate switches these tool names on for the caller's org and project.",

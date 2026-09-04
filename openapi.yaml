@@ -13581,7 +13581,7 @@ components:
       properties:
         agentName:
           description: |-
-            AgentName is the cloud Agent (/v1/agents) this machine runs — the agent a
+            AgentName is the cloud Agent (/v1/agent) this machine runs — the agent a
             message to the bot is actually run against. It is the one field that decides
             what the bot DOES.
           type: string
@@ -14566,7 +14566,7 @@ components:
         dm:
           description: |-
             DM is the CONFIG-managed DM allow entries — the list PUT
-            /v1/channels/allowlist owns and replaces wholesale. An entry matches a sender
+            /v1/channel/allowlist owns and replaces wholesale. An entry matches a sender
             either EXACTLY, as the transport-native id inbox messages carry, or as
             `accessGroup:<name>` resolved through AccessGroups. A bare `*` admits
             everyone, but only while DMPolicy is "open": it is gate syntax, not an
@@ -14602,7 +14602,7 @@ components:
         paired:
           description: |-
             Paired is the senders admitted by PAIRING — the entries POST
-            /v1/channels/pairing/approve minted, DM scope only. READ-ONLY on this
+            /v1/channel/pairing/approve minted, DM scope only. READ-ONLY on this
             endpoint: the PUT writes config entries and can never revoke one of these
             (listing a paired sender under DM instead promotes that entry to config,
             which the admin then owns). They admit only while DMPolicy is "pairing".
@@ -14928,7 +14928,7 @@ components:
           type: string
         code:
           description: |-
-            Code is the pairing code from GET /v1/channels/pairing. It is a capability:
+            Code is the pairing code from GET /v1/channel/pairing. It is a capability:
             holding it is what authorises the approval, alongside org admin.
           type: string
       type: object
@@ -15849,8 +15849,8 @@ components:
     bindAgentReq:
       properties:
         agentName:
-          description: AgentName is the cloud Agent (/v1/agents) the machine will
-            run. Required.
+          description: AgentName is the cloud Agent (/v1/agent) the machine will run.
+            Required.
           type: string
         botVersion:
           description: BotVersion pins the @hanzo/bot runtime version; empty takes
@@ -18712,7 +18712,7 @@ components:
             GroupPolicy is how this org admits group and thread rooms here: "open",
             "allowlist" or "disabled", defaulting to "open". Both policy fields come
             back EMPTY — rather than the listing failing — when the policy cannot be
-            read; GET /v1/channels/allowlist carries the same two with the entries they
+            read; GET /v1/channel/allowlist carries the same two with the entries they
             consult.
           type: string
         id:
@@ -18724,7 +18724,7 @@ components:
         pendingPairing:
           description: |-
             PendingPairing counts the org's UNEXPIRED pairing requests on this channel:
-            exactly the rows GET /v1/channels/pairing returns for it, one per person
+            exactly the rows GET /v1/channel/pairing returns for it, one per person
             waiting on an admin. It never exceeds three — the pending cap per
             (org, channel) — and expired requests are not counted.
           format: int64
@@ -20227,7 +20227,7 @@ components:
           type: string
         listing:
           description: |-
-            Listing enables a CATALOG entry instead — the id from GET /v1/tools/catalog.
+            Listing enables a CATALOG entry instead — the id from GET /v1/tool/catalog.
             The endpoint is the listing's own streamable-http remote, so a listing that
             only ships a stdio package is refused: there is nothing to reach yet.
           type: string
@@ -23174,7 +23174,7 @@ components:
             Source is the plane this row came from: "agent" (a linked run-target), "byo"
             (a worker or cluster the org dialed in) or "visor" (a machine Hanzo
             provisioned). It is half the row's identity, and it says which face owns the
-            unit — /v1/agents/targets, /v1/visor/fleet/workers, /v1/visor/machines.
+            unit — /v1/agent/targets, /v1/visor/fleet/workers, /v1/visor/machines.
           type: string
         spec:
           $ref: '#/components/schemas/fleetSpec'
@@ -44270,7 +44270,7 @@ components:
             Code is the CAPABILITY that authorises the approval: eight characters from a
             32-symbol uppercase alphabet (A-Z0-9 minus the confusables 0, O, 1 and I),
             minted with crypto/rand and also sent to the requester in chat. An org admin
-            passes it with the channel to POST /v1/channels/pairing/approve, which
+            passes it with the channel to POST /v1/channel/pairing/approve, which
             CONSUMES it — the request row is deleted, so a code approves once — and which
             takes org admin as well as the code. It lives ONE HOUR from CreatedAt;
             expired requests are not listed here, and approving one is a 404. It is shown
@@ -53876,7 +53876,7 @@ components:
             whichever source owns it.
           type: object
         name:
-          description: Name is the tool to run, exactly as GET /v1/tools reports it.
+          description: Name is the tool to run, exactly as GET /v1/tool reports it.
           type: string
       type: object
     toolList:
@@ -56540,12 +56540,12 @@ paths:
       x-app: affiliate
       x-public: true
       x-tool: true
-  /v1/agents:
+  /v1/agent:
     get:
       description: |-
         Returns every agent defined in the caller's org, each with the
         number of runs recorded against it.
-      operationId: get_agents
+      operationId: get_agent
       responses:
         "200":
           content:
@@ -56556,8 +56556,8 @@ paths:
       summary: Returns every agent defined in the caller's org, each with the number
         of runs recorded against it.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
     post:
@@ -56570,7 +56570,7 @@ paths:
         than failing at run time. A long-running agent must carry a 5-field cron
         schedule (the scheduler would otherwise never fire it) and counts against a
         per-org cap on scheduled agents.
-      operationId: post_agents
+      operationId: post_agent
       requestBody:
         content:
           application/json:
@@ -56591,14 +56591,14 @@ paths:
       summary: 'Defines an agent in the caller''s org: a model, a system prompt (instructions)
         and a set of tool names.'
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/{ref}:
+  /v1/agent/{ref}:
     delete:
       description: Removes an agent and every run recorded against it. Answers 204.
-      operationId: delete_agents_by_ref
+      operationId: delete_agent_by_ref
       parameters:
       - description: |-
           Ref is the agent's public id (the agent_… handle create and list return) or
@@ -56614,8 +56614,8 @@ paths:
           description: no content
       summary: Removes an agent and every run recorded against it.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
     get:
@@ -56623,7 +56623,7 @@ paths:
         Returns one agent with its system prompt and its 20 most recent runs.
         The ref is the agent's public id or its org-unique name — a created agent is
         immediately gettable by whatever create handed back.
-      operationId: get_agents_by_ref
+      operationId: get_agent_by_ref
       parameters:
       - description: |-
           Ref is the agent's public id (the agent_… handle create and list return) or
@@ -56643,8 +56643,8 @@ paths:
           description: ok
       summary: Returns one agent with its system prompt and its 20 most recent runs.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
     patch:
@@ -56654,7 +56654,7 @@ paths:
         re-validated together, so a partial update can never leave a long-running
         agent without the cron the scheduler needs to fire it, and a transition INTO
         long-running counts against the per-org cap on scheduled agents.
-      operationId: patch_agents_by_ref
+      operationId: patch_agent_by_ref
       parameters:
       - description: Ref is the agent to update — its public id or org-unique name,
           from the path.
@@ -56682,11 +56682,11 @@ paths:
           description: ok
       summary: Changes an agent in place.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/{ref}/run:
+  /v1/agent/{ref}/run:
     post:
       description: |-
         Composes the agent's stored instructions with the caller's `input`, executes one real chat completion through the same in-process AI client the rest of the console uses, and answers with the run that was recorded: its id, status, model, output, duration and error. Every run this returns reflects an execution that actually happened — a model failure is recorded and reported, never hidden and never fabricated. A transient upstream failure (429, 5xx, empty choices) is retried up to three times with jittered backoff, and a configured failover model is tried before the run is called an error.
@@ -56696,7 +56696,7 @@ paths:
         The org's balance is authorized BEFORE any inference, so an unfunded tenant gets 402 and no free compute, and a billing plane that cannot answer gets 503 rather than a free run. The flat per-run fee is an operator knob; setting it to zero makes runs free and removes the balance gate with them. Only a SUCCESSFUL run is billed, attributed to the model actually used — a failover run bills the model it fell over to, not the one it started on. A deployment with no inference wired answers 503 before any of this.
 
         THE RULE A READER GETS WRONG: a failed run is a 502 whose body is the RUN, not an error envelope. The execution happened, the run was persisted to this agent's history, and its `error` field is the product — so a client that treats every non-2xx as an opaque failure throws away the only account of what went wrong. Each run also opens a root session in the live session registry, best-effort: a bookkeeping failure there never fails the run, because the run and its billing already happened.
-      operationId: post_agents_by_ref_run
+      operationId: post_agent_by_ref_run
       parameters:
       - in: path
         name: ref
@@ -56705,16 +56705,16 @@ paths:
           type: string
       summary: Run one of your org's agents and get the recorded run back.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
-  /v1/agents/{ref}/runs:
+  /v1/agent/{ref}/runs:
     get:
       description: |-
         Returns one agent's execution history, newest first — each run's
         input, its output or its error, and how long it took. Every row is a run that
         actually happened.
-      operationId: get_agents_by_ref_runs
+      operationId: get_agent_by_ref_runs
       parameters:
       - description: Ref is the agent's public id or its org-unique name, from the
           path.
@@ -56744,18 +56744,18 @@ paths:
       summary: Returns one agent's execution history, newest first — each run's input,
         its output or its error, and how long it took.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/activity:
+  /v1/agent/activity:
     get:
       description: |-
         Serves the org-wide recent-activity feed. Events are REAL: each
         recorded run is an invoked (ok) or failed (error) event; each agent's own
         create/update timestamps are created/updated events. Merged, newest first,
         capped. Nothing is invented — an org with no agents and no runs gets [].
-      operationId: get_agents_activity
+      operationId: get_agent_activity
       responses:
         "200":
           content:
@@ -56765,18 +56765,18 @@ paths:
           description: ok
       summary: Serves the org-wide recent-activity feed.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/builds:
+  /v1/agent/builds:
     get:
       description: |-
         Returns the public index of every published build, most recently
         updated first, so a gallery can link straight to the story behind each product.
         PUBLIC, no tenancy: publishing is the author's act, and only published root
         sessions appear here.
-      operationId: get_agents_builds
+      operationId: get_agent_builds
       parameters:
       - description: Limit caps the page. Absent, zero or over 500 reads as 100.
         in: query
@@ -56795,11 +56795,11 @@ paths:
       summary: Returns the public index of every published build, most recently updated
         first, so a gallery can link straight to the story behind each product.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/builds/{org}/{project}:
+  /v1/agent/builds/{org}/{project}:
     get:
       description: |-
         Returns the readable build of one product: the agent session that
@@ -56810,8 +56810,8 @@ paths:
         PUBLIC, no tenancy: it answers only for a session its author explicitly
         published, which is what makes it safe to be anonymous. An unpublished session
         is invisible here no matter who asks; its owner reads it through the org-scoped
-        /v1/agents/sessions routes, which need a validated principal.
-      operationId: get_agents_builds_by_org_by_project
+        /v1/agent/sessions routes, which need a validated principal.
+      operationId: get_agent_builds_by_org_by_project
       parameters:
       - description: Org is the org that published the build, from the path.
         example: hanzo
@@ -56839,11 +56839,11 @@ paths:
         produced — plus the exact `git log` that re-derives every commit binding from
         git itself, so nothing here has to be taken on trust.'
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/chat:
+  /v1/agent/chat:
     post:
       description: |-
         Answers one turn of a conversation with four things: the model's `reply`, the `actions` the server executed on the caller's behalf, the `ops` the client must apply itself, and the `conversationId` the turn was recorded under.
@@ -56853,42 +56853,42 @@ paths:
         `preset` selects the system prompt and the tool set (`capability` is a legacy alias for it); an unknown one is refused. `conversationId` continues an existing thread, and its absence starts one. A validated principal with a non-empty org is required — the org is the sole authority for both persistence and tool scope, and is NEVER read from the body.
 
         A completion refused for the caller's own reason — 402 insufficient balance, 429, 403 — is relayed with its own status and body verbatim, so the real billing message reaches the client instead of an opaque gateway error. Only a genuine upstream fault becomes a 502.
-      operationId: post_agents_chat
+      operationId: post_agent_chat
       summary: Run one tool-calling round against your org's own tools
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
-  /v1/agents/chat/conversations:
+  /v1/agent/chat/conversations:
     get:
       description: |-
         Returns a summary of every agent conversation in the caller's org — id, derived title, and when it was last appended to — for populating a thread list.
 
         Scoped to the caller's org and nothing else, and that isolation is structural rather than a filter: conversations are persisted in a store opened PER ORG, so there is no query in which another tenant's threads could appear. A validated principal with a non-empty org is required; 403 without one.
-      operationId: get_agents_chat_conversations
+      operationId: get_agent_chat_conversations
       summary: List the agent threads in your org
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
     post:
       description: |-
         Writes turns to the caller's thread store without running a completion, and answers the `conversationId` they were written under. An absent `conversationId` opens a new thread; supplying one appends to it.
 
         This is for a client that streams its own turn through /v1/chat/completions and still wants the conversation in its history — the round records what IT answers, and is otherwise the only writer. It takes the same store, the same per-org isolation and the same notion of a thread: what is recorded here reads back through the two GETs beside it and the round can continue it by id. A validated principal with a non-empty org is required; 403 without one.
-      operationId: post_agents_chat_conversations
+      operationId: post_agent_chat_conversations
       summary: Record turns in a conversation
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
-  /v1/agents/chat/conversations/{id}:
+  /v1/agent/chat/conversations/{id}:
     get:
       description: |-
         Returns every message of one conversation in order — role, content, the assistant's tool calls where it made any, and each message's creation time — which is the transcript a client replays to resume a thread.
 
         The lookup happens inside the caller's OWN per-org store, so an id belonging to another tenant is not refused, it is simply absent: the answer is 200 with an empty message list. Read it as "no such conversation for you" rather than as an empty thread. A validated principal with a non-empty org is required; 403 without one.
-      operationId: get_agents_chat_conversations_by_id
+      operationId: get_agent_chat_conversations_by_id
       parameters:
       - in: path
         name: id
@@ -56897,24 +56897,24 @@ paths:
           type: string
       summary: Read one agent thread in full
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
-  /v1/agents/chat/presets:
+  /v1/agent/chat/presets:
     get:
       description: |-
         Returns the preset catalog: each entry's id, its description and whether it is server-executing — the flag that decides if a preset's tool calls run here or come back for the client to apply. The ids are what the round accepts in `preset`.
 
         The catalog is compiled into the build, identical for every caller, and this is the one read in the group that needs no principal.
-      operationId: get_agents_chat_presets
+      operationId: get_agent_chat_presets
       summary: List the agent presets available to a caller
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
-  /v1/agents/coding:
+  /v1/agent/coding:
     post:
-      operationId: post_agents_coding
+      operationId: post_agent_coding
       requestBody:
         content:
           application/json:
@@ -56930,11 +56930,11 @@ paths:
           description: accepted
       summary: Start one autonomous coding run against a repo in the caller's org
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/metrics:
+  /v1/agent/metrics:
     get:
       description: |-
         Serves the invocations-over-time histogram for the org's Agents
@@ -56943,7 +56943,7 @@ paths:
         all-null because this store meters no CPU/memory/storage/cost; the console
         renders those as "—" rather than a fabricated figure. No runs => empty series
         (an honest "not connected / no activity yet"), never a synthesized trend.
-      operationId: get_agents_metrics
+      operationId: get_agent_metrics
       parameters:
       - description: 'Range is the window to bucket: 24H, 7D or 30D. Anything else
           reads as 30D.'
@@ -56962,11 +56962,11 @@ paths:
           description: ok
       summary: Serves the invocations-over-time histogram for the org's Agents dashboard.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/runs:
+  /v1/agent/runs:
     get:
       description: |-
         Returns the org's agent runs across EVERY agent, newest first —
@@ -56982,7 +56982,7 @@ paths:
         parameter. There is deliberately no org field on orgRunsQuery to forge: run
         history is the tenant's own record, and the only tenant this can answer for is
         the one asking.
-      operationId: get_agents_runs
+      operationId: get_agent_runs
       parameters:
       - description: |-
           Limit caps how many runs come back, newest first. Absent, zero or out of
@@ -57015,18 +57015,18 @@ paths:
       summary: Returns the org's agent runs across EVERY agent, newest first — what
         ran here, for whom, on which model, how long it took, and why it failed.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/sessions:
+  /v1/agent/sessions:
     get:
       description: |-
         Returns the caller org's live sessions, newest first — each with
         its event count, its direct-child count and a one-line preview of its latest
         event. With no filter it returns ROOT sessions only, so a dashboard shows one
         row per flow rather than one per subagent; ?root= or ?parent= descends.
-      operationId: get_agents_sessions
+      operationId: get_agent_sessions
       parameters:
       - description: Root scopes the page to one subagent tree (its root session id).
         in: query
@@ -57081,8 +57081,8 @@ paths:
       summary: Returns the caller org's live sessions, newest first — each with its
         event count, its direct-child count and a one-line preview of its latest event.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
     post:
@@ -57093,7 +57093,7 @@ paths:
         session and inherits its root, so one flow is one tree; without one it is
         itself a root. Registering with a terminal status records a session that has
         already finished.
-      operationId: post_agents_sessions
+      operationId: post_agent_sessions
       requestBody:
         content:
           application/json:
@@ -57114,16 +57114,16 @@ paths:
       summary: Opens a live agent session in the caller's org — the row every surface
         (the CLI's outer agent, hanzo.bot, the console, chat) hangs its activity off.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/sessions/{id}:
+  /v1/agent/sessions/{id}:
     get:
       description: |-
         Returns one session with its direct child sessions and its 50 most
         recent events, oldest of those first.
-      operationId: get_agents_sessions_by_id
+      operationId: get_agent_sessions_by_id
       parameters:
       - description: ID is the session to act on, from the path.
         example: sess_1
@@ -57142,8 +57142,8 @@ paths:
       summary: Returns one session with its direct child sessions and its 50 most
         recent events, oldest of those first.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
     patch:
@@ -57154,7 +57154,7 @@ paths:
         done/error run would fabricate liveness — and publishing is refused unless the
         session names the project it built, because the public build route is keyed on
         (org, project).
-      operationId: patch_agents_sessions_by_id
+      operationId: patch_agent_sessions_by_id
       parameters:
       - description: ID is the session to update, from the path.
         example: sess_1
@@ -57183,11 +57183,11 @@ paths:
         run-target it is dispatched to, and the product it built plus whether that
         build''s story is public.'
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/sessions/{id}/control:
+  /v1/agent/sessions/{id}/control:
     get:
       description: |-
         Returns the steering commands (pause/resume/stop/message)
@@ -57197,7 +57197,7 @@ paths:
         commands to an execution engine — consumes what the dashboard posted. Read-only
         and bounded at 200 per poll, so a steady poll is cheap and an applied command is
         never redelivered.
-      operationId: get_agents_sessions_by_id_control
+      operationId: get_agent_sessions_by_id_control
       parameters:
       - description: ID is the session whose commands are being drained, from the
           path.
@@ -57228,11 +57228,11 @@ paths:
         against the caller's own session that are newer than the cursor, oldest first,
         with the cursor to poll from next.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/sessions/{id}/events:
+  /v1/agent/sessions/{id}/events:
     post:
       description: |-
         Records one turn of a session's transcript and answers 201 with it.
@@ -57248,7 +57248,7 @@ paths:
         that still had the secret in it once, and this way the author learns which
         value to rotate. The refusal carries every finding: the rule, the severity, the
         line, a MASKED preview and the fingerprint. The secret is never in the answer.
-      operationId: post_agents_sessions_by_id_events
+      operationId: post_agent_sessions_by_id_events
       parameters:
       - description: ID is the session to append to, from the path.
         in: path
@@ -57271,17 +57271,17 @@ paths:
           description: created
       summary: Records one turn of a session's transcript and answers 201 with it.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/sessions/{id}/message:
+  /v1/agent/sessions/{id}/message:
     post:
       description: |-
         Sends a steering message to a running session — the endpoint a
         human or another agent interrupts through. It requires a `message` or a
         `payload`; the other three commands do not.
-      operationId: post_agents_sessions_by_id_message
+      operationId: post_agent_sessions_by_id_message
       parameters:
       - description: ID is the session to steer, from the path.
         in: path
@@ -57305,16 +57305,16 @@ paths:
       summary: Sends a steering message to a running session — the endpoint a human
         or another agent interrupts through.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/sessions/{id}/pause:
+  /v1/agent/sessions/{id}/pause:
     post:
       description: |-
         Asks a running session to pause. Recorded durably, and forwarded
         to the durable-execution engine when the session is task-backed.
-      operationId: post_agents_sessions_by_id_pause
+      operationId: post_agent_sessions_by_id_pause
       parameters:
       - description: ID is the session to steer, from the path.
         in: path
@@ -57337,11 +57337,11 @@ paths:
           description: ok
       summary: Asks a running session to pause.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/sessions/{id}/progress:
+  /v1/agent/sessions/{id}/progress:
     get:
       description: |-
         Returns how far along one run is: the share of its goal that
@@ -57359,7 +57359,7 @@ paths:
         so a human deciding whether to step into a run gets a current reading rather
         than the last poll's — which costs one small completion, charged to the same
         wallet the session already names, at most once every thirty seconds per run.
-      operationId: get_agents_sessions_by_id_progress
+      operationId: get_agent_sessions_by_id_progress
       parameters:
       - description: ID is the session to act on, from the path.
         example: sess_1
@@ -57379,14 +57379,14 @@ paths:
         whether it is running, blocked or finished, and a line saying what it is doing
         right now.'
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/sessions/{id}/resume:
+  /v1/agent/sessions/{id}/resume:
     post:
       description: Asks a paused session to continue, on the same terms as a pause.
-      operationId: post_agents_sessions_by_id_resume
+      operationId: post_agent_sessions_by_id_resume
       parameters:
       - description: ID is the session to steer, from the path.
         in: path
@@ -57409,11 +57409,11 @@ paths:
           description: ok
       summary: Asks a paused session to continue, on the same terms as a pause.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/sessions/{id}/stop:
+  /v1/agent/sessions/{id}/stop:
     post:
       description: |-
         Ends a running session. `message` is recorded as the cancellation
@@ -57422,7 +57422,7 @@ paths:
         STOPPING IS NOT DELETING: the session, its transcript and anything it produced
         stay readable. A session that has already finished is 409 rather than a second
         stop.
-      operationId: post_agents_sessions_by_id_stop
+      operationId: post_agent_sessions_by_id_stop
       parameters:
       - description: ID is the session to steer, from the path.
         in: path
@@ -57445,18 +57445,18 @@ paths:
           description: ok
       summary: Ends a running session.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/sessions/{id}/tree:
+  /v1/agent/sessions/{id}/tree:
     get:
       description: |-
         Returns the subagent-flow graph rooted at this session: the session,
         its children, their children, each node carrying its own event count. One
         indexed read pulls the whole flow (every node of a flow shares a root id), so
         the shape is assembled in memory rather than by walking the store per node.
-      operationId: get_agents_sessions_by_id_tree
+      operationId: get_agent_sessions_by_id_tree
       parameters:
       - description: ID is the session to act on, from the path.
         example: sess_1
@@ -57475,11 +57475,11 @@ paths:
       summary: 'Returns the subagent-flow graph rooted at this session: the session,
         its children, their children, each node carrying its own event count.'
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/sessions/stream:
+  /v1/agent/sessions/stream:
     get:
       description: |-
         Holds the connection open as text/event-stream and pushes a frame each time the org's registry moves: an `event: session` frame carrying the same session shape the list and detail reads answer with (a registration, an update, or a login-manager revoke tearing a session down), and an `event: event` frame carrying one appended turn. Optional ?root=<session id> narrows the feed to a single subagent tree.
@@ -57487,19 +57487,19 @@ paths:
         Requires a validated principal carrying an org; 403 without one. Org-scoped fail-closed: the bus filters on tenant before it fans out, so a subscriber only ever receives its own org's updates, and ?root= narrows that further but can never widen it.
 
         Delivery is best-effort and the GET reads remain the source of truth. A subscriber that falls more than 256 frames behind is DROPPED — its channel is closed and the stream ends — so one stuck dashboard can never back-pressure a session write; the client reconnects and re-reads the session endpoints to resynchronise. A `: ping` comment every 25 seconds holds the connection open through proxies and is how a departed client is noticed.
-      operationId: get_agents_sessions_stream
+      operationId: get_agent_sessions_stream
       summary: Live session and event updates for the caller's org, as Server-Sent
         Events.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
-  /v1/agents/targets:
+  /v1/agent/targets:
     get:
       description: |-
         Returns every machine registered to the caller's org, newest
         first, each with its live session load.
-      operationId: get_agents_targets
+      operationId: get_agent_targets
       responses:
         "200":
           content:
@@ -57510,8 +57510,8 @@ paths:
       summary: Returns every machine registered to the caller's org, newest first,
         each with its live session load.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
     post:
@@ -57520,7 +57520,7 @@ paths:
         already registered. Re-linking is idempotent and keyed on org+host+owner, so a
         machine that reconnects refreshes its own row rather than piling up duplicates;
         it answers 200, while a first registration answers 201.
-      operationId: post_agents_targets
+      operationId: post_agent_targets
       requestBody:
         content:
           application/json:
@@ -57541,17 +57541,17 @@ paths:
       summary: Registers a machine as an agent target, or re-links one that is already
         registered.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/targets/{id}:
+  /v1/agent/targets/{id}:
     delete:
       description: |-
         Deregisters one machine. Only its owner, or an org admin, may
         remove it; an unknown id, a cross-org id and a machine owned by someone else
         all answer the same not-found, so a probe learns nothing about what exists.
-      operationId: delete_agents_targets_by_id
+      operationId: delete_agent_targets_by_id
       parameters:
       - description: ID is the target to act on, from the path.
         example: tgt_1
@@ -57569,13 +57569,13 @@ paths:
           description: ok
       summary: Deregisters one machine.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
     get:
       description: Returns one registered machine, with its live session load.
-      operationId: get_agents_targets_by_id
+      operationId: get_agent_targets_by_id
       parameters:
       - description: ID is the target to act on, from the path.
         example: tgt_1
@@ -57593,8 +57593,8 @@ paths:
           description: ok
       summary: Returns one registered machine, with its live session load.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
     patch:
@@ -57602,7 +57602,7 @@ paths:
         Updates one machine in place. Every field is optional; a field the
         request omits is left alone. A metrics patch IS a heartbeat — the server stamps
         its own clock, so a client can neither forge nor backdate staleness.
-      operationId: patch_agents_targets_by_id
+      operationId: patch_agent_targets_by_id
       parameters:
       - description: ID is the target to update, from the path.
         example: tgt_1
@@ -57629,11 +57629,11 @@ paths:
           description: ok
       summary: Updates one machine in place.
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/targets/{id}/claim:
+  /v1/agent/targets/{id}/claim:
     post:
       description: |-
         ClaimRoutedRun is the machine's long poll for work: it authenticates the
@@ -57645,7 +57645,7 @@ paths:
         TWO independent proofs are required and both fail closed to the same 403: the
         caller must own this machine (or be an org admin) AND present its claim key in
         X-Target-Key. A run offered to one machine is unreachable from another's claim.
-      operationId: post_agents_targets_by_id_claim
+      operationId: post_agent_targets_by_id_claim
       parameters:
       - description: ID is the target to act on, from the path.
         example: tgt_1
@@ -57666,11 +57666,11 @@ paths:
         a runner is listening), and waits up to 25 seconds for the next run addressed
         to THIS machine.'
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/targets/{id}/key:
+  /v1/agent/targets/{id}/key:
     post:
       description: |-
         Mints (or rotates) the claim key a `hanzo code --serve`
@@ -57678,7 +57678,7 @@ paths:
         SHA-256 hash is stored. Rotating supersedes any prior daemon, so only the
         machine's owner — or an org admin — may call it; every other caller gets the
         same not-found an unknown id gets, and learns nothing about what exists.
-      operationId: post_agents_targets_by_id_key
+      operationId: post_agent_targets_by_id_key
       parameters:
       - description: ID is the target to act on, from the path.
         example: tgt_1
@@ -57698,11 +57698,11 @@ paths:
         to claim work for this machine, and returns it ONCE: only its SHA-256 hash
         is stored.'
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
-  /v1/agents/targets/{id}/runs/{runId}/report:
+  /v1/agent/targets/{id}/runs/{runId}/report:
     post:
       description: |-
         Completes a claimed run: it delivers the terminal result to the
@@ -57711,7 +57711,7 @@ paths:
         run it legitimately holds. Idempotent — a report for an unknown or
         already-finished run answers delivered:false rather than failing, because the
         session's terminal state was already set by the machine's own stream.
-      operationId: post_agents_targets_by_id_runs_by_runid_report
+      operationId: post_agent_targets_by_id_runs_by_runid_report
       parameters:
       - description: ID is the machine reporting, from the path.
         example: tgt_1
@@ -57749,8 +57749,8 @@ paths:
       summary: 'Completes a claimed run: it delivers the terminal result to the run''s
         durable owner, which is what lets that workflow finish.'
       tags:
-      - agents
-      x-app: agents
+      - agent
+      x-app: agent
       x-public: true
       x-tool: true
   /v1/ai/account:
@@ -71605,7 +71605,7 @@ paths:
       x-app: catalog
       x-public: true
       x-tool: true
-  /v1/channels:
+  /v1/channel:
     get:
       description: |-
         Reports every chat channel this org can send through, and whether it can
@@ -71616,7 +71616,7 @@ paths:
         which are different problems with different fixes. Each entry carries the
         connection behind it, so the answer to "why can I not post?" is in the same
         response as the channel that cannot post.
-      operationId: get_channels
+      operationId: get_channel
       responses:
         "200":
           content:
@@ -71627,11 +71627,11 @@ paths:
       summary: Reports every chat channel this org can send through, and whether it
         can send through it right now.
       tags:
-      - channels
-      x-app: channels
+      - channel
+      x-app: channel
       x-public: true
       x-tool: true
-  /v1/channels/{channel}/send:
+  /v1/channel/{channel}/send:
     post:
       description: |-
         Delivers text, attachments and actions to one room on a connected chat transport — discord, github, linear, slack, teams, telegram or whatsapp — and answers that transport's own receipt, the `messageId` it assigned and the Unix second it landed. An unknown channel is a 404.
@@ -71641,7 +71641,7 @@ paths:
         Requires a validated principal; 403 without one. The room must already belong to the caller's org — each transport verifies the binding itself, so a room this org has not bound is 403 and a room whose route the bot has never learned is 409, meaning someone has to message the bot there first. A route learned only so a pairing reply could be delivered lasts exactly as long as that pairing request does, so a room whose sender was never approved goes back to 409 within the hour. A transport that fails answers 502 carrying status and shape only, never a token.
 
         Sending is at-most-once only if you ask for it: pass an `idempotency` string and a replay answers 200 with the PRIOR receipt instead of sending twice, while a send that fails releases the key so the caller can re-attempt. Bodies over 1 MiB are refused. Every transport currently renders text only, so attachments and actions are flattened deterministically to one line each after the text rather than dropped.
-      operationId: post_channels_by_channel_send
+      operationId: post_channel_by_channel_send
       parameters:
       - in: path
         name: channel
@@ -71650,15 +71650,15 @@ paths:
           type: string
       summary: Send a message from your org's bot to one chat room
       tags:
-      - channels
-      x-app: channels
+      - channel
+      x-app: channel
       x-public: true
-  /v1/channels/agent:
+  /v1/channel/agent:
     get:
       description: |-
         Returns which agent answers the caller org's channel: the default and
         every room bound to another agent.
-      operationId: get_channels_agent
+      operationId: get_channel_agent
       parameters:
       - description: |-
           Channel is the transport: discord, github, linear, slack, teams, telegram or whatsapp.
@@ -71683,16 +71683,16 @@ paths:
       summary: 'Returns which agent answers the caller org''s channel: the default
         and every room bound to another agent.'
       tags:
-      - channels
-      x-app: channels
+      - channel
+      x-app: channel
       x-public: true
       x-tool: true
     put:
       description: |-
         Binds agents to the caller org's channel and answers the bindings as
         GET would. It requires ORG ADMIN. The agent is named by its ref — the name an
-        org gave it at POST /v1/agents, or a built-in such as dev, des or vi.
-      operationId: put_channels_agent
+        org gave it at POST /v1/agent, or a built-in such as dev, des or vi.
+      operationId: put_channel_agent
       requestBody:
         content:
           application/json:
@@ -71716,11 +71716,11 @@ paths:
       summary: Binds agents to the caller org's channel and answers the bindings as
         GET would.
       tags:
-      - channels
-      x-app: channels
+      - channel
+      x-app: channel
       x-public: true
       x-tool: true
-  /v1/channels/allowlist:
+  /v1/channel/allowlist:
     get:
       description: |-
         Returns the caller org's access policy for one channel: whether
@@ -71728,7 +71728,7 @@ paths:
         allowlisted or disabled, the config-managed DM and group allow entries, the
         senders approved through PAIRING (read-only here), and the org's named access
         groups. An unknown channel is a 404.
-      operationId: get_channels_allowlist
+      operationId: get_channel_allowlist
       parameters:
       - description: |-
           Channel is the transport to read: discord, github, linear, slack, teams, telegram or whatsapp.
@@ -71751,8 +71751,8 @@ paths:
         or disabled, the config-managed DM and group allow entries, the senders approved
         through PAIRING (read-only here), and the org''s named access groups.'
       tags:
-      - channels
-      x-app: channels
+      - channel
+      x-app: channel
       x-public: true
       x-tool: true
     put:
@@ -71764,7 +71764,7 @@ paths:
         alone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries
         — senders approved through pairing belong to the approval flow, so a policy
         edit can never revoke one. An unknown channel is a 404.
-      operationId: put_channels_allowlist
+      operationId: put_channel_allowlist
       requestBody:
         content:
           application/json:
@@ -71786,11 +71786,11 @@ paths:
       summary: Edits the caller org's access policy for one channel and answers the
         policy as GET would, so both verbs return ONE shape.
       tags:
-      - channels
-      x-app: channels
+      - channel
+      x-app: channel
       x-public: true
       x-tool: true
-  /v1/channels/inbox:
+  /v1/channel/inbox:
     get:
       description: |-
         Returns the messages people have sent to the caller org's connected chat
@@ -71798,7 +71798,7 @@ paths:
         into. It is a CURSOR feed, not a search: pass the returned cursor back as
         `since` to get only what has arrived since. Only this org's messages are
         stored under this org, so the feed can never carry another tenant's chat.
-      operationId: get_channels_inbox
+      operationId: get_channel_inbox
       parameters:
       - description: |-
           Since is the exclusive cursor: only messages with a higher row id come
@@ -71829,19 +71829,19 @@ paths:
         chat bots, oldest first, in the portable envelope shape every transport normalises
         into.
       tags:
-      - channels
-      x-app: channels
+      - channel
+      x-app: channel
       x-public: true
       x-tool: true
-  /v1/channels/pairing:
+  /v1/channel/pairing:
     get:
       description: |-
         Returns the pairing requests waiting for the caller org to approve
         — one per person who messaged a connected bot on a channel whose DM policy is
         "pairing" and who is not allowed yet. Each row carries the CODE an org admin
-        passes to POST /v1/channels/pairing/approve. Expired requests are not
+        passes to POST /v1/channel/pairing/approve. Expired requests are not
         returned. Codes are capability strings: they are shown here, and never logged.
-      operationId: get_channels_pairing
+      operationId: get_channel_pairing
       responses:
         "200":
           content:
@@ -71853,11 +71853,11 @@ paths:
         — one per person who messaged a connected bot on a channel whose DM policy
         is "pairing" and who is not allowed yet.
       tags:
-      - channels
-      x-app: channels
+      - channel
+      x-app: channel
       x-public: true
       x-tool: true
-  /v1/channels/pairing/approve:
+  /v1/channel/pairing/approve:
     post:
       description: |-
         Turns one pending pairing code into a standing allow entry, so
@@ -71866,7 +71866,7 @@ paths:
         bootstraps that sender as the channel's owner, which the answer reports. An
         unknown or expired code is a 404, and a code always belongs to exactly one
         org, so it can never approve someone into another tenant.
-      operationId: post_channels_pairing_approve
+      operationId: post_channel_pairing_approve
       requestBody:
         content:
           application/json:
@@ -71886,8 +71886,8 @@ paths:
       summary: Turns one pending pairing code into a standing allow entry, so that
         person can DM the org's bot on that channel from now on.
       tags:
-      - channels
-      x-app: channels
+      - channel
+      x-app: channel
       x-public: true
       x-tool: true
   /v1/chat:
@@ -84141,7 +84141,7 @@ paths:
       x-app: explorer
       x-public: true
       x-tool: true
-  /v1/flags:
+  /v1/flag:
     post:
       description: |-
         Evaluate runs the caller's flag definitions for one identity and returns the
@@ -84149,7 +84149,7 @@ paths:
         and whether any definition failed to compute. Evaluation is in-process over the
         caller's own (org, project) definitions — no network hop, no shared KV — so a
         tenant can only ever evaluate its own flags.
-      operationId: post_flags
+      operationId: post_flag
       requestBody:
         content:
           application/json:
@@ -84178,16 +84178,16 @@ paths:
         returns the flag verdict: which flags are on (or which variant), their payloads,
         and whether any definition failed to compute.'
       tags:
-      - flags
-      x-app: flags
+      - flag
+      x-app: flag
       x-public: true
       x-tool: true
-  /v1/flags/activity:
+  /v1/flag/activity:
     get:
       description: |-
         Returns the caller's flag change log newest-first: every
         create, update and delete, with the actor and the time.
-      operationId: get_flags_activity
+      operationId: get_flag_activity
       parameters:
       - description: Limit caps the rows returned. 1–500; anything else takes the
           default 100.
@@ -84207,11 +84207,11 @@ paths:
       summary: 'Returns the caller''s flag change log newest-first: every create,
         update and delete, with the actor and the time.'
       tags:
-      - flags
-      x-app: flags
+      - flag
+      x-app: flag
       x-public: true
       x-tool: true
-  /v1/flags/decide:
+  /v1/flag/decide:
     post:
       description: |-
         Evaluate runs the caller's flag definitions for one identity and returns the
@@ -84219,7 +84219,7 @@ paths:
         and whether any definition failed to compute. Evaluation is in-process over the
         caller's own (org, project) definitions — no network hop, no shared KV — so a
         tenant can only ever evaluate its own flags.
-      operationId: post_flags_decide
+      operationId: post_flag_decide
       requestBody:
         content:
           application/json:
@@ -84248,16 +84248,16 @@ paths:
         returns the flag verdict: which flags are on (or which variant), their payloads,
         and whether any definition failed to compute.'
       tags:
-      - flags
-      x-app: flags
+      - flag
+      x-app: flag
       x-public: true
       x-tool: true
-  /v1/flags/defs:
+  /v1/flag/defs:
     get:
       description: |-
         Returns every flag definition in the caller's (org,
         project) store, by key, with its version and who last changed it.
-      operationId: get_flags_defs
+      operationId: get_flag_defs
       responses:
         "200":
           content:
@@ -84268,16 +84268,16 @@ paths:
       summary: Returns every flag definition in the caller's (org, project) store,
         by key, with its version and who last changed it.
       tags:
-      - flags
-      x-app: flags
+      - flag
+      x-app: flag
       x-public: true
       x-tool: true
-  /v1/flags/defs/{key}:
+  /v1/flag/defs/{key}:
     delete:
       description: |-
         Removes one flag definition by key and records the
         deletion in the change log. A key the caller's store does not hold is a 404.
-      operationId: delete_flags_defs_by_key
+      operationId: delete_flag_defs_by_key
       parameters:
       - description: Key is the flag key to act on, from the path.
         in: path
@@ -84295,15 +84295,15 @@ paths:
       summary: Removes one flag definition by key and records the deletion in the
         change log.
       tags:
-      - flags
-      x-app: flags
+      - flag
+      x-app: flag
       x-public: true
       x-tool: true
     get:
       description: |-
         Returns one flag definition by key, or 404 when the caller's
         store has none under that key.
-      operationId: get_flags_defs_by_key
+      operationId: get_flag_defs_by_key
       parameters:
       - description: Key is the flag key to act on, from the path.
         in: path
@@ -84321,8 +84321,8 @@ paths:
       summary: Returns one flag definition by key, or 404 when the caller's store
         has none under that key.
       tags:
-      - flags
-      x-app: flags
+      - flag
+      x-app: flag
       x-public: true
       x-tool: true
     put:
@@ -84333,7 +84333,7 @@ paths:
         "key" is forced to the key in the URL, so a document can never be filed under a
         name other than the one it was addressed by. Every write bumps the version and
         appends to the change log under the caller's identity.
-      operationId: put_flags_defs_by_key
+      operationId: put_flag_defs_by_key
       parameters:
       - description: Key is the flag key to write, from the path.
         example: new-editor
@@ -84363,16 +84363,16 @@ paths:
       summary: Creates or replaces the flag definition at the path's key and returns
         the stored row.
       tags:
-      - flags
-      x-app: flags
+      - flag
+      x-app: flag
       x-public: true
       x-tool: true
-  /v1/flags/health:
+  /v1/flag/health:
     get:
       description: |-
         Health reports that the flag engine is serving. It is not gated: liveness must
         be probe-able without a token.
-      operationId: get_flags_health
+      operationId: get_flag_health
       responses:
         "200":
           content:
@@ -84385,8 +84385,8 @@ paths:
           description: ok
       summary: Health reports that the flag engine is serving.
       tags:
-      - flags
-      x-app: flags
+      - flag
+      x-app: flag
       x-public: true
       x-tool: true
   /v1/flow/runs:
@@ -85139,7 +85139,7 @@ paths:
       x-app: framework
       x-public: true
       x-tool: true
-  /v1/functions:
+  /v1/function:
     get:
       description: |-
         Is every serverless function the caller's org has published, each with its
@@ -85151,7 +85151,7 @@ paths:
         console renders "—" instead of a fabricated 0.
 
         Requires a validated principal; the listing is scoped to its org.
-      operationId: get_functions
+      operationId: get_function
       responses:
         "200":
           content:
@@ -85162,8 +85162,8 @@ paths:
       summary: Is every serverless function the caller's org has published, each with
         its real 7-day rollup.
       tags:
-      - functions
-      x-app: functions
+      - function
+      x-app: function
       x-public: true
       x-tool: true
     post:
@@ -85181,7 +85181,7 @@ paths:
         on the org's own GPU fleet and supports runtime=python only.
 
         Requires a validated principal; the function is owned by that principal's org.
-      operationId: post_functions
+      operationId: post_function
       requestBody:
         content:
           application/json:
@@ -85198,11 +85198,11 @@ paths:
       summary: Publishes a serverless function under the caller's org and answers
         201 with it.
       tags:
-      - functions
-      x-app: functions
+      - function
+      x-app: function
       x-public: true
       x-tool: true
-  /v1/functions/{name}:
+  /v1/function/{name}:
     delete:
       description: |-
         Removes one of the caller org's functions and answers 204.
@@ -85210,7 +85210,7 @@ paths:
         A name this org does not hold is 404 — never a silent success — and a name
         belonging to another tenant is the same 404, because the delete is predicated on
         the validated org.
-      operationId: delete_functions_by_name
+      operationId: delete_function_by_name
       parameters:
       - description: Name is the function the URL names.
         in: path
@@ -85223,8 +85223,8 @@ paths:
           description: no content
       summary: Removes one of the caller org's functions and answers 204.
       tags:
-      - functions
-      x-app: functions
+      - function
+      x-app: function
       x-public: true
       x-tool: true
     get:
@@ -85235,7 +85235,7 @@ paths:
 
         Secret values are never read or returned. A name the caller's org does not hold
         is 404, which is also what another tenant's function looks like from here.
-      operationId: get_functions_by_name
+      operationId: get_function_by_name
       parameters:
       - description: Name is the function the URL names.
         in: path
@@ -85254,11 +85254,11 @@ paths:
         its definition, its 7-day rollup, its trigger, its twenty most recent invocations
         and the NAMES of the secrets it mounts.'
       tags:
-      - functions
-      x-app: functions
+      - function
+      x-app: function
       x-public: true
       x-tool: true
-  /v1/functions/{name}/invocations:
+  /v1/function/{name}/invocations:
     get:
       description: |-
         Is one function's past runs, newest first — each with its status,
@@ -85267,7 +85267,7 @@ paths:
         These are real recorded rows, not a projection: an invocation appears here only
         once it actually ran. Requires a validated principal; the read is scoped to its
         org.
-      operationId: get_functions_by_name_invocations
+      operationId: get_function_by_name_invocations
       parameters:
       - description: Name is the function the URL names.
         in: path
@@ -85292,11 +85292,11 @@ paths:
       summary: Is one function's past runs, newest first — each with its status, HTTP
         code, method, time and duration.
       tags:
-      - functions
-      x-app: functions
+      - function
+      x-app: function
       x-public: true
       x-tool: true
-  /v1/functions/{name}/invoke:
+  /v1/function/{name}/invoke:
     post:
       description: |-
         Runs a function and records a REAL invocation.
@@ -85320,7 +85320,7 @@ paths:
         When the sandbox is not configured on this deployment, a non-fleet function
         fails closed before anything is recorded — no execution and no fabricated
         output. Scoped to the caller's org; requires a validated principal.
-      operationId: post_functions_by_name_invoke
+      operationId: post_function_by_name_invoke
       parameters:
       - in: path
         name: name
@@ -85354,11 +85354,11 @@ paths:
           description: service unavailable
       summary: Runs a function and records a REAL invocation.
       tags:
-      - functions
-      x-app: functions
+      - function
+      x-app: function
       x-public: true
       x-tool: true
-  /v1/functions/{name}/logs:
+  /v1/function/{name}/logs:
     get:
       description: |-
         Is the output of a function's most recent run — its error text when that
@@ -85366,7 +85366,7 @@ paths:
 
         It is the LAST run only, and it is empty when the function has never run. There
         is no log retention behind this beyond the recorded invocation itself.
-      operationId: get_functions_by_name_logs
+      operationId: get_function_by_name_logs
       parameters:
       - description: Name is the function the URL names.
         in: path
@@ -85384,11 +85384,11 @@ paths:
       summary: Is the output of a function's most recent run — its error text when
         that run failed, else what it printed.
       tags:
-      - functions
-      x-app: functions
+      - function
+      x-app: function
       x-public: true
       x-tool: true
-  /v1/functions/deployments:
+  /v1/function/deployments:
     get:
       description: |-
         Is what is live right now — each function's current record IS its
@@ -85397,7 +85397,7 @@ paths:
         There is no deployment history behind it: a function has one record, and
         publishing replaces it. The 7-day rollup is deliberately absent here, because
         this read is about what is deployed rather than about how it has performed.
-      operationId: get_functions_deployments
+      operationId: get_function_deployments
       responses:
         "200":
           content:
@@ -85408,11 +85408,11 @@ paths:
       summary: Is what is live right now — each function's current record IS its live
         deployment, so this is the deployment inventory.
       tags:
-      - functions
-      x-app: functions
+      - function
+      x-app: function
       x-public: true
       x-tool: true
-  /v1/functions/metrics:
+  /v1/function/metrics:
     get:
       description: |-
         Is the org's serverless dashboard over a window: a per-function
@@ -85425,7 +85425,7 @@ paths:
         costCents is null and stays null: there is no per-invocation cost source to read,
         and reporting a number computed some other way would be a guess presented as a
         measurement. Requires a validated principal; the read is scoped to its org.
-      operationId: get_functions_metrics
+      operationId: get_function_metrics
       parameters:
       - description: |-
           Range is 1H, 6H, 24H (the default), 7D or 30D. Anything else falls back to
@@ -85445,11 +85445,11 @@ paths:
       summary: 'Is the org''s serverless dashboard over a window: a per-function invocation
         costLine and how those invocations ended.'
       tags:
-      - functions
-      x-app: functions
+      - function
+      x-app: function
       x-public: true
       x-tool: true
-  /v1/functions/secrets:
+  /v1/function/secrets:
     get:
       description: |-
         Is the NAMES of the secrets the caller org's functions mount.
@@ -85457,7 +85457,7 @@ paths:
         Values are NEVER read or returned — this surface knows which names a function
         asks for and nothing about what is behind them, which is what makes it safe to
         list at all. One row per distinct (namespace, name).
-      operationId: get_functions_secrets
+      operationId: get_function_secrets
       responses:
         "200":
           content:
@@ -85467,18 +85467,18 @@ paths:
           description: ok
       summary: Is the NAMES of the secrets the caller org's functions mount.
       tags:
-      - functions
-      x-app: functions
+      - function
+      x-app: function
       x-public: true
       x-tool: true
-  /v1/functions/triggers:
+  /v1/function/triggers:
     get:
       description: |-
         Is what calls the caller org's functions — one row per function.
 
         Every function has exactly one trigger today, its HTTP invoke endpoint, so this
         is the function list read as "how is each of these reached".
-      operationId: get_functions_triggers
+      operationId: get_function_triggers
       responses:
         "200":
           content:
@@ -85488,8 +85488,8 @@ paths:
           description: ok
       summary: Is what calls the caller org's functions — one row per function.
       tags:
-      - functions
-      x-app: functions
+      - function
+      x-app: function
       x-public: true
       x-tool: true
   /v1/gateway/config:
@@ -93331,15 +93331,15 @@ paths:
       x-app: ingress
       x-public: true
       x-tool: true
-  /v1/integrations:
+  /v1/integration:
     get:
       description: |-
         Returns every registered integration provider together with THIS org's
         connection status for it — the catalog the console's Integrations page renders.
         Org-authed: a caller with no validated principal is 403, because the status is
-        per-org and there is no org-less answer. User-plane providers (the /v1/integrations/connectors
+        per-org and there is no org-less answer. User-plane providers (the /v1/integration/connectors
         surface) are omitted; the two planes are disjoint.
-      operationId: get_integrations
+      operationId: get_integration
       responses:
         "200":
           content:
@@ -93364,21 +93364,21 @@ paths:
       summary: Returns every registered integration provider together with THIS org's
         connection status for it — the catalog the console's Integrations page renders.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/{provider}:
+  /v1/integration/{provider}:
     get:
       description: |-
         Returns ONE provider with this org's connection status — the same view list
         carries, for a single id. An unknown id is 404, and so is a user-plane provider:
         the org surface never resolves one.
-      operationId: get_integrations_by_provider
+      operationId: get_integration_by_provider
       parameters:
       - description: |-
           Provider is the registry id of the connector — "slack", "github",
-          "cloudflare". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)
+          "cloudflare". Unknown ids are 404, as are the user-plane (/v1/integration/connectors)
           providers, which this surface never resolves.
         example: slack
         in: path
@@ -93403,11 +93403,11 @@ paths:
       summary: Returns ONE provider with this org's connection status — the same view
         list carries, for a single id.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/{provider}/callback:
+  /v1/integration/{provider}/callback:
     get:
       description: |-
         The single address every connector's OAuth flow returns to. It exchanges the authorization the provider granted, records the connection, and ALWAYS redirects the browser back to the console — on success and on every labeled failure alike, so a user never lands on a raw JSON dead end.
@@ -93417,7 +93417,7 @@ paths:
         Tokens are sealed into the org's KMS namespace BEFORE the connection row is written, so a failure of the secret store leaves no half-connected integration advertising a credential that was never stored. Token values never appear in the redirect, in a log line or in an error.
 
         One generalization is worth knowing: a GitHub App installation returns an installation identifier instead of an OAuth code, and it is accepted in the code's place so the App model needs no second address.
-      operationId: get_integrations_by_provider_callback
+      operationId: get_integration_by_provider_callback
       parameters:
       - in: path
         name: provider
@@ -93426,10 +93426,10 @@ paths:
           type: string
       summary: OAuth return for any connector
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/{provider}/connect:
+  /v1/integration/{provider}/connect:
     post:
       description: |-
         Acquires the org's credential for one provider. It has TWO paths and the
@@ -93442,7 +93442,7 @@ paths:
         AdminOnly connector without the caller's own-org admin bit → 403; not configured
         → 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now
         rather than dead-end at the callback).
-      operationId: post_integrations_by_provider_connect
+      operationId: post_integration_by_provider_connect
       parameters:
       - description: Provider is the connector's registry id, from the :provider path
           segment.
@@ -93477,22 +93477,22 @@ paths:
           description: ok
       summary: Acquires the org's credential for one provider.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/{provider}/disconnect:
+  /v1/integration/{provider}/disconnect:
     post:
       description: |-
         Revokes (best-effort) and forgets an org's connection: it deletes
         every custodied KMS secret and the connection row. Idempotent — disconnecting a
         provider that was never connected still returns {disconnected:true}. Symmetric
         with connect: an AdminOnly connector needs the caller's own-org admin bit.
-      operationId: post_integrations_by_provider_disconnect
+      operationId: post_integration_by_provider_disconnect
       parameters:
       - description: |-
           Provider is the registry id of the connector — "slack", "github",
-          "cloudflare". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)
+          "cloudflare". Unknown ids are 404, as are the user-plane (/v1/integration/connectors)
           providers, which this surface never resolves.
         example: slack
         in: path
@@ -93512,11 +93512,11 @@ paths:
       summary: 'Revokes (best-effort) and forgets an org''s connection: it deletes
         every custodied KMS secret and the connection row.'
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/{provider}/verify:
+  /v1/integration/{provider}/verify:
     post:
       description: |-
         Re-checks a CONNECTED apikey connector's stored credential against the
@@ -93525,11 +93525,11 @@ paths:
         A verification failure is reported as {active:false}, not an error — the console/
         CLI renders it. Only apikey providers support verify (OAuth tokens are checked at
         use, not re-verified here).
-      operationId: post_integrations_by_provider_verify
+      operationId: post_integration_by_provider_verify
       parameters:
       - description: |-
           Provider is the registry id of the connector — "slack", "github",
-          "cloudflare". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)
+          "cloudflare". Unknown ids are 404, as are the user-plane (/v1/integration/connectors)
           providers, which this surface never resolves.
         example: cloudflare
         in: path
@@ -93554,17 +93554,17 @@ paths:
       summary: Re-checks a CONNECTED apikey connector's stored credential against
         the provider, live (`hanzo connector verify`).
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/connectors:
+  /v1/integration/connectors:
     get:
       description: |-
         Lists the caller's OWN connectors across every provider — the set
         `hanzo connector ls` prints. Rows are keyed (org,user), so this can never
         surface another user's connector, and no secret is in the view.
-      operationId: get_integrations_connectors
+      operationId: get_integration_connectors
       responses:
         "200":
           content:
@@ -93586,18 +93586,18 @@ paths:
       summary: Lists the caller's OWN connectors across every provider — the set `hanzo
         connector ls` prints.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/connectors/{id}:
+  /v1/integration/connectors/{id}:
     delete:
       description: |-
         Forgets a connector: every custodied secret, then the row.
         Idempotent — dropping a never-connected id still answers {disconnected:true}
         (disconnect() parity). No provider Revoke: none of the user-plane providers
         exposes a revoke endpoint.
-      operationId: delete_integrations_connectors_by_id
+      operationId: delete_integration_connectors_by_id
       parameters:
       - description: |-
           ID is the connector id, provider + ":" + label ("openai:default") — the
@@ -93619,17 +93619,17 @@ paths:
           description: ok
       summary: 'Forgets a connector: every custodied secret, then the row.'
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/connectors/{id}/refresh:
+  /v1/integration/connectors/{id}/refresh:
     post:
       description: |-
         Forces a token rotation for a connected connector, ahead of the
         automatic rotation a token read would do inside the expiry window. Only
         providers that declare a Refresh support it.
-      operationId: post_integrations_connectors_by_id_refresh
+      operationId: post_integration_connectors_by_id_refresh
       parameters:
       - description: |-
           ID is the connector id, provider + ":" + label ("openai:default") — the
@@ -93662,11 +93662,11 @@ paths:
       summary: Forces a token rotation for a connected connector, ahead of the automatic
         rotation a token read would do inside the expiry window.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/connectors/{id}/token:
+  /v1/integration/connectors/{id}/token:
     get:
       description: |-
         Hands the custodied access token to its owner — the ONE place
@@ -93674,7 +93674,7 @@ paths:
         id is simply "no row" → 404. fresh() auto-rotates within the refreshSkew
         window; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh
         tokens are NEVER returned — custody keeps the sink. The token is never logged.
-      operationId: get_integrations_connectors_by_id_token
+      operationId: get_integration_connectors_by_id_token
       parameters:
       - description: |-
           ID is the connector id, provider + ":" + label ("openai:default") — the
@@ -93700,18 +93700,18 @@ paths:
       summary: Hands the custodied access token to its owner — the ONE place custody
         exits.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/connectors/{provider}/credential:
+  /v1/integration/connectors/{provider}/credential:
     post:
       description: |-
         Is the direct intake path: a customer-held token/setup-token
         (Verify) or an externally obtained OAuth bundle from the CLI's local PKCE
         (Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING
         is persisted (connectByCredential's fail-closed order).
-      operationId: post_integrations_connectors_by_provider_credential
+      operationId: post_integration_connectors_by_provider_credential
       parameters:
       - description: Provider is the user-scoped provider's registry id, from the
           path.
@@ -93753,11 +93753,11 @@ paths:
       summary: 'Is the direct intake path: a customer-held token/setup-token (Verify)
         or an externally obtained OAuth bundle from the CLI''s local PKCE (Adopt).'
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/connectors/{provider}/device:
+  /v1/integration/connectors/{provider}/device:
     post:
       description: |-
         Begins a device sign-in and returns the code to show the user plus
@@ -93765,7 +93765,7 @@ paths:
         the user at poll-done (connect() parity), and the per-provider connector cap is
         checked before the provider is called. The provider's device code is persisted
         only in the encrypted grants table and is NEVER returned.
-      operationId: post_integrations_connectors_by_provider_device
+      operationId: post_integration_connectors_by_provider_device
       parameters:
       - description: Provider is the user-scoped provider's registry id, from the
           path.
@@ -93800,18 +93800,18 @@ paths:
       summary: Begins a device sign-in and returns the code to show the user plus
         how to poll for completion.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/connectors/{provider}/device/{flow}/poll:
+  /v1/integration/connectors/{provider}/device/{flow}/poll:
     post:
       description: |-
         Advances a device sign-in. Terminal outcomes are DATA, not errors
         (verifyConn {active:false} discipline) — the status set is closed:
         pending|connected|denied|expired. pollSlow collapses to "pending" on the
         wire; the raised cadence rides interval.
-      operationId: post_integrations_connectors_by_provider_device_by_flow_poll
+      operationId: post_integration_connectors_by_provider_device_by_flow_poll
       parameters:
       - description: Provider is the user-scoped provider's registry id, from the
           path.
@@ -93851,17 +93851,17 @@ paths:
           description: ok
       summary: Advances a device sign-in.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/connectors/providers:
+  /v1/integration/connectors/providers:
     get:
       description: |-
         Lists the user-scoped provider cards — the catalog of what a
         user can connect, and how. Methods derive from capabilities (Device/Adopt/Verify
         — Mount asserts at least one), never from a parallel kind enum.
-      operationId: get_integrations_connectors_providers
+      operationId: get_integration_connectors_providers
       responses:
         "200":
           content:
@@ -93883,11 +93883,11 @@ paths:
       summary: Lists the user-scoped provider cards — the catalog of what a user can
         connect, and how.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/discord/interactions:
+  /v1/integration/discord/interactions:
     post:
       description: |-
         The Interactions Endpoint URL for the Discord app. It answers Discord's PING with a PONG, and handles the `/hanzo` slash command by acknowledging with a deferred ephemeral reply and editing that reply with the answer once the agent has run. Any other interaction is acknowledged and ignored.
@@ -93897,49 +93897,49 @@ paths:
         Discord does not retry, so this is the one channel where being at capacity is shown to the user as an ephemeral ask-to-run-it-again rather than answered as a retriable failure — nothing is recorded either way, so the next attempt is clean.
 
         The caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.
-      operationId: post_integrations_discord_interactions
+      operationId: post_integration_discord_interactions
       summary: Discord interactions endpoint
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/discord/link:
+  /v1/integration/discord/link:
     get:
       description: |-
         The entry point behind the connect prompt Hanzo shows in a Discord server. It starts a link session and redirects to Discord's OAuth `identify` consent — the narrowest scope that establishes which Discord user is asking, and nothing more.
 
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
-      operationId: get_integrations_discord_link
+      operationId: get_integration_discord_link
       summary: Begin linking a Hanzo account from Discord
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/discord/link/callback:
+  /v1/integration/discord/link/callback:
     get:
       description: |-
         The final leg: it binds the verified Discord user to the Hanzo account that just signed in, and answers a short confirmation page telling them to return to Discord. The Hanzo credential is sealed into the connected org's KMS namespace rather than stored beside the link.
 
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
-      operationId: get_integrations_discord_link_callback
+      operationId: get_integration_discord_link_callback
       summary: Complete the Discord account link
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/discord/link/discord:
+  /v1/integration/discord/link/discord:
     get:
       description: |-
         Where Discord returns the user after the identify consent. It resolves the verified Discord user, confirms the server is connected to an org, and hands the browser to the Hanzo sign-in that completes the link.
 
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
-      operationId: get_integrations_discord_link_discord
+      operationId: get_integration_discord_link_discord
       summary: Discord sign-in return leg
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/github/claim:
+  /v1/integration/github/claim:
     post:
       description: |-
         Binds installations the App ALREADY holds to the org the caller is
@@ -93974,7 +93974,7 @@ paths:
 
         Claiming an account another org holds ADDS this org's row and leaves theirs
         standing, so no org loses an integration it is using.
-      operationId: post_integrations_github_claim
+      operationId: post_integration_github_claim
       requestBody:
         content:
           application/json:
@@ -93998,11 +93998,11 @@ paths:
         acting in — the reconciliation for a grant that happened outside our connect
         flow.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/github/fork:
+  /v1/integration/github/fork:
     post:
       description: |-
         Forks a granted repository.
@@ -94012,7 +94012,7 @@ paths:
         already exists. So this reports what GitHub said rather than waiting — a call
         that blocked until the clone finished would time out on a large repository and
         tell the caller nothing it does not already know.
-      operationId: post_integrations_github_fork
+      operationId: post_integration_github_fork
       requestBody:
         content:
           application/json:
@@ -94036,11 +94036,11 @@ paths:
           description: ok
       summary: Forks a granted repository.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/github/installations:
+  /v1/integration/github/installations:
     get:
       description: |-
         Lists the GitHub accounts the caller may see the App
@@ -94066,7 +94066,7 @@ paths:
         connected" and an operator asked "which GitHub orgs do you see" can only
         answer for accounts already bound, which is precisely the accounts that were
         never the question.
-      operationId: get_integrations_github_installations
+      operationId: get_integration_github_installations
       responses:
         "200":
           content:
@@ -94085,11 +94085,11 @@ paths:
       summary: Lists the GitHub accounts the caller may see the App installed on,
         each confirmed against the App's own list, plus where to add another.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/github/issues/backfill:
+  /v1/integration/github/issues/backfill:
     post:
       description: |-
         Seeds the native todo with the EXISTING issues across the
@@ -94098,7 +94098,7 @@ paths:
         Synchronous + bounded (a total time budget and an issue cap) so it returns the
         counts directly; idempotent by ExtRef, so a re-run continues where a truncated
         pass left off and never duplicates.
-      operationId: post_integrations_github_issues_backfill
+      operationId: post_integration_github_issues_backfill
       requestBody:
         content:
           application/json:
@@ -94123,11 +94123,11 @@ paths:
       summary: Seeds the native todo with the EXISTING issues across the org's granted
         repos (default state=open); the webhook keeps them live thereafter.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/github/repos:
+  /v1/integration/github/repos:
     get:
       description: |-
         Lists the org's granted GitHub repositories, each annotated with its
@@ -94135,7 +94135,7 @@ paths:
         from the validated principal, and the granted set is bounded to THAT org's
         installation token — an org can never enumerate another org's repos. The console
         polls it to watch an import flip a repo to imported.
-      operationId: get_integrations_github_repos
+      operationId: get_integration_github_repos
       responses:
         "200":
           content:
@@ -94156,16 +94156,16 @@ paths:
       summary: Lists the org's granted GitHub repositories, each annotated with its
         native import + sync status from the git object plane.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/github/repos/{repo}/pages:
+  /v1/integration/github/repos/{repo}/pages:
     delete:
       description: |-
         Deletes the repo's Pages site. 404 when there is none, so a
         caller can tell "turned it off" from "there was nothing on".
-      operationId: delete_integrations_github_repos_by_repo_pages
+      operationId: delete_integration_github_repos_by_repo_pages
       parameters:
       - description: |-
           Repo is the repository's short name within the org's installation, with no
@@ -94189,8 +94189,8 @@ paths:
           description: ok
       summary: Deletes the repo's Pages site.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
     get:
@@ -94199,7 +94199,7 @@ paths:
         source. The repo is resolved against the org installation's GRANTED set, so a
         caller can never address a repo the App was not granted; 404 when the repo has no
         Pages site.
-      operationId: get_integrations_github_repos_by_repo_pages
+      operationId: get_integration_github_repos_by_repo_pages
       parameters:
       - description: |-
           Repo is the repository's short name within the org's installation, with no
@@ -94232,8 +94232,8 @@ paths:
       summary: Returns the repo's Pages status, live URL, custom domain and build
         source.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
     post:
@@ -94242,7 +94242,7 @@ paths:
         With buildType "workflow" the site builds via GitHub Actions; otherwise it builds
         from a branch source, defaulting to the repo's own default branch when none is
         given. Only "/" and "/docs" are legal source paths (GitHub's rule).
-      operationId: post_integrations_github_repos_by_repo_pages
+      operationId: post_integration_github_repos_by_repo_pages
       parameters:
       - description: Repo is the repository, from the :repo path segment.
         example: widgets
@@ -94280,8 +94280,8 @@ paths:
           description: ok
       summary: Creates the repo's Pages site and answers 201 Created with it.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
     put:
@@ -94289,7 +94289,7 @@ paths:
         Sets or clears the custom domain (cname) and updates HTTPS
         enforcement, build type, or source. ONLY the provided fields are sent to GitHub,
         so an update never resets a setting the caller did not mention.
-      operationId: put_integrations_github_repos_by_repo_pages
+      operationId: put_integration_github_repos_by_repo_pages
       parameters:
       - description: Repo is the repository, from the :repo path segment.
         example: widgets
@@ -94321,18 +94321,18 @@ paths:
       summary: Sets or clears the custom domain (cname) and updates HTTPS enforcement,
         build type, or source.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/github/repos/{repo}/pages/builds:
+  /v1/integration/github/repos/{repo}/pages/builds:
     post:
       description: |-
         Requests a Pages rebuild and returns the queued build's status.
         The build is queued AT GITHUB, not completed here, so the answer is 202 Accepted
         and its status is the one GitHub reported at queue time. 404 when the repository
         has no Pages site, or when the org's installation was not granted it.
-      operationId: post_integrations_github_repos_by_repo_pages_builds
+      operationId: post_integration_github_repos_by_repo_pages_builds
       parameters:
       - description: |-
           Repo is the repository's short name within the org's installation, with no
@@ -94357,20 +94357,20 @@ paths:
           description: accepted
       summary: Requests a Pages rebuild and returns the queued build's status.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/github/repos/import:
+  /v1/integration/github/repos/import:
     post:
       description: |-
         Imports the selected (or all) granted repos into git.hanzo.ai. The
         selection is intersected with the installation's GRANTED set, so a client can
         never import a repo the App was not granted (org isolation + a grant check). The
         import runs in a bounded background worker (don't block the request), so the
-        answer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo
+        answer is 202 Accepted; poll GET /v1/integration/github/repos for the per-repo
         status to flip to imported.
-      operationId: post_integrations_github_repos_import
+      operationId: post_integration_github_repos_import
       requestBody:
         content:
           application/json:
@@ -94393,11 +94393,11 @@ paths:
           description: accepted
       summary: Imports the selected (or all) granted repos into git.hanzo.ai.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/github/search:
+  /v1/integration/github/search:
     post:
       description: |-
         Finds repositories on GitHub.
@@ -94406,7 +94406,7 @@ paths:
         how you find a repository to fork, not a way to see inside one. The org's own
         token is used only so the query is rate-limited against the installation
         rather than anonymously — the results are the same ones anyone would get.
-      operationId: post_integrations_github_search
+      operationId: post_integration_github_search
       requestBody:
         content:
           application/json:
@@ -94431,14 +94431,14 @@ paths:
           description: ok
       summary: Finds repositories on GitHub.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/github/webhook:
+  /v1/integration/github/webhook:
     post:
       description: |-
-        The address the GitHub App delivers events to. A push is handed to the repository sync engine, and an issue or issue-comment event is mirrored into the native todo — idempotently, so the same issue re-syncs to one row however many times it is edited, closed or reopened. A repository event that puts a repo INTO the granted set (created, transferred, unarchived) raises one todo offering to import it; accepting means POSTing that repo to /v1/integrations/github/import. It never imports on its own.
+        The address the GitHub App delivers events to. A push is handed to the repository sync engine, and an issue or issue-comment event is mirrored into the native todo — idempotently, so the same issue re-syncs to one row however many times it is edited, closed or reopened. A repository event that puts a repo INTO the granted set (created, transferred, unarchived) raises one todo offering to import it; accepting means POSTing that repo to /v1/integration/github/import. It never imports on its own.
 
         It answers a benign 200 for everything it does not act on — the ping, other event types, an unknown installation — deliberately, so GitHub does not enter a retry storm over events that were never going to do anything. Only a bad signature and a genuine sync failure are non-200, and an oversized payload is refused outright.
 
@@ -94447,18 +94447,18 @@ paths:
         The payload is verified by HMAC against the webhook secret before it is parsed.
 
         The caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.
-      operationId: post_integrations_github_webhook
+      operationId: post_integration_github_webhook
       summary: GitHub App webhook
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/gitlab/projects:
+  /v1/integration/gitlab/projects:
     get:
       description: |-
         Lists the projects the org's GitLab connection can reach —
         membership projects, most recently active first.
-      operationId: get_integrations_gitlab_projects
+      operationId: get_integration_gitlab_projects
       responses:
         "200":
           content:
@@ -94479,18 +94479,18 @@ paths:
       summary: Lists the projects the org's GitLab connection can reach — membership
         projects, most recently active first.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/linear/claim:
+  /v1/integration/linear/claim:
     post:
       description: |-
         Binds the caller's Linear organization to the org and seals the
         webhook secret. The organization is READ from the caller's own key, never taken
         from the body: a person can only bind an organization they are a member of. An
         organization another org already holds is refused.
-      operationId: post_integrations_linear_claim
+      operationId: post_integration_linear_claim
       requestBody:
         content:
           application/json:
@@ -94506,24 +94506,24 @@ paths:
               example:
                 name: acme
                 organization: 6f0b…
-                path: /v1/integrations/linear/webhook
+                path: /v1/integration/linear/webhook
               schema:
                 $ref: '#/components/schemas/linearClaimOut'
           description: ok
       summary: Binds the caller's Linear organization to the org and seals the webhook
         secret.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/linear/comments:
+  /v1/integration/linear/comments:
     post:
       description: |-
         Posts a comment on a Linear issue with the caller's own key, so it
         carries their name. This is the op an agent is offered when it should answer in
         Linear rather than in chat.
-      operationId: post_integrations_linear_comments
+      operationId: post_integration_linear_comments
       requestBody:
         content:
           application/json:
@@ -94546,17 +94546,17 @@ paths:
       summary: Posts a comment on a Linear issue with the caller's own key, so it
         carries their name.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/linear/issues/backfill:
+  /v1/integration/linear/issues/backfill:
     post:
       description: |-
         Seeds the native todo with the EXISTING Linear issues the
         caller's key can see (default state=open); the webhook keeps them live
         thereafter. Synchronous and bounded, idempotent by ExtRef.
-      operationId: post_integrations_linear_issues_backfill
+      operationId: post_integration_linear_issues_backfill
       requestBody:
         content:
           application/json:
@@ -94580,27 +94580,27 @@ paths:
       summary: Seeds the native todo with the EXISTING Linear issues the caller's
         key can see (default state=open); the webhook keeps them live thereafter.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/linear/webhook:
+  /v1/integration/linear/webhook:
     post:
       description: |-
         The address Linear delivers Issue and Comment events to. An issue event is mirrored into the native todo — idempotently by identifier, so ENG-123 is one row however many times it is edited, moved or closed — and every issue and comment event is handed to the automations engine as a verified trigger, which is how an org runs an agent when an issue is assigned to it or a comment mentions it. A remove is never propagated: the native side is canonical.
 
         It answers a benign 200 for what it does not act on — an unknown organization, other event types — so Linear does not retry-storm. A bad signature and a delivery older than a minute are 401; only a sink failure is 502.
 
-        The delivery names its Linear organization; that organization's own webhook secret — sealed at /v1/integrations/linear/claim — verifies the HMAC over the raw body, so the tenant is the organization the signature proves, never a header.
+        The delivery names its Linear organization; that organization's own webhook secret — sealed at /v1/integration/linear/claim — verifies the HMAC over the raw body, so the tenant is the organization the signature proves, never a header.
 
         The caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.
-      operationId: post_integrations_linear_webhook
+      operationId: post_integration_linear_webhook
       summary: Linear webhook
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/openrouter/webhook:
+  /v1/integration/openrouter/webhook:
     post:
       description: |-
         OpenRouter's spend is invisible to every Hanzo money lens because those lenses read hanzo.cloud_usage and OpenRouter meters keys of its own. Point a Broadcast destination (Settings ▸ Observability ▸ Webhook) at this endpoint and each generation span becomes ONE row in that same ledger with provider `openrouter`, so one query answers what we spend everywhere. Enable the Cost and Identity field categories: cost is the money and identity carries `openrouter.api_key_name`, which is what says WHICH key spent it — it lands in `account` as openrouter/<key name>.
@@ -94608,7 +94608,7 @@ paths:
         AUTHENTICATION IS A HANZO KEY. Broadcast signs nothing; its only authentication is the destination's Headers map, so send a key as `Authorization: Bearer pk-…` and it is admitted exactly as /v1/event admits a beacon's: a project key resolves through the project that minted it, an IAM-issued key through IAM. That key names the org every row is filed under; it can write and cannot read. No key, or a key that names no org, is 401 and nothing is stored.
 
         The body is OTLP/JSON — `{resourceSpans:[{scopeSpans:[{spans:[…]}]}]}` — exactly as OpenTelemetry defines it; the model, tokens and cost are read from each span's `gen_ai.*` attributes and the key name from `openrouter.api_key_name`. The answer is `{stored, dropped}`: how many generations became rows, and how many spans named no model. Those are OpenRouter's trace and span parents — they carry no cost to meter. An empty payload stores nothing and answers 200, which is what makes Test Connection pass. A warehouse that cannot take the rows answers 503 so the delivery shows red and can be replayed: a row is keyed by its span id, so a redelivery collapses rather than double-counting.
-      operationId: post_integrations_openrouter_webhook
+      operationId: post_integration_openrouter_webhook
       requestBody:
         content:
           application/json:
@@ -94625,10 +94625,10 @@ paths:
           description: Success
       summary: Receive OpenRouter Broadcast traces as usage rows
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/slack/commands:
+  /v1/integration/slack/commands:
     post:
       description: |-
         The address Slack posts a slash command to, form-encoded. It acknowledges inside Slack's three-second budget and posts the answer afterwards to the command's own response URL, which is why the immediate reply is empty.
@@ -94638,13 +94638,13 @@ paths:
         The caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.
 
         The answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.
-      operationId: post_integrations_slack_commands
+      operationId: post_integration_slack_commands
       summary: Slack slash command webhook
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/slack/events:
+  /v1/integration/slack/events:
     post:
       description: |-
         The address a Slack app posts workspace events to. It answers Slack's url_verification handshake with the challenge, and routes an @mention or a direct message to an agent turn that replies in the same thread. The turn holds the product's own tools, so a request to change code starts a sandbox run because the model chose to — there is no prefix and no second path.
@@ -94654,13 +94654,13 @@ paths:
         The caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.
 
         The answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.
-      operationId: post_integrations_slack_events
+      operationId: post_integration_slack_events
       summary: Slack Events API webhook
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/slack/install:
+  /v1/integration/slack/install:
     get:
       description: |-
         The address behind Slack's "Add to Slack" and Marketplace Install buttons. It answers a 302 to Slack's own consent screen and does nothing else — it is a redirector by design.
@@ -94670,20 +94670,20 @@ paths:
         It is PUBLIC and carries no principal, because whoever clicks Install in Slack's directory has no Hanzo session yet. It binds no org either, and that is deliberate rather than missing: the org is resolved at the shared provider callback, from the signed state a console connect minted or from the workspace's existing connection. Minting an org for an anonymous click is the one thing that would break tenant isolation, so an install begun here finishes under exactly the rules every other install obeys.
 
         Where the app is not configured it answers 503, rather than a consent URL carrying an empty client_id that Slack would render as its own dead-end error page.
-      operationId: get_integrations_slack_install
+      operationId: get_integration_slack_install
       summary: Install the Hanzo app into a Slack workspace
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/slack/join:
+  /v1/integration/slack/join:
     post:
       description: |-
         Joins every public channel in the caller org's workspace.
 
         Org admin, because it changes what the whole workspace sees: after it the agent
         is a member of every public room and answers in all of them.
-      operationId: post_integrations_slack_join
+      operationId: post_integration_slack_join
       responses:
         "200":
           content:
@@ -94693,23 +94693,23 @@ paths:
           description: ok
       summary: Joins every public channel in the caller org's workspace.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/slack/link:
+  /v1/integration/slack/link:
     get:
       description: |-
         The entry point behind the connect prompt Hanzo posts in Slack. It starts a link session in the browser and redirects to Slack's own sign-in, which is what proves which Slack user is asking.
 
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
-      operationId: get_integrations_slack_link
+      operationId: get_integration_slack_link
       summary: Begin linking a Hanzo account from Slack
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/slack/link/callback:
+  /v1/integration/slack/link/callback:
     get:
       description: |-
         The final leg: the user has proved both who they are in Slack and who they are in Hanzo, and this binds the two. It answers a short confirmation page telling them to return to Slack.
@@ -94717,13 +94717,13 @@ paths:
         The Hanzo credential obtained here is sealed into the connected workspace's own KMS namespace; it is never written to a database column and never logged. A deployment whose secret store is unavailable refuses the link rather than completing it without custody of the credential.
 
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
-      operationId: get_integrations_slack_link_callback
+      operationId: get_integration_slack_link_callback
       summary: Complete the Slack account link
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/slack/link/slack:
+  /v1/integration/slack/link/slack:
     get:
       description: |-
         Where Slack returns the user after they sign in. It establishes the verified Slack workspace and user, confirms that workspace is connected to an org, and hands the browser on to the Hanzo sign-in that completes the link.
@@ -94731,13 +94731,13 @@ paths:
         The verified pair is carried onward in a host-bound cookie rather than in the URL, so the identity being linked cannot be edited in transit.
 
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
-      operationId: get_integrations_slack_link_slack
+      operationId: get_integration_slack_link_slack
       summary: Slack sign-in return leg
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/teams/events:
+  /v1/integration/teams/events:
     post:
       description: |-
         The messaging endpoint for the Teams bot. A message activity is routed to an agent turn and answered proactively through the Bot Connection; anything that is not a message with text is acknowledged and ignored.
@@ -94747,25 +94747,25 @@ paths:
         The caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.
 
         The answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.
-      operationId: post_integrations_teams_events
+      operationId: post_integration_teams_events
       summary: Microsoft Teams Bot Framework webhook
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/teams/link:
+  /v1/integration/teams/link:
     get:
       description: |-
         The entry point behind the connect prompt Hanzo shows in Teams. It starts a link session and redirects to Microsoft sign-in addressed to the CHAT'S OWN tenant, not the common endpoint, so only a member of that tenant can complete it.
 
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
-      operationId: get_integrations_teams_link
+      operationId: get_integration_teams_link
       summary: Begin linking a Hanzo account from Teams
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/teams/link/aad:
+  /v1/integration/teams/link/aad:
     get:
       description: |-
         Where Microsoft returns the user after sign-in. It resolves the verified directory identity and then re-checks the tenant: the signed-in user's tenant must equal the tenant of the chat the link started from, so a valid Microsoft sign-in from a different organization is refused here rather than accepted.
@@ -94773,25 +94773,25 @@ paths:
         This is the leg Teams has and the other platforms do not, which is why the Teams flow has an extra address.
 
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
-      operationId: get_integrations_teams_link_aad
+      operationId: get_integration_teams_link_aad
       summary: Microsoft sign-in return leg
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/teams/link/callback:
+  /v1/integration/teams/link/callback:
     get:
       description: |-
         The final leg: it binds the verified directory identity to the Hanzo account that just signed in, and answers a short confirmation page telling them to return to Teams. The Hanzo credential is sealed into the connected org's KMS namespace.
 
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
-      operationId: get_integrations_teams_link_callback
+      operationId: get_integration_teams_link_callback
       summary: Complete the Teams account link
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/telegram/connect:
+  /v1/integration/telegram/connect:
     post:
       description: |-
         Mints a short, single-use deep-link code bound to the caller's
@@ -94800,7 +94800,7 @@ paths:
         stored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to
         bind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`
         payload limit.
-      operationId: post_integrations_telegram_connect
+      operationId: post_integration_telegram_connect
       responses:
         "200":
           content:
@@ -94813,11 +94813,11 @@ paths:
       summary: Mints a short, single-use deep-link code bound to the caller's org
         and returns the t.me link the console navigates to.
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
       x-tool: true
-  /v1/integrations/telegram/link:
+  /v1/integration/telegram/link:
     get:
       description: |-
         The entry point behind the connect prompt Hanzo sends in Telegram. Unlike the other platforms it answers an HTML PAGE rather than a redirect: Telegram has no OAuth flow, so the page hosts Telegram's Login Widget, and the browser is sent onward only after the user signs in through it.
@@ -94825,13 +94825,13 @@ paths:
         The widget only appears on the domain registered for the bot, so a deployment whose bot domain is unset renders a page with nothing on it.
 
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
-      operationId: get_integrations_telegram_link
+      operationId: get_integration_telegram_link
       summary: Begin linking a Hanzo account from Telegram
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/telegram/link/auth:
+  /v1/integration/telegram/link/auth:
     get:
       description: |-
         Where Telegram's Login Widget sends the user with its signed authentication data. That data is verified against the bot token — this is the identity source, and it is the widget's signature rather than a code exchange — and the chat is confirmed to be bound to an org before the browser is handed to the Hanzo sign-in.
@@ -94839,25 +94839,25 @@ paths:
         Widget data is only accepted while it is fresh, so a captured sign-in blob cannot be replayed later even though its signature stays valid.
 
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
-      operationId: get_integrations_telegram_link_auth
+      operationId: get_integration_telegram_link_auth
       summary: Telegram Login Widget return leg
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/telegram/link/callback:
+  /v1/integration/telegram/link/callback:
     get:
       description: |-
         The final leg: it binds the verified Telegram user to the Hanzo account that just signed in, and answers a short confirmation page telling them to return to Telegram. The Hanzo credential is sealed into the connected org's KMS namespace.
 
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
-      operationId: get_integrations_telegram_link_callback
+      operationId: get_integration_telegram_link_callback
       summary: Complete the Telegram account link
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/telegram/webhook:
+  /v1/integration/telegram/webhook:
     post:
       description: |-
         The update webhook for the Telegram bot. It does two jobs: `/start <code>` or `/connect <code>` binds the chat it was sent from to an org, idempotently; anything else is treated as a possible agent trigger.
@@ -94869,24 +94869,24 @@ paths:
         The caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.
 
         The answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.
-      operationId: post_integrations_telegram_webhook
+      operationId: post_integration_telegram_webhook
       summary: Telegram Bot API webhook
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
-  /v1/integrations/whatsapp/webhook:
+  /v1/integration/whatsapp/webhook:
     get:
       description: Meta calls this once when the webhook is subscribed, carrying the
         verify token this deployment was configured with and a challenge to echo.
         The token is compared in constant time before the echo — answering the challenge
         without checking it would let anyone point their own app at this address and
         have it confirm the subscription.
-      operationId: get_integrations_whatsapp_webhook
+      operationId: get_integration_whatsapp_webhook
       summary: WhatsApp Cloud API subscription challenge
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
     post:
       description: |-
@@ -94895,11 +94895,11 @@ paths:
         Meta batches (entry × changes × messages) and sends status callbacks — sent/delivered/read — through this same address with no message at all. Those are acknowledged and dropped rather than refused, because a non-2xx is retried with backoff and eventually disables the subscription: the only refusals here are an unconfigured endpoint and a bad signature, which are ours to fix and not Meta's to retry.
 
         The answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.
-      operationId: post_integrations_whatsapp_webhook
+      operationId: post_integration_whatsapp_webhook
       summary: WhatsApp Cloud API webhook
       tags:
-      - integrations
-      x-app: integrations
+      - integration
+      x-app: integration
       x-public: true
   /v1/kms/auth/login:
     post:
@@ -115581,7 +115581,7 @@ paths:
       x-app: pricing
       x-public: true
       x-tool: true
-  /v1/projects:
+  /v1/project:
     get:
       description: |-
         Returns every project your org owns.
@@ -115590,7 +115590,7 @@ paths:
         the same rows console and the builder render, because there is only one store
         behind both. It requires a validated principal (403 without one) and is keyed
         by that principal's org, so it never contains another tenant's project.
-      operationId: get_projects
+      operationId: get_project
       responses:
         "200":
           content:
@@ -115602,8 +115602,8 @@ paths:
           description: ok
       summary: Returns every project your org owns.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
     post:
@@ -115630,7 +115630,7 @@ paths:
         created in THAT principal's org. The slug is unique per org, so a slug already
         used in the caller's own org is a 409 while the same slug in another org is
         irrelevant.
-      operationId: post_projects
+      operationId: post_project
       requestBody:
         content:
           application/json:
@@ -115647,11 +115647,11 @@ paths:
       summary: Creates a project — the handle a site is deployed and served under
         — and answers 201 with it in `draft`.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/{slug}:
+  /v1/project/{slug}:
     delete:
       description: |-
         Deletes a project and takes its site off the internet.
@@ -115669,7 +115669,7 @@ paths:
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404 and
         nothing of theirs is touched.
-      operationId: delete_projects_by_slug
+      operationId: delete_project_by_slug
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -115684,8 +115684,8 @@ paths:
           description: no content
       summary: Deletes a project and takes its site off the internet.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
     get:
@@ -115696,7 +115696,7 @@ paths:
         Scope: a validated principal is required (403 without one) and the lookup is
         keyed by (org, slug), so another tenant's slug is a 404 exactly like a
         nonexistent one.
-      operationId: get_projects_by_slug
+      operationId: get_project_by_slug
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -115716,8 +115716,8 @@ paths:
       summary: Returns one project of yours by slug — its settings, its live URL and
         the deployment currently serving it.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
     patch:
@@ -115739,7 +115739,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: patch_projects_by_slug
+      operationId: patch_project_by_slug
       parameters:
       - description: |-
           Slug is the project to update, from the path. The URL is the addressing
@@ -115764,21 +115764,21 @@ paths:
           description: ok
       summary: Changes a project's settings, and only the settings you send.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/{slug}/deploy:
+  /v1/project/{slug}/deploy:
     post:
       description: |-
         Takes a built site live at `https://<slug>.hanzo.app` in one call. The body is the site itself — a `zip` or `tar.gz` holding `index.html` at its root (or a single wrapper directory that does), sent raw or as a multipart file part. It is unpacked to the site's own storage prefix and served immediately, answering the finished deployment.
 
-        It is bounded by the edge body limit (16 MiB by default), and that bound is the whole reason the other path exists: an oversized POST is refused by the server BEFORE any handler runs and surfaces as an opaque `400 Error when parsing request` that reads like a malformed payload rather than a size cap. A site too large for one archive opens a deployment with `POST /v1/projects/{slug}/deployments` instead and writes its files straight to storage against the scoped grant that answers with — no body limit, and no bytes through this API at all.
+        It is bounded by the edge body limit (16 MiB by default), and that bound is the whole reason the other path exists: an oversized POST is refused by the server BEFORE any handler runs and surfaces as an opaque `400 Error when parsing request` that reads like a malformed payload rather than a size cap. A site too large for one archive opens a deployment with `POST /v1/project/{slug}/deployments` instead and writes its files straight to storage against the scoped grant that answers with — no body limit, and no bytes through this API at all.
 
         Billing is fail-closed and fails FIRST: the hosting gate runs before anything is parsed or uploaded, so an unfunded org is 402 and an unreachable commerce is 503 with nothing written. The debit lands only on success — a failed upload is never billed and never flips the live site — and a redeploy answers the SAME URL, because slug and apex are stable.
 
         Scope: a validated principal is required (403 without one) and the site is resolved within that principal's org, so another tenant's slug is a 404. Object storage must be configured (503); an archive that does not walk is a 400 and one over the size cap is a 413.
-      operationId: post_projects_by_slug_deploy
+      operationId: post_project_by_slug_deploy
       parameters:
       - in: path
         name: slug
@@ -115800,10 +115800,10 @@ paths:
           description: Success
       summary: Upload a built site as one archive and serve it
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
-  /v1/projects/{slug}/deployments:
+  /v1/project/{slug}/deployments:
     get:
       description: |-
         Returns a project's deploy history, newest version first.
@@ -115816,7 +115816,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: get_projects_by_slug_deployments
+      operationId: get_project_by_slug_deployments
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -115837,8 +115837,8 @@ paths:
           description: ok
       summary: Returns a project's deploy history, newest version first.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
     post:
@@ -115874,7 +115874,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_projects_by_slug_deployments
+      operationId: post_project_by_slug_deployments
       parameters:
       - description: Slug is the site to deploy, from the path.
         in: path
@@ -115898,11 +115898,11 @@ paths:
       summary: Opens a deployment and hands back a short-lived, prefix-scoped grant
         to write its bytes straight to object storage.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/{slug}/deployments/{id}:
+  /v1/project/{slug}/deployments/{id}:
     get:
       description: |-
         Returns one deployment of a project by id.
@@ -115914,7 +115914,7 @@ paths:
         Scope: a validated principal is required (403 without one). Both the project
         and the deployment are resolved within that principal's org, so a deployment
         of another project — or of another tenant — is a 404.
-      operationId: get_projects_by_slug_deployments_by_id
+      operationId: get_project_by_slug_deployments_by_id
       parameters:
       - description: Slug is the project the deployment belongs to, from the path.
         in: path
@@ -115939,11 +115939,11 @@ paths:
           description: ok
       summary: Returns one deployment of a project by id.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/{slug}/deployments/{id}/complete:
+  /v1/project/{slug}/deployments/{id}/complete:
     post:
       description: |-
         CompleteDeployment is the CI completion hook that flips a queued git
@@ -115965,7 +115965,7 @@ paths:
         with an org-scoped token through the gateway, so the deployment is resolved
         within that principal's org and another tenant's slug or deployment id is a
         404.
-      operationId: post_projects_by_slug_deployments_by_id_complete
+      operationId: post_project_by_slug_deployments_by_id_complete
       parameters:
       - description: Slug is the project the deployment belongs to, from the path.
         in: path
@@ -115995,11 +115995,11 @@ paths:
       summary: CompleteDeployment is the CI completion hook that flips a queued git
         deployment to live (or error) once CI has synced the built site to S3.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/{slug}/domains:
+  /v1/project/{slug}/domains:
     get:
       description: |-
         Returns every custom hostname this site holds: the live ones, plus
@@ -116011,7 +116011,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: get_projects_by_slug_domains
+      operationId: get_project_by_slug_domains
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -116031,8 +116031,8 @@ paths:
       summary: 'Returns every custom hostname this site holds: the live ones, plus
         any pending claim with the DNS records it still owes.'
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
     post:
@@ -116059,7 +116059,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_projects_by_slug_domains
+      operationId: post_project_by_slug_domains
       parameters:
       - description: Slug is the site the hosts attach to, from the path.
         in: path
@@ -116082,11 +116082,11 @@ paths:
           description: ok
       summary: Attaches one or more CUSTOM public hostnames to this org's site.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/{slug}/domains/{host}:
+  /v1/project/{slug}/domains/{host}:
     delete:
       description: |-
         Gives a custom hostname back, so the name is free to reuse.
@@ -116102,7 +116102,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: delete_projects_by_slug_domains_by_host
+      operationId: delete_project_by_slug_domains_by_host
       parameters:
       - description: Slug is the project the host is attached to, from the path.
         in: path
@@ -116123,11 +116123,11 @@ paths:
           description: no content
       summary: Gives a custom hostname back, so the name is free to reuse.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/{slug}/domains/{host}/verify:
+  /v1/project/{slug}/domains/{host}/verify:
     post:
       description: |-
         Checks the DNS challenge for a pending custom hostname and, when
@@ -116144,7 +116144,7 @@ paths:
         Scope: a validated principal is required (403 without one). Both the site and
         the claim are resolved within that principal's org, so a host claimed by
         another tenant is "not claimed by this site".
-      operationId: post_projects_by_slug_domains_by_host_verify
+      operationId: post_project_by_slug_domains_by_host_verify
       parameters:
       - description: Slug is the project the host is attached to, from the path.
         in: path
@@ -116170,11 +116170,11 @@ paths:
       summary: Checks the DNS challenge for a pending custom hostname and, when it
         passes, promotes the host so it begins routing at the edge.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/{slug}/publish:
+  /v1/project/{slug}/publish:
     post:
       description: |-
         Promotes a build output into a new release AND goes live with it —
@@ -116189,7 +116189,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_projects_by_slug_publish
+      operationId: post_project_by_slug_publish
       parameters:
       - description: Slug is the site to publish, from the path.
         in: path
@@ -116213,11 +116213,11 @@ paths:
       summary: Promotes a build output into a new release AND goes live with it —
         create+activate in one call, which is the 99% path.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/{slug}/purge:
+  /v1/project/{slug}/purge:
     post:
       description: |-
         Flushes the site's edge cache without redeploying anything.
@@ -116231,7 +116231,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_projects_by_slug_purge
+      operationId: post_project_by_slug_purge
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -116250,11 +116250,11 @@ paths:
           description: ok
       summary: Flushes the site's edge cache without redeploying anything.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/{slug}/releases:
+  /v1/project/{slug}/releases:
     get:
       description: |-
         Returns a site's releases newest-first, marking the active one —
@@ -116267,7 +116267,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: get_projects_by_slug_releases
+      operationId: get_project_by_slug_releases
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -116289,8 +116289,8 @@ paths:
       summary: Returns a site's releases newest-first, marking the active one — the
         rollback menu.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
     post:
@@ -116317,7 +116317,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_projects_by_slug_releases
+      operationId: post_project_by_slug_releases
       parameters:
       - description: Slug is the site to publish, from the path.
         in: path
@@ -116342,11 +116342,11 @@ paths:
         it — the staged half of publishing, for when you want to check a release before
         it goes live.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/{slug}/releases/{release}/activate:
+  /v1/project/{slug}/releases/{release}/activate:
     post:
       description: |-
         Points the site at an existing release — the go-live, and
@@ -116365,7 +116365,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         resolved within that principal's org, so another tenant's slug is a 404.
-      operationId: post_projects_by_slug_releases_by_release_activate
+      operationId: post_project_by_slug_releases_by_release_activate
       parameters:
       - description: Slug is the site the release belongs to, from the path.
         in: path
@@ -116392,11 +116392,11 @@ paths:
       summary: Points the site at an existing release — the go-live, and equally the
         ROLLBACK.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/{slug}/shot:
+  /v1/project/{slug}/shot:
     get:
       description: 'Returns a screenshot of what this project currently serves, as
         image/png. The capture is keyed by the deployment, so a redeploy invalidates
@@ -116405,7 +116405,7 @@ paths:
         about the project, which is still right there in the list. Scoped to the caller''s
         org: a validated principal is required, and a slug belonging to another org
         is not found rather than forbidden.'
-      operationId: get_projects_by_slug_shot
+      operationId: get_project_by_slug_shot
       parameters:
       - in: path
         name: slug
@@ -116414,10 +116414,10 @@ paths:
           type: string
       summary: Get a PNG of the project's live site
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
-  /v1/projects/{slug}/star:
+  /v1/project/{slug}/star:
     delete:
       description: |-
         Removes the caller's own bookmark from a project, and answers whether
@@ -116426,7 +116426,7 @@ paths:
         It removes only YOUR star — the same one star wrote — so a project other
         people have starred stays on their lists. Unstarring one you had not starred
         is not an error; it leaves it unstarred.
-      operationId: delete_projects_by_slug_star
+      operationId: delete_project_by_slug_star
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -116446,8 +116446,8 @@ paths:
       summary: Removes the caller's own bookmark from a project, and answers whether
         it is starred afterwards.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
     put:
@@ -116458,7 +116458,7 @@ paths:
         The star is YOURS: it is keyed by you as well as by the project, so two people
         see two answers for the same one and starring it says nothing about anybody
         else's list. Starring a project you have already starred leaves it starred.
-      operationId: put_projects_by_slug_star
+      operationId: put_project_by_slug_star
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -116478,11 +116478,11 @@ paths:
       summary: Bookmarks a project for the person calling, and answers whether it
         is starred afterwards.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/edge:
+  /v1/project/edge:
     get:
       description: |-
         health reports whether a publish reaches readers, rather than whether it was
@@ -116492,7 +116492,7 @@ paths:
         It asks the edge and nothing else. There is no live call to the provider here:
         Configured is a local fact, it is the fact that was missing, and a health check
         that spends a third-party API call is one an operator learns not to run.
-      operationId: get_projects_edge
+      operationId: get_project_edge
       responses:
         "200":
           content:
@@ -116509,11 +116509,11 @@ paths:
       summary: health reports whether a publish reaches readers, rather than whether
         it was accepted.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/fork:
+  /v1/project/fork:
     post:
       description: |-
         Creates a project seeded from a PUBLISHED EXAMPLE — either a
@@ -116537,13 +116537,13 @@ paths:
         so attribution is a fact recorded at fork time rather than a claim
         reconstructed later.
 
-        It funnels through the SAME create path POST /v1/projects uses, so slug
+        It funnels through the SAME create path POST /v1/project uses, so slug
         validation, org scoping, ID minting and the 409 on a slug the caller's own org
         already uses are identical.
 
         Scope: a validated principal is required (403 without one) and the child is
         created in THAT principal's org.
-      operationId: post_projects_fork
+      operationId: post_project_fork
       requestBody:
         content:
           application/json:
@@ -116562,22 +116562,22 @@ paths:
         platform (an example a seeded creator published, or another org's app serving
         at <slug>.hanzo.app).
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/sites:
+  /v1/project/sites:
     get:
       description: |-
         Returns the org's deployed sites at the pretty URLs they serve at.
 
-        It reads the SAME org-scoped store as /v1/projects and keeps only the projects
+        It reads the SAME org-scoped store as /v1/project and keeps only the projects
         that are actually `live`, so a draft or a failed build is not advertised as a
         site.
 
         Scope: a validated principal is required (403 without one) and the list is
         keyed by that principal's org.
-      operationId: get_projects_sites
+      operationId: get_project_sites
       responses:
         "200":
           content:
@@ -116589,8 +116589,8 @@ paths:
           description: ok
       summary: Returns the org's deployed sites at the pretty URLs they serve at.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
     post:
@@ -116607,7 +116607,7 @@ paths:
         CSP-safe. `slug` and `name` are optional: the model's own title is preferred,
         and a slug is derived or minted when none is given.
 
-        It writes into the SAME org-scoped store as /v1/projects — it ensures a
+        It writes into the SAME org-scoped store as /v1/project — it ensures a
         project (framework `static`) for the resolved slug and records a deployment —
         so this is a second entry point to one publish pipeline, not a second copy of
         project state. Ordering is the billing contract: the hosting gate runs BEFORE
@@ -116620,7 +116620,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         published into THAT principal's org.
-      operationId: post_projects_sites
+      operationId: post_project_sites
       requestBody:
         content:
           application/json:
@@ -116637,11 +116637,11 @@ paths:
       summary: Generates a self-contained, mobile-responsive static site from a natural-language
         brief and deploys it live in one call.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/sites/{slug}:
+  /v1/project/sites/{slug}:
     get:
       description: |-
         Returns one site — the same row ListSites carries, for one slug.
@@ -116661,7 +116661,7 @@ paths:
         A site that exists but is not live is NOT found here, matching ListSites,
         which keeps only `live` rows so a draft or a failed build is never advertised
         as a site. One definition of "is a site", used by both.
-      operationId: get_projects_sites_by_slug
+      operationId: get_project_sites_by_slug
       parameters:
       - description: |-
           Slug is the project to act on, from the path. It is unique within the
@@ -116680,11 +116680,11 @@ paths:
           description: ok
       summary: Returns one site — the same row ListSites carries, for one slug.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/sites/deploy:
+  /v1/project/sites/deploy:
     post:
       description: |-
         Deploys a caller-supplied file manifest — the deploy_site
@@ -116697,7 +116697,7 @@ paths:
         a hand-built site is exactly as safe and as responsive as a generated one.
         `slug` and `name` are optional; a slug is derived from the name or minted.
 
-        It writes into the SAME org-scoped store as /v1/projects, ensuring a project
+        It writes into the SAME org-scoped store as /v1/project, ensuring a project
         (framework `static`) for the resolved slug and recording a deployment. The
         hosting gate runs before the upload and the debit lands once, after the site
         is live — a failed upload is never billed. Answers 503 when object storage is
@@ -116705,7 +116705,7 @@ paths:
 
         Scope: a validated principal is required (403 without one) and the site is
         published into THAT principal's org.
-      operationId: post_projects_sites_deploy
+      operationId: post_project_sites_deploy
       requestBody:
         content:
           application/json:
@@ -116722,11 +116722,11 @@ paths:
       summary: Deploys a caller-supplied file manifest — the deploy_site capability
         an agent calls — and answers with where it went live.
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
       x-tool: true
-  /v1/projects/tags:
+  /v1/project/tags:
     get:
       description: 'Returns the client-side pixels the SITE has connected (GA4, Google
         Ads, LinkedIn, Meta, Pinterest, Reddit, TikTok, X) with their NON-SECRET ids,
@@ -116736,7 +116736,7 @@ paths:
         else by the request host, so hanzo.ai and hanzo.chat carry different tags
         under one org. WITHOUT a resolvable site it answers an empty set at 200 —
         a page never breaks on its tag config.'
-      operationId: get_projects_tags
+      operationId: get_project_tags
       responses:
         2XX:
           content:
@@ -116747,8 +116747,8 @@ paths:
       summary: The site's browser tag set for the hosted tag — which pixels to inject,
         by publishable key
       tags:
-      - projects
-      x-app: projects
+      - project
+      x-app: project
       x-public: true
   /v1/prompt:
     get:
@@ -119285,7 +119285,7 @@ paths:
 
         Name a `session` and the command NARRATES INTO IT: its output is appended to
         that session's live log as the program produces it, so anything watching the
-        session — GET /v1/agents/sessions/stream, scoped to one run with ?root= —
+        session — GET /v1/agent/sessions/stream, scoped to one run with ?root= —
         watches the work happen rather than waiting for the verdict. Without it the
         call is what it always was: silent until it returns, which for an agentic run
         is twenty-five minutes of blank screen.
@@ -122858,7 +122858,7 @@ paths:
       x-app: todo
       x-public: true
       x-tool: true
-  /v1/tools:
+  /v1/tool:
     get:
       description: |-
         Lists every tool the caller's org and project can reach, from every
@@ -122866,8 +122866,8 @@ paths:
         surface: one flat set of names spanning connector actions, user functions,
         zap-service routes, agents, skills and the org's own external MCP servers,
         deduplicated by name so the highest-precedence source wins a collision. It
-        lists; it does not call — dispatch is POST /v1/tools/call.
-      operationId: get_tools
+        lists; it does not call — dispatch is POST /v1/tool/call.
+      operationId: get_tool
       parameters:
       - description: |-
           Source keeps only tools from one source — connector, function, zap-service,
@@ -122895,18 +122895,18 @@ paths:
       summary: Lists every tool the caller's org and project can reach, from every
         source, each flagged with whether it is activated.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/activation:
+  /v1/tool/activation:
     get:
       description: |-
         Reports which tools are switched on for the caller's org and
         project. Activation is what makes a tool dispatchable and what makes it visible
         to an agent, so this is the set the MCP tool list is drawn from — every other
         tool in the registry is discoverable but refused at call time.
-      operationId: get_tools_activation
+      operationId: get_tool_activation
       responses:
         "200":
           content:
@@ -122916,8 +122916,8 @@ paths:
           description: ok
       summary: Reports which tools are switched on for the caller's org and project.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
     put:
@@ -122928,7 +122928,7 @@ paths:
         listed by discovery but refused 403 at dispatch. Activate is applied before
         Deactivate, so a name in both lists ends up off. More than 256 toggles in one
         request is refused 413.
-      operationId: put_tools_activation
+      operationId: put_tool_activation
       requestBody:
         content:
           application/json:
@@ -122949,11 +122949,11 @@ paths:
       summary: Switches tools on and off for the caller's org and project, and answers
         with the resulting activated set.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/call:
+  /v1/tool/call:
     post:
       description: |-
         Runs one of the caller's activated tools and answers with its output.
@@ -122969,8 +122969,8 @@ paths:
         dispatch to the winning source bound to the caller's own (org, project). One
         metered unit, one audit record. A caller can only ever dispatch its own tools.
 
-        Discovery is GET /v1/tools — ?activated=true for the callable set.
-      operationId: post_tools_call
+        Discovery is GET /v1/tool — ?activated=true for the callable set.
+      operationId: post_tool_call
       requestBody:
         content:
           application/json:
@@ -122991,11 +122991,11 @@ paths:
           description: ok
       summary: Runs one of the caller's activated tools and answers with its output.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/catalog:
+  /v1/tool/catalog:
     get:
       description: |-
         Lists the MCP servers the public registries publish, as we hold
@@ -123003,7 +123003,7 @@ paths:
         decided about each entry.
 
         This is the SHELF an org picks from. A listing with a streamable-http endpoint
-        can be enabled as-is — POST /v1/tools/mcp/servers with its id — and its tools then
+        can be enabled as-is — POST /v1/tool/mcp/servers with its id — and its tools then
         join the org's tool plane and the fleet's MCP server. A listing that only ships a
         stdio package needs a process to run it, which is why the transports are on
         every entry rather than implied.
@@ -123015,7 +123015,7 @@ paths:
         It is PAGED — 50 by default, 200 at most. The public registry publishes tens of
         thousands of servers, so an unbounded answer is a twenty-megabyte response and a
         storefront that renders in a minute. total is the whole match, not the page.
-      operationId: get_tools_catalog
+      operationId: get_tool_catalog
       parameters:
       - description: Q matches the name, title or description, case-insensitively.
         in: query
@@ -123066,11 +123066,11 @@ paths:
         our canonical copy of registry.modelcontextprotocol.io, plus what we decided
         about each entry.'
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/catalog/{id}:
+  /v1/tool/catalog/{id}:
     get:
       description: |-
         Returns one catalog entry in full: the publisher's description, its
@@ -123082,7 +123082,7 @@ paths:
         A HIDDEN listing is not served to an org — a shelf that renders what it does
         not list would be a way around the shelf — but is served to a SuperAdmin, who
         is the one deciding whether to put it back.
-      operationId: get_tools_catalog_by_id
+      operationId: get_tool_catalog_by_id
       parameters:
       - description: |-
           ID is the listing, from the path. It is the publisher's reverse-DNS name
@@ -123103,8 +123103,8 @@ paths:
         repository and site, every package form with the runtime that launches it,
         and every hosted endpoint.'
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
     patch:
@@ -123117,7 +123117,7 @@ paths:
         thing that writes it. The upstream half is never editable here: a description
         that disagreed with the publisher's would be a fork of their listing, and the
         next sync would silently undo it.
-      operationId: patch_tools_catalog_by_id
+      operationId: patch_tool_catalog_by_id
       parameters:
       - description: ID is the listing to curate, from the path.
         in: path
@@ -123144,11 +123144,11 @@ paths:
       summary: Sets what WE say about one catalog entry — hidden, featured, official,
         logo — and answers with the stored listing.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/catalog/sync:
+  /v1/tool/catalog/sync:
     post:
       description: |-
         Pulls the public MCP registry into our canonical copy and reports
@@ -123160,7 +123160,7 @@ paths:
         one an org has already enabled, and dropping its description would not drop its
         server. And it never touches CURATION: hidden, featured, an admin-set official
         and a logo survive every sync, because the write does not name those columns.
-      operationId: post_tools_catalog_sync
+      operationId: post_tool_catalog_sync
       responses:
         "200":
           content:
@@ -123171,18 +123171,18 @@ paths:
       summary: Pulls the public MCP registry into our canonical copy and reports what
         changed.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/mcp/servers:
+  /v1/tool/mcp/servers:
     get:
       description: |-
         Lists the external MCP servers the caller's org has registered.
         Each record carries the URL and the name of the header its credential is
         injected into; the credential VALUE lives only in KMS and is never returned,
         so hasSecret is the whole of what this surface says about it.
-      operationId: get_tools_mcp_servers
+      operationId: get_tool_mcp_servers
       responses:
         "200":
           content:
@@ -123192,8 +123192,8 @@ paths:
           description: ok
       summary: Lists the external MCP servers the caller's org has registered.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
     post:
@@ -123214,7 +123214,7 @@ paths:
         Enabling a listing the org already enabled REVISES that server rather than
         adding a near-duplicate beside it, so a retried enable is the same one server.
         Answers 201 with the stored record.
-      operationId: post_tools_mcp_servers
+      operationId: post_tool_mcp_servers
       requestBody:
         content:
           application/json:
@@ -123235,18 +123235,18 @@ paths:
       summary: Gives the caller's org one more external MCP server, so its tools join
         the org's tool plane and the fleet's MCP server.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/mcp/servers/{id}:
+  /v1/tool/mcp/servers/{id}:
     delete:
       description: |-
         Deregisters one of the caller org's external MCP servers, so its
         tools leave the registry. Scoped to the caller's org, so an id belonging to
         another tenant is a 404 and not a delete. Answers 204 with no body; a server
         this org does not have is 404.
-      operationId: delete_tools_mcp_servers_by_id
+      operationId: delete_tool_mcp_servers_by_id
       parameters:
       - description: ID is the server to deregister, from the path.
         in: path
@@ -123260,11 +123260,11 @@ paths:
       summary: Deregisters one of the caller org's external MCP servers, so its tools
         leave the registry.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/plugins:
+  /v1/tool/plugins:
     get:
       description: |-
         Reports what this deployment actually mounted: every subsystem the
@@ -123275,7 +123275,7 @@ paths:
         cannot drift from what is serving. Enabled-only by default, because a caller
         asking what this deployment can do wants what is running; ?all=true adds the
         configured-but-off ones.
-      operationId: get_tools_plugins
+      operationId: get_tool_plugins
       parameters:
       - description: |-
           All includes the configured-but-disabled subsystems too, but only when it is
@@ -123295,20 +123295,20 @@ paths:
       summary: 'Reports what this deployment actually mounted: every subsystem the
         composition root declared and whether it is switched on.'
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/plugins/authored:
+  /v1/tool/plugins/authored:
     get:
       description: |-
         Lists the plugins the caller's org BUILT, newest first,
         each with the TypeScript as authored. That is a different set with a different
-        lifecycle from GET /v1/tools/plugins, which reports the subsystems this deployment
+        lifecycle from GET /v1/tool/plugins, which reports the subsystems this deployment
         mounted. The bundled CommonJS the runtime executes is never included, and
         neither is any credential — a plugin names the connectors provider it needs and
         reads the credential from ctx.auth at run time.
-      operationId: get_tools_plugins_authored
+      operationId: get_tool_plugins_authored
       responses:
         "200":
           content:
@@ -123319,17 +123319,17 @@ paths:
       summary: Lists the plugins the caller's org BUILT, newest first, each with the
         TypeScript as authored.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/plugins/authored/{id}:
+  /v1/tool/plugins/authored/{id}:
     delete:
       description: |-
         Removes one of the caller org's built plugins, so the
         runtime can no longer load it. Scoped to the caller's org, so an id belonging
         to another tenant answers 404 and is not deleted.
-      operationId: delete_tools_plugins_authored_by_id
+      operationId: delete_tool_plugins_authored_by_id
       parameters:
       - description: ID is the plugin to remove, from the path.
         in: path
@@ -123347,11 +123347,11 @@ paths:
       summary: Removes one of the caller org's built plugins, so the runtime can no
         longer load it.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/plugins/build:
+  /v1/tool/plugins/build:
     post:
       description: |-
         Builds and stores one plugin for the caller's org. The 201 carries
@@ -123375,7 +123375,7 @@ paths:
         it needs and reads that credential from `ctx.auth` at run time, under KMS
         custody. Source that carries something key-shaped is REFUSED rather than
         silently persisted — a scrubbed key looks like it worked.
-      operationId: post_tools_plugins_build
+      operationId: post_tool_plugins_build
       requestBody:
         content:
           application/json:
@@ -123395,20 +123395,20 @@ paths:
           description: created
       summary: Builds and stores one plugin for the caller's org.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/skills:
+  /v1/tool/skills:
     get:
       description: |-
         Lists the skills the caller's org can reach — the brand's embedded
         catalogue plus the org's own authored ones — with each one's activation flag.
         A skill is discovery and activation metadata attached to an agent, never called
-        directly, so every entry here is non-dispatchable. It is GET /v1/tools narrowed
+        directly, so every entry here is non-dispatchable. It is GET /v1/tool narrowed
         to one source, not a second store: a name a caller sees here is the same entry,
         with the same activation state, that discovery reports.
-      operationId: get_tools_skills
+      operationId: get_tool_skills
       parameters:
       - description: |-
           Activated keeps only the tools activated for the caller's org and project,
@@ -123428,8 +123428,8 @@ paths:
       summary: Lists the skills the caller's org can reach — the brand's embedded
         catalogue plus the org's own authored ones — with each one's activation flag.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
     post:
@@ -123441,7 +123441,7 @@ paths:
         construction — they live in a different store from the brand's embedded
         catalogue and have no path into the public gallery — and a brand skill always
         wins a name collision against an org's.
-      operationId: post_tools_skills
+      operationId: post_tool_skills
       requestBody:
         content:
           application/json:
@@ -123464,17 +123464,17 @@ paths:
       summary: Adds or revises one of the caller org's own skills, and answers 201
         with the stored record.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/skills/{id}:
+  /v1/tool/skills/{id}:
     delete:
       description: |-
         Removes one of the caller org's authored skills. Scoped to the
         caller's org, so an id belonging to another tenant is never reached. Removing
         what is not there is not an error — the caller's intent is "gone", and it is.
-      operationId: delete_tools_skills_by_id
+      operationId: delete_tool_skills_by_id
       parameters:
       - description: ID is the skill to remove, from the path. It is the skill's name.
         in: path
@@ -123491,18 +123491,18 @@ paths:
           description: ok
       summary: Removes one of the caller org's authored skills.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
-  /v1/tools/skills/authored:
+  /v1/tool/skills/authored:
     get:
       description: |-
         Lists the caller org's OWN skills with their SKILL.md
-        bodies. GET /v1/tools/skills is the registry view — the brand's catalogue plus this
+        bodies. GET /v1/tool/skills is the registry view — the brand's catalogue plus this
         org's, with activation flags and no bodies; this is the EDITABLE set, so it
         carries the content that view omits and nothing the org did not write.
-      operationId: get_tools_skills_authored
+      operationId: get_tool_skills_authored
       responses:
         "200":
           content:
@@ -123512,8 +123512,8 @@ paths:
           description: ok
       summary: Lists the caller org's OWN skills with their SKILL.md bodies.
       tags:
-      - tools
-      x-app: tools
+      - tool
+      x-app: tool
       x-public: true
       x-tool: true
   /v1/translate:
@@ -126866,7 +126866,7 @@ tags:
   name: affiliate
 - description: 'Package agents is autonomous agents for your org: define them, run
     them, keep every run.'
-  name: agents
+  name: agent
 - description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
     /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
     a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
@@ -126918,7 +126918,7 @@ tags:
   name: catalog
 - description: Package channels is one inbox for the chat apps you connect — Discord,
     Slack, Teams, Telegram.
-  name: channels
+  name: channel
 - description: Package ci mounts the CI fleet dashboard as a capability of this binary.
   name: ci
 - description: 'Package cloudflare is your Cloudflare account, managed from Hanzo:
@@ -126987,7 +126987,7 @@ tags:
   name: explorer
 - description: 'Package flags is feature flags: ship it dark, then turn it on for
     who you pick.'
-  name: flags
+  name: flag
 - description: 'Package flow is Hanzo Flow: build an agent workflow on a visual canvas,
     run it, and read every run.'
   name: flow
@@ -126996,7 +126996,7 @@ tags:
   name: framework
 - description: 'Package functions is your serverless code: publish it, call it over
     HTTP, watch every run and what it cost.'
-  name: functions
+  name: function
 - description: 'Package gateway is live control of the policy your API applies to
     every incoming request: CORS, rate limits, cache TTL and allowed methods, changed
     without a redeploy.'
@@ -127024,7 +127024,7 @@ tags:
   name: ingress
 - description: Package integrations is how your org connects third-party accounts
     like Slack, and revokes them.
-  name: integrations
+  name: integration
 - description: 'Package kms is secret custody: your org''s secrets sealed at rest,
     plus threshold signing.'
   name: kms
@@ -127107,7 +127107,7 @@ tags:
   name: pricing
 - description: 'Package projects is where your sites live: create one, deploy a build,
     roll back to any release.'
-  name: projects
+  name: project
 - description: Package prompts is your prompt library, versioned, so nothing changes
     silently.
   name: prompt
@@ -127190,7 +127190,7 @@ tags:
   name: todo
 - description: 'Package tools is everything your org can call, in one list: connector
     actions, functions, agents, skills and your own MCP servers.'
-  name: tools
+  name: tool
 - description: Package translate is text in, the same text out in the language you
     asked for.
   name: translate

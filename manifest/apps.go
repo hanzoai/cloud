@@ -478,7 +478,7 @@ var Apps = []App{
 	// claim /tasks for the //go:embed copy. The studio still reads this surface
 	// same-origin — the edge serves the bundle at that host's root and hands
 	// /v1/task here, so one origin survives the split.
-	{Name: "task", Pkg: "tasks", Prefixes: []string{"/v1/task"}},
+	{Name: "tasks", Prefixes: []string{"/v1/tasks"}},
 	{Name: "tel", Prefixes: []string{"/v1/tel"}},
 	// The address was already the word: the product is Hanzo Auto, the app has
 	// always served one group at /v1/auto, and HIP-1063's front matter reads

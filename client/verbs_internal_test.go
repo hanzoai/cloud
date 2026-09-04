@@ -23,21 +23,21 @@ import (
 // surface that has moved on.
 var readings = []struct{ id, want, route string }{
 	// The shape that made the surface unreadable, whole.
-	{"get_projects", "list_projects", "GET /v1/project"},
-	{"post_projects", "create_project", "POST /v1/project"},
-	{"get_projects_by_slug", "get_project", "GET /v1/project/{slug}"},
-	{"patch_projects_by_slug", "update_project", "PATCH /v1/project/{slug}"},
-	{"delete_projects_by_slug", "delete_project", "DELETE /v1/project/{slug}"},
-	{"get_projects_by_slug_deployments", "list_project_deployments", "GET /v1/project/{slug}/deployments"},
-	{"get_projects_by_slug_deployments_by_id", "get_project_deployment", "GET /v1/project/{slug}/deployments/{id}"},
-	{"delete_projects_by_slug_domains_by_host", "delete_project_domain", "DELETE /v1/project/{slug}/domains/{host}"},
+	{"get_project", "list_projects", "GET /v1/project"},
+	{"post_project", "create_project", "POST /v1/project"},
+	{"get_project_by_slug", "get_project", "GET /v1/project/{slug}"},
+	{"patch_project_by_slug", "update_project", "PATCH /v1/project/{slug}"},
+	{"delete_project_by_slug", "delete_project", "DELETE /v1/project/{slug}"},
+	{"get_project_by_slug_deployments", "list_project_deployments", "GET /v1/project/{slug}/deployments"},
+	{"get_project_by_slug_deployments_by_id", "get_project_deployment", "GET /v1/project/{slug}/deployments/{id}"},
+	{"delete_project_by_slug_domains_by_host", "delete_project_domain", "DELETE /v1/project/{slug}/domains/{host}"},
 
 	// .../{id}/ACTION — the author wrote the verb, so it leads.
-	{"post_projects_by_slug_deploy", "deploy_project", "POST /v1/project/{slug}/deploy"},
-	{"post_projects_by_slug_purge", "purge_project", "POST /v1/project/{slug}/purge"},
-	{"post_projects_by_slug_domains_by_host_verify", "verify_project_domain", "POST /v1/project/{slug}/domains/{host}/verify"},
-	{"post_projects_by_slug_deployments_by_id_complete", "complete_project_deployment", "POST /v1/project/{slug}/deployments/{id}/complete"},
-	{"post_projects_by_slug_releases_by_release_activate", "activate_project_release", "POST /v1/project/{slug}/releases/{release}/activate"},
+	{"post_project_by_slug_deploy", "deploy_project", "POST /v1/project/{slug}/deploy"},
+	{"post_project_by_slug_purge", "purge_project", "POST /v1/project/{slug}/purge"},
+	{"post_project_by_slug_domains_by_host_verify", "verify_project_domain", "POST /v1/project/{slug}/domains/{host}/verify"},
+	{"post_project_by_slug_deployments_by_id_complete", "complete_project_deployment", "POST /v1/project/{slug}/deployments/{id}/complete"},
+	{"post_project_by_slug_releases_by_release_activate", "activate_project_release", "POST /v1/project/{slug}/releases/{release}/activate"},
 
 	// A singular segment is only an action when a parameter put it after a ROW.
 	// `/v1/commerce/product` is a collection someone spelled singular, and reading
@@ -59,8 +59,8 @@ var readings = []struct{ id, want, route string }{
 	// Spelling that a naive plural rule gets wrong in both directions.
 	{"get_sandbox", "list_sandboxes", "GET /v1/sandbox — a singular address, and the list phrase is still plural"},
 	{"get_sandbox_by_id", "get_sandbox", "GET /v1/sandbox/{id} — the member reads as the bare noun"},
-	{"get_projects_sites", "list_project_sites", "GET /v1/project/sites — the collection under its owner"},
-	{"post_projects_by_slug_releases", "create_project_release", "POST /v1/project/{slug}/releases — `releases` loses only one"},
+	{"get_project_sites", "list_project_sites", "GET /v1/project/sites — the collection under its owner"},
+	{"post_project_by_slug_releases", "create_project_release", "POST /v1/project/{slug}/releases — `releases` loses only one"},
 
 	// A DECLARED id is already a verb on an object and is left alone.
 	{"GetUserPreference", "GetUserPreference", "o11y declares its own ids"},

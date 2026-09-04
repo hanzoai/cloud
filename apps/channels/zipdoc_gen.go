@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("github.com/hanzoai/cloud/apps/channels GET /v1/channels", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/channels GET /v1/channel", zip.Doc{
 		Description: "Reports every chat channel this org can send through, and whether it can\nsend through it right now.\n\nA channel appears here whether or not it is connected — an empty list would\nleave a caller unable to tell \"this org has no Slack\" from \"Slack is down\",\nwhich are different problems with different fixes. Each entry carries the\nconnection behind it, so the answer to \"why can I not post?\" is in the same\nresponse as the channel that cannot post.",
 		Fields: map[string]string{
 			"capabilities.actions":       "Actions is whether the transport renders an INTERACTIVE control natively, and\nit is the flag to read before composing one. The vocabulary is a closed\nkind-tagged union (envelope.go), exactly four kinds, each carrying only its\nown field plus an optional label:\n\n\tcommand  — a bot command to run (`command`), rendered as a button that\n\t           invokes it.\n\turl      — an external link (`url`), rendered as a link button.\n\tselect   — a menu (`options`, each a label and the value choosing it\n\t           returns), rendered as a picker.\n\tapproval — a reference to an approval request (`approval.id`), rendered as\n\t           approve/deny controls bound to that id.\n\nFalse on every transport, and nothing refuses a send for it:\nactions are accepted, validated per kind, and flattened by renderText to one\nline each after the text — `[label] command`, `[label] url`,\n`[label] opt | opt`, `[label] approval requested: <id>`. So a caller that\nneeds a real control must read this flag and degrade itself; a caller that\nonly needs the choice communicated can send actions and take the text form.",
@@ -28,7 +28,7 @@ func init() {
 			"chatChannels.channels":      "Channels is every chat transport this deployment supports, in a fixed\norder, each carrying whether the org has connected it, the account behind\nthe connection, what the transport can do, the org's DM/group access\npolicies for it, and how many pairing requests are waiting.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/channels GET /v1/channels/agent", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/channels GET /v1/channel/agent", zip.Doc{
 		Description: "Returns which agent answers the caller org's channel: the default and\nevery room bound to another agent.",
 		Fields: map[string]string{
 			"channelAgentRef.channel": "Channel is the transport: discord, github, linear, slack, teams, telegram or whatsapp.\nRequired; an unknown value is a 404.",
@@ -38,7 +38,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"channel":"slack","default":"eng","rooms":{"C024BE91L":"des"}}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/channels GET /v1/channels/allowlist", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/channels GET /v1/channel/allowlist", zip.Doc{
 		Description: "Returns the caller org's access policy for one channel: whether\nDMs are pairing-gated, allowlisted or open, whether group rooms are open,\nallowlisted or disabled, the config-managed DM and group allow entries, the\nsenders approved through PAIRING (read-only here), and the org's named access\ngroups. An unknown channel is a 404.",
 		Fields: map[string]string{
 			"allowlistRef.channel":       "Channel is the transport to read: discord, github, linear, slack, teams, telegram or whatsapp.\nRequired; an unknown value is a 404.",
@@ -51,7 +51,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"channel":"slack"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/channels GET /v1/channels/inbox", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/channels GET /v1/channel/inbox", zip.Doc{
 		Description: "Returns the messages people have sent to the caller org's connected chat\nbots, oldest first, in the portable envelope shape every transport normalises\ninto. It is a CURSOR feed, not a search: pass the returned cursor back as\n`since` to get only what has arrived since. Only this org's messages are\nstored under this org, so the feed can never carry another tenant's chat.",
 		Fields: map[string]string{
 			"inboxIn.limit":        "Limit caps how many messages come back. Empty or 0 uses the store's\ndefault page size. Must parse as an integer.",
@@ -71,7 +71,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"since":"1042","limit":"100"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/channels GET /v1/channels/pairing", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/channels GET /v1/channel/pairing", zip.Doc{
 		Description: "Returns the pairing requests waiting for the caller org to approve\n— one per person who messaged a connected bot on a channel whose DM policy is\n\"pairing\" and who is not allowed yet. Each row carries the CODE an org admin\npasses to POST /v1/channel/pairing/approve. Expired requests are not\nreturned. Codes are capability strings: they are shown here, and never logged.",
 		Fields: map[string]string{
 			"pairingQueue.pending":  "Pending is every unexpired pairing request waiting on an org admin, each\ncarrying the channel, the requesting sender and the code to approve it with.",
@@ -110,7 +110,7 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/channels POST /v1/channel/:channel/send", zip.Doc{
 		Description: "Is POST /v1/channel/:channel/send — the ONE egress endpoint. The body is\nthe envelope's narrow outbound projection (C2-6): identity fields (sender,\naccount, channel) are not decodable — DisallowUnknownFields rejects them\nloudly instead of silently dropping them.",
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/channels POST /v1/channels/pairing/approve", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/channels POST /v1/channel/pairing/approve", zip.Doc{
 		Description: "Turns one pending pairing code into a standing allow entry, so\nthat person can DM the org's bot on that channel from now on. It requires ORG\nADMIN, not merely membership. The first approval an org makes on a channel also\nbootstraps that sender as the channel's owner, which the answer reports. An\nunknown or expired code is a 404, and a code always belongs to exactly one\norg, so it can never approve someone into another tenant.",
 		Fields: map[string]string{
 			"approvePairingIn.channel":          "Channel is the transport the request came in on: discord, slack, teams,\ntelegram or whatsapp.",
@@ -120,7 +120,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"channel":"telegram","code":"PAIR-7Q2M"}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/channels PUT /v1/channels/agent", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/channels PUT /v1/channel/agent", zip.Doc{
 		Description: "Binds agents to the caller org's channel and answers the bindings as\nGET would. It requires ORG ADMIN. The agent is named by its ref — the name an\norg gave it at POST /v1/agent, or a built-in such as dev, des or vi.",
 		Fields: map[string]string{
 			"channelAgents.channel":    "Channel is the transport these bindings are for.",
@@ -133,7 +133,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"channel":"slack","default":"eng","rooms":{"C024BE91L":"des"},"unbind":["C0OLD"]}`),
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/channels PUT /v1/channels/allowlist", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/channels PUT /v1/channel/allowlist", zip.Doc{
 		Description: "Edits the caller org's access policy for one channel and answers\nthe policy as GET would, so both verbs return ONE shape. It requires ORG ADMIN.\nEvery field but `channel` is optional and applied only when provided: an empty\npolicy string leaves that policy alone, an absent or null list leaves that list\nalone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries\n— senders approved through pairing belong to the approval flow, so a policy\nedit can never revoke one. An unknown channel is a 404.",
 		Fields: map[string]string{
 			"allowlistPutIn.accessGroups": "AccessGroups REPLACES the org's named access groups, as\ngroup name -> channel -> entries. Absent or null leaves them alone.",
