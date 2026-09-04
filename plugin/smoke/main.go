@@ -59,6 +59,19 @@ const (
 	classTolerant              // preview/superadmin/cross-org — {200,401,403}
 )
 
+// classNames is the spelling `-class` takes, and it is the ONE place a class has a
+// name. It exists because a container healthcheck asks a narrower question than a
+// release gate: "is this deployment serving", not "does this build route every
+// surface a release must route". Running the whole matrix as a healthcheck marks a
+// perfectly healthy deployment unhealthy for every product it did not enable — a
+// 404 on an unrouted prefix is the deployment's shape, not its health.
+var classNames = map[string]class{
+	"health":   classHealth,
+	"public":   classPublic,
+	"authed":   classAuthed,
+	"tolerant": classTolerant,
+}
+
 type probe struct {
 	name   string
 	method string
@@ -70,9 +83,32 @@ type probe struct {
 // surface the manifest routes (+ the AI module catch-all). Paths are the LITERAL
 // registered routes (no /api/ prefix); verified against their registration sites.
 var probes = []probe{
-	// ── liveness ── (/healthz is on the SEPARATE health listener :9090; the main
-	// HTTP surface's always-on, config-independent liveness is base's /v1/base/health)
+	// ── liveness and readiness ──
+	//
+	// Three routes, because two different processes answer and they know
+	// different things. /v1/* is a PLUGIN's (serve.go), and a plugin can report
+	// that its own planes mounted fail-closed — the `degraded` field this file
+	// reads below. /readyz is the HOST's (cmd/cloud), and it is the only one that
+	// can see a SIBLING that never started at all: the host fork/execs each app,
+	// so a plugin that dies before listening is a fact only the parent holds.
+	//
+	// Measured on a booted image: /v1/health answered {"revision":…,"status":"ok"}
+	// while /readyz answered {"absent":{"s3":"zip: Load(s3): exited before
+	// listening: exit status 1"},"status":"ok"} — one process serving, one
+	// subsystem gone, and only the second route said so.
+	//
+	// /readyz is 200 for an absence like that on purpose, and 503 only when the
+	// absent app is Vital, which exactly one is: `ai`, the owner of /v1. That
+	// case is the reason to ask — 2026-08-01, ~30 minutes of /v1/models and
+	// /v1/chat/completions answering "mount /v1: no instance running" behind a
+	// pod that every liveness probe called healthy.
+	//
+	// They are on :8080 with everything else. An older note here sent /healthz to
+	// a separate :9090 listener; the host does not bind that port (serve.go leaves
+	// it for a plugin, since N children cannot share one), and /readyz answers on
+	// the main surface.
 	{"health", http.MethodGet, "/v1/base/health", classHealth},
+	{"ready", http.MethodGet, "/readyz", classHealth},
 
 	// ── public (no auth, no balance) ──
 	{"traffic-globe", http.MethodGet, "/v1/traffic/globe", classPublic},
@@ -124,6 +160,7 @@ func main() {
 	token := flag.String("token", environ.Or("SMOKE_TOKEN", ""), "bearer token for the authenticated matrix (optional)")
 	strict := flag.Bool("strict", environ.Or("SMOKE_STRICT", "") != "", "require authed reads to be 2xx with a token (fails on 401/403)")
 	timeoutSec := flag.Int("timeout", environ.Int("SMOKE_TIMEOUT", 15), "per-request timeout in seconds")
+	only := flag.String("class", environ.Or("SMOKE_CLASS", ""), "run only this class of probe (health|public|authed|tolerant); empty runs the whole matrix")
 	flag.Parse()
 
 	if strings.TrimSpace(*base) == "" {
@@ -133,9 +170,24 @@ func main() {
 	baseURL := strings.TrimRight(strings.TrimSpace(*base), "/")
 	hasToken := strings.TrimSpace(*token) != ""
 
+	run := probes
+	if name := strings.TrimSpace(*only); name != "" {
+		c, ok := classNames[name]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "smoke: -class %q is not one of %s\n", name, strings.Join(slices.Sorted(maps.Keys(classNames)), " "))
+			os.Exit(2)
+		}
+		run = nil
+		for _, p := range probes {
+			if p.class == c {
+				run = append(run, p)
+			}
+		}
+	}
+
 	client := &http.Client{Timeout: time.Duration(*timeoutSec) * time.Second}
-	results := make([]result, 0, len(probes))
-	for _, p := range probes {
+	results := make([]result, 0, len(run))
+	for _, p := range run {
 		status, err := do(client, baseURL, *token, p)
 		r := result{probe: p, status: status}
 		if err != nil {
