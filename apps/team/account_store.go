@@ -466,7 +466,7 @@ func (s *accountStore) AddMember(ctx context.Context, org, wsUUID, account, role
 	return err
 }
 
-// SpacesForOrg returns every space of an org — used by /v1/team/bots/sync
+// SpacesForOrg returns every space of an org — used by /v1/bot/members/sync
 // to re-project the org's agents into each of its spaces. Org-scoped.
 func (s *accountStore) SpacesForOrg(ctx context.Context, org string) ([]space, error) {
 	out, err := s.spacesIn("spaces").

@@ -728,9 +728,18 @@
  ],
  "bot": [
   {
+   "id": "get_bot_members",
+   "doc": "Returns the caller org's bots as space members — each with the member\naccount uuid and the Person reference the roster addresses it by.\n\nA deployment that runs no team subsystem has no spaces and therefore no\nroster, which is an empty list rather than an error: ErrNoPeer is the ONE\nerror that means \"this deployment does not run that app\", and every other\nfailure is an outage and says so.",
+   "read": true
+  },
+  {
    "id": "get_bot_runs",
    "doc": "List returns the caller org's live bot runs, read from the bot runtime and projected\ninto the console contract with each run's live session URL derived here.\n\nThe org is ALWAYS the validated principal's org, NEVER a request field, and it is\nwhat scopes the runtime's answer — so one tenant can never enumerate another's\nruns. A runtime that cannot answer is an error, not an empty list: [] would tell\nthe caller \"your org has no runs\", which is a different claim from \"we could not\nask\", and the difference is the whole reason this endpoint exists.",
    "read": true
+  },
+  {
+   "id": "post_bot_members_sync",
+   "doc": "Re-projects the caller org's bots as members into every space of the org\nand removes the ones whose agent is gone. Idempotent, and admin only — the\nadmin bit rides the caller to team, which is what decides it."
   },
   {
    "id": "post_bot_runs",
@@ -6695,11 +6704,6 @@
    "read": true
   },
   {
-   "id": "get_team_bots",
-   "doc": "Returns the caller org's bot members — the org's agents projected as\nthe space Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
-   "read": true
-  },
-  {
    "id": "get_team_public",
    "doc": "Lists the rooms orgs have published, across every org.\n\nIt is NOT part of GET /rooms, and the separation is the point: that address\nanswers the CALLER'S rooms, so folding these in would put strangers' channels\nin somebody's own sidebar.\n\nIt reads the directory and never a tenant's store. Every field it can answer\nwith is one an org published by making a room public, so there is nothing here\nto scope by org — a directory only its own org can read is not a directory.\nAn authenticated principal is still required, because an anonymous crawler is\nnot who this is for.",
    "read": true
@@ -6718,10 +6722,6 @@
    "id": "get_team_transactor_statistics",
    "doc": "Statistics returns the transactor's live sessions for the space the caller's\ncredential names — the endpoint the front's space switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a space UUID names the space and is authorized against the\nmembership rows, an HS256 space token names it in its signed claims.\nactiveSessions carries ONLY that one space, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
    "read": true
-  },
-  {
-   "id": "post_team_bots_sync",
-   "doc": "SyncBots re-projects the caller org's agents as space members into EVERY\nspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a space's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched."
   },
   {
    "id": "post_team_collaborator_rpc_by_documentid",

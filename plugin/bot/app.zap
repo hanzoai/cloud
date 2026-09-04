@@ -4,6 +4,10 @@
 
 package bot
 
+struct BotRoster {
+    Bots list<bytes> @0
+}
+
 struct BotRuns {
     Bots list<bytes> @0
 }
@@ -13,11 +17,23 @@ struct BotStopped {
     Status text @8
 }
 
+struct BotSync {
+    Synced    bool @0
+    Projected i64  @8
+}
+
 struct stopBotIn {
     RunID text @0
 }
 
 interface bot {
+    # Returns the caller org's bots as space members — each with the member
+    # account uuid and the Person reference the roster addresses it by.
+    # A deployment that runs no team subsystem has no spaces and therefore no
+    # roster, which is an empty list rather than an error: ErrNoPeer is the ONE
+    # error that means "this deployment does not run that app", and every other
+    # failure is an outage and says so.
+    get_bot_members() returns (rep: BotRoster)
     # List returns the caller org's live bot runs, read from the bot runtime and projected
     # into the console contract with each run's live session URL derived here.
     # The org is ALWAYS the validated principal's org, NEVER a request field, and it is
@@ -26,6 +42,10 @@ interface bot {
     # the caller "your org has no runs", which is a different claim from "we could not
     # ask", and the difference is the whole reason this endpoint exists.
     get_bot_runs() returns (rep: BotRuns)
+    # Re-projects the caller org's bots as members into every space of the org
+    # and removes the ones whose agent is gone. Idempotent, and admin only — the
+    # admin bit rides the caller to team, which is what decides it.
+    post_bot_members_sync() returns (rep: BotSync)
     # Answers 501 to every call: launching a bot run is not implemented.
     # The bot runtime exposes no launch operation, so nothing here can start a sandbox.
     # This address is published rather than dropped because it is the collection every
@@ -52,7 +72,8 @@ interface bot {
 }
 
 # ---------------------------------------------------------------------
-# 3 op(s) here. What follows is what this schema does not carry.
+# 5 op(s) here. What follows is what this schema does not carry.
 #
-# opaque (1) — crosses, arrives without its name:
+# opaque (2) — crosses, arrives without its name:
+#   BotRoster.Bots  client.BotMember (list element)
 #   BotRuns.Bots  bot.BotRun (list element)

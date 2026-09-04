@@ -276,6 +276,13 @@ func mountRuns(app cloud.Router, s *cloud.Service[executor]) {
 	// all say up front that this address refuses.
 	zip.Post(parent, "/runs", o.run, zip.WithStatus(http.StatusNotImplemented))
 	zip.Post(g, "/:runId/stop", o.stop)
+
+	// The roster — this org's bots as members of its team spaces. team holds the
+	// rows and answers over the plane; the ADDRESS is here, because a bot is a bot
+	// wherever its membership happens to be stored (members.go).
+	m := memberOps{}
+	zip.Get(parent, "/members", m.list)
+	zip.Post(parent, "/members/sync", m.sync)
 }
 
 // run answers 501 to every call: launching a bot run is not implemented.

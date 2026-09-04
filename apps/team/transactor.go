@@ -80,7 +80,7 @@ type transServer struct {
 }
 
 // live is the process-singleton transactor server, published in Mount so the
-// in-process projection path (Apply / ingest) and the /v1/team/bots/sync handler
+// in-process projection path (Apply / ingest) and the /v1/bot/members/sync handler
 // can write into the per-space store the SPA reads WITHOUT holding a client
 // WebSocket. One server, one store.
 var live *transServer

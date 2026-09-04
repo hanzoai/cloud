@@ -16,7 +16,6 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/client"
 	agentspeer "github.com/hanzoai/cloud/client/agent"
 )
@@ -34,15 +33,28 @@ type botsBridge struct {
 // the route, the OpenAPI operation, the MCP tool, the CLI command and the SDK
 // method. It takes no guard: a typed op is not a zip.Handler, so it carries the
 // degraded refusal itself (b.degraded, typed.go).
-func (b *botsBridge) register(app cloud.Router) {
-	// The group is built HERE, from the one prefix constant, because a typed op's
-	// path is its group's prefix composed with its leaf and cmd/zipdoc resolves
-	// that prefix from the assignment in the SAME file — a group arriving as a
-	// parameter is one it cannot see, and it refuses rather than filing the prose
-	// under a path that does not exist. Same shape apps/agents/targets.go uses.
-	g := app.Group(teamPrefix)
-	zip.Get(g, "/bots", b.listBots)
-	zip.Post(g, "/bots/sync", b.syncBots)
+// THE ROWS ARE TEAM'S; THE ADDRESS IS NOT. A bot is one noun and it answers at
+// /v1/bot, so this roster is published on the internal plane and apps/bot serves
+// it — rather than at a second bot address under /v1/team, where a caller had to
+// know which subsystem happens to store a membership row to ask about a bot.
+//
+// The tenant and the admin bit ride the CALLER here (zip forwards both), not a
+// request: a plane op has no HTTP request behind it, so the gate that reads one
+// would fail closed on every call.
+func (b *botsBridge) register(cloud.Router) {
+	zip.Post[client.BotsIn, client.BotRoster](cloud.Plane(), "/team/bots",
+		func(ctx context.Context, _ *client.BotsIn) (*client.BotRoster, error) {
+			return b.roster(ctx)
+		},
+		zip.WithOperationID(client.TeamBots),
+		zip.WithSummary("This org's bots, as space members"))
+
+	zip.Post[client.BotsIn, client.BotSync](cloud.Plane(), "/team/bots/sync",
+		func(ctx context.Context, _ *client.BotsIn) (*client.BotSync, error) {
+			return b.reconcile(ctx)
+		},
+		zip.WithOperationID(client.TeamBotsSync),
+		zip.WithSummary("Re-project this org's bots into every space"))
 }
 
 // botRoster is the org's bot members. It is NOT visor's botList (the compute
@@ -78,13 +90,13 @@ type botMember struct {
 // the space Employees they become, each with the member account uuid and
 // Person reference the roster addresses it by. An agents subsystem that is not
 // mounted answers an empty list, never an error.
-func (b *botsBridge) listBots(ctx context.Context, _ *cloud.Unit) (*botRoster, error) {
+func (b *botsBridge) roster(ctx context.Context) (*client.BotRoster, error) {
 	if b.degraded {
 		return nil, unavailable()
 	}
-	org, err := principal.Acting(ctx)
-	if err != nil {
-		return nil, err
+	org := cloud.Who(ctx).Org
+	if org == "" {
+		return nil, zip.ErrForbidden("no org on the call")
 	}
 	// Through the transactor's OWN lister, which is the same client the mention
 	// responder reads. It used to call agentsBotLister directly — a second path to
@@ -94,7 +106,7 @@ func (b *botsBridge) listBots(ctx context.Context, _ *cloud.Unit) (*botRoster, e
 	if errors.Is(err, cloud.ErrNoPeer) {
 		// A deployment that runs no agents subsystem HAS no agents, and an empty
 		// list is the honest answer to "who are this org's bots".
-		return &botRoster{Bots: []botMember{}}, nil
+		return &client.BotRoster{Bots: []client.BotMember{}}, nil
 	}
 	if err != nil {
 		// Anything else is a peer that ANSWERED BADLY, and the two must not look
@@ -102,14 +114,14 @@ func (b *botsBridge) listBots(ctx context.Context, _ *cloud.Unit) (*botRoster, e
 		// on every call report "this org has no agents" for months.
 		return nil, zip.Errorf(http.StatusBadGateway, "team: agent roster unavailable: %v", err)
 	}
-	out := make([]botMember, 0, len(bots))
+	out := make([]client.BotMember, 0, len(bots))
 	for _, bt := range bots {
 		uid := botUserID(bt.ID)
-		out = append(out, botMember{
+		out = append(out, client.BotMember{
 			ID: bt.ID, Name: bt.Name, UserID: uid, PersonRef: PersonRef(uid), Active: bt.Active,
 		})
 	}
-	return &botRoster{Bots: out}, nil
+	return &client.BotRoster{Bots: out}, nil
 }
 
 // SyncBots re-projects the caller org's agents as space members into EVERY
@@ -117,22 +129,25 @@ func (b *botsBridge) listBots(ctx context.Context, _ *cloud.Unit) (*botRoster, e
 // idempotent, and admin only: mutating a space's roster requires the
 // gateway-minted admin flag, which a client can never forge. It answers how many
 // roster entries the reconcile touched.
-func (b *botsBridge) syncBots(ctx context.Context, _ *cloud.Unit) (*botSync, error) {
+func (b *botsBridge) reconcile(ctx context.Context) (*client.BotSync, error) {
 	if b.degraded {
 		return nil, unavailable()
 	}
-	org, err := principal.Acting(ctx)
-	if err != nil {
-		return nil, err
+	who := cloud.Who(ctx)
+	if who.Org == "" {
+		return nil, zip.ErrForbidden("no org on the call")
 	}
-	if !admin(ctx) {
+	// The admin bit rides the caller across the plane; the request-reading gate
+	// beside this file cannot see one and would refuse every call.
+	if !who.Admin {
 		return nil, zip.ErrForbidden("space admin required")
 	}
+	org := who.Org
 	projected, err := b.syncOrg(ctx, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "bot sync: %v", err)
 	}
-	return &botSync{Synced: true, Projected: projected}, nil
+	return &client.BotSync{Synced: true, Projected: projected}, nil
 }
 
 // syncOrg re-runs the FULL roster reconcile (humans + bots add AND stale-bot
@@ -167,7 +182,7 @@ func (b *botsBridge) syncOrg(ctx context.Context, org string) (int, error) {
 // is per-PROCESS: team and agents are separate manifest rows and therefore
 // separate plugin binaries, so it answered ErrNoPeer in every real deployment.
 // The cost was not an outage but something quieter — listBots renders an error as
-// an EMPTY ROSTER, so `GET /v1/team/bots` answered `[]` for an org holding
+// an EMPTY ROSTER, so `GET /v1/bot/members` answered `[]` for an org holding
 // agents, no bot was ever projected as a space member, and the mention
 // responder found nobody to address and stayed silent while the boot log said it
 // was ENABLED. One global, three symptoms.

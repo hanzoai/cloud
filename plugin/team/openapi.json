@@ -241,54 +241,6 @@
         }
       }
     },
-    "/v1/team/bots": {
-      "get": {
-        "operationId": "get_team_bots",
-        "summary": "Returns the caller org's bot members — the org's agents projected as the space Employees they become, each with the member account uuid and Person reference the roster addresses it by.",
-        "description": "Returns the caller org's bot members — the org's agents projected as\nthe space Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
-        "tags": [
-          "team"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/botRoster"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/team/bots/sync": {
-      "post": {
-        "operationId": "post_team_bots_sync",
-        "summary": "SyncBots re-projects the caller org's agents as space members into EVERY space of the org, and removes the ones whose agent is gone.",
-        "description": "SyncBots re-projects the caller org's agents as space members into EVERY\nspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a space's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched.",
-        "tags": [
-          "team"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/botSync"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
     "/v1/team/collaborator": {
       "get": {
         "operationId": "get_team_collaborator",
@@ -819,57 +771,6 @@
         },
         "type": "object"
       },
-      "botMember": {
-        "properties": {
-          "active": {
-            "description": "Active is whether the agent projects as a LIVE space member, derived\nfrom its registry status: empty, \"active\" and \"ready\" are live, anything\nelse (archived/retired) is not. An inactive bot drops out of the Team list\nwhile its past authorship survives.",
-            "type": "boolean"
-          },
-          "id": {
-            "description": "the agent id",
-            "type": "string"
-          },
-          "name": {
-            "description": "display name",
-            "type": "string"
-          },
-          "personRef": {
-            "description": "the projected Person _id",
-            "type": "string"
-          },
-          "userId": {
-            "description": "derived member account uuid (personUuid)",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "botRoster": {
-        "properties": {
-          "bots": {
-            "description": "Bots is every agent of the caller's org, projected as a space member.",
-            "items": {
-              "$ref": "#/components/schemas/botMember"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "botSync": {
-        "properties": {
-          "projected": {
-            "description": "Projected is how many roster entries the reconcile touched.",
-            "format": "int64",
-            "type": "integer"
-          },
-          "synced": {
-            "description": "Synced is true when the reconcile ran.",
-            "type": "boolean"
-          }
-        },
-        "type": "object"
-      },
       "collabPayload": {
         "properties": {
           "content": {
@@ -1137,7 +1038,7 @@
             "type": "string"
           },
           "members": {
-            "description": "Members are the account uuids in the room, agents included: an agent\nprojects as a space member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/team/bots learns which rooms an\nagent is in.",
+            "description": "Members are the account uuids in the room, agents included: an agent\nprojects as a space member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/bot/members learns which rooms an\nagent is in.",
             "items": {
               "type": "string"
             },

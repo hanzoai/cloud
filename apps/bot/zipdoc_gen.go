@@ -3,10 +3,24 @@
 package bot
 
 import (
+	"encoding/json"
+
 	"github.com/zap-proto/zip"
 )
 
 func init() {
+	zip.Describe("github.com/hanzoai/cloud/apps/bot GET /v1/bot/members", zip.Doc{
+		Description: "Returns the caller org's bots as space members — each with the member\naccount uuid and the Person reference the roster addresses it by.\n\nA deployment that runs no team subsystem has no spaces and therefore no\nroster, which is an empty list rather than an error: ErrNoPeer is the ONE\nerror that means \"this deployment does not run that app\", and every other\nfailure is an outage and says so.",
+		Fields: map[string]string{
+			"BotMember.active":    "Active is whether the agent projects as a LIVE space member, derived from\nits registry status: empty, \"active\" and \"ready\" are live, anything else\n(archived/retired) is not. An inactive bot drops out of the roster while its\npast authorship survives.",
+			"BotMember.id":        "ID is the agent id.",
+			"BotMember.name":      "Name is the display name.",
+			"BotMember.personRef": "PersonRef is the projected Person _id.",
+			"BotMember.userId":    "UserID is the derived member account uuid (personUuid).",
+			"BotRoster.bots":      "Bots is one entry per bot, each carrying the member account uuid and the\nPerson reference the space roster addresses it by. Empty means the org has\nno bots — not that the roster could not be read, which is an error.",
+		},
+		Response: json.RawMessage(`{"bots":[{"id":"a1","name":"Concierge","userId":"…","personRef":"…","active":true}]}`),
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/bot GET /v1/bot/runs", zip.Doc{
 		Description: "List returns the caller org's live bot runs, read from the bot runtime and projected\ninto the console contract with each run's live session URL derived here.\n\nThe org is ALWAYS the validated principal's org, NEVER a request field, and it is\nwhat scopes the runtime's answer — so one tenant can never enumerate another's\nruns. A runtime that cannot answer is an error, not an empty list: [] would tell\nthe caller \"your org has no runs\", which is a different claim from \"we could not\nask\", and the difference is the whole reason this endpoint exists.",
 		Fields: map[string]string{
@@ -18,6 +32,14 @@ func init() {
 			"BotRun.task":       "Task is the instruction the bot is executing.",
 			"BotRuns.bots":      "Bots is the org's live runs. Always an array, never null.",
 		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/bot POST /v1/bot/members/sync", zip.Doc{
+		Description: "Re-projects the caller org's bots as members into every space of the org\nand removes the ones whose agent is gone. Idempotent, and admin only — the\nadmin bit rides the caller to team, which is what decides it.",
+		Fields: map[string]string{
+			"BotSync.projected": "Projected is how many roster entries the reconcile touched.",
+			"BotSync.synced":    "Synced is true when the reconcile ran.",
+		},
+		Response: json.RawMessage(`{"synced":true,"projected":12}`),
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/bot POST /v1/bot/runs", zip.Doc{
 		Description: "Answers 501 to every call: launching a bot run is not implemented.\n\nThe bot runtime exposes no launch operation, so nothing here can start a sandbox.\nThis address is published rather than dropped because it is the collection every\nrun is created in: GET lists them, POST would launch one.\n\nThe refusal is total and takes no input. No run id is minted, no session URL is\nhanded back, and no per-run fee is charged. That is the point: the earlier version\nminted an id the runtime had never heard of, pointed it at a VNC node that did not\nexist, and took real money for it. 501 is the truth, and the truth is cheaper than\na plausible lie.\n\nListing and stopping runs are live and org-scoped. Only the launch is missing, and\nit returns in the same change that can prove a bot boots — a runtime-side launch\noperation first (TS, cross-repo), with the entitlement gate and the meter beside\nit.",

@@ -10,15 +10,6 @@ struct blobRef {
     File     text @16
 }
 
-struct botRoster {
-    Bots list<bytes> @0
-}
-
-struct botSync {
-    Synced    bool @0
-    Projected i64  @8
-}
-
 struct cookieAck {
     Result bool @0
 }
@@ -139,11 +130,6 @@ interface team {
     # caller with no verified session gets 401, and a real seat-read failure is a
     # 502 rather than a false "0 members".
     get_team_billing_plan() returns (rep: planInfo)
-    # Returns the caller org's bot members — the org's agents projected as
-    # the space Employees they become, each with the member account uuid and
-    # Person reference the roster addresses it by. An agents subsystem that is not
-    # mounted answers an empty list, never an error.
-    get_team_bots() returns (rep: botRoster)
     # Lists the rooms orgs have published, across every org.
     # It is NOT part of GET /rooms, and the separation is the point: that address
     # answers the CALLER'S rooms, so folding these in would put strangers' channels
@@ -166,12 +152,6 @@ interface team {
     # in the Team client is here with no sync. A room the caller's org does not own
     # answers 404 rather than 403, so a probe learns nothing about what exists.
     get_team_rooms_by_id_messages(req: teamMessageRead) returns (rep: teamMessages)
-    # SyncBots re-projects the caller org's agents as space members into EVERY
-    # space of the org, and removes the ones whose agent is gone. It is
-    # idempotent, and admin only: mutating a space's roster requires the
-    # gateway-minted admin flag, which a client can never forge. It answers how many
-    # roster entries the reconcile touched.
-    post_team_bots_sync() returns (rep: botSync)
     # Opens a named room and answers it as the store now holds it.
     # It writes through the SAME applyTx path the Team client uses, so a room opened
     # here is broadcast to every live client of the space and appears in an open
@@ -199,15 +179,14 @@ interface team {
 }
 
 # ---------------------------------------------------------------------
-# 12 op(s) here. What follows is what this schema does not carry.
+# 10 op(s) here. What follows is what this schema does not carry.
 #
 # blocked (3) — the op is absent; the field has no wire form:
 #   get_team_transactor_statistics  statsOut.Statistics  team.statsSessions  (reaches one)
 #   post_team_collaborator_rpc_by_documentid  collabRequest.Payload  team.collabPayload  (reaches one)
 #   post_team_collaborator_rpc_by_documentid  collabResult.Content  map[string]string  (map)
 #
-# opaque (4) — crosses, arrives without its name:
-#   botRoster.Bots  team.botMember (list element)
+# opaque (3) — crosses, arrives without its name:
 #   publicRooms.Rooms  team.listed (list element)
 #   teamMessages.Messages  team.teamMessage (list element)
 #   teamRooms.Rooms  team.teamRoom (list element)

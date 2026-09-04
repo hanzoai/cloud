@@ -21,6 +21,69 @@
     }
   ],
   "paths": {
+    "/v1/bot/members": {
+      "get": {
+        "operationId": "get_bot_members",
+        "summary": "Returns the caller org's bots as space members — each with the member account uuid and the Person reference the roster addresses it by.",
+        "description": "Returns the caller org's bots as space members — each with the member\naccount uuid and the Person reference the roster addresses it by.\n\nA deployment that runs no team subsystem has no spaces and therefore no\nroster, which is an empty list rather than an error: ErrNoPeer is the ONE\nerror that means \"this deployment does not run that app\", and every other\nfailure is an outage and says so.",
+        "tags": [
+          "bot"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bots": [
+                    {
+                      "active": true,
+                      "id": "a1",
+                      "name": "Concierge",
+                      "personRef": "…",
+                      "userId": "…"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BotRoster"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/bot/members/sync": {
+      "post": {
+        "operationId": "post_bot_members_sync",
+        "summary": "Re-projects the caller org's bots as members into every space of the org and removes the ones whose agent is gone.",
+        "description": "Re-projects the caller org's bots as members into every space of the org\nand removes the ones whose agent is gone. Idempotent, and admin only — the\nadmin bit rides the caller to team, which is what decides it.",
+        "tags": [
+          "bot"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "projected": 12,
+                  "synced": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BotSync"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/bot/runs": {
       "get": {
         "operationId": "get_bot_runs",
@@ -190,6 +253,43 @@
   },
   "components": {
     "schemas": {
+      "BotMember": {
+        "properties": {
+          "active": {
+            "description": "Active is whether the agent projects as a LIVE space member, derived from\nits registry status: empty, \"active\" and \"ready\" are live, anything else\n(archived/retired) is not. An inactive bot drops out of the roster while its\npast authorship survives.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the agent id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the display name.",
+            "type": "string"
+          },
+          "personRef": {
+            "description": "PersonRef is the projected Person _id.",
+            "type": "string"
+          },
+          "userId": {
+            "description": "UserID is the derived member account uuid (personUuid).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BotRoster": {
+        "properties": {
+          "bots": {
+            "description": "Bots is one entry per bot, each carrying the member account uuid and the\nPerson reference the space roster addresses it by. Empty means the org has\nno bots — not that the roster could not be read, which is an error.",
+            "items": {
+              "$ref": "#/components/schemas/BotMember"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "BotRun": {
         "properties": {
           "runId": {
@@ -240,6 +340,20 @@
           "status": {
             "description": "Status is the run's terminal state: \"stopped\".",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BotSync": {
+        "properties": {
+          "projected": {
+            "description": "Projected is how many roster entries the reconcile touched.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "synced": {
+            "description": "Synced is true when the reconcile ran.",
+            "type": "boolean"
           }
         },
         "type": "object"

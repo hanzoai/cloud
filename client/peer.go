@@ -209,6 +209,12 @@ const (
 	// another.
 	TeamSpaces = "team_spaces"
 
+	// TeamBots reads the org's bots as space members, and TeamBotsSync reconciles
+	// them. team owns the rows; the ADDRESS is /v1/bot, because a bot is a bot
+	// wherever it happens to be stored.
+	TeamBots     = "team_bots"
+	TeamBotsSync = "team_bots_sync"
+
 	// ToolsSkills replaces what one repository contributes to the caller's org's
 	// skills with the SKILL.md files just read from its default branch. The org's
 	// skills are the files in its repositories; a push that adds one adds it, a
@@ -1370,6 +1376,44 @@ type MemberIn struct {
 	// computed its own would be a second derivation of the same address, which is
 	// how two layers end up naming different accounts for one person.
 	Subject string `json:"subject"`
+}
+
+// BotsIn asks for the caller's own org, and carries nothing. The org is the
+// tenancy key of every roster row and rides the CALLER, never an argument — a
+// field here would let a peer name another tenant's bots.
+type BotsIn struct{}
+
+// BotMember is one bot as the space roster addresses it.
+type BotMember struct {
+	// ID is the agent id.
+	ID string `json:"id"`
+	// Name is the display name.
+	Name string `json:"name"`
+	// UserID is the derived member account uuid (personUuid).
+	UserID string `json:"userId"`
+	// PersonRef is the projected Person _id.
+	PersonRef string `json:"personRef"`
+	// Active is whether the agent projects as a LIVE space member, derived from
+	// its registry status: empty, "active" and "ready" are live, anything else
+	// (archived/retired) is not. An inactive bot drops out of the roster while its
+	// past authorship survives.
+	Active bool `json:"active"`
+}
+
+// BotRoster is every bot of the caller's org, projected as a space member.
+type BotRoster struct {
+	// Bots is one entry per bot, each carrying the member account uuid and the
+	// Person reference the space roster addresses it by. Empty means the org has
+	// no bots — not that the roster could not be read, which is an error.
+	Bots []BotMember `json:"bots"`
+}
+
+// BotSync acknowledges a roster re-projection.
+type BotSync struct {
+	// Synced is true when the reconcile ran.
+	Synced bool `json:"synced"`
+	// Projected is how many roster entries the reconcile touched.
+	Projected int `json:"projected"`
 }
 
 // Member is what the rows say. Role and Account are empty exactly when Member is
