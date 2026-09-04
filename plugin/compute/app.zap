@@ -29,19 +29,6 @@ struct bindingList {
     AgentBindings list<bytes> @0
 }
 
-struct botList {
-    Bots list<bytes> @0
-}
-
-struct botRef {
-    ID text @0
-}
-
-struct botView {
-    Agent   text  @0
-    Binding bytes @8
-}
-
 struct clusterAttach {
     Name       text @0
     Kubeconfig text @8
@@ -124,25 +111,31 @@ struct machineList {
     Machines list<bytes> @0
 }
 
+struct machineQuery {
+    Kind text @0
+}
+
 struct machineRef {
     ID text @0
 }
 
 struct machineView {
-    ID          text @0
-    Name        text @8
-    Region      text @16
-    Type        text @24
-    Status      text @32
-    Provider    text @40
-    PublicIp    text @48
-    PrivateIp   text @56
-    CreatedTime text @64
-    Vcpu        i64  @72
-    Mem         text @80
-    GPU         text @88
-    Image       text @96
-    Os          text @104
+    Agent       text  @0
+    Binding     bytes @8
+    ID          text  @16
+    Name        text  @24
+    Region      text  @32
+    Type        text  @40
+    Status      text  @48
+    Provider    text  @56
+    PublicIp    text  @64
+    PrivateIp   text  @72
+    CreatedTime text  @80
+    Vcpu        i64   @88
+    Mem         text  @96
+    GPU         text  @104
+    Image       text  @112
+    Os          text  @120
 }
 
 struct nodeList {
@@ -236,9 +229,6 @@ interface compute {
     # with the created pool. Only the CreateNodePoolSpec fields are forwarded;
     # owner/provider/clusterId ride in the query exactly as Visor expects them.
     createNodePool(req: poolCreate) returns (rep: nodePoolView)
-    # Tears down both halves of a bot: it unbinds the agent (best-effort — a
-    # bot with no binding still deletes), then terminates the machine. Answers 204.
-    deleteBot(req: botRef)
     # Destroys a DOKS cluster by id and answers 204. ADMIN-GATED, like
     # create. Visor scopes the delete to the org (refuses a foreign id), so this can
     # only ever remove the caller org's own cluster.
@@ -255,12 +245,6 @@ interface compute {
     # touches BYO clusters — a managed cluster's nodes are removed through the node-pool
     # routes — and answers 404 when the name is not in this org's fleet.
     detachCluster(req: clusterRef) returns (rep: clusterDetached)
-    # Returns one of the caller org's bot machines with its agent binding.
-    # A machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent
-    # binding — either signal is authoritative, so a bot resolves even before its
-    # cloud-init has stamped every tag. A machine that is neither is 404: this route
-    # answers for bots, not for machines.
-    getBot(req: botRef) returns (rep: botView)
     # Returns one cluster's detail: node pools + worker nodes. Visor scopes
     # the lookup to the org (a foreign or missing id resolves to not-found), so a tenant
     # can never read another tenant's cluster by guessing an id.
@@ -280,12 +264,6 @@ interface compute {
     # Sizes lists the machine sizes available to launch, with their specifications.
     # Global and org-gated, exactly as the region catalog is, and for the same reasons.
     get_compute_sizes()
-    # Returns the caller org's bot machines — the kind=bot machines — each
-    # joined with the agent binding that says which cloud Agent it runs.
-    # The bindings are read ONCE and joined by machine id, so the list is O(1) upstream
-    # calls, not N+1. A bindings read that fails only costs the reconciled status: a bot
-    # still lists without it.
-    listBots() returns (rep: botList)
     # Returns the caller org's clusters from both sources: the managed
     # clusters projected from Visor's node pools, and the BYO clusters attached to the
     # caller's project. A Visor outage costs the managed half only — the BYO half
@@ -342,7 +320,7 @@ interface compute {
     # plus the BYO machines that dialed in via `hanzo link` (provider "byo").
     # A source Visor cannot answer for is logged and skipped, never an error: one
     # wedged upstream must not hide the machines the other sources can see.
-    listMachines() returns (rep: machineList)
+    listMachines(req: machineQuery) returns (rep: machineList)
     # Records a BYO worker's live GPU utilization into the SAME series the
     # fleet board overlays. The org is the validated principal and source/kind are fixed
     # server-side, so a worker names only its own metrics — never another tenant or
@@ -360,19 +338,16 @@ interface compute {
 }
 
 # ---------------------------------------------------------------------
-# 30 op(s) here. What follows is what this schema does not carry.
+# 27 op(s) here. What follows is what this schema does not carry.
 #
-# dropped (2) — the value does not cross, and nothing fails:
-#   botView.machineView  compute.machineView  (promoted, not carried)
+# dropped (1) — the value does not cross, and nothing fails:
 #   clusterDetailView.clusterView  compute.clusterView  (promoted, not carried)
 #
 # blocked (1) — the op is absent; the field has no wire form:
 #   listGpuAlerts  gpuAlertList.Alerts  []interface {}  (no wire form)
 #
-# opaque (15) — crosses, arrives without its name:
+# opaque (14) — crosses, arrives without its name:
 #   bindingList.AgentBindings  compute.agentBinding (list element)
-#   botList.Bots  compute.botView (list element)
-#   botView.Binding  compute.agentBinding
 #   clusterDetailView.Nodes  compute.machineView (list element)
 #   clusterList.Clusters  compute.clusterView (list element)
 #   clusterList.Degraded  compute.sourceFailure (list element)
@@ -382,6 +357,7 @@ interface compute {
 #   gpuList.GPUs  compute.gpuView (list element)
 #   jobList.Jobs  compute.gpuJob (list element)
 #   machineList.Machines  compute.machineView (list element)
+#   machineView.Binding  compute.agentBinding
 #   nodeList.Nodes  compute.machineView (list element)
 #   sampleList.Samples  compute.sampleView (list element)
 #   workerList.Workers  compute.byoWorker (list element)

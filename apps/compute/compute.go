@@ -251,25 +251,22 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	zip.Delete(reg, "/v1/compute/machines/:id/agent", o.unbindAgent,
 		zip.WithOperationID("unbindMachineAgent"), zip.WithTags("compute"))
 
-	// Bot machines — a kind=bot machine + an agent binding, composed from the vm
-	// compute + binding surface (bots.go). The value is a MACHINE that hosts a bot
-	// runtime, not the bot itself: /v1/bot is the bot RUN (clients/bots), a
-	// different noun, and it belongs to bots. This one nests under
-	// /v1/compute, so the two never share a route namespace. launch is an
-	// explicit literal, registered before :id so it never binds as an id.
-	zip.Get(reg, "/v1/compute/bots", o.listBots,
-		zip.WithOperationID("listBots"), zip.WithTags("bots"))
-	// RAW: launch is polymorphic exactly like the machine launch above — 200 + the
-	// quote for a dryRun, 201 + the botView for a real launch.
-	app.Post("/v1/compute/bots/launch", cloud.Handle(s, launchBot))
-	zip.Get(reg, "/v1/compute/bots/:id", o.getBot,
-		zip.WithOperationID("getBot"), zip.WithTags("bots"))
-	zip.Delete(reg, "/v1/compute/bots/:id", o.deleteBot,
-		zip.WithOperationID("deleteBot"), zip.WithTags("bots"))
+	// A BOT MACHINE IS A MACHINE, AND IT IS ASKED FOR AS ONE. It was /v1/compute/bots
+	// — a second noun for a machine with a kind and an agent bound to it, which put
+	// the word "bot" at two addresses meaning two different things (the bot RUN is
+	// /v1/bot, and it belongs to apps/bot). The composition did not change; only the
+	// address did:
+	//
+	//	list   GET  /v1/compute/machines?kind=bot   (joined with each binding)
+	//	get    GET  /v1/compute/machines/:id        (its binding rides the view)
+	//	launch POST /v1/compute/machines {kind:bot} (agent created, then bound)
+	//	delete DELETE /v1/compute/machines/:id      (unbinds, then deletes)
+	//	stop   DELETE /v1/compute/machines/:id/agent
+	//
 	// RAW: /:action is a verb dispatch, not a resource, and `message` streams the
 	// bound agent's answer back VERBATIM — the upstream body, its Content-Type and
 	// its status. There is no Out to state, and stating one would buffer a stream.
-	app.Post("/v1/compute/bots/:id/:action", cloud.Handle(s, botAction))
+	app.Post("/v1/compute/machines/:id/:action", cloud.Handle(s, botAction))
 
 	s.Log.Info("visor compute surface mounted", "target", s.State.cl.target,
 		"serviceAuth", serviceClientID() != "", "brand", cloud.Brand())
@@ -410,6 +407,17 @@ type machineList struct {
 	Machines []machineView `json:"machines"`
 }
 
+// machineQuery narrows the list. Kind is vm's own tag filter — "bot" selects the
+// machines that host a bot runtime, which is what /v1/compute/bots used to be: a
+// bot machine is not a second noun, it is a machine with a kind and an agent
+// bound to it, so it is asked for here rather than at an address of its own.
+//
+// It is a STRING and not a typed enum because vm owns the vocabulary: a kind we
+// have never heard of is vm's to reject, not ours to hide.
+type machineQuery struct {
+	Kind string `json:"-" url:"kind"`
+}
+
 // listMachines returns every machine the caller's org has — Visor's registry, the
 // live DigitalOcean droplets and the DOKS worker nodes (deduped into one union),
 // plus the BYO machines that dialed in via `hanzo link` (provider "byo").
@@ -418,15 +426,36 @@ type machineList struct {
 // wedged upstream must not hide the machines the other sources can see.
 //
 // Response: {"machines":[{"id":"web-1","name":"Web 1","region":"sfo3","type":"s-2vcpu-4gb","status":"running","provider":"digitalocean","publicIp":"1.2.3.4","vcpu":2,"mem":"4 GB"}]}
-func (o ops) listMachines(ctx context.Context, _ *cloud.Unit) (*machineList, error) {
+func (o ops) listMachines(ctx context.Context, in *machineQuery) (*machineList, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err
 	}
+	kind := strings.ToLower(strings.TrimSpace(in.Kind))
 	machines := managedMachines(o.Service, c, org)
+	// Join the org's bindings ONCE (O(1), not N+1), keyed by the machine id vm
+	// binds by. Enrichment only: a bindings read failure never blanks the list, and
+	// it is asked for only when the caller selected the kind that has bindings.
+	byMachine := map[string]*agentBinding{}
+	if kind == "bot" {
+		var bindings bindingList
+		if err := o.State.cl.op(c, http.MethodGet, "/v1/machines/agents", q("owner", org), nil, &bindings); err == nil {
+			for i := range bindings.AgentBindings {
+				byMachine[bindings.AgentBindings[i].Name] = &bindings.AgentBindings[i]
+			}
+		}
+	}
 	out := make([]machineView, 0, len(machines))
 	for _, m := range machines {
-		out = append(out, toMachineView(m))
+		if kind == "bot" && !machineIsBot(m) {
+			continue
+		}
+		out = append(out, toBotView(m, byMachine[cmp.Or(m.Id, m.Name)]))
+	}
+	if kind != "" {
+		// A kind selects vm-provisioned machines by their launch-time tag; a BYO
+		// machine that dialed in carries none, so it is not a member of any kind.
+		return &machineList{Machines: out}, nil
 	}
 	// Fold in the org's BYO machines (provider="byo") so the console's Machines
 	// page shows dialed-in GPUs next to Visor-provisioned ones.
@@ -457,6 +486,15 @@ func (o ops) getMachine(ctx context.Context, in *machineRef) (*machineView, erro
 	}
 	if m.Name == "" && m.Id == "" {
 		return nil, zip.ErrNotFound("machine not found")
+	}
+	// Attach the agent binding, best-effort. A machine that runs a bot reads whole
+	// from this one address instead of from a second noun; a machine with nothing
+	// bound leaves both fields absent, which IS the "not bound" signal.
+	var binding agentBinding
+	_ = o.State.cl.op(c, http.MethodGet, machine(org, name)+"/agent", "", nil, &binding)
+	if binding.identifies() {
+		v := toBotView(m, &binding)
+		return &v, nil
 	}
 	v := toMachineView(m)
 	return &v, nil
@@ -525,6 +563,16 @@ type launchReq struct {
 	InstanceType string `json:"instanceType"`
 	Region       string `json:"region"`
 	DryRun       bool   `json:"dryRun"`
+	// Kind is vm's machine kind. "bot" launches a machine that hosts a bot runtime
+	// AND the agent it runs, in that order — see launchBotWith. Empty is an
+	// ordinary machine. Any other value is vm's to accept or reject.
+	Kind string `json:"kind"`
+	// Agent, Model and Instructions configure the agent a kind=bot launch creates
+	// and binds. They are read only on that path; an ordinary machine runs nothing
+	// and ignores them.
+	Agent        string `json:"agent"`
+	Model        string `json:"model"`
+	Instructions string `json:"instructions"`
 }
 
 // The prose for the three operations here that cannot be typed ops. Every other
@@ -555,23 +603,7 @@ func init() {
 			"body, so a launch always lands in the caller's OWN tenant and the machine it creates "+
 			"is only ever visible to that tenant. Fails closed: a validated principal is required "+
 			"(403 without one) and `size` (or its `instanceType` alias) is required (400).")
-	openapi.Describe("/v1/compute/bots/launch", http.MethodPost,
-		"Launch a bot machine — an agent plus the machine that runs it — or price one",
-		"Creates BOTH halves of a bot in one call and answers 201 with the bot: the cloud agent "+
-			"it runs, then a bot-kind machine bootstrapped with the bot runtime, then the binding "+
-			"between them, so a launched bot is immediately messageable. Send `dryRun: true` for a "+
-			"price quote instead — 200 with the upstream quote verbatim, no agent created, no "+
-			"machine launched, nothing spent.\n\n"+
-			"The agent is created FIRST and on purpose: it is create-if-absent (an agent that "+
-			"already exists is reused, so a relaunch is fine and several bots may share one "+
-			"explicit `agent`), and doing it before the machine means a bad request — a model that "+
-			"is not in the catalog, say — fails with the real reason BEFORE any metered machine is "+
-			"provisioned. `agent` defaults to the bot's name and an empty `model` takes the "+
-			"deployment default.\n\n"+
-			"Org-scoped and fails closed: a validated principal is required (403 without one), the "+
-			"owning org is that principal's and never a body field, `size` is required (400), and "+
-			"`name` is required for a real launch though not for a quote.")
-	openapi.Describe("/v1/compute/bots/:id/:action", http.MethodPost,
+	openapi.Describe("/v1/compute/machines/:id/:action", http.MethodPost,
 		"Message a bot, or stop it, by naming the action in the path",
 		"Dispatches one verb against a bot the caller's org owns. `message` runs the bot's bound "+
 			"agent with the request body as the message and streams the agent's answer back "+
@@ -609,6 +641,17 @@ func launchMachine(s *cloud.Service[state], c *zip.Ctx) error {
 	body.Size = strings.TrimSpace(body.Size)
 	body.InstanceType = strings.TrimSpace(body.InstanceType)
 	body.Region = strings.TrimSpace(body.Region)
+	// A bot machine is a machine, so it is launched here — but it is a COMPOSITION
+	// (agent, then machine, then the binding), and the order is load-bearing: the
+	// agent is created first so a bad model fails before anything metered is
+	// provisioned. That sequence lives in bots.go and is entered, not restated.
+	if strings.EqualFold(strings.TrimSpace(body.Kind), "bot") {
+		return launchBotWith(s, c, org, botLaunchReq{
+			Name: body.Name, Agent: body.Agent, Model: body.Model,
+			Instructions: body.Instructions, Size: body.Size,
+			InstanceType: body.InstanceType, Region: body.Region, DryRun: body.DryRun,
+		})
+	}
 	if cmp.Or(body.Size, body.InstanceType) == "" {
 		return zip.ErrBadRequest("size is required")
 	}
@@ -671,6 +714,11 @@ func (o ops) deleteMachine(ctx context.Context, in *machineRef) (*cloud.Unit, er
 	if name == "" {
 		return nil, zip.ErrBadRequest("machine id required")
 	}
+	// Unbind first, best-effort: a machine running a bot has an agent bound to it,
+	// and terminating the machine without detaching the runtime leaves the binding
+	// pointing at something that is gone. A machine with no binding 404s here and
+	// deletes exactly as before.
+	_ = o.State.cl.op(c, http.MethodDelete, machine(org, name)+"/agent", "", nil, nil)
 	if err := o.State.cl.call(c, http.MethodDelete, machine(org, name), "", nil, nil); err != nil {
 		return nil, err
 	}

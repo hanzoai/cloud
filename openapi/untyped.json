@@ -1,5 +1,5 @@
 {
-  "operations": 752,
+  "operations": 751,
   "products": {
     "account": 2,
     "ad": 1,
@@ -19,7 +19,7 @@
     "commerce": 176,
     "company": 1,
     "compliance": 1,
-    "compute": 3,
+    "compute": 2,
     "dataroom": 7,
     "deploy": 5,
     "destination": 1,

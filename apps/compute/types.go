@@ -86,6 +86,16 @@ type visorNodePool struct {
 // the org-scoped machine NAME (the stable key the :id routes address), not the
 // ephemeral provider id.
 type machineView struct {
+	// Agent is the cloud Agent this machine runs, lifted out of the binding so a
+	// list reads without following one. Empty means nothing is bound — for a
+	// kind=bot machine that means it costs money and answers nothing.
+	Agent string `json:"agent,omitempty"`
+	// Binding is the record joining this machine to that agent, carrying vm's own
+	// reconciled status and its reason. Absent means no runtime is bound, which is
+	// also what a stopped bot looks like: stopping unbinds and leaves the machine
+	// running.
+	Binding *agentBinding `json:"binding,omitempty"`
+
 	// ID addresses this machine on the /v1/compute/machines/:id routes: the
 	// org-scoped NAME Visor keys a machine by, falling back to the provider id for
 	// a machine that has no name. A BYO machine's is the id it dialed in under.
