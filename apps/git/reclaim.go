@@ -1,9 +1,9 @@
 package git
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"strconv"
 	"sync"
 	"sync/atomic"

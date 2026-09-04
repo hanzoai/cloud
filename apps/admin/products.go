@@ -20,8 +20,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/cluster"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -86,8 +86,8 @@ type productRollup struct{ Total, Active, Drift int }
 // side where the observer lives. A platform that cannot be REACHED is an error,
 // because an unreachable estate and an empty estate must never look alike.
 func fleetProducts(ctx context.Context, c *zip.Ctx) ([]productRow, productRollup, error) {
-	fleet, err := cloud.Ask[struct{}, plane.Fleet](cloud.As(c, ""), "platform",
-		plane.PlatformFleet, &struct{}{})
+	fleet, err := cloud.Ask[struct{}, client.Fleet](cloud.As(c, ""), "platform",
+		client.PlatformFleet, &struct{}{})
 	if err != nil {
 		return nil, productRollup{}, err
 	}
@@ -113,7 +113,7 @@ func fleetProducts(ctx context.Context, c *zip.Ctx) ([]productRow, productRollup
 // productFromView projects a paas fleet AppView onto a productRow: the declared/running tags
 // + operator-reconciled health/phase verbatim, the drift verdict rolled to a boolean +
 // severity, and the derived infra tier for the board's grouping.
-func productFromView(v plane.App) productRow {
+func productFromView(v client.App) productRow {
 	return productRow{
 		Name:          v.Name,
 		Kind:          v.Role, // the operator's OWN declared class (sql|kv|generic|ingress) or ""
@@ -143,7 +143,7 @@ func productFromView(v plane.App) productRow {
 // for sql/kv/generic/ingress), so the board groups on this derivation. A declarative
 // `hanzo.ai/tier` label on the App CRs would make it authoritative — a universe/operator
 // follow-up; until then this stays the single, documented classifier (one place, no fork).
-func tierOf(v plane.App) string {
+func tierOf(v client.App) string {
 	// A workload outside the platform tenant is a customer / PaaS deployment, not
 	// platform infra. The namespace is classified by the one function that decides
 	// what a namespace means (cluster.Class), never a second list here — a list is

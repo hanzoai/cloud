@@ -21,7 +21,7 @@ package risk
 // process per app, so the write core is in another pid — the shape risk_rpc.go's
 // own header names twice (cloud.SetRiskScorer, cloud.SetObsErrorIngest) and the
 // answer is the one both landed on: a plane op on the owning app's socket
-// (plane.EventCapture, apps/event/event_rpc.go). No new transport, no HTTP
+// (client.EventCapture, apps/event/event_rpc.go). No new transport, no HTTP
 // hop through the fleet's public endpoint, no second gate.
 //
 // THREE RULES, and each is the difference between telemetry and a liability:
@@ -52,8 +52,8 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	contract "github.com/hanzoai/cloud/plane"
-	peer "github.com/hanzoai/cloud/plane/event"
+	contract "github.com/hanzoai/cloud/client"
+	peer "github.com/hanzoai/cloud/client/event"
 )
 
 // nameDecided is what the row is called, and it is a CONSTANT for the reason
@@ -131,7 +131,7 @@ const (
 // generous where the decide budget is tight, and it costs the endpoint nothing
 // because it bounds a detached goroutine rather than the request: five seconds is
 // thirty-three decide budgets, far past a healthy socket call, and enough for a
-// cold analytics child to come up (plane.Reach single-flights the start, so an
+// cold analytics child to come up (client.Reach single-flights the start, so an
 // emit that gives up mid-wake still leaves the peer coming up for the next one).
 const emitBudget = 5 * time.Second
 

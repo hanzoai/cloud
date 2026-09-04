@@ -19,7 +19,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	costsapi "github.com/hanzoai/commerce/api/costs"
 	storeapi "github.com/hanzoai/commerce/api/store"
 	"github.com/zap-proto/zip"
@@ -35,7 +35,7 @@ import (
 // take.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeCosts(ctx context.Context, in *plane.CostsIn) (*plane.Costs, error) {
+func planeCosts(ctx context.Context, in *client.CostsIn) (*client.Costs, error) {
 	org, err := orgOf(ctx, "costs")
 	if err != nil {
 		return nil, err
@@ -49,14 +49,14 @@ func planeCosts(ctx context.Context, in *plane.CostsIn) (*plane.Costs, error) {
 		}
 	}
 	report := costsapi.Report(org.Namespaced(ctx), test, period)
-	vendors := make([]plane.VendorCost, 0, len(report.Vendors))
+	vendors := make([]client.VendorCost, 0, len(report.Vendors))
 	for _, v := range report.Vendors {
-		vendors = append(vendors, plane.VendorCost{
+		vendors = append(vendors, client.VendorCost{
 			Vendor: v.Vendor, Service: v.Service, AmountCents: v.AmountCents,
 			Period: v.Period, Source: string(v.Source), Note: v.Note, Currency: v.Currency,
 		})
 	}
-	return &plane.Costs{
+	return &client.Costs{
 		Period: report.Period, Vendors: vendors,
 		TotalCents: report.TotalCents, Currency: report.Currency,
 	}, nil
@@ -67,7 +67,7 @@ func planeCosts(ctx context.Context, in *plane.CostsIn) (*plane.Costs, error) {
 // Resolved inside that org's namespace and nowhere else, so a store id can never
 // cross a tenant boundary — StoreIn carries no fields at all, which is the same
 // guarantee stated in the type.
-func planeStore(ctx context.Context, _ *plane.StoreIn) (*plane.Store, error) {
+func planeStore(ctx context.Context, _ *client.StoreIn) (*client.Store, error) {
 	org, err := orgOf(ctx, "store")
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func planeStore(ctx context.Context, _ *plane.StoreIn) (*plane.Store, error) {
 		// one would send a caller's listing into a store that does not exist.
 		return nil, zip.Errorf(502, "store: commerce resolved no store for this org")
 	}
-	return &plane.Store{ID: s.Id(), Name: s.Name, Currency: string(s.Currency)}, nil
+	return &client.Store{ID: s.Id(), Name: s.Name, Currency: string(s.Currency)}, nil
 }
 
 // planeListing upserts one product listing on the caller org's store.
@@ -89,7 +89,7 @@ func planeStore(ctx context.Context, _ *plane.StoreIn) (*plane.Store, error) {
 // The patch is decoded ONTO the existing listing by the core, never replacing
 // it, so a caller setting a header image preserves the curated name, price and
 // copy it says nothing about.
-func planeListing(ctx context.Context, in *plane.ListingIn) (*plane.Listed, error) {
+func planeListing(ctx context.Context, in *client.ListingIn) (*client.Listed, error) {
 	org, err := orgOf(ctx, "listing")
 	if err != nil {
 		return nil, err
@@ -101,18 +101,18 @@ func planeListing(ctx context.Context, in *plane.ListingIn) (*plane.Listed, erro
 	if err != nil {
 		return nil, zip.Errorf(502, "listing: %v", err)
 	}
-	return &plane.Listed{Existed: existed}, nil
+	return &client.Listed{Existed: existed}, nil
 }
 
 // exposeStoreCosts publishes the three. Mount calls it.
 func exposeStoreCosts() {
-	zip.Post[plane.CostsIn, plane.Costs](cloud.Plane(), "/finance/costs", planeCosts,
-		zip.WithOperationID(plane.FinanceCosts),
+	zip.Post[client.CostsIn, client.Costs](cloud.Plane(), "/finance/costs", planeCosts,
+		zip.WithOperationID(client.FinanceCosts),
 		zip.WithSummary("What we paid every vendor in a period"))
-	zip.Post[plane.StoreIn, plane.Store](cloud.Plane(), "/store/current", planeStore,
-		zip.WithOperationID(plane.StoreCurrent),
+	zip.Post[client.StoreIn, client.Store](cloud.Plane(), "/store/current", planeStore,
+		zip.WithOperationID(client.StoreCurrent),
 		zip.WithSummary("This org's storefront"))
-	zip.Post[plane.ListingIn, plane.Listed](cloud.Plane(), "/store/listing", planeListing,
-		zip.WithOperationID(plane.StoreListing),
+	zip.Post[client.ListingIn, client.Listed](cloud.Plane(), "/store/listing", planeListing,
+		zip.WithOperationID(client.StoreListing),
 		zip.WithSummary("Upsert one product listing"))
 }

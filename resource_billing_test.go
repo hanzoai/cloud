@@ -29,9 +29,9 @@ import (
 	"github.com/hanzoai/cloud/internal/planetest"
 
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -81,7 +81,7 @@ func (f *recCommerce) lastBalanceOrg() string {
 }
 
 // lastUsage is the org the debit was written to and the debit itself.
-func (f *recCommerce) lastUsage() (string, plane.RecordIn) {
+func (f *recCommerce) lastUsage() (string, client.RecordIn) {
 	d, _ := f.debits.last()
 	return d.Org, d.In
 }
@@ -542,7 +542,7 @@ func TestMeter_RecordBillsAnExactAmount(t *testing.T) {
 
 // A debit must cross the internal plane EXACTLY.
 //
-// plane.Money is a decimal string precisely so an amount survives the process
+// client.Money is a decimal string precisely so an amount survives the process
 // boundary unrounded, and the receiving side honors it (apps/commerce
 // meter_rpc.go parses the decimal and debits it verbatim). A sender that folded
 // to cents first would land a usage priced only as a typed money.Amount — the
@@ -556,13 +556,13 @@ func TestMeterPeer_CarriesTheExactDebit(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	ResetPlane()
 
-	got := make(chan plane.RecordIn, 1)
-	zip.Post[plane.RecordIn, plane.Recorded](Plane(), "/finance/record",
-		func(_ context.Context, in *plane.RecordIn) (*plane.Recorded, error) {
+	got := make(chan client.RecordIn, 1)
+	zip.Post[client.RecordIn, client.Recorded](Plane(), "/finance/record",
+		func(_ context.Context, in *client.RecordIn) (*client.Recorded, error) {
 			got <- *in
-			return &plane.Recorded{Amount: in.Amount}, nil
+			return &client.Recorded{Amount: in.Amount}, nil
 		},
-		zip.WithOperationID(plane.FinanceRecord),
+		zip.WithOperationID(client.FinanceRecord),
 		zip.WithSummary("test capture of the peer debit"))
 
 	stop, err := ServePlane("commerce", nil)
@@ -600,7 +600,7 @@ func TestMeterPeer_CarriesTheExactDebit(t *testing.T) {
 	}
 	rm.Record(account.PayerOf("", "acme"), "zen", metering.Usage{User: "acme", Amount: exact, Model: "zen-1"})
 
-	var in plane.RecordIn
+	var in client.RecordIn
 	select {
 	case in = <-got:
 	case <-time.After(3 * time.Second):
@@ -638,7 +638,7 @@ type oneLedger struct {
 	minted int
 }
 
-func (l *oneLedger) observe(_ string, in plane.RecordIn) {
+func (l *oneLedger) observe(_ string, in client.RecordIn) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.posted == nil {

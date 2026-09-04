@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -26,12 +26,12 @@ import (
 // exposeSessions publishes the teardown and its count on the internal plane.
 // Mount calls it, beside the in-process client.
 func exposeSessions() {
-	zip.Post[plane.SessionMatchIn, plane.SessionCount](cloud.Plane(), "/agents/sessions/stop", planeStopSessions,
-		zip.WithOperationID(plane.AgentsSessionsStop),
+	zip.Post[client.SessionMatchIn, client.SessionCount](cloud.Plane(), "/agents/sessions/stop", planeStopSessions,
+		zip.WithOperationID(client.AgentsSessionsStop),
 		zip.WithSummary("Stop the live sessions a credential revoke tears down"))
 
-	zip.Post[plane.SessionMatchIn, plane.SessionCount](cloud.Plane(), "/agents/sessions/count", planeCountSessions,
-		zip.WithOperationID(plane.AgentsSessionsCount),
+	zip.Post[client.SessionMatchIn, client.SessionCount](cloud.Plane(), "/agents/sessions/count", planeCountSessions,
+		zip.WithOperationID(client.AgentsSessionsCount),
 		zip.WithSummary("Count the live sessions a match selects"))
 }
 
@@ -50,7 +50,7 @@ func exposeSessions() {
 // the wire.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeStopSessions(ctx context.Context, in *plane.SessionMatchIn) (*plane.SessionCount, error) {
+func planeStopSessions(ctx context.Context, in *client.SessionMatchIn) (*client.SessionCount, error) {
 	m, err := matchFor(ctx, in)
 	if err != nil {
 		return nil, err
@@ -59,12 +59,12 @@ func planeStopSessions(ctx context.Context, in *plane.SessionMatchIn) (*plane.Se
 	if err != nil {
 		return nil, err
 	}
-	return &plane.SessionCount{Count: n}, nil
+	return &client.SessionCount{Count: n}, nil
 }
 
 // planeCountSessions answers the active-session count the device view shows,
 // under the same tenancy and actor rules as the stop above.
-func planeCountSessions(ctx context.Context, in *plane.SessionMatchIn) (*plane.SessionCount, error) {
+func planeCountSessions(ctx context.Context, in *client.SessionMatchIn) (*client.SessionCount, error) {
 	m, err := matchFor(ctx, in)
 	if err != nil {
 		return nil, err
@@ -73,13 +73,13 @@ func planeCountSessions(ctx context.Context, in *plane.SessionMatchIn) (*plane.S
 	if err != nil {
 		return nil, err
 	}
-	return &plane.SessionCount{Count: n}, nil
+	return &client.SessionCount{Count: n}, nil
 }
 
 // matchFor resolves the caller's proven org and qualifies the subject into an
 // actor. It is the ONE place the wire shape becomes a SessionMatch, so the two
 // ops cannot come to disagree about which sessions a caller may name.
-func matchFor(ctx context.Context, in *plane.SessionMatchIn) (SessionMatch, error) {
+func matchFor(ctx context.Context, in *client.SessionMatchIn) (SessionMatch, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return SessionMatch{}, zip.ErrForbidden("agents sessions: org required")

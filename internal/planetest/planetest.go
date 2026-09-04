@@ -37,15 +37,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
 // Debit is one crossing: the org the CALLER acted for, and what it sent.
 type Debit struct {
 	Org string
-	In  plane.RecordIn
+	In  client.RecordIn
 }
 
 // Commerce records every debit that reaches the money plane.
@@ -57,7 +57,7 @@ type Commerce struct {
 
 // Serve binds the peer's socket and returns the recorder. Every test that expects a
 // debit calls it, and it must be called BEFORE the client makes one — an unbound
-// socket is plane.ErrNoPeer, which reads in a failure message as "the meter never
+// socket is client.ErrNoPeer, which reads in a failure message as "the meter never
 // fired" rather than "nobody was listening".
 func Serve(t *testing.T) *Commerce { return ServeWith(t, nil) }
 
@@ -65,14 +65,14 @@ func Serve(t *testing.T) *Commerce { return ServeWith(t, nil) }
 // rather than only a count. The observer runs INSIDE the handler, so the debit has
 // landed by the time the op answers — which is what lets a gate that reads
 // afterwards see it.
-func ServeWith(t *testing.T, observe func(org string, in plane.RecordIn)) *Commerce {
+func ServeWith(t *testing.T, observe func(org string, in client.RecordIn)) *Commerce {
 	t.Helper()
 	c := &Commerce{}
 
 	runtimeDir(t)
 	app := zip.New(zip.Config{AppName: "commerce"})
-	zip.Post[plane.RecordIn, plane.Recorded](app, "/finance/record",
-		func(ctx context.Context, in *plane.RecordIn) (*plane.Recorded, error) {
+	zip.Post[client.RecordIn, client.Recorded](app, "/finance/record",
+		func(ctx context.Context, in *client.RecordIn) (*client.Recorded, error) {
 			// The billed org rides the CALLER. Refusing an empty one here is what makes
 			// the cross-org assertions in these tests mean something.
 			org := zip.CallerOf(ctx).Org
@@ -86,8 +86,8 @@ func ServeWith(t *testing.T, observe func(org string, in plane.RecordIn)) *Comme
 				observe(org, *in)
 			}
 			c.n.Add(1)
-			return &plane.Recorded{Amount: in.Amount}, nil
-		}, zip.WithOperationID(plane.FinanceRecord))
+			return &client.Recorded{Amount: in.Amount}, nil
+		}, zip.WithOperationID(client.FinanceRecord))
 
 	// RESOLVE THE ADDRESS HERE, NOT IN THE GOROUTINE. zip.SocketPath reads
 	// ZIP_RUNTIME_DIR on every call, and each test points that at its own temp dir —
@@ -129,8 +129,8 @@ func runtimeDir(t *testing.T) string {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	t.Setenv("ZIP_RUNTIME_DIR", dir)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 	return dir
 }
 
@@ -252,7 +252,7 @@ func Wait(cond func() bool) bool {
 // Cents reads a crossed amount as whole cents — the unit a fee constant is written
 // in. Use [Micros] for a per-screen or per-token price, which is finer than a cent
 // and would truncate to zero here.
-func Cents(m plane.Money) int64 {
+func Cents(m client.Money) int64 {
 	a, err := m.Parse()
 	if err != nil {
 		return 0
@@ -266,7 +266,7 @@ func Cents(m plane.Money) int64 {
 // The amount crosses as an EXACT decimal, so this is a rescale and never a rounding:
 // the old HTTP body had to choose between a cents field and a micros field, and the
 // reader had to guess which one was set.
-func Micros(m plane.Money) int64 {
+func Micros(m client.Money) int64 {
 	a, err := m.Parse()
 	if err != nil {
 		return 0

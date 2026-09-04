@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	iamschema "github.com/hanzoai/iam/pkg/schema"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	"github.com/hanzoai/orm"
@@ -24,9 +24,9 @@ import (
 
 // exposeRoles publishes the role read. Mount calls it.
 func exposeRoles() {
-	zip.Post[struct{}, plane.Roles](cloud.Plane(), "/iam/roles",
+	zip.Post[struct{}, client.Roles](cloud.Plane(), "/iam/roles",
 		roles,
-		zip.WithOperationID(plane.IAMRoles),
+		zip.WithOperationID(client.IAMRoles),
 		zip.WithSummary("The caller's role names in their own org"))
 }
 
@@ -40,7 +40,7 @@ func exposeRoles() {
 // It fails closed on a store that is not open: this process owns the store, so a
 // nil handle is a boot-order fault, and an empty set would read as a member with
 // no grants — a refusal the caller would blame on their own permissions.
-func roles(ctx context.Context, _ *cloud.Unit) (*plane.Roles, error) {
+func roles(ctx context.Context, _ *cloud.Unit) (*client.Roles, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" || who.User == "" {
 		return nil, zip.ErrUnauthorized("roles: no caller on the call")
@@ -94,5 +94,5 @@ func roles(ctx context.Context, _ *cloud.Unit) (*plane.Roles, error) {
 		}
 	}
 	slices.Sort(out)
-	return &plane.Roles{Roles: slices.Compact(out)}, nil
+	return &client.Roles{Roles: slices.Compact(out)}, nil
 }

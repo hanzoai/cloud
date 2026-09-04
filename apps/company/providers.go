@@ -7,8 +7,8 @@ import (
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/metering"
 )
 
 // providers.go declares the provider CLIENTS the formation machine drives, plus the

@@ -1,10 +1,10 @@
 package git
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"os"
 	"os/exec"

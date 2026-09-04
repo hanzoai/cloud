@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -40,11 +40,11 @@ import (
 
 // expose publishes the count. Mount calls it.
 func expose() {
-	zip.Post[plane.AllowanceIn, plane.Allowance](cloud.Plane(), "/allowance/read", planeRead,
-		zip.WithOperationID(plane.AllowanceRead),
+	zip.Post[client.AllowanceIn, client.Allowance](cloud.Plane(), "/allowance/read", planeRead,
+		zip.WithOperationID(client.AllowanceRead),
 		zip.WithSummary("Read what a subject has left of their plan's free calls"))
-	zip.Post[plane.AllowanceIn, plane.Allowance](cloud.Plane(), "/allowance/take", planeTake,
-		zip.WithOperationID(plane.AllowanceTake),
+	zip.Post[client.AllowanceIn, client.Allowance](cloud.Plane(), "/allowance/take", planeTake,
+		zip.WithOperationID(client.AllowanceTake),
 		zip.WithSummary("Count one served free call against a subject's plan allowance"))
 }
 
@@ -64,7 +64,7 @@ func expose() {
 // address on the edge.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeRead(ctx context.Context, in *plane.AllowanceIn) (*plane.Allowance, error) {
+func planeRead(ctx context.Context, in *client.AllowanceIn) (*client.Allowance, error) {
 	org, subject, err := scope(ctx, in)
 	if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ func planeRead(ctx context.Context, in *plane.AllowanceIn) (*plane.Allowance, er
 // cannot say. It is ONE rule for both ops: the org is the caller's, asserted by the
 // gateway and never nameable in the input, and the subject is theirs to choose only
 // within it.
-func scope(ctx context.Context, in *plane.AllowanceIn) (org, subject string, err error) {
+func scope(ctx context.Context, in *client.AllowanceIn) (org, subject string, err error) {
 	org = cloud.Who(ctx).Org
 	if org == "" {
 		return "", "", zip.ErrForbidden("allowance: no org on the call")
@@ -110,7 +110,7 @@ func scope(ctx context.Context, in *plane.AllowanceIn) (org, subject string, err
 // usage.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeTake(ctx context.Context, in *plane.AllowanceIn) (*plane.Allowance, error) {
+func planeTake(ctx context.Context, in *client.AllowanceIn) (*client.Allowance, error) {
 	org, subject, err := scope(ctx, in)
 	if err != nil {
 		return nil, err

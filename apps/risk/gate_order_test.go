@@ -26,7 +26,7 @@ package risk
 //	local ledger (this fixture) — metering refuses an empty org fail-closed, which
 //	   is not a 4xx, so the money wire's fallback renders 503 "Billing temporarily
 //	   unavailable". An unauthenticated caller is told the BILLER is broken.
-//	peer ledger (the deployed shape) — the crossing ships plane.AuthorizeIn{Subject:""}
+//	peer ledger (the deployed shape) — the crossing ships client.AuthorizeIn{Subject:""}
 //	   over the internal plane, commerce's own `validate:"required"` rejects it, and
 //	   because that refusal is a 4xx the money wire PRESERVES it verbatim: 400
 //	   `field "subject" is required`. The caller is told to send a field that

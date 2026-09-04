@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
-	"github.com/hanzoai/cloud/plane/settings"
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/client/settings"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -64,7 +64,7 @@ func Model(ctx context.Context, role, floor string) string {
 	ctx, cancel := context.WithTimeout(ctx, modelCallTimeout)
 	defer cancel()
 
-	out, err := settings.SettingsFleet(ctx, &plane.Product{Product: "ai"})
+	out, err := settings.SettingsFleet(ctx, &client.Product{Product: "ai"})
 	switch {
 	case err != nil:
 		// Warn, not error: this is a stale ROUTE rather than a failed request, and

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // THE TWO PEOPLE THE OLD SINGLE CLOCK GOT WRONG, as a test.
@@ -48,7 +48,7 @@ func TestTheClockDependsOnWhetherAnyoneIsWatching(t *testing.T) {
 			// the short clock is measured from the moment they left. A refresh or a
 			// train tunnel is exactly this, and it gets its fifteen minutes.
 			"a stream that dropped a moment ago",
-			Sandbox{CreatedAt: ago(time.Hour), LastUsedAt: ago(20 * time.Minute), ConnectedAt: ago(4 * plane.AttachEvery)},
+			Sandbox{CreatedAt: ago(time.Hour), LastUsedAt: ago(20 * time.Minute), ConnectedAt: ago(4 * client.AttachEvery)},
 			false, "",
 		},
 		{

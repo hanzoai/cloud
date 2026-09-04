@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/forge"
-	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -364,7 +364,7 @@ type scribe struct {
 // fact — it rides the caller — so capturing it here is what proves it crossed as
 // an identity rather than as an argument anyone could name.
 type said struct {
-	plane.Visibility
+	client.Visibility
 	Org string
 }
 
@@ -394,8 +394,8 @@ func listen(t *testing.T) *scribe {
 	t.Setenv("ZIP_RUNTIME_DIR", sockDir(t))
 	sc := &scribe{}
 	app := zip.New(zip.Config{AppName: "git"})
-	zip.Post[plane.Visibility, struct{}](app, "/git/publish",
-		func(ctx context.Context, ev *plane.Visibility) (*struct{}, error) {
+	zip.Post[client.Visibility, struct{}](app, "/git/publish",
+		func(ctx context.Context, ev *client.Visibility) (*struct{}, error) {
 			org := cloud.Who(ctx).Org
 			sc.mu.Lock()
 			defer sc.mu.Unlock()
@@ -407,7 +407,7 @@ func listen(t *testing.T) *scribe {
 				return nil, zip.Errorf(http.StatusBadGateway, "git publish: away")
 			}
 			return nil, nil
-		}, zip.WithOperationID(plane.GitPublish))
+		}, zip.WithOperationID(client.GitPublish))
 	go func() { _ = app.Listen(zip.SocketPath("git")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	for i := 0; i < 200; i++ {
@@ -749,7 +749,7 @@ func TestEveryCopyFollowsTheRow(t *testing.T) {
 		settled(t, "the repository to be readable", func() bool { return f.readable(t, "acme_board") })
 		settled(t, "the other copies to be opened", func() bool {
 			ev, ok := sc.last("board")
-			return ok && ev.State == plane.Open
+			return ok && ev.State == client.Open
 		})
 		// The TENANT RIDES THE CALL and is not a field of the fact: a caller that
 		// could name an org would be publishing into another tenant's repositories.
@@ -771,7 +771,7 @@ func TestEveryCopyFollowsTheRow(t *testing.T) {
 		}
 		settled(t, "every copy to close", func() bool {
 			ev, ok := sc.last("secret")
-			return ok && ev.State == plane.Shut && !f.readable(t, "acme_secret")
+			return ok && ev.State == client.Shut && !f.readable(t, "acme_secret")
 		})
 		// On the RETRACTION path too, which is where a tenant read off the inbound
 		// request rather than the project is a close the git app throws away.
@@ -789,7 +789,7 @@ func TestEveryCopyFollowsTheRow(t *testing.T) {
 		}
 		settled(t, "every copy to close", func() bool {
 			ev, ok := sc.last("spam")
-			return ok && ev.State == plane.Shut && !f.readable(t, "acme_spam")
+			return ok && ev.State == client.Shut && !f.readable(t, "acme_spam")
 		})
 		sc.forOrg(t, "spam", "acme")
 	})
@@ -807,7 +807,7 @@ func TestEveryCopyFollowsTheRow(t *testing.T) {
 		// Asserted with NO WAITING, like the forge half: the slug is free to
 		// reclaim the moment the delete answers, so every copy has to have been
 		// told by then rather than be scheduled to be.
-		if !sc.heard("board", plane.Gone) {
+		if !sc.heard("board", client.Gone) {
 			t.Fatalf("the delete answered before the other copies were retired: %v", sc.states("board"))
 		}
 		sc.forOrg(t, "board", "acme")
@@ -889,14 +889,14 @@ func TestTheAuditClosesEveryCopy(t *testing.T) {
 	if f.readable(t, "acme_secret") {
 		t.Fatal("the audit left the forge's copy world-readable")
 	}
-	if got, _ := sc.last("secret"); got.State != plane.Shut {
-		t.Fatalf("the git app was last told %q, want %q", got.State, plane.Shut)
+	if got, _ := sc.last("secret"); got.State != client.Shut {
+		t.Fatalf("the git app was last told %q, want %q", got.State, client.Shut)
 	}
 	// And everything it said was CLOSE. The audit holds an absence, not a
 	// deletion, so a store that is empty or half-restored costs closed
 	// repositories rather than deleted ones — on every copy, not only the forge's.
 	for _, got := range sc.states("secret")[before:] {
-		if got != plane.Shut {
+		if got != client.Shut {
 			t.Fatalf("the audit told the git app %q; it may only ever close", got)
 		}
 	}
@@ -1048,7 +1048,7 @@ func TestAReclaimedSlugInheritsNothingFromALeftover(t *testing.T) {
 	}
 	// And the other two copies were destroyed BEFORE anything was opened: the
 	// order is the whole of it, since the git app finds a repository by name too.
-	if got := sc.states("board"); len(got) < 2 || got[len(got)-1] != plane.Open || got[len(got)-2] != plane.Gone {
+	if got := sc.states("board"); len(got) < 2 || got[len(got)-1] != client.Open || got[len(got)-2] != client.Gone {
 		t.Fatalf("the git app was told %v; the reclaimed name must be emptied before it is filled", got)
 	}
 }
@@ -1113,8 +1113,8 @@ func TestADeleteThatRacesACreateLeavesNoOpenOrphan(t *testing.T) {
 	if f.exists("acme_board") {
 		t.Fatal("a deleted project's source is still on the forge")
 	}
-	if got, _ := sc.last("board"); got.State != plane.Gone {
-		t.Fatalf("the git app was last told %q, want %q", got.State, plane.Gone)
+	if got, _ := sc.last("board"); got.State != client.Gone {
+		t.Fatalf("the git app was last told %q, want %q", got.State, client.Gone)
 	}
 }
 

@@ -1,9 +1,9 @@
 package sync
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
+	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"net/http"
 	"net/url"
 	"regexp"

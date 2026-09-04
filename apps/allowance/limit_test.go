@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/tenant"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // tiered builds a service whose tier reader always answers name/err, with NO store:
@@ -109,9 +109,9 @@ func TestUnboundedStandingReadsWithoutAStore(t *testing.T) {
 	s := tiered("pro", nil)
 	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 
-	for what, out := range map[string]func() (*plane.Allowance, error){
-		"read": func() (*plane.Allowance, error) { return s.read(context.Background(), "hanzo", "hanzo/z", now) },
-		"take": func() (*plane.Allowance, error) { return s.take(context.Background(), "hanzo", "hanzo/z", now) },
+	for what, out := range map[string]func() (*client.Allowance, error){
+		"read": func() (*client.Allowance, error) { return s.read(context.Background(), "hanzo", "hanzo/z", now) },
+		"take": func() (*client.Allowance, error) { return s.take(context.Background(), "hanzo", "hanzo/z", now) },
 	} {
 		got, err := out()
 		if err != nil {

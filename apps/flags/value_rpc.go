@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -26,9 +26,9 @@ import (
 
 // exposeValue publishes the flag read. Use calls it.
 func exposeValue() {
-	zip.Post[plane.FlagValueIn, plane.FlagValue](cloud.Plane(), "/flags/value",
+	zip.Post[client.FlagValueIn, client.FlagValue](cloud.Plane(), "/flags/value",
 		value,
-		zip.WithOperationID(plane.FlagsValue),
+		zip.WithOperationID(client.FlagsValue),
 		zip.WithSummary("What an operator has set one flag to"))
 }
 
@@ -44,7 +44,7 @@ func exposeValue() {
 // stored value means one thing however it is asked for. A caller that parsed the
 // text itself would be a second parser, and the two would disagree the first time
 // somebody wrote "yes" instead of "true".
-func value(ctx context.Context, in *plane.FlagValueIn) (*plane.FlagValue, error) {
+func value(ctx context.Context, in *client.FlagValueIn) (*client.FlagValue, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("value: no org on the call")
@@ -55,7 +55,7 @@ func value(ctx context.Context, in *plane.FlagValueIn) (*plane.FlagValue, error)
 	}
 	def := Def{Key: key, Default: in.Default, Type: kindOf(in.Kind)}
 	text, source := mounted.resolve(def)
-	out := &plane.FlagValue{Value: text, Set: source == "flags"}
+	out := &client.FlagValue{Value: text, Set: source == "flags"}
 	out.N, _ = strconv.Atoi(strings.TrimSpace(text))
 	out.On, _ = strconv.ParseBool(strings.TrimSpace(text))
 	return out, nil

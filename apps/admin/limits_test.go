@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // recCommerce records the X-Org-Id + method + path of the last forwarded request so a
@@ -110,8 +110,8 @@ func TestLimits_SpendCaps_OrgScoped(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || envStatus(t, body) != "ok" {
 		t.Fatalf("super caps = %d %s", resp.StatusCode, body)
 	}
-	if org, op := caps.seen(); org != "maxpower" || op != plane.BillingAlerts {
-		t.Fatalf("answered for org=%q op=%q, want maxpower %s", org, op, plane.BillingAlerts)
+	if org, op := caps.seen(); org != "maxpower" || op != client.BillingAlerts {
+		t.Fatalf("answered for org=%q op=%q, want maxpower %s", org, op, client.BillingAlerts)
 	}
 
 	// SuperAdmin WITHOUT ?org → org required (honest error, no guessed tenant).

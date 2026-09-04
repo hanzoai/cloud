@@ -11,9 +11,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
+	gitpeer "github.com/hanzoai/cloud/client/git"
 	"github.com/hanzoai/cloud/forge"
-	"github.com/hanzoai/cloud/plane"
-	gitpeer "github.com/hanzoai/cloud/plane/git"
 	"github.com/zap-proto/zip"
 )
 
@@ -210,14 +210,14 @@ func plain(s string) bool {
 // of the three they are allowed to reach.
 //
 // The values are the ones the git app applies to the OTHER TWO copies
-// ([plane.Visibility]), so the three copies are moved by one word each rather
+// ([client.Visibility]), so the three copies are moved by one word each rather
 // than by a word here and a translation of it there.
 type want string
 
 const (
-	shut want = plane.Shut // closed: readable only by someone on the repository
-	open want = plane.Open // world-readable
-	gone want = plane.Gone // not there at all
+	shut want = client.Shut // closed: readable only by someone on the repository
+	open want = client.Open // world-readable
+	gone want = client.Gone // not there at all
 )
 
 // wanted reads one project's row and says what its repository must be.
@@ -333,7 +333,7 @@ func tell(ctx context.Context, org, slug string, w want, p Project) error {
 	if who := cloud.Who(ctx).Org; who != org {
 		return fmt.Errorf("git: %s %s/%s: this call acts for %q", w, org, slug, who)
 	}
-	_, err := gitpeer.GitPublish(ctx, &plane.Visibility{
+	_, err := gitpeer.GitPublish(ctx, &client.Visibility{
 		Slug: slug, Name: p.Name, Description: p.Description, State: string(w),
 	})
 	if err != nil {

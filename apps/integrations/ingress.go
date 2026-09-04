@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	channelspeer "github.com/hanzoai/cloud/plane/channel"
+	"github.com/hanzoai/cloud/client"
+	channelspeer "github.com/hanzoai/cloud/client/channel"
 	"github.com/zap-proto/zip"
 )
 
@@ -26,7 +26,7 @@ import (
 // pointer was nil on this side and every event was dropped where a nil check
 // returns. The inbox took nothing and the pairing and allowlist gates never saw
 // real traffic, silently, for as long as the client existed. This is the same
-// mistake plane.AgentsRunOnBehalf was written to undo, one client over.
+// mistake client.AgentsRunOnBehalf was written to undo, one client over.
 
 // emitIngress takes one authenticated event and delivers it to the channels
 // inbox: a slot, the durable dedupe, then a detached dispatch over the plane.
@@ -179,8 +179,8 @@ func SendDiscord(ctx context.Context, channelID, replyTo, text string) (string, 
 // ingestIn is the adapter-normalized event as it crosses to channels. Its own
 // function because the mapping is the part that can silently be wrong, and the
 // hop it feeds cannot be observed from this process.
-func ingestIn(org string, in Inbound, replyRoot string) *plane.ChannelsIngestIn {
-	out := &plane.ChannelsIngestIn{
+func ingestIn(org string, in Inbound, replyRoot string) *client.ChannelsIngestIn {
+	out := &client.ChannelsIngestIn{
 		Org: org, Provider: in.Provider, ExternalID: in.ExternalID, User: in.User,
 		Channel: in.Channel, ThreadID: in.ThreadID, Text: in.Text,
 		DedupeKey: in.DedupeKey, ReplyRoot: replyRoot,
@@ -206,8 +206,8 @@ func ingestIn(org string, in Inbound, replyRoot string) *plane.ChannelsIngestIn 
 // is the reason this stays here: the link lives in KMS under this subsystem, and
 // only the answer crosses.
 func serveIdentity() {
-	zip.Post[plane.ChatIdentityIn, plane.ChatIdentityOut](cloud.Plane(), "/integrations/chat-identity", planeChatIdentity,
-		zip.WithOperationID(plane.ChatIdentity),
+	zip.Post[client.ChatIdentityIn, client.ChatIdentityOut](cloud.Plane(), "/integrations/chat-identity", planeChatIdentity,
+		zip.WithOperationID(client.ChatIdentity),
 		zip.WithSummary("Resolve the Hanzo account a chat user has linked"))
 }
 
@@ -217,13 +217,13 @@ func serveIdentity() {
 // same reason AgentsRunOnBehalf does: the tenant is the one that connected the
 // workspace, which the adapter resolved from a signed id, and the calling
 // plugin's own identity is not it. No token is returned under any branch.
-func planeChatIdentity(ctx context.Context, in *plane.ChatIdentityIn) (*plane.ChatIdentityOut, error) {
+func planeChatIdentity(ctx context.Context, in *client.ChatIdentityIn) (*client.ChatIdentityOut, error) {
 	s := mounted
 	if s == nil || in == nil {
-		return &plane.ChatIdentityOut{Say: "Sorry — I couldn't reach your Hanzo account just now. Please try again shortly."}, nil
+		return &client.ChatIdentityOut{Say: "Sorry — I couldn't reach your Hanzo account just now. Please try again shortly."}, nil
 	}
 	link, say, ephemeral := channelIdentity(s, in.Org, in.Provider, in.ExternalID, in.User)
-	return &plane.ChatIdentityOut{Subject: link.Subject, Model: link.Model, Say: say, Ephemeral: ephemeral}, nil
+	return &client.ChatIdentityOut{Subject: link.Subject, Model: link.Model, Say: say, Ephemeral: ephemeral}, nil
 }
 
 // serveSend publishes the outbound send on the plane.
@@ -238,8 +238,8 @@ func planeChatIdentity(ctx context.Context, in *plane.ChatIdentityIn) (*plane.Ch
 // that never connected Slack cannot post, and that property only holds where the
 // token is. Only the intent crosses.
 func serveSend() {
-	zip.Post[plane.ChatSendIn, plane.ChatSendOut](cloud.Plane(), "/integrations/chat-send", planeChatSend,
-		zip.WithOperationID(plane.ChatSend),
+	zip.Post[client.ChatSendIn, client.ChatSendOut](cloud.Plane(), "/integrations/chat-send", planeChatSend,
+		zip.WithOperationID(client.ChatSend),
 		zip.WithSummary("Post one message back to a chat platform as the org"))
 }
 
@@ -257,7 +257,7 @@ func serveSend() {
 // omitted it reached a per-transport error message on two transports and spent a
 // shared app credential unchecked on two others. One refusal, named once, and a
 // dropped org is loud where it was silent.
-func planeChatSend(ctx context.Context, in *plane.ChatSendIn) (*plane.ChatSendOut, error) {
+func planeChatSend(ctx context.Context, in *client.ChatSendIn) (*client.ChatSendOut, error) {
 	if mounted == nil {
 		return nil, fmt.Errorf("integrations: not mounted")
 	}
@@ -277,34 +277,34 @@ func planeChatSend(ctx context.Context, in *plane.ChatSendIn) (*plane.ChatSendOu
 			if terr != nil {
 				return nil, terr
 			}
-			return &plane.ChatSendOut{}, slackPostEphemeral(ctx, string(tok), in.Room, in.User, in.Text)
+			return &client.ChatSendOut{}, slackPostEphemeral(ctx, string(tok), in.Room, in.User, in.Text)
 		}
 		id, err := SendSlackAt(ctx, in.Org, in.Room, in.ReplyTo, "", in.Text)
-		return &plane.ChatSendOut{MessageID: id}, err
+		return &client.ChatSendOut{MessageID: id}, err
 	case "whatsapp":
 		// Every WhatsApp message IS private — one person, one number, no room a
 		// third party can see — so the flag has nothing to switch on and asking
 		// for a public one would be asking for something the API cannot do.
 		id, err := SendWhatsApp(ctx, in.Org, in.Room, in.ReplyTo, in.Text)
-		return &plane.ChatSendOut{MessageID: id}, err
+		return &client.ChatSendOut{MessageID: id}, err
 	case "discord":
 		if in.Private {
 			return nil, fmt.Errorf("integrations: discord has no private reply here")
 		}
 		id, err := SendDiscord(ctx, in.Room, in.ReplyTo, in.Text)
-		return &plane.ChatSendOut{MessageID: id}, err
+		return &client.ChatSendOut{MessageID: id}, err
 	case "teams":
-		return &plane.ChatSendOut{}, SendTeams(ctx, in.Root, in.Room, in.Text)
+		return &client.ChatSendOut{}, SendTeams(ctx, in.Root, in.Room, in.Text)
 	case "github":
 		// The room is "owner/repo#N"; the reply is an issue comment posted with
 		// the installation's own token, so it appears as the App.
 		id, err := githubIssueComment(ctx, in.Org, in.Room, in.Text)
-		return &plane.ChatSendOut{MessageID: id}, err
+		return &client.ChatSendOut{MessageID: id}, err
 	case "linear":
 		// The room is the issue id; the reply is a comment posted with the key of
 		// the person who bound the organization (linearClaim), so it carries a name.
 		id, err := linearIssueComment(ctx, mounted, in.Org, in.Room, in.Text)
-		return &plane.ChatSendOut{MessageID: id}, err
+		return &client.ChatSendOut{MessageID: id}, err
 	case "telegram":
 		// THE ISOLATION ROOT for telegram, and it has to be asked here. There is
 		// ONE global bot token, so the chat→org bind is the only thing standing
@@ -323,7 +323,7 @@ func planeChatSend(ctx context.Context, in *plane.ChatSendIn) (*plane.ChatSendOu
 		if in.ReplyTo != "" {
 			replyTo, _ = strconv.ParseInt(in.ReplyTo, 10, 64)
 		}
-		return &plane.ChatSendOut{}, SendTelegram(ctx, chat, replyTo, in.Text)
+		return &client.ChatSendOut{}, SendTelegram(ctx, chat, replyTo, in.Text)
 	}
 	return nil, fmt.Errorf("integrations: no transport for %q", in.Provider)
 }

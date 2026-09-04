@@ -70,7 +70,7 @@ func TestNoDeferredTransportInClients(t *testing.T) {
 	}
 	if len(findings) > 0 {
 		t.Log("A subsystem that is not in this process has exactly two honest shapes: " +
-			"reached over the peer plane (plane.Ask / plane/<app>, addressed by NAME, no endpoint " +
+			"reached over the peer plane (client.Call / plane/<app>, addressed by NAME, no endpoint " +
 			"to configure), or Disabled<Subsystem>() which says so. Anything in between is a " +
 			"client that looks configured and fails every call, which is strictly worse than " +
 			"having none — a missing client is diagnosed in seconds and a lying one in an incident.")
@@ -81,7 +81,7 @@ func TestNoDeferredTransportInClients(t *testing.T) {
 //
 // The eight CLOUD_<X>_ZAP_ADDR knobs that used to select the stub above are gone,
 // and this keeps them gone. A knob is the visible half of the defect: it is what
-// let a deployment believe it had chosen a transport. plane.Ask resolves a peer
+// let a deployment believe it had chosen a transport. client.Call resolves a peer
 // through zip.SocketPath(name), which is why removing the knobs removed nothing —
 // there was never an address to supply.
 //
@@ -105,7 +105,7 @@ func TestNoPeerEndpointKnobs(t *testing.T) {
 			continue
 		}
 		t.Errorf("config.go reads a peer endpoint knob: %s\n"+
-			"A peer is reached by NAME over its own socket (plane.Ask → zip.SocketPath), so an "+
+			"A peer is reached by NAME over its own socket (client.Call → zip.SocketPath), so an "+
 			"address is not something a deployment supplies. The last set of these selected a "+
 			"client that failed every call while logging that the transport was up.",
 			strings.TrimSpace(line))

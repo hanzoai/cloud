@@ -3,7 +3,6 @@
 package marketing
 
 import (
-	"github.com/hanzoai/cloud/internal/shorten"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -12,6 +11,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"net/http"
 	"net/url"
 	"strings"

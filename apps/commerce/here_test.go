@@ -18,7 +18,7 @@ package commerce
 // A goroutine-id-keyed depth counter is not a fix, it is a description of the
 // defect. The recursion existed because a co-resident caller entered the ROUTER.
 // A caller that enters the OP cannot recurse into a middleware, because it never
-// runs one: there is nothing between plane.Ask and the handler.
+// runs one: there is nothing between client.Call and the handler.
 //
 // So this test does not measure how deep the recursion goes. It removes the
 // wire — unlinks the socket the plane serves on — and shows the nested read
@@ -34,10 +34,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -55,13 +55,13 @@ var invocations atomic.Int64
 // nested is what a middleware doing its job looks like from the ledger's side:
 // serving one read, it takes two more. Under the transport this re-entered the
 // whole app twice per level and was stopped only by the depth cap.
-func nested(ctx context.Context, _ *plane.SpendIn) (*plane.Spend, error) {
+func nested(ctx context.Context, _ *client.SpendIn) (*client.Spend, error) {
 	invocations.Add(1)
-	spend, err := commercepeer.FinanceSpend(ctx, &plane.SpendIn{})
+	spend, err := commercepeer.FinanceSpend(ctx, &client.SpendIn{})
 	if err != nil {
 		return nil, err
 	}
-	txns, err := commercepeer.FinanceTxns(ctx, &plane.TxnsIn{})
+	txns, err := commercepeer.FinanceTxns(ctx, &client.TxnsIn{})
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +84,8 @@ func serveNested(t *testing.T, org string, cents int64) string {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
 	t.Setenv("ZIP_RUNTIME_DIR", sockDir)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 
 	fin := finance.New(finance.Local(t.TempDir()))
 	finance.Publish(fin)
@@ -100,7 +100,7 @@ func serveNested(t *testing.T, org string, cents int64) string {
 	t.Cleanup(cloud.ResetPlane)
 	exposeSpend()
 	exposeTxns()
-	zip.Post[plane.SpendIn, plane.Spend](cloud.Plane(), "/finance/nested", nested,
+	zip.Post[client.SpendIn, client.Spend](cloud.Plane(), "/finance/nested", nested,
 		zip.WithOperationID(nestedOp))
 
 	app := cloud.Plane()
@@ -126,7 +126,7 @@ func TestCommerceReadServesCommerceReadWithoutTheWire(t *testing.T) {
 	ctx := cloud.For(context.Background(), org)
 
 	// Warm: the socket is up, and the nested read answers.
-	out, err := plane.Ask[plane.SpendIn, plane.Spend](ctx, "commerce", nestedOp, &plane.SpendIn{})
+	out, err := client.Call[client.SpendIn, client.Spend](ctx, "commerce", nestedOp, &client.SpendIn{})
 	if err != nil {
 		t.Fatalf("nested read with the socket up: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestCommerceReadServesCommerceReadWithoutTheWire(t *testing.T) {
 	// The same nested read — one commerce op asking commerce for two more —
 	// still answers. A call that built a request for a transport to carry could
 	// not do this.
-	out, err = plane.Ask[plane.SpendIn, plane.Spend](ctx, "commerce", nestedOp, &plane.SpendIn{})
+	out, err = client.Call[client.SpendIn, client.Spend](ctx, "commerce", nestedOp, &client.SpendIn{})
 	if err != nil {
 		t.Fatalf("nested read with NO socket: %v\n"+
 			"the co-resident call is still going through a wire; zip.Serving/zip.Here is not carrying it", err)
@@ -175,7 +175,7 @@ func TestBreakingTheDirectPathBreaksTheCall(t *testing.T) {
 	serveNested(t, org, cents)
 	ctx := cloud.For(context.Background(), org)
 
-	if _, err := plane.Ask[plane.SpendIn, plane.Spend](ctx, "commerce", nestedOp, &plane.SpendIn{}); err != nil {
+	if _, err := client.Call[client.SpendIn, client.Spend](ctx, "commerce", nestedOp, &client.SpendIn{}); err != nil {
 		t.Fatalf("baseline nested read: %v", err)
 	}
 
@@ -187,22 +187,22 @@ func TestBreakingTheDirectPathBreaksTheCall(t *testing.T) {
 	defer func() { _ = os.RemoveAll(elsewhere) }()
 	real := os.Getenv("ZIP_RUNTIME_DIR")
 	t.Setenv("ZIP_RUNTIME_DIR", elsewhere)
-	plane.Unbind()
+	client.Unbind()
 	if zip.Serving("commerce") != nil {
 		t.Fatal("zip.Serving still answers for commerce at an address nothing bound — the mutation did not take")
 	}
-	if _, err := plane.Ask[plane.SpendIn, plane.Spend](ctx, "commerce", nestedOp, &plane.SpendIn{}); err == nil {
+	if _, err := client.Call[client.SpendIn, client.Spend](ctx, "commerce", nestedOp, &client.SpendIn{}); err == nil {
 		t.Fatal("the call SUCCEEDED with the direct path broken and no socket to fall back to; " +
 			"something other than zip.Here is answering, and the test above proves nothing")
 	}
 
 	// RESTORE IT.
 	t.Setenv("ZIP_RUNTIME_DIR", real)
-	plane.Unbind()
+	client.Unbind()
 	if zip.Serving("commerce") == nil {
 		t.Fatal("zip.Serving does not answer for commerce after restoring the runtime dir")
 	}
-	out, err := plane.Ask[plane.SpendIn, plane.Spend](ctx, "commerce", nestedOp, &plane.SpendIn{})
+	out, err := client.Call[client.SpendIn, client.Spend](ctx, "commerce", nestedOp, &client.SpendIn{})
 	if err != nil {
 		t.Fatalf("nested read after restoring the direct path: %v", err)
 	}

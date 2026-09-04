@@ -27,7 +27,7 @@
 //
 // THE FOUR PROPERTIES, AND WHERE EACH IS ENFORCED.
 //
-//	tenancy       plane.go — the tenant is the leading BOUND predicate of every
+//	tenancy       peer.go — the tenant is the leading BOUND predicate of every
 //	              statement, the first component of both tables' sort keys AND of
 //	              their partition expressions, and it arrives only as a
 //	              [tenant.Key], which cannot be written as a literal here and
@@ -77,8 +77,8 @@ import (
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/tenant"
 	"github.com/zap-proto/zip"
 )

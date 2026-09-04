@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -38,9 +38,9 @@ import (
 // The handler is a NAMED function, not a closure: zipdoc lifts an op's prose off
 // its handler's doc comment and can lift nothing from an anonymous one.
 func exposeSend(s *service) {
-	zip.Post[plane.Send, plane.Sent](cloud.Plane(), "/notify/send",
-		func(ctx context.Context, in *plane.Send) (*plane.Sent, error) { return send(ctx, s, in) },
-		zip.WithOperationID(plane.NotifySend),
+	zip.Post[client.Send, client.Sent](cloud.Plane(), "/notify/send",
+		func(ctx context.Context, in *client.Send) (*client.Sent, error) { return send(ctx, s, in) },
+		zip.WithOperationID(client.NotifySend),
 		zip.WithSummary("Deliver one message on the org's configured provider"))
 }
 
@@ -56,7 +56,7 @@ func exposeSend(s *service) {
 // than defaulted. An empty org is the important one: notify resolves the provider
 // credential by org, so defaulting it would send this tenant's message through
 // somebody else's account.
-func send(ctx context.Context, s *service, in *plane.Send) (*plane.Sent, error) {
+func send(ctx context.Context, s *service, in *client.Send) (*client.Sent, error) {
 	if in == nil {
 		return nil, zip.Errorf(400, "notify: no request")
 	}
@@ -87,5 +87,5 @@ func send(ctx context.Context, s *service, in *plane.Send) (*plane.Sent, error) 
 		// leaves a person waiting on a message that will never arrive.
 		return nil, fmt.Errorf("notify: send on %s for %s: %w", channel, org, err)
 	}
-	return &plane.Sent{Provider: used}, nil
+	return &client.Sent{Provider: used}, nil
 }

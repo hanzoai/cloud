@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // github.go is the GitHub transport: an issue or pull request is a room, its
@@ -18,7 +18,7 @@ import (
 
 // githubEndpoint is the send path; tests spy it, prod never repoints.
 var githubEndpoint = func(ctx context.Context, org, room, text string) (string, error) {
-	return post(ctx, org, plane.ChatSendIn{Provider: "github", Room: room, Text: text})
+	return post(ctx, org, client.ChatSendIn{Provider: "github", Room: room, Text: text})
 }
 
 var githubTransport = transport{
@@ -32,7 +32,7 @@ var githubTransport = transport{
 // "owner/repo#N", DedupeKey = comment id) into the envelope. Every issue is a
 // thread: there is no direct message on GitHub and the comments under an issue
 // are one conversation.
-func githubNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
+func githubNormalize(ev client.ChannelsIngestIn) (Message, bool) {
 	if ev.Channel == "" {
 		return Message{}, false
 	}

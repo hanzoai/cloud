@@ -8,7 +8,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // ingest is the registered integrations ingress consumer (channels.Use):
@@ -22,7 +22,7 @@ const gcEverySec = 600
 
 var lastGC atomic.Int64
 
-func ingest(ctx context.Context, ev plane.ChannelsIngestIn) {
+func ingest(ctx context.Context, ev client.ChannelsIngestIn) {
 	s := mounted.Load()
 	if s == nil {
 		return
@@ -147,8 +147,8 @@ func pairingText(code string) string {
 // consumer is for. The inbox held nothing and the gates below never ran on real
 // traffic for as long as the client existed.
 func serveIngest() {
-	zip.Post[plane.ChannelsIngestIn, plane.ChannelsIngestOut](cloud.Plane(), "/channels/ingest", planeIngest,
-		zip.WithOperationID(plane.ChannelsIngest),
+	zip.Post[client.ChannelsIngestIn, client.ChannelsIngestOut](cloud.Plane(), "/channels/ingest", planeIngest,
+		zip.WithOperationID(client.ChannelsIngest),
 		zip.WithSummary("Take one authenticated inbound chat event from a platform adapter"))
 }
 
@@ -160,13 +160,13 @@ func serveIngest() {
 // team/guild/chat id, and the adapter plugin's own identity is not it. Taken
 // reports whether this inbox carries the transport — a fact worth returning,
 // since the silent version of that answer is the bug this endpoint replaces.
-func planeIngest(ctx context.Context, in *plane.ChannelsIngestIn) (*plane.ChannelsIngestOut, error) {
+func planeIngest(ctx context.Context, in *client.ChannelsIngestIn) (*client.ChannelsIngestOut, error) {
 	if in == nil || mounted.Load() == nil {
-		return &plane.ChannelsIngestOut{}, nil
+		return &client.ChannelsIngestOut{}, nil
 	}
 	if _, ok := transportFor(in.Provider); !ok {
-		return &plane.ChannelsIngestOut{}, nil
+		return &client.ChannelsIngestOut{}, nil
 	}
 	ingest(ctx, *in)
-	return &plane.ChannelsIngestOut{Taken: true}, nil
+	return &client.ChannelsIngestOut{Taken: true}, nil
 }

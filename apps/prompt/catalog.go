@@ -1,11 +1,11 @@
 package prompt
 
 import (
-	"github.com/hanzoai/cloud"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud"
 	"net/http"
 	"sync"
 

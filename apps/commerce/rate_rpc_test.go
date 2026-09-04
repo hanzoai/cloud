@@ -10,7 +10,7 @@ import (
 	commercemod "github.com/hanzoai/commerce"
 	commercerate "github.com/hanzoai/commerce/models/rate"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // A PRICE THAT CANNOT BE READ MUST NOT READ AS FREE. Every case here is one way
@@ -54,7 +54,7 @@ func TestRate_AnswersThePublishedPrice(t *testing.T) {
 	ctx := context.Background()
 	putRate(t, ctx, "storage", "cold-gb-month", "GB-month", 80_000_000, "")
 
-	out, err := planeRate(ctx, &plane.RateIn{Product: "storage", Meter: "cold-gb-month"})
+	out, err := planeRate(ctx, &client.RateIn{Product: "storage", Meter: "cold-gb-month"})
 	if err != nil {
 		t.Fatalf("planeRate: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestRate_ZeroIsPublishedNotAbsent(t *testing.T) {
 	ctx := context.Background()
 	putRate(t, ctx, "translate", "given-away", "1k characters", 0, "")
 
-	out, err := planeRate(ctx, &plane.RateIn{Product: "translate", Meter: "given-away"})
+	out, err := planeRate(ctx, &client.RateIn{Product: "translate", Meter: "given-away"})
 	if err != nil {
 		t.Fatalf("planeRate: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestRate_ZeroIsPublishedNotAbsent(t *testing.T) {
 // of a new one, and failing would stop the work over a missing row.
 func TestRate_AbsentIsNotAnError(t *testing.T) {
 	boot(t)
-	out, err := planeRate(context.Background(), &plane.RateIn{Product: "storage", Meter: "nothing-here"})
+	out, err := planeRate(context.Background(), &client.RateIn{Product: "storage", Meter: "nothing-here"})
 	if err != nil {
 		t.Fatalf("an unpublished rate returned an error: %v — a meter nobody has priced "+
 			"must not stop the work it meters", err)
@@ -115,7 +115,7 @@ func TestRate_AnUnlistedRowDoesNotPrice(t *testing.T) {
 	ctx := context.Background()
 	for _, status := range []string{"archived", "draft"} {
 		putRate(t, ctx, "risk", "screen-"+status, "screen", 999_000, status)
-		out, err := planeRate(ctx, &plane.RateIn{Product: "risk", Meter: "screen-" + status})
+		out, err := planeRate(ctx, &client.RateIn{Product: "risk", Meter: "screen-" + status})
 		if err != nil {
 			t.Fatalf("planeRate(%s): %v", status, err)
 		}
@@ -130,7 +130,7 @@ func TestRate_AnUnlistedRowDoesNotPrice(t *testing.T) {
 // rather than a lookup of "/".
 func TestRate_RefusesAHalfNamedMeter(t *testing.T) {
 	boot(t)
-	for _, in := range []plane.RateIn{
+	for _, in := range []client.RateIn{
 		{Product: "storage"},
 		{Meter: "block-gb-month"},
 		{},
@@ -147,7 +147,7 @@ func TestRate_RefusesAHalfNamedMeter(t *testing.T) {
 // priced this" from "the price is unreadable here".
 func TestRate_RefusesWhenCommerceIsNotHere(t *testing.T) {
 	PublishEmbedded(nil)
-	if _, err := planeRate(context.Background(), &plane.RateIn{Product: "storage", Meter: "block-gb-month"}); err == nil {
+	if _, err := planeRate(context.Background(), &client.RateIn{Product: "storage", Meter: "block-gb-month"}); err == nil {
 		t.Fatal("planeRate answered with no commerce beside it; an unreadable authority " +
 			"must not be reported as an unpriced meter")
 	}

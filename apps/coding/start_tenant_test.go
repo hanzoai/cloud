@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // A run's context must name the tenant, or every client it touches refuses it.
@@ -160,8 +160,8 @@ func q(s string) string { b, _ := json.Marshal(s); return string(b) }
 // of it — not the tenant and not the subject, which is the whole point of the
 // contract — so both are passed to Start separately, exactly as a real endpoint
 // passes what it read off the caller.
-func startIn(repo, prompt string) plane.CodingStartIn {
-	return plane.CodingStartIn{Repo: repo, Prompt: prompt}
+func startIn(repo, prompt string) client.CodingStartIn {
+	return client.CodingStartIn{Repo: repo, Prompt: prompt}
 }
 
 // A finished run must always get the last word, and it must say which ending it

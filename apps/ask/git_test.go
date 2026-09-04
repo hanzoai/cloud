@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/forge"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // twelveRepos is an inventory of 12 repositories totalling 48 MiB, which is what
@@ -27,14 +27,14 @@ func twelveRepos() []forge.Repo {
 }
 
 // figuresOf reads the rollup for one org against a fixed inventory.
-func figuresOf(t *testing.T, repos []forge.Repo) map[string]plane.Figure {
+func figuresOf(t *testing.T, repos []forge.Repo) map[string]client.Figure {
 	t.Helper()
 	stubInventory(t, byRepo{"acme": repos})
-	out, err := gitFigures(cloud.For(context.Background(), "acme"), &plane.FiguresIn{})
+	out, err := gitFigures(cloud.For(context.Background(), "acme"), &client.FiguresIn{})
 	if err != nil {
 		t.Fatalf("gitFigures: %v", err)
 	}
-	by := map[string]plane.Figure{}
+	by := map[string]client.Figure{}
 	for _, f := range out.Figures {
 		by[f.Label] = f
 	}
@@ -120,7 +120,7 @@ func TestForgeReposRefusesAnUnmappedTenant(t *testing.T) {
 }
 
 // TestBytesReadsLikeAPerson fixes the one formatting rule this domain owns. The
-// value crosses the wire already formatted (plane.Figure), so a second spelling
+// value crosses the wire already formatted (client.Figure), so a second spelling
 // downstream is how one number starts disagreeing with the page it came from.
 func TestBytesReadsLikeAPerson(t *testing.T) {
 	for n, want := range map[int64]string{

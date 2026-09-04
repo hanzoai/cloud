@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/internal/planetest"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -111,49 +111,49 @@ func servePeers(t *testing.T, p *peers) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 
 	agentsApp := zip.New(zip.Config{AppName: "agents", DisableStartupMessage: true})
-	zip.Post[plane.SessionOpenIn, plane.SessionOpened](agentsApp, "/agents/session/open",
-		func(ctx context.Context, in *plane.SessionOpenIn) (*plane.SessionOpened, error) {
+	zip.Post[client.SessionOpenIn, client.SessionOpened](agentsApp, "/agents/session/open",
+		func(ctx context.Context, in *client.SessionOpenIn) (*client.SessionOpened, error) {
 			id, err := p.sessions.OpenOn(ctx, in.Org, in.Actor, in.Agent, in.Title, in.Target)
 			if err != nil {
 				return nil, err
 			}
-			return &plane.SessionOpened{SessionID: id}, nil
-		}, zip.WithOperationID(plane.AgentsSessionOpen))
-	zip.Post[plane.SessionEventIn, plane.CodingAck](agentsApp, "/agents/session/event",
-		func(ctx context.Context, in *plane.SessionEventIn) (*plane.CodingAck, error) {
+			return &client.SessionOpened{SessionID: id}, nil
+		}, zip.WithOperationID(client.AgentsSessionOpen))
+	zip.Post[client.SessionEventIn, client.CodingAck](agentsApp, "/agents/session/event",
+		func(ctx context.Context, in *client.SessionEventIn) (*client.CodingAck, error) {
 			if err := p.sessions.Log(ctx, in.Org, in.SessionID, in.Kind, in.Actor, in.Payload); err != nil {
 				return nil, err
 			}
-			return &plane.CodingAck{OK: true}, nil
-		}, zip.WithOperationID(plane.AgentsSessionEvent))
-	zip.Post[plane.SessionCloseIn, plane.CodingAck](agentsApp, "/agents/session/close",
-		func(ctx context.Context, in *plane.SessionCloseIn) (*plane.CodingAck, error) {
+			return &client.CodingAck{OK: true}, nil
+		}, zip.WithOperationID(client.AgentsSessionEvent))
+	zip.Post[client.SessionCloseIn, client.CodingAck](agentsApp, "/agents/session/close",
+		func(ctx context.Context, in *client.SessionCloseIn) (*client.CodingAck, error) {
 			if err := p.sessions.Close(ctx, in.Org, in.SessionID, in.Status); err != nil {
 				return nil, err
 			}
-			return &plane.CodingAck{OK: true}, nil
-		}, zip.WithOperationID(plane.AgentsSessionClose))
-	zip.Post[plane.TargetGateIn, plane.CodingAck](agentsApp, "/agents/target-gate",
-		func(_ context.Context, in *plane.TargetGateIn) (*plane.CodingAck, error) {
+			return &client.CodingAck{OK: true}, nil
+		}, zip.WithOperationID(client.AgentsSessionClose))
+	zip.Post[client.TargetGateIn, client.CodingAck](agentsApp, "/agents/target-gate",
+		func(_ context.Context, in *client.TargetGateIn) (*client.CodingAck, error) {
 			p.gated = append(p.gated, in.Org+"/"+in.TargetID)
-			return &plane.CodingAck{OK: true}, nil
-		}, zip.WithOperationID(plane.AgentsTargetGate))
+			return &client.CodingAck{OK: true}, nil
+		}, zip.WithOperationID(client.AgentsTargetGate))
 
 	// KMS is where the forge credential comes from, so it is a real peer on a
 	// real socket — the one hop between "the deployment's secret" and a run's
 	// ability to read the forge at all.
 	kmsApp := zip.New(zip.Config{AppName: "kms", DisableStartupMessage: true})
-	zip.Post[plane.SecretIn, plane.Secret](kmsApp, "/kms/get",
-		func(_ context.Context, in *plane.SecretIn) (*plane.Secret, error) {
+	zip.Post[client.SecretIn, client.Secret](kmsApp, "/kms/get",
+		func(_ context.Context, in *client.SecretIn) (*client.Secret, error) {
 			if in.Ref != forge.TokenRef {
 				return nil, zip.ErrNotFound("no such secret")
 			}
-			return &plane.Secret{Value: []byte("forge-machine-token")}, nil
-		}, zip.WithOperationID(plane.KMSGet))
+			return &client.Secret{Value: []byte("forge-machine-token")}, nil
+		}, zip.WithOperationID(client.KMSGet))
 
 	todoApp := zip.New(zip.Config{AppName: "todo", DisableStartupMessage: true})
-	zip.Post[plane.AgentPRIn, plane.AgentPROut](todoApp, "/todo/agent-pr",
-		func(ctx context.Context, in *plane.AgentPRIn) (*plane.AgentPROut, error) {
+	zip.Post[client.AgentPRIn, client.AgentPROut](todoApp, "/todo/agent-pr",
+		func(ctx context.Context, in *client.AgentPRIn) (*client.AgentPROut, error) {
 			// No in.Org: the org is the caller's plane identity, mirroring the real
 			// handler (plugin/todo/clients.go) after the cross-tenant write was closed.
 			ref, err := p.todo.Open(ctx, PRInput{
@@ -163,11 +163,11 @@ func servePeers(t *testing.T, p *peers) {
 			if err != nil {
 				return nil, err
 			}
-			return &plane.AgentPROut{Identifier: ref.Identifier, ProjectKey: ref.ProjectKey, Number: ref.Number}, nil
-		}, zip.WithOperationID(plane.TodoAgentPR))
+			return &client.AgentPROut{Identifier: ref.Identifier, ProjectKey: ref.ProjectKey, Number: ref.Number}, nil
+		}, zip.WithOperationID(client.TodoAgentPR))
 
 	for name, app := range map[string]*zip.App{"agents": agentsApp, "kms": kmsApp, "todo": todoApp} {
-		plane.Bind()
+		client.Bind()
 		go func(path string) { _ = app.Listen(path) }(zip.SocketPath(name))
 		t.Cleanup(func() { _ = app.Shutdown() })
 		waitListening(t, name)
@@ -178,7 +178,7 @@ func waitListening(t *testing.T, app string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if up, err := plane.Listening(zip.SocketPath(app)); err == nil && up {
+		if up, err := client.Listening(zip.SocketPath(app)); err == nil && up {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)

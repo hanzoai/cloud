@@ -33,25 +33,25 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // exposeStatement publishes the five statement reads. Mount calls it.
 func exposeStatement() {
-	zip.Post[plane.CallerIn, plane.Accounts](cloud.Plane(), "/billing/accounts", planeAccounts,
-		zip.WithOperationID(plane.BillingAccounts),
+	zip.Post[client.CallerIn, client.Accounts](cloud.Plane(), "/billing/accounts", planeAccounts,
+		zip.WithOperationID(client.BillingAccounts),
 		zip.WithSummary("The caller's billing accounts"))
-	zip.Post[plane.HoldersIn, plane.Holders](cloud.Plane(), "/billing/account/members", planeMembers,
-		zip.WithOperationID(plane.BillingAccountMembers),
+	zip.Post[client.HoldersIn, client.Holders](cloud.Plane(), "/billing/account/members", planeMembers,
+		zip.WithOperationID(client.BillingAccountMembers),
 		zip.WithSummary("The roster of one billing account"))
-	zip.Post[struct{}, plane.Payouts](cloud.Plane(), "/billing/payouts", planePayouts,
-		zip.WithOperationID(plane.BillingPayouts),
+	zip.Post[struct{}, client.Payouts](cloud.Plane(), "/billing/payouts", planePayouts,
+		zip.WithOperationID(client.BillingPayouts),
 		zip.WithSummary("Outbound payouts for this org"))
-	zip.Post[plane.TransactionsIn, plane.Transactions](cloud.Plane(), "/billing/transactions", planeTransactions,
-		zip.WithOperationID(plane.BillingTransactions),
+	zip.Post[client.TransactionsIn, client.Transactions](cloud.Plane(), "/billing/transactions", planeTransactions,
+		zip.WithOperationID(client.BillingTransactions),
 		zip.WithSummary("One page of a subject's ledger"))
-	zip.Post[plane.TransactionRef, plane.Transaction](cloud.Plane(), "/billing/transaction", planeTransaction,
-		zip.WithOperationID(plane.BillingTransaction),
+	zip.Post[client.TransactionRef, client.Transaction](cloud.Plane(), "/billing/transaction", planeTransaction,
+		zip.WithOperationID(client.BillingTransaction),
 		zip.WithSummary("One ledger entry by its id"))
 }
 
@@ -65,7 +65,7 @@ func exposeStatement() {
 // and cannot be named, so the account described is always the caller's own.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeAccounts(ctx context.Context, in *plane.CallerIn) (*plane.Accounts, error) {
+func planeAccounts(ctx context.Context, in *client.CallerIn) (*client.Accounts, error) {
 	org, err := orgOf(ctx, "accounts")
 	if err != nil {
 		return nil, err
@@ -74,14 +74,14 @@ func planeAccounts(ctx context.Context, in *plane.CallerIn) (*plane.Accounts, er
 	if aerr != nil {
 		return nil, zip.Errorf(502, "accounts: %v", aerr)
 	}
-	out := make([]plane.BillingAccount, 0, len(rows))
+	out := make([]client.BillingAccount, 0, len(rows))
 	for _, a := range rows {
-		out = append(out, plane.BillingAccount{
+		out = append(out, client.BillingAccount{
 			ID: a.Id, Name: a.Name, OrgID: a.OrgId, OrgName: a.OrgName,
 			Currency: string(a.Currency), CreatedAt: stamp(a.CreatedAt), Role: a.Role,
 		})
 	}
-	return &plane.Accounts{Rows: out}, nil
+	return &client.Accounts{Rows: out}, nil
 }
 
 // Lists one billing account's roster.
@@ -93,7 +93,7 @@ func planeAccounts(ctx context.Context, in *plane.CallerIn) (*plane.Accounts, er
 // of them is a refusal.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeMembers(ctx context.Context, in *plane.HoldersIn) (*plane.Holders, error) {
+func planeMembers(ctx context.Context, in *client.HoldersIn) (*client.Holders, error) {
 	org, err := orgOf(ctx, "account members")
 	if err != nil {
 		return nil, err
@@ -106,13 +106,13 @@ func planeMembers(ctx context.Context, in *plane.HoldersIn) (*plane.Holders, err
 		// already know about their own org.
 		return nil, zip.Errorf(403, "account members: %v", merr)
 	}
-	out := make([]plane.Holder, 0, len(rows))
+	out := make([]client.Holder, 0, len(rows))
 	for _, m := range rows {
-		out = append(out, plane.Holder{
+		out = append(out, client.Holder{
 			ID: m.Id, UserID: m.UserId, Email: m.Email, Role: m.Role, AddedAt: stamp(m.AddedAt),
 		})
 	}
-	return &plane.Holders{Rows: out}, nil
+	return &client.Holders{Rows: out}, nil
 }
 
 // Lists the org's outbound payouts, newest first.
@@ -122,7 +122,7 @@ func planeMembers(ctx context.Context, in *plane.HoldersIn) (*plane.Holders, err
 // never list another's.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planePayouts(ctx context.Context, _ *cloud.Unit) (*plane.Payouts, error) {
+func planePayouts(ctx context.Context, _ *cloud.Unit) (*client.Payouts, error) {
 	org, err := orgOf(ctx, "payouts")
 	if err != nil {
 		return nil, err
@@ -131,9 +131,9 @@ func planePayouts(ctx context.Context, _ *cloud.Unit) (*plane.Payouts, error) {
 	if perr != nil {
 		return nil, zip.Errorf(502, "payouts: %v", perr)
 	}
-	out := make([]plane.Payout, 0, len(rows))
+	out := make([]client.Payout, 0, len(rows))
 	for _, p := range rows {
-		row := plane.Payout{
+		row := client.Payout{
 			ID: p.Id, Amount: p.Amount,
 			Currency: string(p.Currency), Status: string(p.Status),
 			DestinationType: p.DestinationType, DestinationID: p.DestinationId,
@@ -146,7 +146,7 @@ func planePayouts(ctx context.Context, _ *cloud.Unit) (*plane.Payouts, error) {
 		}
 		out = append(out, row)
 	}
-	return &plane.Payouts{Rows: out}, nil
+	return &client.Payouts{Rows: out}, nil
 }
 
 // Reads one page of a subject's ledger, newest first.
@@ -160,7 +160,7 @@ func planePayouts(ctx context.Context, _ *cloud.Unit) (*plane.Payouts, error) {
 // difference is how a reader knows there is more to ask for.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeTransactions(ctx context.Context, in *plane.TransactionsIn) (*plane.Transactions, error) {
+func planeTransactions(ctx context.Context, in *client.TransactionsIn) (*client.Transactions, error) {
 	org, err := orgOf(ctx, "transactions")
 	if err != nil {
 		return nil, err
@@ -169,15 +169,15 @@ func planeTransactions(ctx context.Context, in *plane.TransactionsIn) (*plane.Tr
 	if terr != nil {
 		return nil, zip.Errorf(502, "transactions: %v", terr)
 	}
-	out := make([]plane.Transaction, 0, len(page.Transactions))
+	out := make([]client.Transaction, 0, len(page.Transactions))
 	for _, t := range page.Transactions {
-		out = append(out, plane.Transaction{
+		out = append(out, client.Transaction{
 			ID: t.Id, Type: t.Type, Amount: t.Amount, Currency: t.Currency,
 			Tags: t.Tags, Notes: t.Notes, Metadata: t.Metadata,
 			CreatedAt: t.CreatedAt, ExpiresAt: t.ExpiresAt,
 		})
 	}
-	return &plane.Transactions{Rows: out, Count: page.Count, User: page.User}, nil
+	return &client.Transactions{Rows: out, Count: page.Count, User: page.User}, nil
 }
 
 // stamp renders a time the way a time.Time marshals itself, which is what makes
@@ -201,7 +201,7 @@ func stamp(t time.Time) string { return t.Format(time.RFC3339Nano) }
 // reaching another tenant's ledger.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeTransaction(ctx context.Context, in *plane.TransactionRef) (*plane.Transaction, error) {
+func planeTransaction(ctx context.Context, in *client.TransactionRef) (*client.Transaction, error) {
 	org, err := orgOf(ctx, "read transaction")
 	if err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func planeTransaction(ctx context.Context, in *plane.TransactionRef) (*plane.Tra
 	if f != nil {
 		return nil, zip.Errorf(f.Status, "%s", f.Message)
 	}
-	return &plane.Transaction{
+	return &client.Transaction{
 		ID:        rec.ID,
 		Type:      "deposit",
 		Amount:    rec.AmountCents,

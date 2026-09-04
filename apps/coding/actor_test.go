@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -31,13 +31,13 @@ func asCaller(subject string) context.Context {
 }
 
 // verified/unverified state the identity store's answer for a subject.
-func verified(addr string) plane.Email   { return plane.Email{Address: addr, Verified: true} }
-func unverified(addr string) plane.Email { return plane.Email{Address: addr, Verified: false} }
+func verified(addr string) client.Email   { return client.Email{Address: addr, Verified: true} }
+func unverified(addr string) client.Email { return client.Email{Address: addr, Verified: false} }
 
 // THE OWNER RESOLVES AND IS ENTITLED. A control that refuses everybody is an
 // outage, not a control — this is the case that must keep working.
 func TestResolveActor_TheOwnerResolvesAndIsEntitled(t *testing.T) {
-	iamAddr = map[string]plane.Email{"sub-z": verified("z@hanzo.ai")}
+	iamAddr = map[string]client.Email{"sub-z": verified("z@hanzo.ai")}
 	minted := forgeAs(t, map[string]bool{"z": true},
 		func(login string) string { return login + "@hanzo.ai" })
 	ctx := asCaller("sub-z")
@@ -60,7 +60,7 @@ func TestResolveActor_TheOwnerResolvesAndIsEntitled(t *testing.T) {
 // THE ESCALATION: a stranger whose address derives a colleague's login. The
 // forge holds the colleague's address against that login, so the two disagree.
 func TestResolveActor_RefusesAStrangerWhoDerivedAColleaguesLogin(t *testing.T) {
-	iamAddr = map[string]plane.Email{"sub-x": verified("z@attacker.example")}
+	iamAddr = map[string]client.Email{"sub-x": verified("z@attacker.example")}
 	minted := forgeAs(t, map[string]bool{"z": true},
 		func(login string) string { return login + "@hanzo.ai" })
 
@@ -79,7 +79,7 @@ func TestResolveActor_RefusesAStrangerWhoDerivedAColleaguesLogin(t *testing.T) {
 // forge account's, so LoginFor would agree — but the person only typed it. A
 // direct signup records it unconfirmed, which is exactly the attacker's path.
 func TestResolveActor_RefusesAnUnverifiedAddress(t *testing.T) {
-	iamAddr = map[string]plane.Email{"sub-imposter": unverified("z@hanzo.ai")}
+	iamAddr = map[string]client.Email{"sub-imposter": unverified("z@hanzo.ai")}
 	minted := forgeAs(t, map[string]bool{"z": true},
 		func(login string) string { return login + "@hanzo.ai" })
 
@@ -98,7 +98,7 @@ func TestResolveActor_RefusesAnUnverifiedAddress(t *testing.T) {
 // AN UNREACHABLE IDENTITY STORE REFUSES. Never an assumption that the address
 // was fine — the whole gate is that assumption's absence.
 func TestResolveActor_RefusesWhenTheStoreCannotAnswer(t *testing.T) {
-	iamAddr = map[string]plane.Email{} // the subject is unknown to the store
+	iamAddr = map[string]client.Email{} // the subject is unknown to the store
 	forgeAs(t, map[string]bool{"z": true}, func(login string) string { return login + "@hanzo.ai" })
 
 	if _, err := resolveActor(asCaller("sub-nobody")); err == nil {
@@ -109,7 +109,7 @@ func TestResolveActor_RefusesWhenTheStoreCannotAnswer(t *testing.T) {
 // A subject the store knows but holds no address for is refused before the
 // forge is asked anything.
 func TestResolveActor_RefusesWithNoAddress(t *testing.T) {
-	iamAddr = map[string]plane.Email{"sub-blank": verified("")}
+	iamAddr = map[string]client.Email{"sub-blank": verified("")}
 	forgeAs(t, map[string]bool{"z": true}, func(login string) string { return login + "@hanzo.ai" })
 
 	_, err := resolveActor(asCaller("sub-blank"))

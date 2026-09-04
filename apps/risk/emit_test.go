@@ -24,8 +24,8 @@ import (
 	"github.com/luxfi/aml/pkg/anomaly"
 
 	"github.com/hanzoai/cloud"
-	contract "github.com/hanzoai/cloud/plane"
-	peer "github.com/hanzoai/cloud/plane/event"
+	contract "github.com/hanzoai/cloud/client"
+	peer "github.com/hanzoai/cloud/client/event"
 )
 
 // filed is one emit as the plane received it: what was said, and whom it was said

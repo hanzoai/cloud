@@ -20,12 +20,12 @@
 package bot
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"strings"
@@ -46,7 +46,6 @@ const (
 
 	// tokenEnv is the shared service bearer (KMS-injected) the runtime gates on.
 	tokenEnv = "BOT_GATEWAY_TOKEN"
-
 
 	// errBodyCap bounds the failure detail read back for an error message.
 	errBodyCap = 64 << 10

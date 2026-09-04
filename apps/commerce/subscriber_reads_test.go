@@ -8,7 +8,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // THE ADDRESSES A SUBSCRIBER'S OWN ACCOUNT PAGE CALLS MUST BE MOUNTED HERE.
@@ -60,11 +60,11 @@ func TestASubscriberCanReadTheirOwnPlan(t *testing.T) {
 	}
 
 	for _, r := range []struct{ op, answers string }{
-		{plane.BillingPlans, "which plans exist, and what each costs"},
-		{plane.BillingSubscriptions, "which plan this customer actually holds"},
-		{plane.BillingRollup, "how much of that plan is left, and the wallet beside it"},
-		{plane.BillingTier, "the rate this customer is served at"},
-		{plane.BillingCredits, "the prepaid balance they bought"},
+		{client.BillingPlans, "which plans exist, and what each costs"},
+		{client.BillingSubscriptions, "which plan this customer actually holds"},
+		{client.BillingRollup, "how much of that plan is left, and the wallet beside it"},
+		{client.BillingTier, "the rate this customer is served at"},
+		{client.BillingCredits, "the prepaid balance they bought"},
 	} {
 		if !published[r.op] {
 			t.Errorf("%s is not published, so nothing can answer %s — the money endpoint "+

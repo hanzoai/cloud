@@ -21,11 +21,11 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/internal/planetest"
-	"github.com/hanzoai/cloud/plane/commerce"
 
 	"github.com/hanzoai/cloud/apps/commerce/transport"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -33,15 +33,15 @@ import (
 // servePlaneRules serves the scope-rules op as app "commerce" on this process's
 // plane, answering each caller org with its own rules and counting the calls. It
 // is the real op id and the real wire — only the row source is a fixture.
-func servePlaneRules(t *testing.T, rules map[string][]plane.ScopeRule, calls *atomic.Int32) {
+func servePlaneRules(t *testing.T, rules map[string][]client.ScopeRule, calls *atomic.Int32) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", "")
 	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t))
 	ResetPlane()
 	t.Cleanup(ResetPlane)
 
-	zip.Post[struct{}, plane.ScopeRules](Plane(), "/finance/scope-rules",
-		func(ctx context.Context, _ *struct{}) (*plane.ScopeRules, error) {
+	zip.Post[struct{}, client.ScopeRules](Plane(), "/finance/scope-rules",
+		func(ctx context.Context, _ *struct{}) (*client.ScopeRules, error) {
 			if calls != nil {
 				calls.Add(1)
 			}
@@ -51,8 +51,8 @@ func servePlaneRules(t *testing.T, rules map[string][]plane.ScopeRule, calls *at
 			if org == "" {
 				return nil, zip.ErrForbidden("scope rules: no org on the call")
 			}
-			return &plane.ScopeRules{Rules: rules[org]}, nil
-		}, zip.WithOperationID(plane.FinanceScopeRules))
+			return &client.ScopeRules{Rules: rules[org]}, nil
+		}, zip.WithOperationID(client.FinanceScopeRules))
 
 	stop, err := ServePlane(commerce.App, luxlog.NewNoOpLogger())
 	if err != nil {
@@ -87,7 +87,7 @@ func coresidentRateApp(t *testing.T, entries *atomic.Int32) *zip.App {
 // as the 502 that was in production.
 func TestScopeRulesComeOverThePlaneNotThroughTheApp(t *testing.T) {
 	var planeCalls, entries atomic.Int32
-	servePlaneRules(t, map[string][]plane.ScopeRule{
+	servePlaneRules(t, map[string][]client.ScopeRule{
 		"hanzo": {{Project: "P", RateLimitRpm: 2}},
 	}, &planeCalls)
 	app := coresidentRateApp(t, &entries)

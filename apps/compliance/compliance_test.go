@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/idv"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/idv"
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"

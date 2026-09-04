@@ -51,10 +51,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
-	"github.com/hanzoai/cloud/plane/commerce"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -194,7 +194,7 @@ func New(cfg Config) (*Client, error) {
 // BaseURL is configured, which cloud sets whenever commerce is co-resident. False
 // means the ledger lives elsewhere, not that nothing bills: the gate and the debit
 // then cross the internal plane to the process that owns it, and only
-// [plane.ErrNoPeer] says no such process exists.
+// [client.ErrNoPeer] says no such process exists.
 func (c *Client) Enabled() bool { return c != nil && c.baseURL != "" }
 
 // AuthInput identifies who to authorize.
@@ -389,23 +389,23 @@ func (c *Client) AuthorizeVerdict(ctx context.Context, in AuthInput) (Verdict, e
 
 // authorizePeer asks the process that owns the ledger whether this act may run.
 //
-// [plane.ErrNoPeer] is the ONE answer that means nobody bills in this deployment,
+// [client.ErrNoPeer] is the ONE answer that means nobody bills in this deployment,
 // and it is the only one that may be read as permission. Every other failure is a
 // biller that is there and did not answer — unknown, which takes the client's fail
 // posture exactly as the funds read does. Reading the two as one fact is how a
 // priced act goes free the moment its app is split into its own binary.
 func (c *Client) authorizePeer(ctx context.Context, in AuthInput) (Verdict, error) {
-	ctx, cancel := context.WithTimeout(plane.For(ctx, in.Org), peerTimeout)
+	ctx, cancel := context.WithTimeout(client.For(ctx, in.Org), peerTimeout)
 	defer cancel()
-	v, err := commerce.FinanceAuthorize(ctx, &plane.AuthorizeIn{
+	v, err := commerce.FinanceAuthorize(ctx, &client.AuthorizeIn{
 		Subject:          in.User,
-		Amount:           plane.Amount(in.amount().Unwrap()),
+		Amount:           client.Amount(in.amount().Unwrap()),
 		Project:          in.Project,
 		Service:          in.Service,
 		ProjectValidated: in.ProjectValidated,
 	})
 	switch {
-	case errors.Is(err, plane.ErrNoPeer):
+	case errors.Is(err, client.ErrNoPeer):
 		return Verdict{Allow: true}, nil
 	case err != nil:
 		return c.unknown(fmt.Errorf("metering: commerce unreachable: %w", err))
@@ -434,7 +434,7 @@ func (c *Client) unknown(err error) (Verdict, error) {
 // ScopeRule is one scope's rate-limit config, consumed by the cloud
 // ScopeRateLimit middleware. Only rows with a positive RateLimitRpm are returned.
 //
-// The rows are READ over the internal plane (plane.FinanceScopeRules), not over
+// The rows are READ over the internal plane (client.FinanceScopeRules), not over
 // this client: the reader is an edge middleware, and a GET /v1/billing/alerts
 // through the commerce transport re-dispatched the whole shared app back through
 // that same middleware until the depth guard 502'd. This type is the shape the
@@ -532,9 +532,9 @@ func (c *Client) Balance(ctx context.Context, subject, org, currency string) (in
 		return bal.CentsDown(), nil
 	}
 	if !c.Enabled() {
-		ctx, cancel := context.WithTimeout(plane.For(ctx, org), peerTimeout)
+		ctx, cancel := context.WithTimeout(client.For(ctx, org), peerTimeout)
 		defer cancel()
-		bal, err := commerce.FinanceBalance(ctx, &plane.BalanceIn{Subject: subject, Currency: cur})
+		bal, err := commerce.FinanceBalance(ctx, &client.BalanceIn{Subject: subject, Currency: cur})
 		if err != nil {
 			return 0, fmt.Errorf("metering: plane balance read: %w", err)
 		}
@@ -790,7 +790,7 @@ type RecordResult struct {
 //
 // It is a no-op (nil, nil) on a non-positive amount (commerce treats zero-cost
 // usage as "skipped") and on a deployment that runs no commerce at all
-// ([plane.ErrNoPeer]) — never merely because the ledger is in another process.
+// ([client.ErrNoPeer]) — never merely because the ledger is in another process.
 // Usage recording is deliberately decoupled from gating: the work already
 // happened and must be recorded, so balance is NOT re-checked here — exactly as
 // commerce's RecordUsage documents.
@@ -843,15 +843,15 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 	//
 	// The amount crosses as the EXACT decimal, never a folded cent or micro figure: the
 	// receiver parses it and debits it verbatim, so an 18-decimal per-token charge arrives
-	// unrounded. plane.Amount is the ONE conversion, so an amount cannot be packed by one
+	// unrounded. client.Amount is the ONE conversion, so an amount cannot be packed by one
 	// rule here and read by another there. The whole row crosses with it, so a debit taken
 	// off this path is attributed as richly as one taken on the co-resident path.
-	ctx, cancel := context.WithTimeout(plane.For(ctx, u.Org), peerTimeout)
+	ctx, cancel := context.WithTimeout(client.For(ctx, u.Org), peerTimeout)
 	defer cancel()
-	if _, err := commerce.FinanceRecord(ctx, &plane.RecordIn{
+	if _, err := commerce.FinanceRecord(ctx, &client.RecordIn{
 		Subject: u.User,
-		Amount:  plane.Amount(amt.Unwrap()),
-		Usage: plane.Usage{
+		Amount:  client.Amount(amt.Unwrap()),
+		Usage: client.Usage{
 			Model: u.Model, Provider: u.Provider, Project: u.Project, Service: u.Service,
 			// The act's name and the correlation id cross as two different things,
 			// which is the whole distinction this key exists on. The receiver keys the
@@ -865,7 +865,7 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 			TotalTokens: u.TotalTokens,
 		},
 	}); err != nil {
-		if errors.Is(err, plane.ErrNoPeer) {
+		if errors.Is(err, client.ErrNoPeer) {
 			// No commerce anywhere in this deployment: there is nothing to bill
 			// through, which is the one shape a missing debit is correct in.
 			return nil, nil

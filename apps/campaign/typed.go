@@ -32,8 +32,8 @@ package campaign
 // checkable.
 
 import (
-	"github.com/hanzoai/cloud/internal/shorten"
 	"context"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"net/http"
 	"strings"
 	"time"

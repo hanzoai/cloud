@@ -8,7 +8,7 @@ import (
 
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -23,9 +23,9 @@ import (
 // exposeFleet publishes the platform's configuration read. Mount calls it.
 func exposeFleet(s *service) {
 	o := settingsOps{s: s}
-	zip.Post[plane.Product, plane.Configured](cloud.Plane(), "/settings/fleet",
+	zip.Post[client.Product, client.Configured](cloud.Plane(), "/settings/fleet",
 		o.fleetConfig,
-		zip.WithOperationID(plane.SettingsFleet),
+		zip.WithOperationID(client.SettingsFleet),
 		zip.WithSummary("The platform's own configuration of a product"))
 }
 
@@ -44,17 +44,17 @@ func exposeFleet(s *service) {
 // because a reader has to do the same thing in both cases — take its default — and
 // a reader that must distinguish "never set" from "cannot ask" is a reader with two
 // behaviours where one will do.
-func (o settingsOps) fleetConfig(ctx context.Context, in *plane.Product) (*plane.Configured, error) {
+func (o settingsOps) fleetConfig(ctx context.Context, in *client.Product) (*client.Configured, error) {
 	product, err := requireProduct(in.Product)
 	if err != nil {
 		return nil, err
 	}
 	st, err := o.s.store.Get(ctx, authz.AdminOrg, product)
 	if errors.Is(err, errNotFound) {
-		return &plane.Configured{}, nil
+		return &client.Configured{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Configured{Config: st.Config}, nil
+	return &client.Configured{Config: st.Config}, nil
 }

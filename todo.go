@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // todo.go is the inversion layer between the native TODO (apps/todo)
@@ -83,8 +83,8 @@ func UpsertIssue(ctx context.Context, in IssueUpsert) (IssueUpsertResult, error)
 	if issueSink != nil {
 		return issueSink(ctx, in)
 	}
-	out, err := Ask[plane.IssueIn, plane.IssueUpserted](For(ctx, in.Org), "todo", plane.TodoUpsert,
-		&plane.IssueIn{
+	out, err := Ask[client.IssueIn, client.IssueUpserted](For(ctx, in.Org), "todo", client.TodoUpsert,
+		&client.IssueIn{
 			Project: in.Project, Key: in.ProjectKey, TeamName: in.ProjectName,
 			Repo: in.Repo, ExtRef: in.ExtRef, Kind: in.Kind, Source: in.Source,
 			Title: in.Title, Description: in.Description, State: in.State,

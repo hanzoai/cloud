@@ -33,8 +33,8 @@ import (
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/cloud/plane"
-	flagsplane "github.com/hanzoai/cloud/plane/flag"
+	"github.com/hanzoai/cloud/client"
+	flagsplane "github.com/hanzoai/cloud/client/flag"
 )
 
 // registryState is admission's process-wide launch state: the platform-tenant
@@ -211,7 +211,7 @@ func SetWaitlistMode(ctx context.Context, service string, mode bool, actor strin
 		return ServiceView{}, err
 	}
 	ensureWaitlistDef(service, row.DisplayName)
-	if _, err := flagsplane.FlagsSet(ctx, &plane.FlagSetIn{
+	if _, err := flagsplane.FlagsSet(ctx, &client.FlagSetIn{
 		Key: waitlistKey(service), Definition: boolDef(mode), Actor: actor,
 	}); err != nil {
 		return ServiceView{}, err
@@ -247,7 +247,7 @@ func UpsertWaitlistService(ctx context.Context, in ServiceInput, actor string) (
 	}
 	ensureWaitlistDef(svc, row.DisplayName)
 	if isNew {
-		if _, err := flagsplane.FlagsSet(ctx, &plane.FlagSetIn{
+		if _, err := flagsplane.FlagsSet(ctx, &client.FlagSetIn{
 			Key: waitlistKey(svc), Definition: boolDef(in.WaitlistMode), Actor: actor,
 		}); err != nil {
 			return ServiceView{}, err

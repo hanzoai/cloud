@@ -48,8 +48,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/goja"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -435,7 +435,7 @@ func (o ops) deliver(ctx context.Context, org, at, email, link string, until int
 	body := "Your request has been granted.\n\n" +
 		"Open it here: " + at + "/v1/dataroom/view/" + link + "\n\n" +
 		"It admits " + email + " and closes on " + time.UnixMilli(until).UTC().Format(time.RFC1123) + "."
-	_, err := cloud.Ask[plane.Send, plane.Sent](cloud.For(ctx, org), "notify", plane.NotifySend, &plane.Send{
+	_, err := cloud.Ask[client.Send, client.Sent](cloud.For(ctx, org), "notify", client.NotifySend, &client.Send{
 		Org: org, Channel: "email", To: email, Subject: "Your document request", Body: body,
 	})
 	switch {

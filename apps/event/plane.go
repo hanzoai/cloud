@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
-	planeops "github.com/hanzoai/cloud/plane"
+	planeops "github.com/hanzoai/cloud/client"
 )
 
 // planeKeys resolves a beacon's publishable ingest key by asking the app that

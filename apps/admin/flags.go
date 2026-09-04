@@ -20,8 +20,8 @@ import (
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/cloud/plane"
-	flagsplane "github.com/hanzoai/cloud/plane/flag"
+	"github.com/hanzoai/cloud/client"
+	flagsplane "github.com/hanzoai/cloud/client/flag"
 )
 
 // flagsBoard reads the platform control-plane board: every runtime launch/release
@@ -36,7 +36,7 @@ func flagsBoard(ctx context.Context, _ *core.None) (*flagsOut, error) {
 	if _, err := core.Admit(ctx); err != nil {
 		return nil, err
 	}
-	board, err := flagsplane.FlagsBoard(ctx, &plane.Unit{})
+	board, err := flagsplane.FlagsBoard(ctx, &client.Unit{})
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ type flagsOut struct {
 	// Data is the whole control-plane board — after the write, on a write, so a
 	// caller sees the effect of its own flip without a second read. Null when the
 	// op failed.
-	Data *plane.FlagBoard `json:"data"`
+	Data *client.FlagBoard `json:"data"`
 }
 
 // setFlagIn is the PUT /v1/admin/flags/:key input: the switch from the path, its
@@ -96,12 +96,12 @@ func setFlag(ctx context.Context, in *setFlagIn) (*flagsOut, error) {
 	if len(body) == 0 || !json.Valid(body) {
 		return nil, zip.ErrBadRequest("body must be the flag definition JSON")
 	}
-	if _, err := flagsplane.FlagsSet(ctx, &plane.FlagSetIn{
+	if _, err := flagsplane.FlagsSet(ctx, &client.FlagSetIn{
 		Key: key, Definition: body, Actor: c.UserEmail(),
 	}); err != nil {
 		return nil, zip.ErrBadRequest(err.Error())
 	}
-	board, err := flagsplane.FlagsBoard(ctx, &plane.Unit{})
+	board, err := flagsplane.FlagsBoard(ctx, &client.Unit{})
 	if err != nil {
 		return nil, err
 	}

@@ -23,9 +23,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/framework"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/metering"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // ── counting commerce meter ───────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ func newRedMeter(t *testing.T, availableCents int64) *redMeter {
 	})
 	// The DEBIT arrives on the plane, not here. The observer runs inside the peer's
 	// handler, so the debit has landed by the time the op answers.
-	planetest.ServeWith(t, func(org string, in plane.RecordIn) {
+	planetest.ServeWith(t, func(org string, in client.RecordIn) {
 		select {
 		case m.debits <- redDebit{
 			User: in.Subject, AmountCents: planetest.Cents(in.Amount),

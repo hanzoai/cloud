@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	"github.com/hanzoai/cloud/plane/iam"
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/client/iam"
 	"strings"
 	"time"
 
@@ -303,7 +303,7 @@ func (s *accountStore) adoptExisting(ctx context.Context, org, account string) (
 // team's. So this asks IAM for the scopes and reads the rows for them, rather
 // than joining a roster it no longer keeps.
 func (s *accountStore) SpacesOf(ctx context.Context, org, account string) ([]space, error) {
-	got, err := iam.IAMMembers(cloud.For(ctx, org), &plane.Scope{User: account, Any: true})
+	got, err := iam.IAMMembers(cloud.For(ctx, org), &client.Scope{User: account, Any: true})
 	if err != nil {
 		return nil, fmt.Errorf("spaces of: %w", err)
 	}
@@ -392,7 +392,7 @@ func (s *accountStore) AccountForSubject(ctx context.Context, org, subject strin
 	if account == "" || strings.TrimSpace(org) == "" {
 		return "", false
 	}
-	got, err := iam.IAMMembers(cloud.For(ctx, org), &plane.Scope{User: account, Any: true})
+	got, err := iam.IAMMembers(cloud.For(ctx, org), &client.Scope{User: account, Any: true})
 	if err != nil || len(got.Memberships) == 0 {
 		return "", false
 	}
@@ -414,8 +414,8 @@ func (s *accountStore) MembersForSpaceUUID(ctx context.Context, org, wsUUID stri
 
 // roster reads one space's memberships. It answers empty on a failure: every
 // caller is deciding whether ONE person may act, and an empty roster denies.
-func (s *accountStore) roster(ctx context.Context, org, wsUUID string) []plane.Membership {
-	got, err := iam.IAMMembers(cloud.For(ctx, org), &plane.Scope{Space: wsUUID})
+func (s *accountStore) roster(ctx context.Context, org, wsUUID string) []client.Membership {
+	got, err := iam.IAMMembers(cloud.For(ctx, org), &client.Scope{Space: wsUUID})
 	if err != nil {
 		return nil
 	}
@@ -460,7 +460,7 @@ func (s *accountStore) AddMember(ctx context.Context, org, wsUUID, account, role
 	if role == "" {
 		role = "member"
 	}
-	_, err := iam.IAMGrant(cloud.For(ctx, org), &plane.GrantIn{
+	_, err := iam.IAMGrant(cloud.For(ctx, org), &client.GrantIn{
 		User: account, Space: wsUUID, Role: role,
 	})
 	return err

@@ -28,9 +28,9 @@ package agents
 // referenced BY NAME, so a truthful transcript has nothing to redact.
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"net/http"
 	"strconv"
 	"strings"

@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/hanzoai/cloud/plane"
-	settings "github.com/hanzoai/cloud/plane/settings"
+	"github.com/hanzoai/cloud/client"
+	settings "github.com/hanzoai/cloud/client/settings"
 )
 
 // preference is the boundary THIS DEPLOYMENT would rather run, asked of the
@@ -35,7 +35,7 @@ import (
 // configurable boundary for an outage, and the boundary it would be protecting is
 // the one it already had before anyone configured it.
 func (r *runtime) preference(ctx context.Context) string {
-	out, err := settings.SettingsFleet(ctx, &plane.Product{Product: product})
+	out, err := settings.SettingsFleet(ctx, &client.Product{Product: product})
 	if err != nil || out == nil {
 		return ""
 	}

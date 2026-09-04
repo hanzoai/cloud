@@ -27,9 +27,9 @@
 package fleet
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net"
 	"strings"
 	"sync"

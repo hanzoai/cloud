@@ -23,9 +23,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/flags"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 
-	flagsplane "github.com/hanzoai/cloud/plane/flag"
+	flagsplane "github.com/hanzoai/cloud/client/flag"
 )
 
 // cap.go is the gate's TRAILING-WINDOW spend ceiling: the burst limit that resets
@@ -163,8 +163,8 @@ func capFor(ctx context.Context, subject, namespace string) (int, error) {
 // The sum leaves the ledger already at cent precision, so taking the floor of it
 // here restores the integer exactly; it is not a rounding.
 func spentSince(ctx context.Context, org string, since int64) (int64, error) {
-	out, err := cloud.Ask[plane.SpendIn, plane.Spend](
-		cloud.For(ctx, org), "commerce", plane.FinanceSpend, &plane.SpendIn{Since: since})
+	out, err := cloud.Ask[client.SpendIn, client.Spend](
+		cloud.For(ctx, org), "commerce", client.FinanceSpend, &client.SpendIn{Since: since})
 	if err != nil {
 		return 0, fmt.Errorf("plane spend read: %w", err)
 	}

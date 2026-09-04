@@ -8,9 +8,9 @@ package cloudflare
 // responses relay verbatim (no field loss).
 
 import (
-	"github.com/hanzoai/cloud"
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud"
 	"net/http"
 	"strings"
 

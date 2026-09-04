@@ -7,8 +7,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/wallet"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // peer.go — the three things a settlement needs that this process does not own.
@@ -35,7 +35,7 @@ import (
 // The PRICE has no exception, and it held one: cloud.ErrNoPeer — read as "no
 // marketplace in this fleet" — answered "nothing is priced". The plane cannot report
 // that fact. reach() calls an app absent when it cannot reach it and no ROUTER is
-// there to say otherwise (plane.go, and a killed peer leaves a socket file that
+// there to say otherwise (peer.go, and a killed peer leaves a socket file that
 // refuses every connection), so a marketplace that DIED read as a fleet that never
 // had one — and this process, which cannot price anything without that table, then
 // answered free for the entire catalogue.
@@ -77,8 +77,8 @@ func pricePeer(ctx context.Context, resource string) (Terms, bool, error) {
 	cctx, cancel := context.WithTimeout(ctx, peerCallTimeout)
 	defer cancel()
 
-	out, err := cloud.Ask[plane.PriceIn, plane.Priced](cctx, peerMarketplace, plane.MarketPrice,
-		&plane.PriceIn{Resource: resource})
+	out, err := cloud.Ask[client.PriceIn, client.Priced](cctx, peerMarketplace, client.MarketPrice,
+		&client.PriceIn{Resource: resource})
 	switch {
 	case err != nil:
 		// Unreached is UNKNOWN, and an unknown price is never zero.
@@ -128,8 +128,8 @@ func payeePeer(org, walletID string) (wallet.PaymentTarget, bool) {
 	cctx, cancel := peerCtx(org)
 	defer cancel()
 
-	out, err := cloud.Ask[plane.PayeeIn, plane.Payee](cctx, peerWallets, plane.WalletsPayee,
-		&plane.PayeeIn{WalletID: walletID})
+	out, err := cloud.Ask[client.PayeeIn, client.Payee](cctx, peerWallets, client.WalletsPayee,
+		&client.PayeeIn{WalletID: walletID})
 	if err != nil || out == nil || !out.Found {
 		return wallet.PaymentTarget{}, false
 	}
@@ -144,11 +144,11 @@ func debitPeer(st *Settlement, amount money.Amount) error {
 	cctx, cancel := peerCtx(st.PayerOrg)
 	defer cancel()
 
-	_, err := cloud.Ask[plane.RecordIn, plane.Recorded](cctx, peerCommerce, plane.FinanceRecord,
-		&plane.RecordIn{
+	_, err := cloud.Ask[client.RecordIn, client.Recorded](cctx, peerCommerce, client.FinanceRecord,
+		&client.RecordIn{
 			Subject: st.PayerOrg,
-			Amount:  plane.Amount(amount.Unwrap()),
-			Usage: plane.Usage{
+			Amount:  client.Amount(amount.Unwrap()),
+			Usage: client.Usage{
 				Model:    st.Resource,
 				Provider: providerLabel,
 				Service:  providerLabel,
@@ -167,10 +167,10 @@ func creditPeer(org, subject string, amount money.Amount, ref, notes string) err
 	cctx, cancel := peerCtx(org)
 	defer cancel()
 
-	_, err := cloud.Ask[plane.CreditIn, plane.Credited](cctx, peerCommerce, plane.FinanceCredit,
-		&plane.CreditIn{
+	_, err := cloud.Ask[client.CreditIn, client.Credited](cctx, peerCommerce, client.FinanceCredit,
+		&client.CreditIn{
 			Subject: subject,
-			Amount:  plane.Amount(amount.Unwrap()),
+			Amount:  client.Amount(amount.Unwrap()),
 			Ref:     ref,
 			Notes:   notes,
 			Tags:    "x402",

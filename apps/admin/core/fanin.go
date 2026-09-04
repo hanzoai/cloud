@@ -12,8 +12,8 @@ import (
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/iam"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -52,7 +52,7 @@ func ListOrgs(s *cloud.Service[State], ctx context.Context, cr iam.Creds) ([]iam
 // are compiled into no binary here. GET /v1/billing/usage/rollup is registered nowhere
 // and answered 404 for every org on every load, which is what marked the money source
 // degraded on a fleet whose money was fine. That is the same 404 the referral, affiliate,
-// author and usage surfaces each hit, and they were moved to plane.FinanceSpend; admin
+// author and usage surfaces each hit, and they were moved to client.FinanceSpend; admin
 // was the last caller left on the dead path.
 //
 // So there is one way now, and it holds wherever commerce runs: ask the process that owns
@@ -68,7 +68,7 @@ func ListOrgs(s *cloud.Service[State], ctx context.Context, cr iam.Creds) ([]iam
 // money source could read healthy while nothing had been read at all.
 func OrgMoney(s *cloud.Service[State], as Delegated, org string) (spend, credits int64, err error) {
 	money, err := commercepeer.FinanceSpend(as.at(org),
-		&plane.SpendIn{Since: time.Now().UTC().AddDate(0, 0, -spendWindowDays).Unix()})
+		&client.SpendIn{Since: time.Now().UTC().AddDate(0, 0, -spendWindowDays).Unix()})
 	switch {
 	case errors.Is(err, cloud.ErrNoPeer):
 		return 0, 0, ErrNoLedger

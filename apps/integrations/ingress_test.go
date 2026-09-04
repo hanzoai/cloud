@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // ingress_test.go proves the two client pieces channels rides: the SendDiscord
@@ -277,7 +277,7 @@ func TestChatSendNeedsTheOrgItSendsAs(t *testing.T) {
 	rec := newDiscordMsgServer(t, http.StatusOK, `{"id":"m1"}`)
 
 	if _, err := planeChatSend(context.Background(),
-		&plane.ChatSendIn{Provider: "discord", Room: "123", Text: "hi"}); err == nil ||
+		&client.ChatSendIn{Provider: "discord", Room: "123", Text: "hi"}); err == nil ||
 		!strings.Contains(err.Error(), "org") {
 		t.Fatalf("err = %v, want a refusal naming the org", err)
 	}
@@ -288,7 +288,7 @@ func TestChatSendNeedsTheOrgItSendsAs(t *testing.T) {
 	// The same call, named, goes through — so the refusal is the missing org and
 	// nothing else.
 	if _, err := planeChatSend(context.Background(),
-		&plane.ChatSendIn{Org: "acme", Provider: "discord", Room: "123", Text: "hi"}); err != nil {
+		&client.ChatSendIn{Org: "acme", Provider: "discord", Room: "123", Text: "hi"}); err != nil {
 		t.Fatalf("named send: %v", err)
 	}
 	if rec.count() != 1 {

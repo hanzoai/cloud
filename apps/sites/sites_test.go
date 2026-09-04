@@ -196,11 +196,11 @@ func TestSiteSlug(t *testing.T) {
 // must NOT become a publishable site (the OAuth account-takeover in reserved.go).
 func TestSiteSlugBrandApex(t *testing.T) {
 	s := New(Config{
-		Apex:            "hanzo.app",
-		Reserved:        []string{"app", "api", "admin"},
-		SelfDomains:     []string{"hanzo.ai"},
-		FirstPartyApex:  "hanzo.ai",
-		FirstPartyOrg:   "hanzo",
+		Apex:           "hanzo.app",
+		Reserved:       []string{"app", "api", "admin"},
+		SelfDomains:    []string{"hanzo.ai"},
+		FirstPartyApex: "hanzo.ai",
+		FirstPartyOrg:  "hanzo",
 	}, luxlog.New("test"))
 	site := func(host, want string) {
 		if slug, _, ok := s.siteSlug(host); !ok || slug != want {

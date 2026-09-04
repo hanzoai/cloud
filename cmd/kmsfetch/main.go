@@ -24,8 +24,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
-	"github.com/hanzoai/cloud/plane/kms"
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/client/kms"
 )
 
 type pairs []string
@@ -94,7 +94,7 @@ func main() {
 func read(ctx context.Context, ref string) ([]byte, error) {
 	var last error
 	for {
-		s, err := kms.KMSGet(ctx, &plane.SecretIn{Ref: ref})
+		s, err := kms.KMSGet(ctx, &client.SecretIn{Ref: ref})
 		if err == nil {
 			return s.Value, nil
 		}

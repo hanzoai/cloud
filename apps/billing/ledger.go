@@ -44,10 +44,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -315,7 +315,7 @@ func peerTxns(ctx context.Context, org, subject string) ([]commerceTxn, bool, er
 	// The generated peer client, not three loose strings: it is this call with the
 	// app name, the op name and the In/Out pair already fixed to each other, so
 	// the compiler checks what only a running fleet could check here.
-	reply, err := commercepeer.FinanceTxns(cloud.For(ctx, org), &plane.TxnsIn{Subject: subject})
+	reply, err := commercepeer.FinanceTxns(cloud.For(ctx, org), &client.TxnsIn{Subject: subject})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
 			return nil, false, nil

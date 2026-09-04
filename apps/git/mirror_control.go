@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/mint"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -87,8 +87,8 @@ func (gitMirrorController) EnsureMirror(ctx context.Context, org, project, repo,
 // has no Org field to read. An argument org would let an engine acting for one
 // tenant point another tenant's repo at a remote it controls.
 func exposeMirror() {
-	zip.Post[plane.MirrorIn, plane.Mirrored](cloud.Plane(), "/git/mirror", planeMirror,
-		zip.WithOperationID(plane.GitMirror),
+	zip.Post[client.MirrorIn, client.Mirrored](cloud.Plane(), "/git/mirror", planeMirror,
+		zip.WithOperationID(client.GitMirror),
 		zip.WithSummary("Declare or remove a repo's outbound mirror target"))
 }
 
@@ -109,7 +109,7 @@ func exposeMirror() {
 // our fault.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeMirror(ctx context.Context, in *plane.MirrorIn) (*plane.Mirrored, error) {
+func planeMirror(ctx context.Context, in *client.MirrorIn) (*client.Mirrored, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("git mirror: org required")
@@ -124,5 +124,5 @@ func planeMirror(ctx context.Context, in *plane.MirrorIn) (*plane.Mirrored, erro
 	if err := (gitMirrorController{}).EnsureMirror(ctx, who.Org, in.Project, in.Repo, in.URL, in.Enabled); err != nil {
 		return nil, err
 	}
-	return &plane.Mirrored{Repo: in.Repo}, nil
+	return &client.Mirrored{Repo: in.Repo}, nil
 }

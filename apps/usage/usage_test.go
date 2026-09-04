@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/finance"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/types"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -47,8 +47,8 @@ func (f *fakeCommerce) serve(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
 	t.Setenv("ZIP_RUNTIME_DIR", sockDir)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 
@@ -59,23 +59,23 @@ func (f *fakeCommerce) serve(t *testing.T) {
 		f.mu.Unlock()
 	}
 	p := cloud.Plane()
-	zip.Post[plane.SpendIn, plane.Spend](p, "/finance/spend",
-		func(ctx context.Context, _ *plane.SpendIn) (*plane.Spend, error) {
-			record(ctx, plane.FinanceSpend)
-			return &plane.Spend{
-				Consumed: plane.Money{Decimal: "50.00", Currency: "USD"},
-				Balance:  plane.Money{Decimal: "200.00", Currency: "USD"},
+	zip.Post[client.SpendIn, client.Spend](p, "/finance/spend",
+		func(ctx context.Context, _ *client.SpendIn) (*client.Spend, error) {
+			record(ctx, client.FinanceSpend)
+			return &client.Spend{
+				Consumed: client.Money{Decimal: "50.00", Currency: "USD"},
+				Balance:  client.Money{Decimal: "200.00", Currency: "USD"},
 			}, nil
-		}, zip.WithOperationID(plane.FinanceSpend))
-	zip.Post[plane.TxnsIn, plane.Txns](p, "/finance/txns",
-		func(ctx context.Context, _ *plane.TxnsIn) (*plane.Txns, error) {
-			record(ctx, plane.FinanceTxns)
-			return &plane.Txns{Rows: []plane.Txn{
-				{ID: "t1", Kind: string(finance.KindUsage), Ref: "gpu-h100", Amount: plane.Money{Decimal: "3.00", Currency: "USD"}, CreatedAt: recent},
-				{ID: "t2", Kind: string(finance.KindUsage), Ref: "llm", Amount: plane.Money{Decimal: "2.00", Currency: "USD"}, CreatedAt: recent},
-				{ID: "t3", Kind: string(finance.KindDeposit), Ref: "", Amount: plane.Money{Decimal: "99.99", Currency: "USD"}, CreatedAt: recent},
+		}, zip.WithOperationID(client.FinanceSpend))
+	zip.Post[client.TxnsIn, client.Txns](p, "/finance/txns",
+		func(ctx context.Context, _ *client.TxnsIn) (*client.Txns, error) {
+			record(ctx, client.FinanceTxns)
+			return &client.Txns{Rows: []client.Txn{
+				{ID: "t1", Kind: string(finance.KindUsage), Ref: "gpu-h100", Amount: client.Money{Decimal: "3.00", Currency: "USD"}, CreatedAt: recent},
+				{ID: "t2", Kind: string(finance.KindUsage), Ref: "llm", Amount: client.Money{Decimal: "2.00", Currency: "USD"}, CreatedAt: recent},
+				{ID: "t3", Kind: string(finance.KindDeposit), Ref: "", Amount: client.Money{Decimal: "99.99", Currency: "USD"}, CreatedAt: recent},
 			}}, nil
-		}, zip.WithOperationID(plane.FinanceTxns))
+		}, zip.WithOperationID(client.FinanceTxns))
 
 	sock := zip.SocketPath("commerce")
 	go func() { _ = p.Listen(sock) }()
@@ -157,9 +157,9 @@ func TestSummary_ScopedToCallerOrg_RollsUpCommerce(t *testing.T) {
 	// there is no header a reader sets and no query parameter a client could aim
 	// somewhere else — the callee reads the tenant off the caller and refuses an
 	// empty one.
-	if f.gotOrg[plane.FinanceSpend] != "maxpower" || f.gotOrg[plane.FinanceTxns] != "maxpower" {
+	if f.gotOrg[client.FinanceSpend] != "maxpower" || f.gotOrg[client.FinanceTxns] != "maxpower" {
 		t.Fatalf("the ledger reads were not scoped to the caller: spend=%q txns=%q",
-			f.gotOrg[plane.FinanceSpend], f.gotOrg[plane.FinanceTxns])
+			f.gotOrg[client.FinanceSpend], f.gotOrg[client.FinanceTxns])
 	}
 	// Spend rolled up: rollup figures + windowed withdrawals (300+200=500; deposit excluded).
 	if !s.Spend.Available || !s.Sources.Commerce {
@@ -210,9 +210,9 @@ func TestSummary_ClientCannotWidenScope(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("want 200, got %d", code)
 	}
-	if f.gotOrg[plane.FinanceSpend] != "maxpower" || f.gotOrg[plane.FinanceTxns] != "maxpower" {
+	if f.gotOrg[client.FinanceSpend] != "maxpower" || f.gotOrg[client.FinanceTxns] != "maxpower" {
 		t.Fatalf("a forged user/org reached the ledger: spend=%q txns=%q",
-			f.gotOrg[plane.FinanceSpend], f.gotOrg[plane.FinanceTxns])
+			f.gotOrg[client.FinanceSpend], f.gotOrg[client.FinanceTxns])
 	}
 }
 
@@ -227,8 +227,8 @@ func TestSummary_NoCommerceInTheFleet_HonestZeros(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	t.Setenv("ZIP_RUNTIME_DIR", dir)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 	app := mountApp(t)

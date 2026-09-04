@@ -21,9 +21,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -64,12 +64,12 @@ func init() {
 // against another is a card that saves and then cannot be used.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) settings(ctx context.Context, _ *cloud.Unit) (*plane.PaymentConfig, error) {
+func (o ops) settings(ctx context.Context, _ *cloud.Unit) (*client.PaymentConfig, error) {
 	org, err := principalOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "settings", func(ctx context.Context) (*plane.PaymentConfig, error) {
+	return ask(ctx, org, "settings", func(ctx context.Context) (*client.PaymentConfig, error) {
 		return commercepeer.BillingSettings(ctx)
 	})
 }
@@ -86,13 +86,13 @@ func (o ops) settings(ctx context.Context, _ *cloud.Unit) (*plane.PaymentConfig,
 // anywhere to find.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) tier(ctx context.Context, _ *cloud.Unit) (*plane.Tier, error) {
+func (o ops) tier(ctx context.Context, _ *cloud.Unit) (*client.Tier, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
 	}
-	in := plane.TierIn{Subject: subject, Tier: mintedTier(ctx)}
-	return ask(ctx, org, "tier", func(ctx context.Context) (*plane.Tier, error) {
+	in := client.TierIn{Subject: subject, Tier: mintedTier(ctx)}
+	return ask(ctx, org, "tier", func(ctx context.Context) (*client.Tier, error) {
 		return commercepeer.BillingTier(ctx, &in)
 	})
 }
@@ -105,7 +105,7 @@ func (o ops) tier(ctx context.Context, _ *cloud.Unit) (*plane.Tier, error) {
 // number anyone holds, and a reader that formed it would be inventing a balance.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) rollup(ctx context.Context, _ *cloud.Unit) (*plane.Rollup, error) {
+func (o ops) rollup(ctx context.Context, _ *cloud.Unit) (*client.Rollup, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
@@ -114,8 +114,8 @@ func (o ops) rollup(ctx context.Context, _ *cloud.Unit) (*plane.Rollup, error) {
 	if c, ok := cloud.Request(ctx); ok {
 		plan = strings.TrimSpace(c.Query("plan"))
 	}
-	return ask(ctx, org, "usage rollup", func(ctx context.Context) (*plane.Rollup, error) {
-		return commercepeer.BillingRollup(ctx, &plane.RollupIn{Subject: subject, Plan: plan})
+	return ask(ctx, org, "usage rollup", func(ctx context.Context) (*client.Rollup, error) {
+		return commercepeer.BillingRollup(ctx, &client.RollupIn{Subject: subject, Plan: plan})
 	})
 }
 
@@ -126,7 +126,7 @@ func (o ops) rollup(ctx context.Context, _ *cloud.Unit) (*plane.Rollup, error) {
 // that could put itself in test mode could take priced work for free.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) mode(ctx context.Context, in *plane.ModeIn) (*plane.Mode, error) {
+func (o ops) mode(ctx context.Context, in *client.ModeIn) (*client.Mode, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func (o ops) mode(ctx context.Context, in *plane.ModeIn) (*plane.Mode, error) {
 	if !mayMint(ctx) {
 		return nil, zip.ErrForbidden("platform authority required to change money mode")
 	}
-	return ask(ctx, org, "mode", func(ctx context.Context) (*plane.Mode, error) {
+	return ask(ctx, org, "mode", func(ctx context.Context) (*client.Mode, error) {
 		return commercepeer.BillingMode(ctx, in)
 	})
 }
@@ -150,8 +150,8 @@ func listPlans(s *cloud.Service[state], c *zip.Ctx) error {
 	// The catalog is public, so this read states no tenant. cloud.For with an
 	// empty org is what an unauthenticated caller has: the op takes no org and
 	// scopes nothing.
-	out, err := ask(c.Context(), "", "plans", func(ctx context.Context) (*plane.Rendered, error) {
-		return commercepeer.BillingPlans(ctx, &plane.PlansIn{Category: c.Query("category")})
+	out, err := ask(c.Context(), "", "plans", func(ctx context.Context) (*client.Rendered, error) {
+		return commercepeer.BillingPlans(ctx, &client.PlansIn{Category: c.Query("category")})
 	})
 	if err != nil {
 		return err

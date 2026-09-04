@@ -20,8 +20,8 @@ package cloud
 import (
 	"testing"
 
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/planetest"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // planeDebit is one crossing: the org the CALLER acted for, and what it sent.
@@ -34,7 +34,7 @@ type planeDebit = planetest.Debit
 type planeDebits struct{ c *planetest.Commerce }
 
 // serve binds the peer's socket. Every test that expects a debit calls it, and it
-// must be called before the client makes one — an unbound socket is plane.ErrNoPeer,
+// must be called before the client makes one — an unbound socket is client.ErrNoPeer,
 // not a lost debit.
 func (p *planeDebits) serve(t *testing.T) { p.serveWith(t, nil) }
 
@@ -42,7 +42,7 @@ func (p *planeDebits) serve(t *testing.T) { p.serveWith(t, nil) }
 // balance rather than only a count. The observer runs INSIDE the handler, so a debit
 // has landed by the time the op answers — which is what lets a gate that reads
 // afterwards see it.
-func (p *planeDebits) serveWith(t *testing.T, observe func(org string, in plane.RecordIn)) {
+func (p *planeDebits) serveWith(t *testing.T, observe func(org string, in client.RecordIn)) {
 	t.Helper()
 	p.c = planetest.ServeWith(t, observe)
 }
@@ -55,4 +55,4 @@ func (p *planeDebits) last() (planeDebit, bool) { return p.c.Last() }
 
 // microsOf reads a crossed amount as micro-USD (1e6 = $1) — the unit the reservation
 // tests keep their wallet in, and finer than a cent because per-token charges are.
-func microsOf(m plane.Money) int64 { return planetest.Micros(m) }
+func microsOf(m client.Money) int64 { return planetest.Micros(m) }

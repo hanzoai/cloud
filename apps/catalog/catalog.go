@@ -63,13 +63,13 @@ import (
 	"github.com/hanzoai/cloud/apps/index"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/projects"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	// The GENERATED client for the index peer — the one typed way to call it, with
 	// the app name, the op and the In/Out pair already fixed to each other. Aliased
 	// because the app package this file also imports is the SAME word: one is the
 	// index in this process, the other is how to reach it in another.
-	indexpeer "github.com/hanzoai/cloud/plane/index"
-	projectspeer "github.com/hanzoai/cloud/plane/project"
+	indexpeer "github.com/hanzoai/cloud/client/index"
+	projectspeer "github.com/hanzoai/cloud/client/project"
 	"github.com/zap-proto/zip"
 )
 
@@ -391,7 +391,7 @@ func lexical(ctx context.Context, org, q string) ([]json.RawMessage, error) {
 	if c, ok := cloud.Request(ctx); ok {
 		call = cloud.As(c, org)
 	}
-	out, err := indexpeer.IndexQuery(call, &plane.IndexQueryIn{UID: uid, Q: q, Limit: scan})
+	out, err := indexpeer.IndexQuery(call, &client.IndexQueryIn{UID: uid, Q: q, Limit: scan})
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +444,7 @@ func write(ctx context.Context, org string, docs []json.RawMessage) (int, int, e
 	// contract names for a background job, and the published corpus is written as
 	// PublicOrg by exactly this call.
 	out, err := indexpeer.IndexReconcile(cloud.For(ctx, org),
-		&plane.IndexReconcileIn{UID: uid, PrimaryKey: pk, Docs: docs})
+		&client.IndexReconcileIn{UID: uid, PrimaryKey: pk, Docs: docs})
 	if err != nil {
 		return 0, 0, err
 	}
@@ -588,7 +588,7 @@ func serving(ctx context.Context) ([]projects.LiveSite, error) {
 	if projects.Ready() {
 		return projects.LiveSites(ctx)
 	}
-	out, err := projectspeer.SitesLive(ctx, &plane.LiveSitesIn{})
+	out, err := projectspeer.SitesLive(ctx, &client.LiveSitesIn{})
 	if err != nil {
 		return nil, err
 	}

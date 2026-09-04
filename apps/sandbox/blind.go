@@ -12,7 +12,7 @@ package sandbox
 // can take a secret back out of a message already delivered.
 //
 // So redaction happens where the bytes are PRODUCED. The caller says what must
-// never appear (plane.RunIn.Blind); this applies it to both paths.
+// never appear (client.RunIn.Blind); this applies it to both paths.
 //
 // # What it is not
 //

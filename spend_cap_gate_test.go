@@ -12,8 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/metering"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -156,7 +156,7 @@ func rateReq(t *testing.T, app *zip.App, org, project string) *http.Response {
 // The rules arrive over the plane; the fake commerce is still up so the tripwire
 // on its retired /v1/billing/alerts route can prove nothing fetched them by HTTP.
 func TestScopeRateLimit_PerScope429AndIsolation(t *testing.T) {
-	servePlaneRules(t, map[string][]plane.ScopeRule{
+	servePlaneRules(t, map[string][]client.ScopeRule{
 		// org "hanzo": a 2 rpm cap scoped to project "P".
 		"hanzo": {{Project: "P", RateLimitRpm: 2}},
 		// org "other": no rules → unlimited.

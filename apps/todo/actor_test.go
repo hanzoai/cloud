@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/authz"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -64,7 +64,7 @@ func TestBoardActor_RefusesAUsernameThatIsSomebodyElsesLogin(t *testing.T) {
 	f.visible["z"] = []string{"hanzoai"}
 	f.repo("hanzoai", "api", issue(1, "real work", "open", "todo"))
 	app := mountForge(t, f)
-	identity["u_mallory"] = plane.Email{Address: "z@elsewhere.example", Verified: true}
+	identity["u_mallory"] = client.Email{Address: "z@elsewhere.example", Verified: true}
 
 	code, raw := asSubject(t, app, http.MethodGet, "/v1/todo/projects",
 		"hanzo", "u_mallory", "z", nil)
@@ -93,7 +93,7 @@ func TestBoardActor_RefusesAnUnverifiedAddress(t *testing.T) {
 	f.visible["z"] = []string{"hanzoai"}
 	f.repo("hanzoai", "api", issue(1, "real work", "open", "todo"))
 	app := mountForge(t, f)
-	identity["u_imposter"] = plane.Email{Address: "z@hanzo.ai", Verified: false}
+	identity["u_imposter"] = client.Email{Address: "z@hanzo.ai", Verified: false}
 
 	code, raw := asUser(t, app, http.MethodGet, "/v1/todo/projects", "hanzo", "imposter", nil)
 	if code != http.StatusForbidden {
@@ -108,7 +108,7 @@ func TestBoardActor_TheOwnerResolvesAndReads(t *testing.T) {
 	f.visible["z"] = []string{"hanzoai"}
 	f.repo("hanzoai", "api", issue(1, "real work", "open", "todo"))
 	app := mountForge(t, f)
-	identity["u_z"] = plane.Email{Address: "z@hanzo.ai", Verified: true}
+	identity["u_z"] = client.Email{Address: "z@hanzo.ai", Verified: true}
 
 	code, raw := asUser(t, app, http.MethodGet, "/v1/todo/projects", "hanzo", "z", nil)
 	if code != http.StatusOK {
@@ -130,7 +130,7 @@ func TestBoardActor_RefusesAnUnknownPrincipal(t *testing.T) {
 	f.visible[""] = []string{"hanzoai"} // if it sudoed as nobody, this would answer
 	f.repo("hanzoai", "api", issue(1, "secret", "open"))
 	app := mountForge(t, f)
-	identity["u_ghost"] = plane.Email{} // known route, no address
+	identity["u_ghost"] = client.Email{} // known route, no address
 
 	code, raw := asUser(t, app, http.MethodGet, "/v1/todo/projects", "hanzo", "ghost", nil)
 	if code != http.StatusForbidden {

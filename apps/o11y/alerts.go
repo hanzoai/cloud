@@ -71,12 +71,12 @@
 package o11y
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"strings"
 	"sync"
@@ -85,8 +85,8 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // recentMax bounds the replay ring. Matches the receiver this replaced, and the
@@ -354,8 +354,8 @@ func reason(failures []failure) string {
 // cloud.For stamps the org so integrations' handler reads it as the caller's,
 // never an argument.
 func slackSend(ctx context.Context, org, channel, text string) error {
-	_, err := cloud.Ask[plane.SlackSendIn, plane.SlackSent](cloud.For(ctx, org), peerIntegrations,
-		plane.IntegrationsSlackSend, &plane.SlackSendIn{Channel: channel, Text: text})
+	_, err := cloud.Ask[client.SlackSendIn, client.SlackSent](cloud.For(ctx, org), peerIntegrations,
+		client.IntegrationsSlackSend, &client.SlackSendIn{Channel: channel, Text: text})
 	return err
 }
 

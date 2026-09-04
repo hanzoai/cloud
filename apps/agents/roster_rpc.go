@@ -26,21 +26,21 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // exposeRoster publishes the org's agent roster on the internal plane, so a
 // membership projection in ANOTHER PROCESS can read it. Mount calls it, beside
 // the in-process client.
 func exposeRoster() {
-	zip.Post[plane.RosterIn, plane.AgentRoster](cloud.Plane(), "/agents/roster", planeRoster,
-		zip.WithOperationID(plane.AgentsRoster),
+	zip.Post[client.RosterIn, client.AgentRoster](cloud.Plane(), "/agents/roster", planeRoster,
+		zip.WithOperationID(client.AgentsRoster),
 		zip.WithSummary("The agents of the caller's org, as a membership projection reads them"))
 }
 
 // planeRoster answers the caller's own agents.
 //
-// The org is the caller's plane identity and NEVER an argument — plane.RosterIn
+// The org is the caller's plane identity and NEVER an argument — client.RosterIn
 // has no fields at all, so a cross-tenant read is unrepresentable here rather
 // than merely refused. That is the opposite choice from planeRunOnBehalf, which
 // does take an org, and the difference is the direction of the act: that op
@@ -52,7 +52,7 @@ func exposeRoster() {
 // principal must fail, not pick a tenant.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeRoster(ctx context.Context, _ *plane.RosterIn) (*plane.AgentRoster, error) {
+func planeRoster(ctx context.Context, _ *client.RosterIn) (*client.AgentRoster, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrForbidden("agents roster: org required")
@@ -64,9 +64,9 @@ func planeRoster(ctx context.Context, _ *plane.RosterIn) (*plane.AgentRoster, er
 	// A never-nil slice, because the wire distinction that matters downstream is
 	// "no agents" versus "could not ask", and an error is how the second is said.
 	// A nil slice marshals to null and reads as neither.
-	out := make([]plane.AgentBrief, 0, len(ags))
+	out := make([]client.AgentBrief, 0, len(ags))
 	for _, a := range ags {
-		out = append(out, plane.AgentBrief{ID: a.ID, Name: a.Name, Status: a.Status})
+		out = append(out, client.AgentBrief{ID: a.ID, Name: a.Name, Status: a.Status})
 	}
-	return &plane.AgentRoster{Agents: out}, nil
+	return &client.AgentRoster{Agents: out}, nil
 }

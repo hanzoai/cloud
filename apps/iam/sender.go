@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	iamserver "github.com/hanzoai/iam/server"
 	luxlog "github.com/luxfi/log"
 )
@@ -30,7 +30,7 @@ import (
 // started reported no delivery at all, which is self-fulfilling: the method is
 // hidden, nothing calls notify, nothing ever wakes it.
 //
-// plane.Ask answers both. It short-circuits to a function call when notify is
+// client.Call answers both. It short-circuits to a function call when notify is
 // co-resident, wakes it through the router when it is not, and returns ErrNoPeer —
 // and only ErrNoPeer — when this deployment runs no such app. So a cold notify is
 // simply started by the send that needed it, and a failing notify reports an outage
@@ -61,8 +61,8 @@ func bindDelivery(log luxlog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), reachWait)
 	defer cancel()
 
-	err := plane.Reach(ctx, notifyApp)
-	if errors.Is(err, plane.ErrNoPeer) {
+	err := client.Reach(ctx, notifyApp)
+	if errors.Is(err, client.ErrNoPeer) {
 		log.Info("no notify in this deployment — email/SMS codes and their second factors stay off", "err", err)
 		return
 	}
@@ -95,7 +95,7 @@ type sender struct{}
 // peer on a unix socket is trusted to name the tenant it acts for, so one process
 // sends for all of them with no secret to mint, mount or rotate.
 func (sender) Send(ctx context.Context, m iamserver.Message) error {
-	in := plane.Send{Org: m.Org, To: m.To, Subject: m.Subject, Body: m.Body}
+	in := client.Send{Org: m.Org, To: m.To, Subject: m.Subject, Body: m.Body}
 	switch m.Channel {
 	case "email":
 		in.Channel = "email"
@@ -104,7 +104,7 @@ func (sender) Send(ctx context.Context, m iamserver.Message) error {
 	default:
 		return fmt.Errorf("iam: unknown delivery channel %q", m.Channel)
 	}
-	if _, err := plane.Ask[plane.Send, plane.Sent](ctx, notifyApp, plane.NotifySend, &in); err != nil {
+	if _, err := client.Call[client.Send, client.Sent](ctx, notifyApp, client.NotifySend, &in); err != nil {
 		return fmt.Errorf("iam: deliver %s to %s: %w", in.Channel, notifyApp, err)
 	}
 	return nil

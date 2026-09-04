@@ -7,7 +7,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/agents"
 	"github.com/hanzoai/cloud/apps/coding"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -23,7 +23,7 @@ import (
 // shape until it moved onto the plane; this is the rest of that move.
 //
 // The ORG rides in each argument rather than on the caller's plane identity.
-// That is the exception plane.RunOnBehalfIn documents, and it holds for the same
+// That is the exception client.RunOnBehalfIn documents, and it holds for the same
 // reason: the tenant is the one that connected the Slack workspace, resolved
 // server-side from the signature-verified team_id, and the bridge plugin's own
 // identity is not it. Every op below touches only the named org's own session,
@@ -36,76 +36,76 @@ import (
 // is safe and ordinary: an op registry is a value, ServePlane binds the socket
 // over it afterwards.
 func init() {
-	zip.Post[plane.SessionOpenIn, plane.SessionOpened](cloud.Plane(), "/agents/session/open", planeSessionOpen,
-		zip.WithOperationID(plane.AgentsSessionOpen),
+	zip.Post[client.SessionOpenIn, client.SessionOpened](cloud.Plane(), "/agents/session/open", planeSessionOpen,
+		zip.WithOperationID(client.AgentsSessionOpen),
 		zip.WithSummary("Open the live session a coding run streams into"))
 
-	zip.Post[plane.SessionEventIn, plane.CodingAck](cloud.Plane(), "/agents/session/event", planeSessionEvent,
-		zip.WithOperationID(plane.AgentsSessionEvent),
+	zip.Post[client.SessionEventIn, client.CodingAck](cloud.Plane(), "/agents/session/event", planeSessionEvent,
+		zip.WithOperationID(client.AgentsSessionEvent),
 		zip.WithSummary("Append one event to a live session"))
 
-	zip.Post[plane.SessionCloseIn, plane.CodingAck](cloud.Plane(), "/agents/session/close", planeSessionClose,
-		zip.WithOperationID(plane.AgentsSessionClose),
+	zip.Post[client.SessionCloseIn, client.CodingAck](cloud.Plane(), "/agents/session/close", planeSessionClose,
+		zip.WithOperationID(client.AgentsSessionClose),
 		zip.WithSummary("Transition a live session to its terminal status"))
 
-	zip.Post[plane.TargetRefIn, plane.TargetRef](cloud.Plane(), "/agents/resolve-target", planeResolveTarget,
-		zip.WithOperationID(plane.AgentsResolveTarget),
+	zip.Post[client.TargetRefIn, client.TargetRef](cloud.Plane(), "/agents/resolve-target", planeResolveTarget,
+		zip.WithOperationID(client.AgentsResolveTarget),
 		zip.WithSummary("Resolve an `on <machine>` reference to one of the org's targets"))
 
-	zip.Post[plane.TargetGateIn, plane.CodingAck](cloud.Plane(), "/agents/target-gate", planeTargetGate,
-		zip.WithOperationID(plane.AgentsTargetGate),
+	zip.Post[client.TargetGateIn, client.CodingAck](cloud.Plane(), "/agents/target-gate", planeTargetGate,
+		zip.WithOperationID(client.AgentsTargetGate),
 		zip.WithSummary("Whether a run may be dispatched to a machine right now"))
 
-	zip.Post[plane.RouteRunIn, plane.CodingAck](cloud.Plane(), "/agents/route-run", planeRouteRun,
-		zip.WithOperationID(plane.AgentsRouteRun),
+	zip.Post[client.RouteRunIn, client.CodingAck](cloud.Plane(), "/agents/route-run", planeRouteRun,
+		zip.WithOperationID(client.AgentsRouteRun),
 		zip.WithSummary("Enqueue a routed coding run on the durable engine"))
 }
 
 // planeSessionOpen opens the session. Target is a VALUE of the request, not a
 // second op: "no machine" is what an ordinary sandbox run says, and splitting it
 // in two would be two ops onto one OpenSessionOn.
-func planeSessionOpen(ctx context.Context, in *plane.SessionOpenIn) (*plane.SessionOpened, error) {
+func planeSessionOpen(ctx context.Context, in *client.SessionOpenIn) (*client.SessionOpened, error) {
 	id, err := agents.OpenSessionOn(ctx, in.Org, in.Actor, in.Agent, in.Title, in.Target)
 	if err != nil {
 		return nil, err
 	}
-	return &plane.SessionOpened{SessionID: id}, nil
+	return &client.SessionOpened{SessionID: id}, nil
 }
 
-func planeSessionEvent(ctx context.Context, in *plane.SessionEventIn) (*plane.CodingAck, error) {
+func planeSessionEvent(ctx context.Context, in *client.SessionEventIn) (*client.CodingAck, error) {
 	if err := agents.LogSessionEvent(ctx, in.Org, in.SessionID, in.Kind, in.Actor, in.Payload); err != nil {
 		return nil, err
 	}
-	return &plane.CodingAck{OK: true}, nil
+	return &client.CodingAck{OK: true}, nil
 }
 
-func planeSessionClose(ctx context.Context, in *plane.SessionCloseIn) (*plane.CodingAck, error) {
+func planeSessionClose(ctx context.Context, in *client.SessionCloseIn) (*client.CodingAck, error) {
 	if err := agents.CloseSession(ctx, in.Org, in.SessionID, in.Status); err != nil {
 		return nil, err
 	}
-	return &plane.CodingAck{OK: true}, nil
+	return &client.CodingAck{OK: true}, nil
 }
 
 // planeResolveTarget answers with the org's machine, or an error. It returns
 // only the id and the label — never the row — so a caller learns nothing about a
 // machine it did not already name, and a reference that matches nothing in THIS
 // org is not found rather than somebody else's target.
-func planeResolveTarget(ctx context.Context, in *plane.TargetRefIn) (*plane.TargetRef, error) {
+func planeResolveTarget(ctx context.Context, in *client.TargetRefIn) (*client.TargetRef, error) {
 	t, err := agents.ResolveTarget(ctx, in.Org, in.Ref)
 	if err != nil {
 		return nil, err
 	}
-	return &plane.TargetRef{ID: t.ID, Label: t.Label}, nil
+	return &client.TargetRef{ID: t.ID, Label: t.Label}, nil
 }
 
 // planeTargetGate is fail-closed by construction: the only success is a nil
 // error from the gate itself, so a machine that is absent, offline or has no
 // live runner stops the dispatch here rather than downstream.
-func planeTargetGate(ctx context.Context, in *plane.TargetGateIn) (*plane.CodingAck, error) {
+func planeTargetGate(ctx context.Context, in *client.TargetGateIn) (*client.CodingAck, error) {
 	if err := agents.TargetDispatchable(ctx, in.Org, in.TargetID); err != nil {
 		return nil, err
 	}
-	return &plane.CodingAck{OK: true}, nil
+	return &client.CodingAck{OK: true}, nil
 }
 
 // planeRouteRun puts the run on the durable engine IN THIS PROCESS.
@@ -115,11 +115,11 @@ func planeTargetGate(ctx context.Context, in *plane.TargetGateIn) (*plane.Coding
 // HTTP surface; enqueued anywhere else it would be offered to a mailbox nobody
 // reads, and the workflow would spend its entire budget before failing. One
 // process holds the engine, the mailbox and the completion — this one.
-func planeRouteRun(ctx context.Context, in *plane.RouteRunIn) (*plane.CodingAck, error) {
+func planeRouteRun(ctx context.Context, in *client.RouteRunIn) (*client.CodingAck, error) {
 	if err := coding.Enqueue(ctx, *in, routeLog); err != nil {
 		return nil, fmt.Errorf("agents: could not queue the routed run: %w", err)
 	}
-	return &plane.CodingAck{OK: true}, nil
+	return &client.CodingAck{OK: true}, nil
 }
 
 // codingLog is how coding talks in this process. Deps used to carry a logger and

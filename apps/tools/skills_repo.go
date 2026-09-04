@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -29,15 +29,15 @@ const skillsDir = ".agents/skills"
 // serveSkills publishes the replacement on the plane. Mount calls it once the
 // store is open.
 func serveSkills() {
-	zip.Post[plane.SkillsIn, plane.Skills](cloud.Plane(), "/tools/skills", planeSkills,
-		zip.WithOperationID(plane.ToolsSkills),
+	zip.Post[client.SkillsIn, client.Skills](cloud.Plane(), "/tools/skills", planeSkills,
+		zip.WithOperationID(client.ToolsSkills),
 		zip.WithSummary("Replace the skills one repository contributes to the caller's org"))
 }
 
 // planeSkills turns the files into skills and makes them the source's whole
 // contribution. The ORG is the caller's, from the plane context: a repository
 // can only ever write the skills of the org that holds it.
-func planeSkills(ctx context.Context, in *plane.SkillsIn) (*plane.Skills, error) {
+func planeSkills(ctx context.Context, in *client.SkillsIn) (*client.Skills, error) {
 	if in == nil || strings.TrimSpace(in.Source) == "" {
 		return nil, zip.ErrBadRequest("skills: source is required")
 	}
@@ -62,7 +62,7 @@ func planeSkills(ctx context.Context, in *plane.SkillsIn) (*plane.Skills, error)
 	if err := s.State.skills.Replace(ctx, org, strings.TrimSpace(in.Source), skills); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "skills: %v", err)
 	}
-	return &plane.Skills{Count: len(skills), Refused: refused}, nil
+	return &client.Skills{Count: len(skills), Refused: refused}, nil
 }
 
 // skillFromFile reads one repository file as a skill. The name is the directory

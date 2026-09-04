@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // A caller with no org cannot page activities. The org rides the CALLER — the
@@ -19,7 +19,7 @@ import (
 // something an input here can express. This pins the one case where that could
 // still leak: an unattributed call must be refused rather than defaulted.
 func TestActivitiesRefusesACallWithNoOrg(t *testing.T) {
-	if _, err := planeActivities(context.Background(), &plane.ActivitiesIn{Namespace: "fleet"}); err == nil {
+	if _, err := planeActivities(context.Background(), &client.ActivitiesIn{Namespace: "fleet"}); err == nil {
 		t.Fatal("an unattributed call was answered; it must be refused")
 	}
 }
@@ -36,7 +36,7 @@ func TestActivitiesWithNoEngineIsAnErrorNotAnEmptyPage(t *testing.T) {
 		t.Skip("this process has an engine; the no-engine path is what is under test")
 	}
 	out, err := planeActivities(cloud.For(context.Background(), "hanzo"),
-		&plane.ActivitiesIn{Namespace: "fleet"})
+		&client.ActivitiesIn{Namespace: "fleet"})
 	if err == nil {
 		t.Fatalf("no engine answered %+v with no error; an unreadable engine must fault", out)
 	}

@@ -33,8 +33,8 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/metering"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -44,8 +44,8 @@ func TestObsErrorInCrossesThePlane(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 
 	app := zip.New(zip.Config{AppName: "obsecho"})
-	zip.Post[plane.ObsErrorIn, plane.ObsErrorOut](app, "/obs/error/post",
-		func(_ context.Context, in *plane.ObsErrorIn) (*plane.ObsErrorOut, error) {
+	zip.Post[client.ObsErrorIn, client.ObsErrorOut](app, "/obs/error/post",
+		func(_ context.Context, in *client.ObsErrorIn) (*client.ObsErrorOut, error) {
 			// Echo one header back as the body so a DROPPED header fails loudly
 			// rather than passing as an empty map would.
 			var got string
@@ -54,16 +54,16 @@ func TestObsErrorInCrossesThePlane(t *testing.T) {
 					got = h.Value
 				}
 			}
-			return &plane.ObsErrorOut{Status: 401, Body: []byte(got)}, nil
+			return &client.ObsErrorOut{Status: 401, Body: []byte(got)}, nil
 		}, zip.WithOperationID("obs_error_post"))
 	go func() { _ = app.Listen(zip.SocketPath("obsecho")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	waitFor(t, "obsecho")
 
-	out, err := cloud.Ask[plane.ObsErrorIn, plane.ObsErrorOut](context.Background(),
-		"obsecho", "obs_error_post", &plane.ObsErrorIn{
+	out, err := cloud.Ask[client.ObsErrorIn, client.ObsErrorOut](context.Background(),
+		"obsecho", "obs_error_post", &client.ObsErrorIn{
 			Path:    "/v1/event/6ba7b810-9dad-11d1-80b4-00c04fd430c8/envelope/",
-			Headers: []plane.Header{{Name: "X-Sentry-Auth", Value: "Sentry sentry_key=abc"}},
+			Headers: []client.Header{{Name: "X-Sentry-Auth", Value: "Sentry sentry_key=abc"}},
 			Body:    []byte("{}"),
 		})
 	if err != nil {
@@ -89,22 +89,22 @@ func TestObsErrorInCrossesThePlane(t *testing.T) {
 // added to any of these is the same 24h outage.
 func TestNoPlaneTypeCarriesAnUnencodableKind(t *testing.T) {
 	types := []any{
-		plane.AuthorizeIn{}, plane.RecordIn{}, plane.BalanceIn{},
-		plane.SecretIn{}, plane.FilesIn{}, plane.Visibility{}, plane.ReserveIn{},
-		plane.ObsErrorIn{}, plane.ObsErrorOut{}, plane.Header{},
+		client.AuthorizeIn{}, client.RecordIn{}, client.BalanceIn{},
+		client.SecretIn{}, client.FilesIn{}, client.Visibility{}, client.ReserveIn{},
+		client.ObsErrorIn{}, client.ObsErrorOut{}, client.Header{},
 		// ScopeRules is walked, not ScopeRule: the walk descends a slice of
 		// structs, so the row type is reached through the reply that carries it
 		// — which is also the only way it ever crosses.
-		plane.ScopeRules{},
-		plane.SlackSendIn{},
-		plane.StartIn{}, plane.Started{},
+		client.ScopeRules{},
+		client.SlackSendIn{},
+		client.StartIn{}, client.Started{},
 		// The coding op's contract. It crosses on every run started from chat,
 		// and a map added to either half would fail the call INSIDE zip.Call,
 		// before the socket, with a healthy-looking peer and an unreachable op.
-		plane.CodingStartIn{}, plane.CodingStarted{},
+		client.CodingStartIn{}, client.CodingStarted{},
 		// SlackSendIn grew a field (Update) and SlackSent is new — both are on the
 		// path a run narrates itself down.
-		plane.SlackSendIn{}, plane.SlackSent{},
+		client.SlackSendIn{}, client.SlackSent{},
 	}
 	for _, v := range types {
 		walkEncodable(t, reflect.TypeOf(v), reflect.TypeOf(v).Name())
@@ -119,7 +119,7 @@ func TestNoPlaneTypeCarriesAnUnencodableKind(t *testing.T) {
 // type lives in. That is a property of every plane type at once, including the ones
 // written after this test.
 //
-// It is also the leaf rule the plane already lives by for its own reasons (plane/ask.go:
+// It is also the leaf rule the plane already lives by for its own reasons (client/ask.go:
 // cloud drags 576 packages, this leaf 75) — apps/metering pulls the finance ledger, its
 // SQLite store and the envelope keys behind it. One import would take the money's private
 // vocabulary and its whole dependency tree into the package every peer call links.
@@ -171,7 +171,7 @@ func walkEncodable(t *testing.T, typ reflect.Type, path string) {
 	if typ == meterUsage {
 		t.Errorf("%s reaches metering.Usage — its Ref is the ledger's idempotency key and is "+
 			"`json:\"-\"` to keep callers out of it, but zapenc ignores tags and would carry it "+
-			"across the plane. Send plane.Usage, whose Ref is the sender's own act name.", path)
+			"across the plane. Send client.Usage, whose Ref is the sender's own act name.", path)
 		return
 	}
 	if typ.Kind() != reflect.Struct {

@@ -22,30 +22,30 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/manifest"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
 // serveFlags publishes the flag read on the plane, answering from held: the orgs
 // that have been let into each capability. It is the real op contract
-// (plane.FlagsHold, plane.FlagIn → plane.Flag) reached the real way, so what the
+// (client.FlagsHold, client.FlagIn → client.Flag) reached the real way, so what the
 // refusal is tested against is what it will call in production.
 func serveFlags(t *testing.T, held map[string][]string) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 
 	app := zip.New(zip.Config{AppName: "flags"})
-	zip.Post[plane.FlagIn, plane.Flag](app, "/flags/hold",
-		func(ctx context.Context, in *plane.FlagIn) (*plane.Flag, error) {
+	zip.Post[client.FlagIn, client.Flag](app, "/flags/hold",
+		func(ctx context.Context, in *client.FlagIn) (*client.Flag, error) {
 			// The same refusal apps/flags makes: no caller, no answer.
 			org := cloud.Who(ctx).Org
 			if org == "" {
 				return nil, zip.ErrUnauthorized("hold: no org on the call")
 			}
-			return &plane.Flag{On: slices.Contains(held[org], in.Key)}, nil
-		}, zip.WithOperationID(plane.FlagsHold))
+			return &client.Flag{On: slices.Contains(held[org], in.Key)}, nil
+		}, zip.WithOperationID(client.FlagsHold))
 
 	go func() { _ = app.Listen(zip.SocketPath("flags")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })

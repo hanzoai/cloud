@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // slack_turns.go is the Slack adapter's READ edge: the conversation a message
@@ -49,7 +49,7 @@ const (
 // else reads as the room's recent messages (conversations.history) — the right
 // answer for a DM, where Slack's assistant surface deliberately does not thread,
 // and for a slash command, which has no thread to sit in.
-func slackTurns(ctx context.Context, org string, in Inbound) ([]plane.Turn, error) {
+func slackTurns(ctx context.Context, org string, in Inbound) ([]client.Turn, error) {
 	if strings.TrimSpace(in.Channel) == "" {
 		return nil, nil // nowhere to read from; a first message is a real answer
 	}
@@ -64,7 +64,7 @@ func slackTurns(ctx context.Context, org string, in Inbound) ([]plane.Turn, erro
 // conversation is here for the same reason the send path splits that way
 // (SendSlackAt / slackPostThreadTS): what a transcript IS can then be stated
 // against a Slack stub, without a key store standing behind it.
-func slackReadTurns(ctx context.Context, botToken, org string, in Inbound) ([]plane.Turn, error) {
+func slackReadTurns(ctx context.Context, botToken, org string, in Inbound) ([]client.Turn, error) {
 	method, form := "/conversations.history", url.Values{
 		"channel": {in.Channel},
 		"limit":   {strconv.Itoa(slackTurnPage)},
@@ -101,7 +101,7 @@ func slackReadTurns(ctx context.Context, botToken, org string, in Inbound) ([]pl
 	if conn, ok := ConnectionFor(org, "slack", ""); ok {
 		self = conn.BotUserID
 	}
-	turns := make([]plane.Turn, 0, len(r.Messages))
+	turns := make([]client.Turn, 0, len(r.Messages))
 	for _, m := range r.Messages {
 		// A join, a leave, a pinned file: events with words in them that nobody
 		// said. A bot_message is a real turn — usually ours.
@@ -113,7 +113,7 @@ func slackReadTurns(ctx context.Context, botToken, org string, in Inbound) ([]pl
 			continue
 		}
 		at, _ := strconv.ParseFloat(m.TS, 64)
-		turns = append(turns, plane.Turn{
+		turns = append(turns, client.Turn{
 			Sender: m.User,
 			Self:   (self != "" && m.User == self) || (self == "" && m.BotID != ""),
 			Text:   text,

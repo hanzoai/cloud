@@ -6,7 +6,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -27,9 +27,9 @@ import (
 
 // exposeConnection publishes the connection read. Mount calls it.
 func exposeConnection() {
-	zip.Post[plane.ConnectionIn, plane.Connection](cloud.Plane(), "/integrations/connection",
+	zip.Post[client.ConnectionIn, client.Connection](cloud.Plane(), "/integrations/connection",
 		planeConnection,
-		zip.WithOperationID(plane.IntegrationsConnection),
+		zip.WithOperationID(client.IntegrationsConnection),
 		zip.WithSummary("Whether the caller's org has connected a provider"))
 }
 
@@ -42,7 +42,7 @@ func exposeConnection() {
 // the one described: a caller acting for the org acts as the WORKSPACE, never as
 // some member's personal link. Nothing secret crosses — an app that must ACT on a
 // connection asks this package to act instead of fetching the credential.
-func planeConnection(ctx context.Context, in *plane.ConnectionIn) (*plane.Connection, error) {
+func planeConnection(ctx context.Context, in *client.ConnectionIn) (*client.Connection, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrForbidden("connection: no org on the call")
@@ -59,9 +59,9 @@ func planeConnection(ctx context.Context, in *plane.ConnectionIn) (*plane.Connec
 	}
 	c, ok := orgHeld(conns)
 	if !ok {
-		return &plane.Connection{}, nil
+		return &client.Connection{}, nil
 	}
-	return &plane.Connection{
+	return &client.Connection{
 		Connected:    true,
 		Account:      c.ExternalID,
 		AccountLabel: c.AccountLabel,

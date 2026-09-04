@@ -39,9 +39,9 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -69,8 +69,8 @@ func funded(t *testing.T) finance.Client {
 //
 // The settlement's RECORD is detached by design — [screen.learn] spawns a goroutine
 // that outlives the request — while every endpoint fixture in this package unbinds the
-// plane in its own cleanup. Those two race: plane.Unbind on the test goroutine against
-// plane.Bind inside the detached one. It is not a property of this change (main reports
+// plane in its own cleanup. Those two race: client.Unbind on the test goroutine against
+// client.Bind inside the detached one. It is not a property of this change (main reports
 // the same race from TestPayments_ANotDeployedScorerDoesNotCloseTheTypedEndpoint under
 // -race, on a fixture that predates it), and it is not what these tests are about — the
 // money is. So they take the plane out of the picture and WAIT for the goroutine.
@@ -81,8 +81,8 @@ func quiet(t *testing.T) {
 	t.Helper()
 	mute(t)
 	prior := teach
-	teach = func(context.Context, *plane.RiskObserveIn) (*plane.RiskObserved, error) {
-		return &plane.RiskObserved{Learned: 1}, nil
+	teach = func(context.Context, *client.RiskObserveIn) (*client.RiskObserved, error) {
+		return &client.RiskObserved{Learned: 1}, nil
 	}
 	t.Cleanup(func() {
 		if !released(3 * time.Second) {
@@ -982,8 +982,8 @@ func creditEndpointBody(t *testing.T, s screen, body string) *zip.App {
 func creditEndpointHandler(t *testing.T, s screen, h zip.Handler) *zip.App {
 	t.Helper()
 	shortRuntimeDir(t)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 	t.Cleanup(func() { cloud.SetRiskScorer(nil) })
 	cloud.SetRiskScorer(allowAll)
 	quiet(t)

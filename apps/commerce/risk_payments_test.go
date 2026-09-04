@@ -42,7 +42,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // creditEndpoints is every address in this package that reaches commerce's card money
@@ -540,8 +540,8 @@ const topupEndpoint = "/v1/billing/topup/token"
 func isolate(t *testing.T) {
 	t.Helper()
 	shortRuntimeDir(t)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 	t.Cleanup(func() { cloud.SetRiskScorer(nil) })
 }
 

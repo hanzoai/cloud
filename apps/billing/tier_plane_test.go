@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/internal/planetest"
@@ -30,7 +30,7 @@ import (
 //
 // The endpoint resolves who is asking and the op behind it acts for them, but
 // they are two resolutions on two different context shapes: the endpoint has a
-// REQUEST, and the plane op has only what ask() stamped — plane.For sets
+// REQUEST, and the plane op has only what ask() stamped — client.For sets
 // zip.Caller{Org} and leaves everything else empty. A fix to one says nothing
 // about the other, which is exactly how a first attempt at this passed its own
 // tests and changed a 401 into a 403 in production and nothing else.
@@ -41,7 +41,7 @@ import (
 // was told.
 func TestTheOrgTheEndpointResolvedIsTheOrgThePlaneOpActsFor(t *testing.T) {
 
-	// The stub has to be REACHABLE as commerce, not merely registered: plane.Ask
+	// The stub has to be REACHABLE as commerce, not merely registered: client.Call
 	// resolves the peer by name (zip.Serving), and without that it answers
 	// ErrNoPeer and the endpoint reports 503 before the op is ever invoked —
 	// which is what this test did until it served the plane.
@@ -51,18 +51,18 @@ func TestTheOrgTheEndpointResolvedIsTheOrgThePlaneOpActsFor(t *testing.T) {
 	// which names neither the limit nor the length. Every other plane test in this
 	// repo already takes the short dir; this was the one that did not.
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
-	plane.Unbind()
+	client.Unbind()
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 
 	var sawOrg, sawSubject string
-	zip.Post[plane.TierIn, plane.Tier](cloud.Plane(), "/billing/tier",
-		func(ctx context.Context, in *plane.TierIn) (*plane.Tier, error) {
+	zip.Post[client.TierIn, client.Tier](cloud.Plane(), "/billing/tier",
+		func(ctx context.Context, in *client.TierIn) (*client.Tier, error) {
 			sawOrg = cloud.Who(ctx).Org
 			sawSubject = in.Subject
-			return &plane.Tier{User: in.Subject, Tier: plane.TierLimits{Name: "pro"}}, nil
+			return &client.Tier{User: in.Subject, Tier: client.TierLimits{Name: "pro"}}, nil
 		},
-		zip.WithOperationID(plane.BillingTier))
+		zip.WithOperationID(client.BillingTier))
 
 	stop, err := cloud.ServePlane("commerce", nil)
 	if err != nil {

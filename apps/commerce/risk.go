@@ -73,8 +73,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/plane"
-	riskpeer "github.com/hanzoai/cloud/plane/risk"
+	"github.com/hanzoai/cloud/client"
+	riskpeer "github.com/hanzoai/cloud/client/risk"
 )
 
 // installRiskScorer publishes the ONE scorer to package cloud's client. Mount calls
@@ -111,7 +111,7 @@ func installRiskScorer(lg luxlog.Logger) {
 // and the agent's typed payment each carry a card token, an amount and a currency under
 // the SAME field names, so [paymentSignals] reads either one and the axes it can
 // state do not depend on which address was called.
-var paymentAxes = []string{plane.SignalNano, plane.SignalCountry, plane.SignalPeer}
+var paymentAxes = []string{client.SignalNano, client.SignalCountry, client.SignalPeer}
 
 // paymentUnarmed is the DEVICE axis, and the reason is a fact about the payment path
 // rather than a decision of this file's.
@@ -134,7 +134,7 @@ var paymentAxes = []string{plane.SignalNano, plane.SignalCountry, plane.SignalPe
 // The device half of the fan-out is not dead everywhere: POST /v1/risk/learn takes a
 // device from a caller that has one, so the rule is exercised where a real value
 // exists.
-var paymentUnarmed = []string{plane.SignalDevice}
+var paymentUnarmed = []string{client.SignalDevice}
 
 // scoreOverPlane asks the risk child, and translates the two vocabularies.
 //
@@ -167,7 +167,7 @@ func scoreOverPlane(ctx context.Context, lg luxlog.Logger, org string, q cloud.R
 	// to fail closed on.
 	//
 	// AND THE PROBE ITSELF CAN FAIL, which is a THIRD fact and not either of those
-	// two. [plane.Listening] reports ENOENT and ECONNREFUSED as "no listener" and
+	// two. [client.Listening] reports ENOENT and ECONNREFUSED as "no listener" and
 	// returns every other dial error UNTOUCHED, precisely so that a socket which is
 	// present and unusable is never read as one that is absent. Under fd exhaustion
 	// (EMFILE), a mode that denies the dial (EACCES) or a run directory whose path
@@ -190,7 +190,7 @@ func scoreOverPlane(ctx context.Context, lg luxlog.Logger, org string, q cloud.R
 	cctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), cloud.RiskBudget)
 	defer cancel()
 
-	out, err := riskpeer.RiskDecide(cctx, &plane.RiskDecideIn{
+	out, err := riskpeer.RiskDecide(cctx, &client.RiskDecideIn{
 		Stage:   q.Stage,
 		Kind:    q.Subject.Kind,
 		Subject: q.Subject.ID,
@@ -224,13 +224,13 @@ func scoreOverPlane(ctx context.Context, lg luxlog.Logger, org string, q cloud.R
 // signalsOf puts the gate's observations on the wire. A map cannot cross the
 // plane at all — zapenc refuses one at encode — so they travel as a list, SORTED,
 // because an unordered wire is one that cannot be compared with itself.
-func signalsOf(facts map[string]string) []plane.Signal {
+func signalsOf(facts map[string]string) []client.Signal {
 	if len(facts) == 0 {
 		return nil
 	}
-	out := make([]plane.Signal, 0, len(facts))
+	out := make([]client.Signal, 0, len(facts))
 	for name, value := range facts {
-		out = append(out, plane.Signal{Name: name, Value: value})
+		out = append(out, client.Signal{Name: name, Value: value})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
@@ -241,16 +241,16 @@ func signalsOf(facts map[string]string) []plane.Signal {
 // by a dead pod outlives it, and for a lazily started app that difference is the
 // whole answer.
 //
-// IT RETURNS THE ERROR, and that is the whole of it. [plane.Listening] separates
+// IT RETURNS THE ERROR, and that is the whole of it. [client.Listening] separates
 // three facts and this is a pass-through of that separation: no listener (false,
 // nil), a listener (true, nil), and a socket that is present and UNUSABLE (false,
 // err). Folding the third into the first — `return err == nil && up` — is the one
 // line that turns an outage into an absence, and absence is the exemption the fail
-// policy grants a privileged grant. This is the same contract [plane.Reach] keeps
+// policy grants a privileged grant. This is the same contract [client.Reach] keeps
 // for the router's own start path, for the same reason.
 func scorerUp() (bool, error) {
-	plane.Bind()
-	return plane.Listening(zip.SocketPath(riskpeer.App))
+	client.Bind()
+	return client.Listening(zip.SocketPath(riskpeer.App))
 }
 
 // waking holds the ONE start request in flight. The host single-flights the start
@@ -270,7 +270,7 @@ func wakeScorer(lg luxlog.Logger) {
 		// Reach applies the host's own plugin-start budget. A fleet that runs no
 		// risk app answers ErrNoPeer immediately and this is a no-op that repeats
 		// at most once per decision, one at a time.
-		if err := plane.Reach(context.Background(), riskpeer.App); err != nil {
+		if err := client.Reach(context.Background(), riskpeer.App); err != nil {
 			lg.Debug("commerce: the risk scorer could not be started", "err", err)
 		}
 	}()
@@ -619,8 +619,8 @@ func (s screen) decide(ctx context.Context, p payment) error {
 		// against a distribution of money spent OUT — and the windowed value bounds
 		// the aggregate rule reads are a PAYMENTS appetite accruing on the very same
 		// key. A customer with a large inference bill was examined for it. See
-		// [plane.KindPayer].
-		Subject: cloud.RiskSubject{Kind: plane.KindPayer, ID: p.subject},
+		// [client.KindPayer].
+		Subject: cloud.RiskSubject{Kind: client.KindPayer, ID: p.subject},
 		// STATED, never derived. cloud.Privileged() does not match either of the
 		// two routes this gate holds and the default is fail-open, so an unset bit
 		// here is a scorer outage minting balance.
@@ -717,7 +717,7 @@ var teach = riskpeer.RiskObserve
 // It is generous where the decide budget is tight because it bounds a DETACHED
 // goroutine rather than a request: the customer has already been charged and
 // answered, so nothing here is on anybody's critical path, and a cold risk child
-// needs room to come up (plane.Ask reaches the peer and single-flights the start).
+// needs room to come up (client.Call reaches the peer and single-flights the start).
 const teachBudget = 5 * time.Second
 
 // learn tells the risk plane that a card payment SETTLED, at whichever endpoint took it
@@ -726,7 +726,7 @@ const teachBudget = 5 * time.Second
 // # This is the only thing that teaches the credit endpoint's rule anything
 //
 // The screen reads what a subject had already done; nothing was making that true.
-// [plane.RiskDecide] records nothing by design, the published learn endpoint is an
+// [client.RiskDecide] records nothing by design, the published learn endpoint is an
 // organisation calling itself, and at a self-serve credit endpoint the organisation IS
 // the payer — so a fresh org's pace and fan-out read an empty history, which is
 // precisely the subject those halves exist for. Five payments of eleven thousand
@@ -799,16 +799,16 @@ func (s screen) learn(p payment, ref string) {
 			"door", p.path, "via", p.via, "ledger", p.ledger)
 		return
 	}
-	nano := p.facts[plane.SignalNano]
+	nano := p.facts[client.SignalNano]
 	if nano == "" {
 		// No amount this endpoint could state in USD ([paymentSignals]). The event still
 		// happened, so it is still taught — the value features read blind, which is a
 		// different and honest fact from a payment of nothing.
 		s.lg.Debug("teaching a settled payment with no stated value", "door", p.path, "ledger", p.ledger)
 	}
-	in := &plane.RiskObserveIn{
+	in := &client.RiskObserveIn{
 		Stage:      cloud.StagePayment,
-		Kind:       plane.KindPayer,
+		Kind:       client.KindPayer,
 		Subject:    p.subject,
 		Settlement: ref,
 		// THE SAME SIGNALS THE SCREEN WAS GIVEN, minus the ones that describe the
@@ -816,8 +816,8 @@ func (s screen) learn(p payment, ref string) {
 		// asked about or the screen reads a history taught under different identifiers.
 		// They are the SAME map, resolved once per payment, so they cannot differ.
 		Signals: signalsOf(map[string]string{
-			plane.SignalNano: nano,
-			plane.SignalPeer: p.facts[plane.SignalPeer],
+			client.SignalNano: nano,
+			client.SignalPeer: p.facts[client.SignalPeer],
 		}),
 	}
 	lg, org := s.lg, p.ledger
@@ -1058,20 +1058,20 @@ func paymentFacts(address, country string, amountCents int64, currency string) m
 	// which reaches the fan-out bound on volume alone and reports a farm made of
 	// strangers.
 	if address != "" {
-		signals[plane.SignalPeer] = address
+		signals[client.SignalPeer] = address
 	}
 	// Omitted when nothing trustworthy stated one. An absent country is a fact the
 	// rule reads as "the geography half cannot judge"; an empty string sent as a
 	// value would be a gate claiming to have looked.
 	if country != "" {
-		signals[plane.SignalCountry] = country
+		signals[client.SignalCountry] = country
 	}
 	// NANO IS USD. A minor unit in another currency converted as though it were
 	// cents would be a number the value features read as a different amount of
 	// money, so an amount this gate cannot state in USD is not stated at all —
 	// absent, blind, and counted as blind on the org's own model state.
 	if amountCents > 0 && (signals["currency"] == "" || signals["currency"] == "usd") {
-		signals[plane.SignalNano] = strconv.FormatInt(amountCents*nanoPerCent, 10)
+		signals[client.SignalNano] = strconv.FormatInt(amountCents*nanoPerCent, 10)
 	}
 	return signals
 }

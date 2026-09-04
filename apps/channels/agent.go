@@ -10,7 +10,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -199,15 +199,15 @@ func (o ops) agentPut(ctx context.Context, in *channelAgentsPut) (*channelAgents
 // serveAgent publishes the binding on the plane. Mount calls it beside
 // serveRecent, for the bridges that answer outside the channels turn.
 func serveAgent() {
-	zip.Post[plane.AgentForIn, plane.AgentFor](cloud.Plane(), "/channels/agent", planeAgentFor,
-		zip.WithOperationID(plane.ChannelsAgent),
+	zip.Post[client.AgentForIn, client.AgentFor](cloud.Plane(), "/channels/agent", planeAgentFor,
+		zip.WithOperationID(client.ChannelsAgent),
 		zip.WithSummary("The agent that answers one room"))
 }
 
 // planeAgentFor answers with the ref. The ORG is the caller's, from the plane
 // context and never an argument, for the reason recent.go gives: an org a caller
 // could pass is an org whose bindings any caller could read.
-func planeAgentFor(ctx context.Context, in *plane.AgentForIn) (*plane.AgentFor, error) {
+func planeAgentFor(ctx context.Context, in *client.AgentForIn) (*client.AgentFor, error) {
 	if in == nil || in.Channel == "" {
 		return nil, zip.ErrBadRequest("agent: channel is required")
 	}
@@ -219,5 +219,5 @@ func planeAgentFor(ctx context.Context, in *plane.AgentForIn) (*plane.AgentFor, 
 	if s == nil {
 		return nil, zip.Errorf(503, "agent: channels is not serving")
 	}
-	return &plane.AgentFor{Ref: agentFor(ctx, s.State.store, org, Message{Channel: in.Channel, Room: Room{ID: in.Room}})}, nil
+	return &client.AgentFor{Ref: agentFor(ctx, s.State.store, org, Message{Channel: in.Channel, Room: Room{ID: in.Room}})}, nil
 }

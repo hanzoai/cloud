@@ -10,7 +10,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // mountedForTest installs a mounted agents service over per-test stores, which
@@ -52,7 +52,7 @@ func TestRosterAnswersTheCallersOwnOrg(t *testing.T) {
 	seedAgent(t, st, "acme", "a-1", "helper")
 	seedAgent(t, st, "other", "a-2", "stranger")
 
-	got, err := planeRoster(cloud.For(context.Background(), "acme"), &plane.RosterIn{})
+	got, err := planeRoster(cloud.For(context.Background(), "acme"), &client.RosterIn{})
 	if err != nil {
 		t.Fatalf("planeRoster: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestRosterAnswersTheCallersOwnOrg(t *testing.T) {
 // hold, and the reason RosterIn has no org field to fall back to.
 func TestRosterRefusesAnAnonymousCaller(t *testing.T) {
 	mountedForTest(t)
-	if _, err := planeRoster(context.Background(), &plane.RosterIn{}); err == nil {
+	if _, err := planeRoster(context.Background(), &client.RosterIn{}); err == nil {
 		t.Fatal("planeRoster answered a caller with no org")
 	}
 }
@@ -77,8 +77,8 @@ func TestRosterRefusesAnAnonymousCaller(t *testing.T) {
 // rule TestNoPlaneInputCanNameAnOrg states fleet-wide, held here beside the type
 // it was just added to.
 func TestRosterInNamesNoTenant(t *testing.T) {
-	if n := numFields[plane.RosterIn](); n != 0 {
-		t.Errorf("plane.RosterIn has %d field(s); it must have none — "+
+	if n := numFields[client.RosterIn](); n != 0 {
+		t.Errorf("client.RosterIn has %d field(s); it must have none — "+
 			"a roster read that can name its own tenant enumerates somebody else's agents", n)
 	}
 }
@@ -91,7 +91,7 @@ func TestRosterCarriesStatusVerbatim(t *testing.T) {
 	st := mountedForTest(t)
 	seedAgentStatus(t, st, "acme", "a-archived", "old", "archived")
 
-	got, err := planeRoster(cloud.For(context.Background(), "acme"), &plane.RosterIn{})
+	got, err := planeRoster(cloud.For(context.Background(), "acme"), &client.RosterIn{})
 	if err != nil {
 		t.Fatalf("planeRoster: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestRosterCarriesStatusVerbatim(t *testing.T) {
 // reads as neither.
 func TestRosterAnswersAnEmptyListNotNull(t *testing.T) {
 	mountedForTest(t)
-	got, err := planeRoster(cloud.For(context.Background(), "empty-org"), &plane.RosterIn{})
+	got, err := planeRoster(cloud.For(context.Background(), "empty-org"), &client.RosterIn{})
 	if err != nil {
 		t.Fatalf("planeRoster: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestRosterOpIsDeclaredOnThePlane(t *testing.T) {
 	exposeRoster()
 	var found bool
 	for _, op := range cloud.Plane().Commands() {
-		if op.OperationID == plane.AgentsRoster {
+		if op.OperationID == client.AgentsRoster {
 			found = true
 			if !strings.Contains(strings.ToLower(op.Summary), "agents") {
 				t.Errorf("summary = %q, want it to say what the op answers", op.Summary)
@@ -144,6 +144,6 @@ func TestRosterOpIsDeclaredOnThePlane(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("no plane op declared as %q — the generated client would call a name nothing answers", plane.AgentsRoster)
+		t.Fatalf("no plane op declared as %q — the generated client would call a name nothing answers", client.AgentsRoster)
 	}
 }

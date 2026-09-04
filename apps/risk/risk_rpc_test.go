@@ -19,7 +19,7 @@ import (
 	"github.com/luxfi/aml/pkg/anomaly"
 
 	"github.com/hanzoai/cloud"
-	contract "github.com/hanzoai/cloud/plane"
+	contract "github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -63,14 +63,14 @@ func TestPlaneTenant_IsMintedFromTheCallerAndNothingElse(t *testing.T) {
 // tenant and no brand, so there is no field for a handler to be tempted by and no
 // wire for one to arrive on.
 //
-// Mutation proof: add an Org field to plane.RiskDecideIn and this names it.
+// Mutation proof: add an Org field to client.RiskDecideIn and this names it.
 func TestRiskDecideIn_CannotNameAnOrg(t *testing.T) {
 	rt := reflect.TypeFor[contract.RiskDecideIn]()
 	for field := range rt.Fields() {
 		name := strings.ToLower(field.Name)
 		for _, banned := range []string{"org", "tenant", "brand", "owner"} {
 			if strings.Contains(name, banned) {
-				t.Errorf("plane.RiskDecideIn.%s names the tenant — the organisation whose model answers "+
+				t.Errorf("client.RiskDecideIn.%s names the tenant — the organisation whose model answers "+
 					"rides the caller, never the argument", field.Name)
 			}
 		}

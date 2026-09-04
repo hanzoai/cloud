@@ -222,7 +222,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// together because of it. So the only question here is whether this deployment
 	// has a notify to reach at all.
 	//
-	// plane.Reach settles it with the ROUTER, which owns the app list — and starts a
+	// client.Reach settles it with the ROUTER, which owns the app list — and starts a
 	// cold notify while it is there, so the first person to ask for a code does not
 	// pay for its boot. Nothing observable at this instant could have answered:
 	// notify's socket is bound after Mount runs, and in the fleet it belongs to a

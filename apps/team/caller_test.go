@@ -14,8 +14,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/iamtest"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // The IAM subject the fake validator answers for, and the account it must resolve
@@ -682,7 +682,7 @@ func TestMemberPlaneOpScopesToTheCaller(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	in := &plane.MemberIn{Space: ws.UUID, Subject: iamSub}
+	in := &client.MemberIn{Space: ws.UUID, Subject: iamSub}
 	got, err := memberOf(cloud.For(ctx, "acme"), store, in)
 	if err != nil {
 		t.Fatalf("memberOf(own org): %v", err)
@@ -704,7 +704,7 @@ func TestMemberPlaneOpScopesToTheCaller(t *testing.T) {
 	}
 
 	// A stranger in the owning org is not a member either.
-	got, err = memberOf(cloud.For(ctx, "acme"), store, &plane.MemberIn{Space: ws.UUID, Subject: iamOtherSub})
+	got, err = memberOf(cloud.For(ctx, "acme"), store, &client.MemberIn{Space: ws.UUID, Subject: iamOtherSub})
 	if err != nil {
 		t.Fatalf("memberOf(stranger): %v", err)
 	}

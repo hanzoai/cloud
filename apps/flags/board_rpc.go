@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -29,33 +29,33 @@ import (
 
 // exposeBoard publishes the switchboard and its write. Use calls it.
 func exposeBoard() {
-	zip.Post[plane.Unit, plane.FlagBoard](cloud.Plane(), "/flags/board",
+	zip.Post[client.Unit, client.FlagBoard](cloud.Plane(), "/flags/board",
 		board,
-		zip.WithOperationID(plane.FlagsBoard),
+		zip.WithOperationID(client.FlagsBoard),
 		zip.WithSummary("The operator switchboard for the caller's org"))
-	zip.Post[plane.FlagSetIn, plane.Unit](cloud.Plane(), "/flags/set",
+	zip.Post[client.FlagSetIn, client.Unit](cloud.Plane(), "/flags/set",
 		set,
-		zip.WithOperationID(plane.FlagsSet),
+		zip.WithOperationID(client.FlagsSet),
 		zip.WithSummary("Write one platform switch"))
 }
 
 // board answers the switchboard through this app's own [Board], so the plane and
 // /v1/flag render one value. A second projection here would be a second answer to
 // "what is in force", and the two would disagree the day a default moves.
-func board(ctx context.Context, _ *plane.Unit) (*plane.FlagBoard, error) {
+func board(ctx context.Context, _ *client.Unit) (*client.FlagBoard, error) {
 	if cloud.Who(ctx).Org == "" {
 		return nil, zip.ErrUnauthorized("board: no org on the call")
 	}
 	b := Board()
-	out := &plane.FlagBoard{
+	out := &client.FlagBoard{
 		Engine:     b.Engine,
 		Configured: b.Configured,
 		ManageURL:  b.ManageURL,
 		AuditURL:   b.AuditURL,
-		Switches:   make([]plane.FlagSwitch, 0, len(b.Switches)),
+		Switches:   make([]client.FlagSwitch, 0, len(b.Switches)),
 	}
 	for _, s := range b.Switches {
-		out.Switches = append(out.Switches, plane.FlagSwitch{
+		out.Switches = append(out.Switches, client.FlagSwitch{
 			Key: s.Key, Category: s.Category, Label: s.Label,
 			Description: s.Description, Type: s.Type, Value: s.Value,
 			Source: s.Source, Env: s.Env, ReadOnly: s.ReadOnly,
@@ -70,7 +70,7 @@ func board(ctx context.Context, _ *plane.Unit) (*plane.FlagBoard, error) {
 // The definition is kept byte-for-byte: it is the engine's document rather than
 // this package's, carrying fields no Go type here names, and re-encoding it would
 // drop whatever we do not model.
-func set(ctx context.Context, in *plane.FlagSetIn) (*plane.Unit, error) {
+func set(ctx context.Context, in *client.FlagSetIn) (*client.Unit, error) {
 	if cloud.Who(ctx).Org == "" {
 		return nil, zip.ErrUnauthorized("set: no org on the call")
 	}
@@ -83,5 +83,5 @@ func set(ctx context.Context, in *plane.FlagSetIn) (*plane.Unit, error) {
 	if err := SetPlatformSwitch(in.Key, json.RawMessage(in.Definition), in.Actor); err != nil {
 		return nil, err
 	}
-	return &plane.Unit{}, nil
+	return &client.Unit{}, nil
 }

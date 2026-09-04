@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	codepeer "github.com/hanzoai/cloud/plane/code"
+	"github.com/hanzoai/cloud/client"
+	codepeer "github.com/hanzoai/cloud/client/code"
 	"github.com/hanzoai/tasks/pkg/sdk/temporal"
 	"github.com/hanzoai/tasks/pkg/sdk/workflow"
 )
@@ -156,9 +156,9 @@ func readAndIndex(ctx context.Context, s *cloud.Service[state], in indexInput) e
 	if len(files) == 0 {
 		return nil
 	}
-	out := make([]plane.IndexFile, 0, len(files))
+	out := make([]client.IndexFile, 0, len(files))
 	for _, f := range files {
-		out = append(out, plane.IndexFile{Path: f.Path, Content: f.Content})
+		out = append(out, client.IndexFile{Path: f.Path, Content: f.Content})
 	}
 	// Bounded, because this rides a push and indexing EMBEDS — the work is paid
 	// inference on the far side, so a code plane that has stopped answering must
@@ -166,7 +166,7 @@ func readAndIndex(ctx context.Context, s *cloud.Service[state], in indexInput) e
 	ctx, cancel := context.WithTimeout(ctx, indexCallTimeout)
 	defer cancel()
 	// billingOrg = org: the repo owner's org pays for indexing its own code.
-	_, err = codepeer.CodeIndex(ctx, &plane.IndexIn{
+	_, err = codepeer.CodeIndex(ctx, &client.IndexIn{
 		Org: in.Org, BillingOrg: in.Org, Project: in.Project, Repo: in.Repo, Files: out,
 	})
 	return err

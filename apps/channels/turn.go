@@ -10,7 +10,7 @@ package channels
 // reply goes, and the egress transports themselves.
 //
 // What is NOT here is custody. Which Hanzo account a chat user has linked is
-// integrations' to answer (plane.ChatIdentity) because the link lives in KMS
+// integrations' to answer (client.ChatIdentity) because the link lives in KMS
 // under that subsystem; only the answer crosses, never a token.
 
 import (
@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -170,7 +170,7 @@ func turn(s *cloud.Service[state], tr transport, org string, m Message) {
 	// be delivered at all and the person is left unlinked with no way to know why,
 	// so that is an error and not a shrug.
 	if ephemeral {
-		if _, err := post(ctx, org, plane.ChatSendIn{
+		if _, err := post(ctx, org, client.ChatSendIn{
 			Provider: m.Channel, Room: m.Room.ID,
 			User: m.Sender.ExternalID, Private: true, Text: text,
 		}); err != nil {
@@ -216,8 +216,8 @@ func turnContext(org string) (context.Context, context.CancelFunc) {
 // failures are logged and surfaced as one terse line, never as an error a
 // platform would render.
 func answer(ctx context.Context, s *cloud.Service[state], org string, m Message) (reply string, ephemeral bool, runID string, err error) {
-	who, err := plane.Ask[plane.ChatIdentityIn, plane.ChatIdentityOut](ctx, "integration", plane.ChatIdentity,
-		&plane.ChatIdentityIn{Org: org, Provider: m.Channel, ExternalID: m.Account, User: m.Sender.ExternalID})
+	who, err := client.Call[client.ChatIdentityIn, client.ChatIdentityOut](ctx, "integration", client.ChatIdentity,
+		&client.ChatIdentityIn{Org: org, Provider: m.Channel, ExternalID: m.Account, User: m.Sender.ExternalID})
 	if err != nil || who == nil {
 		// ERROR, not warn, and SAID. Someone asked a question; a bot that goes quiet
 		// is indistinguishable from a broken one, and "it does nothing" is the bug
@@ -234,8 +234,8 @@ func answer(ctx context.Context, s *cloud.Service[state], org string, m Message)
 		return who.Say, who.Ephemeral, "", nil
 	}
 
-	run, err := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](ctx, "agent", plane.AgentsRunOnBehalf,
-		&plane.RunOnBehalfIn{Org: org, Subject: who.Subject, Ref: agentFor(ctx, s.State.store, org, m), Input: m.Text, Model: who.Model})
+	run, err := client.Call[client.RunOnBehalfIn, client.RunOnBehalfOut](ctx, "agent", client.AgentsRunOnBehalf,
+		&client.RunOnBehalfIn{Org: org, Subject: who.Subject, Ref: agentFor(ctx, s.State.store, org, m), Input: m.Text, Model: who.Model})
 	if err != nil {
 		s.Log.Error("channels: agent run", "channel", m.Channel, "org", org, "err", err) // never a token
 		return "The agent hit an error handling that. This is on our side — please try again.", false, "", err

@@ -25,7 +25,7 @@ type delegateOut struct{}
 //
 // Only the caller crosses a socket, so re-pointing only the caller made those
 // two disagree, and which one a callee saw turned on where it ran: a real hop
-// reads the caller off headers and answers the new tenant; plane.Ask short-
+// reads the caller off headers and answers the new tenant; client.Call short-
 // circuits a co-resident peer to zip.Here, which hands this very context to the
 // handler, where the slot still held the ORIGINAL org and is asked first. Same
 // call, two tenants, decided by whether two apps happened to be in one binary.

@@ -7,8 +7,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/finance"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -71,8 +71,8 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 	// For(org) names the tenant whose books to read; the callee takes the org from
 	// that capability and the payload cannot name one, so the subject is all that
 	// travels.
-	out, err := cloud.Ask[plane.BalanceIn, plane.Balance](cloud.For(ctx, org), "commerce",
-		plane.FinanceBalance, &plane.BalanceIn{Subject: subject, Currency: "usd"})
+	out, err := cloud.Ask[client.BalanceIn, client.Balance](cloud.For(ctx, org), "commerce",
+		client.FinanceBalance, &client.BalanceIn{Subject: subject, Currency: "usd"})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
 			// The router ANSWERED, from the manifest it owns: this deployment runs
@@ -100,7 +100,7 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 	}
 	// Round DOWN, explicitly, because this figure is SPENT AGAINST.
 	//
-	// plane.Money.Minor() refuses a value finer than a cent rather than round
+	// client.Money.Minor() refuses a value finer than a cent rather than round
 	// behind the caller — right for a debit, and its own doc says a caller that
 	// wants a rounded figure "should round explicitly, where the choice is
 	// visible". This view never rounded, so a real balance made the read FAIL:

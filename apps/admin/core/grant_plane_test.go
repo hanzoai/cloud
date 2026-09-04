@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/planetest"
-	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -34,10 +34,10 @@ func servePlaneCredit(t *testing.T, got *creditCall, balance string) {
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 
-	zip.Post[plane.CreditIn, plane.Credited](cloud.Plane(), "/finance/credit",
-		func(ctx context.Context, in *plane.CreditIn) (*plane.Credited, error) {
+	zip.Post[client.CreditIn, client.Credited](cloud.Plane(), "/finance/credit",
+		func(ctx context.Context, in *client.CreditIn) (*client.Credited, error) {
 			// The org rides the CALLER, never an argument — the same rule the real
-			// op enforces. plane.CreditIn cannot name one, so this is the only place
+			// op enforces. client.CreditIn cannot name one, so this is the only place
 			// a tenant can come from.
 			org := cloud.Who(ctx).Org
 			if org == "" {
@@ -50,16 +50,16 @@ func servePlaneCredit(t *testing.T, got *creditCall, balance string) {
 				Org: org, Subject: in.Subject, Ref: in.Ref,
 				Notes: in.Notes, Tags: in.Tags, Decimal: in.Amount.Decimal,
 			}
-			return &plane.Credited{Amount: in.Amount, ID: "fe_from_commerce"}, nil
-		}, zip.WithOperationID(plane.FinanceCredit))
+			return &client.Credited{Amount: in.Amount, ID: "fe_from_commerce"}, nil
+		}, zip.WithOperationID(client.FinanceCredit))
 
-	zip.Post[plane.BalanceIn, plane.Balance](cloud.Plane(), "/finance/balance",
-		func(ctx context.Context, _ *plane.BalanceIn) (*plane.Balance, error) {
+	zip.Post[client.BalanceIn, client.Balance](cloud.Plane(), "/finance/balance",
+		func(ctx context.Context, _ *client.BalanceIn) (*client.Balance, error) {
 			if cloud.Who(ctx).Org == "" {
 				return nil, zip.ErrForbidden("balance: no org on the call")
 			}
-			return &plane.Balance{Amount: plane.Money{Decimal: balance, Currency: "USD"}}, nil
-		}, zip.WithOperationID(plane.FinanceBalance))
+			return &client.Balance{Amount: client.Money{Decimal: balance, Currency: "USD"}}, nil
+		}, zip.WithOperationID(client.FinanceBalance))
 
 	stop, err := cloud.ServePlane("commerce", luxlog.NewNoOpLogger())
 	if err != nil {
@@ -132,7 +132,7 @@ func TestSplitDeployGrantAsksTheLedger(t *testing.T) {
 // TestSplitDeployGrantAddressesAMember: the old HTTP leg refused a
 // member-addressed grant, because commerce's HTTP deposit is org-keyed and
 // crediting the pool would have put the money where that member cannot spend it.
-// plane.CreditIn carries the subject, so that refusal is a false negative.
+// client.CreditIn carries the subject, so that refusal is a false negative.
 func TestSplitDeployGrantAddressesAMember(t *testing.T) {
 	var got creditCall
 	servePlaneCredit(t, &got, "0")

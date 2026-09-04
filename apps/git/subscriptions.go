@@ -1,8 +1,8 @@
 package git
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"net/http"
 	"net/url"
 	"regexp"

@@ -55,10 +55,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/datastore"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/brand"
-	contract "github.com/hanzoai/cloud/plane"
+	contract "github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -210,7 +210,7 @@ const (
 	kindAccount = contract.KindAccount
 	// kindPayer is the party that PAYS — the billing subject a settled charge
 	// credits. NO ROLLUP WRITES IT, and that is the point: it is taught only by a
-	// settlement this deployment watched happen ([plane.RiskObserve]), so the
+	// settlement this deployment watched happen ([client.RiskObserve]), so the
 	// aggregates under it hold payments and nothing else.
 	//
 	// It exists because [kindAccount] holds metered SPEND, and a value bound stated

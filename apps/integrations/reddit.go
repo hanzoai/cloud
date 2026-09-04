@@ -13,9 +13,9 @@ package integrations
 // a campaign-write path is wired. Linking is an org-admin action.
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/url"
 	"strings"
 	"time"

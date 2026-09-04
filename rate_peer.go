@@ -6,8 +6,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
-	"github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/client/commerce"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -76,7 +76,7 @@ func RateNano(ctx context.Context, product, meter string, floor int64) int64 {
 	ctx, cancel := context.WithTimeout(ctx, rateCallTimeout)
 	defer cancel()
 
-	out, err := commerce.BillingRate(ctx, &plane.RateIn{Product: product, Meter: meter})
+	out, err := commerce.BillingRate(ctx, &client.RateIn{Product: product, Meter: meter})
 	switch {
 	case err != nil:
 		// The authority is unreachable or unwell. Said once, at warn, because it

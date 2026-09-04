@@ -24,9 +24,9 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -133,8 +133,8 @@ func subscribeWithCard(s *cloud.Service[state], c *zip.Ctx) error {
 	if berr := c.Bind(&body); berr != nil {
 		return zip.ErrBadRequest("invalid request body")
 	}
-	sold, aerr := ask(c.Context(), org, "subscribe", func(ctx context.Context) (*plane.Sold, error) {
-		return commercepeer.BillingSubscribe(ctx, &plane.SaleIn{
+	sold, aerr := ask(c.Context(), org, "subscribe", func(ctx context.Context) (*client.Sold, error) {
+		return commercepeer.BillingSubscribe(ctx, &client.SaleIn{
 			SourceID:       body.SourceID,
 			MethodID:       body.MethodID,
 			PlanID:         body.PlanID,
@@ -176,12 +176,12 @@ func retryKey(c *zip.Ctx) string { return strings.TrimSpace(c.Header("X-Idempote
 // never-configured from deliberately-off.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) autoRecharge(ctx context.Context, _ *cloud.Unit) (*plane.AutoRecharge, error) {
+func (o ops) autoRecharge(ctx context.Context, _ *cloud.Unit) (*client.AutoRecharge, error) {
 	org, _, err := payer(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "auto-recharge", func(ctx context.Context) (*plane.AutoRecharge, error) {
+	return ask(ctx, org, "auto-recharge", func(ctx context.Context) (*client.AutoRecharge, error) {
 		return commercepeer.BillingAutoRecharge(ctx)
 	})
 }
@@ -198,7 +198,7 @@ func (o ops) autoRecharge(ctx context.Context, _ *cloud.Unit) (*plane.AutoRechar
 // another tenant's schedule.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) setAutoRecharge(ctx context.Context, in *plane.AutoRechargeEdit) (*plane.AutoRecharge, error) {
+func (o ops) setAutoRecharge(ctx context.Context, in *client.AutoRechargeEdit) (*client.AutoRecharge, error) {
 	// The control is asked IN THE OPERATION, not on the route: MCP, the call plane
 	// and the CLI reach this op without touching route middleware, and a browser
 	// authenticates this surface from an ambient session cookie that any origin's
@@ -210,7 +210,7 @@ func (o ops) setAutoRecharge(ctx context.Context, in *plane.AutoRechargeEdit) (*
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "set auto-recharge", func(ctx context.Context) (*plane.AutoRecharge, error) {
+	return ask(ctx, org, "set auto-recharge", func(ctx context.Context) (*client.AutoRecharge, error) {
 		return commercepeer.BillingAutoRechargeSet(ctx, in)
 	})
 }

@@ -46,14 +46,14 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/commerce"
-	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/apps/kms"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/apps/wallet"
 	"github.com/hanzoai/cloud/apps/x402"
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/finance"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/luxfi/crypto"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -413,8 +413,8 @@ func (f *fleet) balance(org, subject string) money.Amount {
 	f.t.Helper()
 	ctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), 10*time.Second)
 	defer cancel()
-	out, err := cloud.Ask[plane.BalanceIn, plane.Balance](ctx, "commerce", plane.FinanceBalance,
-		&plane.BalanceIn{Subject: subject, Currency: "usd"})
+	out, err := cloud.Ask[client.BalanceIn, client.Balance](ctx, "commerce", client.FinanceBalance,
+		&client.BalanceIn{Subject: subject, Currency: "usd"})
 	if err != nil {
 		f.t.Fatalf("balance %s/%s: %v", org, subject, err)
 	}
@@ -431,8 +431,8 @@ func (f *fleet) fund(org string, amount money.Amount) {
 	f.t.Helper()
 	ctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), 10*time.Second)
 	defer cancel()
-	if _, err := cloud.Ask[plane.CreditIn, plane.Credited](ctx, "commerce", plane.FinanceCredit,
-		&plane.CreditIn{Subject: org, Amount: plane.Amount(amount.Unwrap()), Ref: "fund_" + org}); err != nil {
+	if _, err := cloud.Ask[client.CreditIn, client.Credited](ctx, "commerce", client.FinanceCredit,
+		&client.CreditIn{Subject: org, Amount: client.Amount(amount.Unwrap()), Ref: "fund_" + org}); err != nil {
 		f.t.Fatalf("fund %s: %v", org, err)
 	}
 }
@@ -506,8 +506,8 @@ func TestSplitFleetSettlesAPricedTool(t *testing.T) {
 		t.Fatalf("the tools process still has no rail across the boundary: %s", body)
 	}
 	req := f.challengeOf(hdr)
-	if f.resource != plane.ToolResource(pricedTool) {
-		t.Fatalf("challenge names %q, want %q", f.resource, plane.ToolResource(pricedTool))
+	if f.resource != client.ToolResource(pricedTool) {
+		t.Fatalf("challenge names %q, want %q", f.resource, client.ToolResource(pricedTool))
 	}
 	if req.PayTo == "" {
 		t.Fatal("challenge names no payee address — wallets was never reached")

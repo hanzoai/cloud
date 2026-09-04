@@ -26,7 +26,7 @@
 // diagnosed in seconds and a lying one is diagnosed in an incident.
 //
 // The transport for a peer that is NOT in this process is the peer plane:
-// plane.Ask over the peer's own socket, addressed by NAME (see plane/ask.go, and
+// client.Call over the peer's own socket, addressed by NAME (see client/ask.go, and
 // the generated per-app clients under plane/<app>). It needs no endpoint
 // configuration, which is why removing the address knobs removed nothing real.
 // A subsystem with a plane op is reached; one without is disabled and says so.

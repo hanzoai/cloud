@@ -12,9 +12,9 @@
 package git
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
 	"cmp"
 	"context"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"os"
 	"path/filepath"
 	"sort"

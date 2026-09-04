@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // sync.go is the inversion layer between the universal sync ENGINE (apps/sync)
@@ -75,7 +75,7 @@ func Sync(ctx context.Context, ev SyncEvent) (SyncResult, error) {
 	if syncFn != nil {
 		return syncFn(ctx, ev)
 	}
-	out, err := Ask[plane.SyncIn, plane.SyncRan](For(ctx, ev.Org), "sync", plane.SyncRun, &plane.SyncIn{
+	out, err := Ask[client.SyncIn, client.SyncRan](For(ctx, ev.Org), "sync", client.SyncRun, &client.SyncIn{
 		Kind: ev.Kind, Provider: ev.Provider, Locator: ev.Locator, Repo: ev.Repo,
 		Ref: ev.Ref, Before: ev.Before, After: ev.After, Actor: ev.Actor,
 		Token: ev.Token, Manual: ev.Manual, Hop: ev.Hop,
@@ -118,7 +118,7 @@ func EnsureGitMirror(ctx context.Context, org, project, repo, url string, enable
 	if gitMirrorCtl != nil {
 		return gitMirrorCtl.EnsureMirror(ctx, org, project, repo, url, enabled)
 	}
-	_, err := Ask[plane.MirrorIn, plane.Mirrored](For(ctx, org), "sync", plane.GitMirror,
-		&plane.MirrorIn{Project: project, Repo: repo, URL: url, Enabled: enabled})
+	_, err := Ask[client.MirrorIn, client.Mirrored](For(ctx, org), "sync", client.GitMirror,
+		&client.MirrorIn{Project: project, Repo: repo, URL: url, Enabled: enabled})
 	return err
 }

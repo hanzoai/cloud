@@ -70,12 +70,12 @@ var pkgOf = map[string]string{
 // from the bijection; everything ELSE under plugin/ must be a manifest app. (The
 // light host is cmd/cloud — the ONE thing under cmd/, never here.)
 var notApps = map[string]bool{
-	"smoke":             true,
-	"gen-app-cmds":      true,
+	"smoke":              true,
+	"gen-app-cmds":       true,
 	"gen-client-catalog": true,
-	"gen-skills":        true,
-	"gen-mcp-catalog":   true,
-	"kmsreseal":         true,
+	"gen-skills":         true,
+	"gen-mcp-catalog":    true,
+	"kmsreseal":          true,
 }
 
 func main() {

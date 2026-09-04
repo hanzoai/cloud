@@ -22,13 +22,13 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // sale is one statement that LEFT this process, as the client saw it.
 type sale struct {
 	org string
-	in  *plane.EventIn
+	in  *client.EventIn
 }
 
 // mute substitutes the event plane's client so an endpoint fixture states its sale to a
@@ -39,8 +39,8 @@ type sale struct {
 func mute(t *testing.T) {
 	t.Helper()
 	prior := send
-	send = func(context.Context, *plane.EventIn) (*plane.EventCaptured, error) {
-		return &plane.EventCaptured{Accepted: 1}, nil
+	send = func(context.Context, *client.EventIn) (*client.EventCaptured, error) {
+		return &client.EventCaptured{Accepted: 1}, nil
 	}
 	t.Cleanup(func() { send = prior })
 }
@@ -51,9 +51,9 @@ func watchSales(t *testing.T) <-chan sale {
 	t.Helper()
 	seen := make(chan sale, 16)
 	prior := send
-	send = func(ctx context.Context, in *plane.EventIn) (*plane.EventCaptured, error) {
+	send = func(ctx context.Context, in *client.EventIn) (*client.EventCaptured, error) {
 		seen <- sale{org: cloud.Who(ctx).Org, in: in}
-		return &plane.EventCaptured{Accepted: 1}, nil
+		return &client.EventCaptured{Accepted: 1}, nil
 	}
 	t.Cleanup(func() { send = prior })
 	return seen
@@ -69,12 +69,12 @@ func paid() payment {
 		via:      "/v1/commerce/payments",
 		cents:    4950,
 		currency: "eur",
-		facts:    map[string]string{plane.SignalNano: "0", "currency": "eur"},
+		facts:    map[string]string{client.SignalNano: "0", "currency": "eur"},
 	}
 }
 
 // said reads one attribute off a stated occurrence.
-func said(in *plane.EventIn, name string) string {
+func said(in *client.EventIn, name string) string {
 	for _, s := range in.Attributes {
 		if s.Name == name {
 			return s.Value
@@ -176,22 +176,22 @@ func TestEmit_StatesTheSaleUnderThePayersOwnOrg(t *testing.T) {
 func TestEmit_CannotReachThePayment(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		call func(context.Context, *plane.EventIn) (*plane.EventCaptured, error)
+		call func(context.Context, *client.EventIn) (*client.EventCaptured, error)
 	}{
-		{"the plane panics", func(context.Context, *plane.EventIn) (*plane.EventCaptured, error) {
+		{"the plane panics", func(context.Context, *client.EventIn) (*client.EventCaptured, error) {
 			panic("the analytics child died mid-call")
 		}},
-		{"the plane refuses", func(context.Context, *plane.EventIn) (*plane.EventCaptured, error) {
+		{"the plane refuses", func(context.Context, *client.EventIn) (*client.EventCaptured, error) {
 			return nil, context.DeadlineExceeded
 		}},
-		{"the occurrence landed nowhere", func(context.Context, *plane.EventIn) (*plane.EventCaptured, error) {
-			return &plane.EventCaptured{Accepted: 0, Dropped: 1}, nil
+		{"the occurrence landed nowhere", func(context.Context, *client.EventIn) (*client.EventCaptured, error) {
+			return &client.EventCaptured{Accepted: 0, Dropped: 1}, nil
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			done := make(chan struct{})
 			prior := send
-			send = func(ctx context.Context, in *plane.EventIn) (*plane.EventCaptured, error) {
+			send = func(ctx context.Context, in *client.EventIn) (*client.EventCaptured, error) {
 				defer close(done)
 				return tc.call(ctx, in)
 			}
@@ -240,8 +240,8 @@ func TestEmit_DropsAtTheCeiling(t *testing.T) {
 // hears nothing.
 func TestRecordStatesTheSaleEvenWhenTheCreditRefuses(t *testing.T) {
 	prior := teach
-	teach = func(context.Context, *plane.RiskObserveIn) (*plane.RiskObserved, error) {
-		return &plane.RiskObserved{Learned: 1}, nil
+	teach = func(context.Context, *client.RiskObserveIn) (*client.RiskObserved, error) {
+		return &client.RiskObserved{Learned: 1}, nil
 	}
 	t.Cleanup(func() { teach = prior })
 	seen := watchSales(t)

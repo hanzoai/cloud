@@ -262,7 +262,7 @@ type Config struct {
 	// internal host to the estate means naming its label in Reserved in the same
 	// change. TestSiteSlugBrandApex is what fails when that is forgotten.
 	FirstPartyApex string
-	FirstPartyOrg string
+	FirstPartyOrg  string
 }
 
 // Server is the host-routed public site edge. It holds the S3 access path
@@ -270,11 +270,11 @@ type Config struct {
 // reserved-label policy is the package-level shared source (reserved.go), so
 // serve/create/bind never disagree. It reads the resolver at request time.
 type Server struct {
-	apex            string
+	apex      string
 	brandApex string // the apex serving OUR OWN sites (hanzo.ai); "" = none
 	brandOrg  string // the org that owns them — resolution on brandApex is PINNED to it
-	admin           s3admin.Admin
-	log             luxlog.Logger
+	admin     s3admin.Admin
+	log       luxlog.Logger
 }
 
 // New builds the Server from Config. An empty apex defaults to hanzo.app.

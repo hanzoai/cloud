@@ -33,8 +33,8 @@ func TestMoneyCrossesTheProcessBoundaryOverThePlaneNotHTTP(t *testing.T) {
 	// The balance READ is asked here. The debit is asked by the meter, one layer down,
 	// so its plane path is asserted where it lives rather than where it is called from.
 	for _, want := range []string{
-		`cloud.Ask[plane.BalanceIn, plane.Balance](`,
-		`plane.FinanceBalance`,
+		`cloud.Ask[client.BalanceIn, client.Balance](`,
+		`client.FinanceBalance`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q — money must cross the process boundary over the plane", want)

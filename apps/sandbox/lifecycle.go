@@ -47,7 +47,7 @@ import (
 	"github.com/hanzoai/cloud/internal/environ"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // The defaults, each in the unit it is argued in.
@@ -81,12 +81,12 @@ const (
 // disconnected.
 //
 // DERIVED, not chosen: a watcher restamps on every beat of its own heartbeat
-// (plane.AttachEvery), so the only question is how many beats may be lost to a
+// (client.AttachEvery), so the only question is how many beats may be lost to a
 // slow hop before we stop believing it. Three — one beat late is ordinary, two is
 // a hiccup, three in a row means the stream is gone. There is no separate knob,
 // because a grace that could disagree with the cadence that feeds it is a knob
 // whose only settings are "wrong" and "the same as this".
-const presenceGrace = 3 * plane.AttachEvery
+const presenceGrace = 3 * client.AttachEvery
 
 // clocks is the whole lifetime policy, read once.
 //

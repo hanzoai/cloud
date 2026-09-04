@@ -33,9 +33,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
+	flags "github.com/hanzoai/cloud/client/flag"
 	"github.com/hanzoai/cloud/manifest"
-	"github.com/hanzoai/cloud/plane"
-	flags "github.com/hanzoai/cloud/plane/flag"
 	"github.com/zap-proto/zip"
 )
 
@@ -69,7 +69,7 @@ func Stage(name string) zip.Handler {
 		return nil
 	}
 	return refuse(name, "stage", func(ctx context.Context) (bool, error) {
-		held, err := flags.FlagsHold(ctx, &plane.FlagIn{Key: name})
+		held, err := flags.FlagsHold(ctx, &client.FlagIn{Key: name})
 		if err != nil {
 			return false, err
 		}

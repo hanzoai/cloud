@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/metering"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -51,7 +51,7 @@ type wallet struct {
 // the reader had to guess which the sender had filled in.
 func (w *wallet) server(t *testing.T) *httptest.Server {
 	t.Helper()
-	w.peer.serveWith(t, func(_ string, in plane.RecordIn) {
+	w.peer.serveWith(t, func(_ string, in client.RecordIn) {
 		amt := microsOf(in.Amount)
 		w.mu.Lock()
 		w.micros -= amt

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/mint"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -45,7 +45,7 @@ import (
 // transitions. A missed transition would leave a private project world-readable,
 // which is the one failure here that cannot be taken back — so the cheap
 // redundant write is the right trade.
-func publish(ctx context.Context, org string, ev plane.Visibility) error {
+func publish(ctx context.Context, org string, ev client.Visibility) error {
 	s := mounted.Load()
 	if s == nil {
 		return nil // git plane not mounted (or shutting down): nothing to apply
@@ -59,7 +59,7 @@ func publish(ctx context.Context, org string, ev plane.Visibility) error {
 	if !nameRE.MatchString(slug) {
 		return fmt.Errorf("community: %s/%q is not a repository name", org, ev.Slug)
 	}
-	if ev.State == plane.Gone {
+	if ev.State == client.Gone {
 		return retire(s, ctx, org, slug)
 	}
 	store, err := storeFor(s, org)
@@ -70,7 +70,7 @@ func publish(ctx context.Context, org string, ev plane.Visibility) error {
 	// round: a state this does not recognise — an empty one, a newer peer's — is
 	// answered with the readable bit off, which is the half that can be taken
 	// back.
-	listed := ev.State == plane.Open
+	listed := ev.State == client.Open
 
 	// Name/Description seed the repo only at creation. Re-imposing them on every
 	// event would overwrite an author who edited their own repo description —
@@ -156,8 +156,8 @@ func mirror(ctx context.Context, org, slug, description string, listed bool) err
 // to see. A socket call cannot fail that way: git either answers or the caller
 // gets an error naming the app it could not reach.
 func exposePublish() {
-	zip.Post[plane.Visibility, struct{}](cloud.Plane(), "/git/publish", planePublish,
-		zip.WithOperationID(plane.GitPublish),
+	zip.Post[client.Visibility, struct{}](cloud.Plane(), "/git/publish", planePublish,
+		zip.WithOperationID(client.GitPublish),
 		zip.WithSummary("Reconcile a project's repo visibility"))
 }
 
@@ -169,7 +169,7 @@ func exposePublish() {
 // a caller that could name the org would be publishing into another tenant's
 // repos — and an anonymous caller is refused. A named handler, not a closure, so
 // zipdoc can lift this prose into the registry.
-func planePublish(ctx context.Context, ev *plane.Visibility) (*cloud.Unit, error) {
+func planePublish(ctx context.Context, ev *client.Visibility) (*cloud.Unit, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrForbidden("git publish: org required")

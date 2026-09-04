@@ -32,7 +32,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // tellEvery is the shortest gap between two appends.
@@ -72,7 +72,7 @@ type tell struct {
 	org, session string
 	// blind redacts what the caller said must never be published. It is applied
 	// HERE, at the moment a line becomes an event, because this is the writer the
-	// bytes leave by — see [blinder] and plane.RunIn.Blind.
+	// bytes leave by — see [blinder] and client.RunIn.Blind.
 	blind *blinder
 
 	mu   sync.Mutex
@@ -197,12 +197,12 @@ func (t *tell) say(kind string, l line) {
 	payload = []byte(t.blind.hide(string(payload)))
 	// A DETACHED, TENANT-STATED context. The command's own may already be
 	// cancelled — a stop is exactly that case — and the last thing a stopped run
-	// says is the part a watcher most needs. plane.For supplies the org where
+	// says is the part a watcher most needs. client.For supplies the org where
 	// there is no request behind the context, which a fresh Background is.
-	ctx, cancel := context.WithTimeout(plane.For(context.Background(), t.org), tellPatience)
+	ctx, cancel := context.WithTimeout(client.For(context.Background(), t.org), tellPatience)
 	defer cancel()
-	if _, err := plane.Ask[plane.SessionEventIn, plane.CodingAck](ctx, "agent", plane.AgentsSessionEvent,
-		&plane.SessionEventIn{Org: t.org, SessionID: t.session, Kind: kind, Payload: payload}); err != nil {
+	if _, err := client.Call[client.SessionEventIn, client.CodingAck](ctx, "agent", client.AgentsSessionEvent,
+		&client.SessionEventIn{Org: t.org, SessionID: t.session, Kind: kind, Payload: payload}); err != nil {
 		t.mu.Lock()
 		t.dead = true
 		t.mu.Unlock()

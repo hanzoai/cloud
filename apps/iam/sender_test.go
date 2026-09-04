@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	iamserver "github.com/hanzoai/iam/server"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -33,8 +33,8 @@ func runIn(t *testing.T) string {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	t.Setenv("ZIP_RUNTIME_DIR", dir)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 	t.Cleanup(func() { iamserver.BindSender(nil) })
 	iamserver.BindSender(nil)
 	return dir
@@ -58,7 +58,7 @@ func listen(t *testing.T, app string) {
 // directory is a volume — cloud's is, /var/lib/cloud/run on a PVC — so the live
 // identity pod carries sockets from generations that died a week before it started.
 // The old delivery decision stat-ed notify.sock, found a file, bound a sender, and
-// every screen then offered a code that no send could carry. plane.Reach dials, and
+// every screen then offered a code that no send could carry. client.Reach dials, and
 // a file with no listener and no router to wake one is ErrNoPeer, which hides the
 // method honestly.
 //

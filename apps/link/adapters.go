@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/agents"
-	"github.com/hanzoai/cloud/plane"
-	agentspeer "github.com/hanzoai/cloud/plane/agent"
+	"github.com/hanzoai/cloud/client"
+	agentspeer "github.com/hanzoai/cloud/client/agent"
 )
 
 // adapters.go binds the Sessions client to the agents in-process control plane
@@ -66,8 +66,8 @@ func (sessionAdapter) CountActive(ctx context.Context, org string, m SessionMatc
 // NO org: the peer qualifies the subject into an actor with the org the plane
 // proved, which is what keeps a revoke bounded to its own user's sessions when
 // the caller is another process.
-func planeMatch(m SessionMatch) *plane.SessionMatchIn {
-	return &plane.SessionMatchIn{
+func planeMatch(m SessionMatch) *client.SessionMatchIn {
+	return &client.SessionMatchIn{
 		Subject:  strings.TrimSpace(m.Subject),
 		Host:     m.Host,
 		Provider: m.Provider,

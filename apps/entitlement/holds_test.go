@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // Keyed by both columns, so one org's purchase cannot answer for another's.
@@ -63,8 +63,8 @@ func TestHoldsWithoutAStoreIsAnError(t *testing.T) {
 	mounted = nil
 	t.Cleanup(func() { mounted = prev })
 
-	ctx := plane.For(context.Background(), "acme")
-	_, err := holds(ctx, &plane.ProductIn{Product: "crm"})
+	ctx := client.For(context.Background(), "acme")
+	_, err := holds(ctx, &client.ProductIn{Product: "crm"})
 	if err == nil {
 		t.Fatal("holds answered with no store mounted — an unstarted subsystem reads as a customer decision")
 	}
@@ -76,17 +76,17 @@ func TestHoldsNeedsACaller(t *testing.T) {
 	mounted = &service{store: openTestStore(t)}
 	t.Cleanup(func() { mounted = prev })
 
-	if _, err := holds(context.Background(), &plane.ProductIn{Product: "crm"}); err == nil {
+	if _, err := holds(context.Background(), &client.ProductIn{Product: "crm"}); err == nil {
 		t.Error("holds answered a call with no org")
 	}
-	if _, err := holds(plane.For(context.Background(), "acme"), &plane.ProductIn{Product: "  "}); err == nil {
+	if _, err := holds(client.For(context.Background(), "acme"), &client.ProductIn{Product: "  "}); err == nil {
 		t.Error("holds answered a call naming no product")
 	}
 	// The happy path through the handler.
 	if err := mounted.store.Enable(context.Background(), "acme", "crm", "", 1); err != nil {
 		t.Fatalf("enable: %v", err)
 	}
-	out, err := holds(plane.For(context.Background(), "acme"), &plane.ProductIn{Product: "crm"})
+	out, err := holds(client.For(context.Background(), "acme"), &client.ProductIn{Product: "crm"})
 	if err != nil || out == nil || !out.On {
 		t.Errorf("holds(acme, crm) = %+v, %v — the org enabled it and was told no", out, err)
 	}

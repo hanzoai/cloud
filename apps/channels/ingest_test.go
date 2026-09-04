@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -319,8 +319,8 @@ func spyWhatsApp(t *testing.T) *endpointRec {
 
 // ingressEv builds one client event; realistic per-transport values live at the
 // call sites.
-func ingressEv(org, provider, externalID, user, channel, thread, text, key, replyRoot string) plane.ChannelsIngestIn {
-	return plane.ChannelsIngestIn{
+func ingressEv(org, provider, externalID, user, channel, thread, text, key, replyRoot string) client.ChannelsIngestIn {
+	return client.ChannelsIngestIn{
 		Org: org, Provider: provider, ExternalID: externalID, User: user,
 		Channel: channel, ThreadID: thread, Text: text, DedupeKey: key,
 		ReplyRoot: replyRoot,
@@ -571,7 +571,7 @@ func TestIngestGroupPolicy(t *testing.T) {
 	ctx := context.Background()
 	const org = "acme-group"
 	st := e.store(t)
-	group := func(key, text string) plane.ChannelsIngestIn {
+	group := func(key, text string) client.ChannelsIngestIn {
 		return ingressEv(org, "slack", "T024ABC", "u9", "C024BE91L", "", text, key, "")
 	}
 

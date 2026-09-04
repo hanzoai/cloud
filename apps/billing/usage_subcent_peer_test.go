@@ -7,7 +7,7 @@ package billing
 // and exercises the LOCAL branch, where cents come from finance.UsageRow.Cents and
 // nothing can error. Production runs the other branch: plugin/billing links no
 // ledger, so finance.Current() is nil and the rows arrive over the plane from
-// commerce as plane.Money. That branch called Money.Minor(), which REFUSES an
+// commerce as client.Money. That branch called Money.Minor(), which REFUSES an
 // amount finer than a cent instead of rounding behind the caller — and a
 // per-token AI charge is routinely finer than a cent.
 //
@@ -29,20 +29,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/finance"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
 // subCentCommerce serves the commerce plane socket and answers the usage op with a
 // page whose debits are finer than a cent — the shape a real AI ledger holds.
-func subCentCommerce(t *testing.T, rows []plane.UsageRow) {
+func subCentCommerce(t *testing.T, rows []client.UsageRow) {
 	t.Helper()
 	app := zip.New(zip.Config{AppName: "commerce"})
-	zip.Post[struct{}, plane.UsageRows](app, "/finance/usage",
-		func(context.Context, *struct{}) (*plane.UsageRows, error) {
-			return &plane.UsageRows{Rows: rows}, nil
-		}, zip.WithOperationID(plane.FinanceUsage))
+	zip.Post[struct{}, client.UsageRows](app, "/finance/usage",
+		func(context.Context, *struct{}) (*client.UsageRows, error) {
+			return &client.UsageRows{Rows: rows}, nil
+		}, zip.WithOperationID(client.FinanceUsage))
 	go func() { _ = app.Listen(zip.SocketPath("commerce")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 
@@ -65,10 +65,10 @@ func TestCoResidentUsage_SubCentPeerRowIsNotAnOutage(t *testing.T) {
 	finance.Publish(nil) // no local ledger — force the peer branch, as in prod
 	t.Cleanup(func() { finance.Publish(nil) })
 
-	rows := []plane.UsageRow{
-		{ID: "tiny-1", Model: "zen-1", Amount: plane.Money{Decimal: "0.0025", Currency: "USD"}, CreatedAt: 1_700_000_000},
-		{ID: "tiny-2", Model: "zen-1", Amount: plane.Money{Decimal: "0.00007", Currency: "USD"}, CreatedAt: 1_700_000_100},
-		{ID: "whole", Model: "gpt-x", Amount: plane.Money{Decimal: "1.50", Currency: "USD"}, CreatedAt: 1_700_000_200},
+	rows := []client.UsageRow{
+		{ID: "tiny-1", Model: "zen-1", Amount: client.Money{Decimal: "0.0025", Currency: "USD"}, CreatedAt: 1_700_000_000},
+		{ID: "tiny-2", Model: "zen-1", Amount: client.Money{Decimal: "0.00007", Currency: "USD"}, CreatedAt: 1_700_000_100},
+		{ID: "whole", Model: "gpt-x", Amount: client.Money{Decimal: "1.50", Currency: "USD"}, CreatedAt: 1_700_000_200},
 	}
 	subCentCommerce(t, rows)
 

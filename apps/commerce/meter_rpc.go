@@ -9,9 +9,9 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/metering"
 	credit "github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -20,7 +20,7 @@ import (
 //
 // They are what makes "the biller is one socket away" answerable. An app in its
 // own process holds no local ledger and asks these; only a deployment that
-// publishes neither — plane.ErrNoPeer — bills nothing, and that is a different
+// publishes neither — client.ErrNoPeer — bills nothing, and that is a different
 // fact from a biller that did not answer.
 
 // meterOps binds the metering client to the two plane ops that need it. A plane
@@ -34,12 +34,12 @@ func exposeMeter(m *metering.Client) {
 	p := cloud.Plane()
 	o := meterOps{m: m}
 
-	zip.Post[plane.AuthorizeIn, plane.Verdict](p, "/finance/authorize", o.authorize,
-		zip.WithOperationID(plane.FinanceAuthorize),
+	zip.Post[client.AuthorizeIn, client.Verdict](p, "/finance/authorize", o.authorize,
+		zip.WithOperationID(client.FinanceAuthorize),
 		zip.WithSummary("Authorize one prepaid spend"))
 
-	zip.Post[plane.RecordIn, plane.Recorded](p, "/finance/record", o.record,
-		zip.WithOperationID(plane.FinanceRecord),
+	zip.Post[client.RecordIn, client.Recorded](p, "/finance/record", o.record,
+		zip.WithOperationID(client.FinanceRecord),
 		zip.WithSummary("Debit one metered act"))
 }
 
@@ -62,13 +62,13 @@ func exposeMeter(m *metering.Client) {
 // gates the org's own account. Authorizing does not debit — the record op does.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o meterOps) authorize(ctx context.Context, in *plane.AuthorizeIn) (*plane.Verdict, error) {
+func (o meterOps) authorize(ctx context.Context, in *client.AuthorizeIn) (*client.Verdict, error) {
 	org, err := callerOrg(ctx, "authorize")
 	if err != nil {
 		return nil, err
 	}
 	if o.m == nil || !o.m.Enabled() {
-		return &plane.Verdict{Reason: "commerce has no metering client"}, nil
+		return &client.Verdict{Reason: "commerce has no metering client"}, nil
 	}
 	amount, err := in.Amount.Parse()
 	if err != nil {
@@ -88,13 +88,13 @@ func (o meterOps) authorize(ctx context.Context, in *plane.AuthorizeIn) (*plane.
 	})
 	switch {
 	case aerr == nil:
-		return &plane.Verdict{OK: true}, nil
+		return &client.Verdict{OK: true}, nil
 	case errors.Is(aerr, metering.ErrInsufficientBalance):
-		return &plane.Verdict{NoFunds: true}, nil
+		return &client.Verdict{NoFunds: true}, nil
 	case errors.Is(aerr, metering.ErrSpendCapExceeded):
-		return &plane.Verdict{CapSpent: true}, nil
+		return &client.Verdict{CapSpent: true}, nil
 	default:
-		return &plane.Verdict{Reason: aerr.Error()}, nil
+		return &client.Verdict{Reason: aerr.Error()}, nil
 	}
 }
 
@@ -115,7 +115,7 @@ func (o meterOps) authorize(ctx context.Context, in *plane.AuthorizeIn) (*plane.
 // debit that was never written.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o meterOps) record(ctx context.Context, in *plane.RecordIn) (*plane.Recorded, error) {
+func (o meterOps) record(ctx context.Context, in *client.RecordIn) (*client.Recorded, error) {
 	org, err := callerOrg(ctx, "record")
 	if err != nil {
 		return nil, err
@@ -157,5 +157,5 @@ func (o meterOps) record(ctx context.Context, in *plane.RecordIn) (*plane.Record
 	}); rerr != nil {
 		return nil, fmt.Errorf("record: %w", rerr)
 	}
-	return &plane.Recorded{Amount: in.Amount}, nil
+	return &client.Recorded{Amount: in.Amount}, nil
 }

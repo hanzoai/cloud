@@ -32,9 +32,9 @@ package social
 // for the next reader who thinks the order is cosmetic.
 
 import (
-	"github.com/hanzoai/cloud/internal/shorten"
 	"context"
 	"errors"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"net/http"
 	"strings"
 	"time"

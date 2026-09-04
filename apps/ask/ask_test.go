@@ -6,7 +6,7 @@ package ask
 //
 // The domains here are STAND-IN PEERS, not stand-in transports: each test registers a real op
 // on the real plane under the domain's real app name and operation id, so the advisor reaches
-// them through the same generated client (plane/books, plane/projects, plane/git) it uses in
+// them through the same generated client (client/books, client/projects, client/git) it uses in
 // production. What the fakes replace is the STORE behind the op, never the path to it — which
 // is the distinction the previous version of this file got wrong. It faked the transport too,
 // mounting /v1/books/metrics on the advisor's own router, and so it passed for months while
@@ -35,8 +35,8 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/forge"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -65,7 +65,7 @@ func (r *recordingAI) Rerank(context.Context, *types.RerankRequest) ([]float64, 
 
 // byOrg is a stand-in domain store: the figures each org holds. A peer built over it answers
 // for the org the CALLER was, which is what makes the isolation proof mean something.
-type byOrg map[string][]plane.Figure
+type byOrg map[string][]client.Figure
 
 // byRepo is the forge inventory a test gives one org.
 type byRepo map[string][]forge.Repo
@@ -87,7 +87,7 @@ func stubInventory(t *testing.T, data byRepo) {
 }
 
 // peer declares one stand-in domain on the real plane, under the real app name and the real
-// operation id — so plane.Ask resolves it exactly as it resolves the live app.
+// operation id — so client.Call resolves it exactly as it resolves the live app.
 //
 // The handler derives the org the SAME way every real figures op does (cloud.Who(ctx).Org,
 // anonymous refused). Nothing in the test hands it an org: it reads the one zip carried from
@@ -97,8 +97,8 @@ func stubInventory(t *testing.T, data byRepo) {
 // listens: every op has to be on it before any socket is bound, which is the same order Serve
 // uses in production (mount everything, then bind).
 func peer(app, path, opID string, data byOrg) {
-	zip.Post[plane.FiguresIn, plane.FiguresOut](cloud.Plane(), path,
-		func(ctx context.Context, _ *plane.FiguresIn) (*plane.FiguresOut, error) {
+	zip.Post[client.FiguresIn, client.FiguresOut](cloud.Plane(), path,
+		func(ctx context.Context, _ *client.FiguresIn) (*client.FiguresOut, error) {
 			org := cloud.Who(ctx).Org
 			if org == "" {
 				return nil, zip.ErrForbidden(app + " figures: org required")
@@ -106,7 +106,7 @@ func peer(app, path, opID string, data byOrg) {
 			figs := data[org]
 			// An org this store has never heard of holds nothing — an empty slice, never
 			// another org's rows and never an error.
-			return &plane.FiguresOut{Figures: append([]plane.Figure(nil), figs...)}, nil
+			return &client.FiguresOut{Figures: append([]client.Figure(nil), figs...)}, nil
 		},
 		zip.WithOperationID(opID))
 }
@@ -139,16 +139,16 @@ func newAskApp(t *testing.T, ai types.AIClient, books, projects byOrg, repos byR
 	// yet — and something always has by the second test, so every test after the first
 	// would keep the first one's sockets and be answered by its handlers.
 	t.Setenv("ZIP_RUNTIME_DIR", dir)
-	plane.Unbind()
+	client.Unbind()
 	cloud.ResetPlane()
 	t.Cleanup(func() {
 		cloud.ResetPlane()
-		plane.Unbind()
+		client.Unbind()
 		_ = os.RemoveAll(dir)
 	})
 
-	peer("books", "/books/figures", plane.BooksFigures, books)
-	peer("projects", "/projects/figures", plane.ProjectsFigures, projects)
+	peer("books", "/books/figures", client.BooksFigures, books)
+	peer("projects", "/projects/figures", client.ProjectsFigures, projects)
 	servePeers(t, "books", "projects")
 	// git is NOT a plane peer: its figures are rolled up from the forge's own
 	// repository inventory, so the stand-in is that inventory. The org still
@@ -166,8 +166,8 @@ func newAskApp(t *testing.T, ai types.AIClient, books, projects byOrg, repos byR
 
 // money is the one-line stand-in ledger used where the test is about the ADVISOR rather than
 // about a particular domain.
-func money(mrr string) []plane.Figure {
-	return []plane.Figure{{Label: "MRR", Value: mrr, Period: "2026-07"}}
+func money(mrr string) []client.Figure {
+	return []client.Figure{{Label: "MRR", Value: mrr, Period: "2026-07"}}
 }
 
 // ask POSTs a question as a VALIDATED principal for org (X-User-Id set, exactly as the gateway

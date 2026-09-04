@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -175,7 +175,7 @@ func TestApprovals_PlaneAnswerDecidesTheGate(t *testing.T) {
 // caching that verdict would keep them locked out after iam came back.
 func TestApprovals_AbsentPeerFailsOpenAndIsNotCached(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
-	plane.Unbind()
+	client.Unbind()
 	cloud.ResetPlane() // nothing listening
 
 	a := NewApprovals(time.Minute)
@@ -214,15 +214,15 @@ func TestApprovals_NoCredentialCrossesTheWire(t *testing.T) {
 	front, back := planetest.Dir(t), planetest.Dir(t)
 
 	t.Setenv("ZIP_RUNTIME_DIR", back)
-	plane.Unbind()
+	client.Unbind()
 	cloud.ResetPlane()
 	var sawUser string
-	zip.Post[struct{}, plane.Approval](cloud.Plane(), "/iam/approval",
-		func(ctx context.Context, _ *struct{}) (*plane.Approval, error) {
+	zip.Post[struct{}, client.Approval](cloud.Plane(), "/iam/approval",
+		func(ctx context.Context, _ *struct{}) (*client.Approval, error) {
 			sawUser = cloud.Who(ctx).User
-			return &plane.Approval{Status: "approved"}, nil
+			return &client.Approval{Status: "approved"}, nil
 		},
-		zip.WithOperationID(plane.IAMApproval))
+		zip.WithOperationID(client.IAMApproval))
 	stop, err := cloud.ServePlane("iam", nil)
 	if err != nil {
 		t.Fatalf("ServePlane(iam): %v", err)
@@ -264,7 +264,7 @@ func TestApprovals_NoCredentialCrossesTheWire(t *testing.T) {
 	}()
 
 	t.Setenv("ZIP_RUNTIME_DIR", front)
-	plane.Unbind()
+	client.Unbind()
 	a := NewApprovals(time.Minute)
 	ctxWith(t, map[string]string{
 		"X-User-Id":     "u-real",
@@ -319,13 +319,13 @@ func waitAccept(t *testing.T, path string) {
 func servePeerApproval(t *testing.T, status string) func() error {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
-	plane.Unbind()
+	client.Unbind()
 	cloud.ResetPlane()
-	zip.Post[struct{}, plane.Approval](cloud.Plane(), "/iam/approval",
-		func(context.Context, *struct{}) (*plane.Approval, error) {
-			return &plane.Approval{Status: status}, nil
+	zip.Post[struct{}, client.Approval](cloud.Plane(), "/iam/approval",
+		func(context.Context, *struct{}) (*client.Approval, error) {
+			return &client.Approval{Status: status}, nil
 		},
-		zip.WithOperationID(plane.IAMApproval))
+		zip.WithOperationID(client.IAMApproval))
 	stop, err := cloud.ServePlane("iam", nil)
 	if err != nil {
 		t.Fatalf("ServePlane(iam): %v", err)

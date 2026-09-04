@@ -369,7 +369,7 @@ var allowedRequestUses = map[string]string{
 		"admitting a validated principal OR the service token that stands in for one where the " +
 		"caller is another PROCESS and so carries no session. principal.OrgFrom alone cannot: it " +
 		"composes validated-ness AND an org, so it refuses that service. Off the HTTP path there is " +
-		"no request and no header in play: the org is what plane.For stamped in-process, and zip " +
+		"no request and no header in play: the org is what client.For stamped in-process, and zip " +
 		"reads a stated caller only on a request-free context. Fails closed in both shapes.",
 	"apps/commerce/invoices.go": "eventsFrom/kmsFrom — two request-scoped side channels " +
 		"carried in c.Locals(), which no ctx helper exposes. Both are OPTIONAL by design: a missing " +

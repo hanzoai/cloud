@@ -24,15 +24,15 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	module "github.com/hanzoai/o11y"
 	"github.com/zap-proto/zip"
 )
 
 // exposeObs publishes the claim. Mount calls it.
 func exposeObs() {
-	zip.Post[plane.ObsErrorIn, plane.ObsErrorOut](cloud.Plane(), "/obs/error/post", planeObsError,
-		zip.WithOperationID(plane.ObsErrorPost),
+	zip.Post[client.ObsErrorIn, client.ObsErrorOut](cloud.Plane(), "/obs/error/post", planeObsError,
+		zip.WithOperationID(client.ObsErrorPost),
 		zip.WithSummary("Relay one Sentry envelope/store request to the o11y runtime"))
 }
 
@@ -40,18 +40,18 @@ func exposeObs() {
 // answer VERBATIM — a 401 "invalid ingest key" must reach the SDK as a 401, not
 // be reshaped into a plane error. The request is rebuilt here rather than
 // forwarded as bytes because the runtime is an http.Handler.
-func planeObsError(ctx context.Context, in *plane.ObsErrorIn) (*plane.ObsErrorOut, error) {
+func planeObsError(ctx context.Context, in *client.ObsErrorIn) (*client.ObsErrorOut, error) {
 	// THE ADDRESS DOES NOT MOVE. The runtime serves its ingest endpoint at the
 	// same /v1/event the caller called and a minted DSN spells, so there is
 	// nothing to translate — only to ADMIT. IngestWire is the module's own
 	// predicate, so the endpoint that answers and the gate that lets a request
 	// reach it cannot come to disagree.
 	if !module.IngestWire(http.MethodPost, in.Path) {
-		return &plane.ObsErrorOut{Status: http.StatusNotFound}, nil
+		return &client.ObsErrorOut{Status: http.StatusNotFound}, nil
 	}
 	h := runtimeHandler
 	if h == nil {
-		return &plane.ObsErrorOut{Status: http.StatusServiceUnavailable,
+		return &client.ObsErrorOut{Status: http.StatusServiceUnavailable,
 			ContentType: "text/plain", Body: []byte("o11y runtime not initialized")}, nil
 	}
 	u := &url.URL{Path: in.Path}
@@ -66,7 +66,7 @@ func planeObsError(ctx context.Context, in *plane.ObsErrorIn) (*plane.ObsErrorOu
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	res := rec.Result()
-	return &plane.ObsErrorOut{
+	return &client.ObsErrorOut{
 		Status:      res.StatusCode,
 		ContentType: res.Header.Get("Content-Type"),
 		Body:        rec.Body.Bytes(),

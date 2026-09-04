@@ -208,11 +208,11 @@ type ghIssue struct {
 // endpoint mixes in). Bounded to the first page.
 func ghIssues(ctx context.Context, token, fullName string) ([]ghIssue, error) {
 	var raw []struct {
-		Number      int       `json:"number"`
-		Title       string    `json:"title"`
-		Body        string    `json:"body"`
-		HTMLURL     string    `json:"html_url"`
-		UpdatedAt   string    `json:"updated_at"`
+		Number      int         `json:"number"`
+		Title       string      `json:"title"`
+		Body        string      `json:"body"`
+		HTMLURL     string      `json:"html_url"`
+		UpdatedAt   string      `json:"updated_at"`
 		PullRequest *cloud.Unit `json:"pull_request"`
 		User        struct {
 			Login string `json:"login"`

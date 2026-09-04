@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // discord.go is the Discord transport: envelope normalization from the
@@ -21,7 +21,7 @@ var errNoRoute = errors.New("channels: no reply route for this room")
 
 // discordEndpoint is the send path; tests spy it, prod never repoints.
 var discordEndpoint = func(ctx context.Context, org, channelID, replyTo, text string) (string, error) {
-	return post(ctx, org, plane.ChatSendIn{Provider: "discord", Room: channelID, ReplyTo: replyTo, Text: text})
+	return post(ctx, org, client.ChatSendIn{Provider: "discord", Room: channelID, ReplyTo: replyTo, Text: text})
 }
 
 // DM:false is honest: the interactions ingress is guild-scoped only.
@@ -35,7 +35,7 @@ var discordTransport = transport{
 // discordNormalize maps a Discord Inbound (ExternalID = guild id, DedupeKey =
 // interaction id) into the envelope. The ingress is guild slash commands
 // only, so every room is a group.
-func discordNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
+func discordNormalize(ev client.ChannelsIngestIn) (Message, bool) {
 	in := ev
 	return Message{
 		Channel:     "discord",

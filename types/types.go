@@ -5,16 +5,16 @@
 //
 // These are the shapes of CO-RESIDENT calls — a dependency mounted in this
 // process, reached by direct Go dispatch. A call that genuinely crosses a
-// process declares its In/Out in package plane instead, and plane/gen emits the
+// process declares its In/Out in package plane instead, and client/gen emits the
 // typed peer client for it; nothing here is waiting to be replaced by a
 // generator.
 package types
 
 import (
 	"context"
-	"net/http"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 
 	"github.com/hanzoai/cloud/money"

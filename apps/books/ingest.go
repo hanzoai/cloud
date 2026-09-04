@@ -1,7 +1,7 @@
 package books
 
 // ingest.go — the ONE posting source: a per-org cursor over commerce's ledger
-// entries, read by NAME over the internal plane (plane.FinanceTxns). commerce's
+// entries, read by NAME over the internal plane (client.FinanceTxns). commerce's
 // prepaid wallet is the source of truth for money moved; this projects each entry
 // into a balanced double-entry voucher via a FIXED rule map (no AI, no
 // heuristics) and posts it through the choke point. It is READ-ONLY against

@@ -24,22 +24,22 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // exposeRails publishes the crypto and wire ops. Mount calls it.
 func exposeRails() {
-	zip.Post[struct{}, plane.CryptoOptions](cloud.Plane(), "/billing/crypto/options", planeCryptoOptions,
-		zip.WithOperationID(plane.BillingCryptoOptions),
+	zip.Post[struct{}, client.CryptoOptions](cloud.Plane(), "/billing/crypto/options", planeCryptoOptions,
+		zip.WithOperationID(client.BillingCryptoOptions),
 		zip.WithSummary("Chains and tokens the crypto rail accepts"))
-	zip.Post[plane.CryptoMintIn, plane.CryptoDeposit](cloud.Plane(), "/billing/crypto/mint", planeCryptoMint,
-		zip.WithOperationID(plane.BillingCryptoMint),
+	zip.Post[client.CryptoMintIn, client.CryptoDeposit](cloud.Plane(), "/billing/crypto/mint", planeCryptoMint,
+		zip.WithOperationID(client.BillingCryptoMint),
 		zip.WithSummary("Issue a deposit address for one payer and asset"))
-	zip.Post[plane.CryptoDepositIn, plane.CryptoDeposit](cloud.Plane(), "/billing/crypto/deposit", planeCryptoDeposit,
-		zip.WithOperationID(plane.BillingCryptoDeposit),
+	zip.Post[client.CryptoDepositIn, client.CryptoDeposit](cloud.Plane(), "/billing/crypto/deposit", planeCryptoDeposit,
+		zip.WithOperationID(client.BillingCryptoDeposit),
 		zip.WithSummary("Read one deposit intent back"))
-	zip.Post[plane.WireIn, plane.WireInstructions](cloud.Plane(), "/billing/wire", planeWire,
-		zip.WithOperationID(plane.BillingWire),
+	zip.Post[client.WireIn, client.WireInstructions](cloud.Plane(), "/billing/wire", planeWire,
+		zip.WithOperationID(client.BillingWire),
 		zip.WithSummary("Receiving bank details for a wire top-up"))
 }
 
@@ -51,12 +51,12 @@ func exposeRails() {
 // money and lose it. A rail with nothing configured is 503, not an empty menu.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeCryptoOptions(ctx context.Context, _ *cloud.Unit) (*plane.CryptoOptions, error) {
+func planeCryptoOptions(ctx context.Context, _ *cloud.Unit) (*client.CryptoOptions, error) {
 	out, err := commercebilling.GetCryptoOptions(ctx)
 	if err != nil {
 		return nil, zip.Errorf(503, "crypto deposits not configured")
 	}
-	return &plane.CryptoOptions{Chains: out.Chains, Tokens: out.Tokens}, nil
+	return &client.CryptoOptions{Chains: out.Chains, Tokens: out.Tokens}, nil
 }
 
 // Issues a per-payer custody deposit address for one asset.
@@ -72,7 +72,7 @@ func planeCryptoOptions(ctx context.Context, _ *cloud.Unit) (*plane.CryptoOption
 // or to give up on something that will.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeCryptoMint(ctx context.Context, in *plane.CryptoMintIn) (*plane.CryptoDeposit, error) {
+func planeCryptoMint(ctx context.Context, in *client.CryptoMintIn) (*client.CryptoDeposit, error) {
 	org, err := orgOf(ctx, "crypto deposit")
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func planeCryptoMint(ctx context.Context, in *plane.CryptoMintIn) (*plane.Crypto
 // else's deposit exists.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeCryptoDeposit(ctx context.Context, in *plane.CryptoDepositIn) (*plane.CryptoDeposit, error) {
+func planeCryptoDeposit(ctx context.Context, in *client.CryptoDepositIn) (*client.CryptoDeposit, error) {
 	org, err := orgOf(ctx, "crypto deposit")
 	if err != nil {
 		return nil, err
@@ -127,7 +127,7 @@ func planeCryptoDeposit(ctx context.Context, in *plane.CryptoDepositIn) (*plane.
 // half-filled form is not an alternative.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeWire(ctx context.Context, in *plane.WireIn) (*plane.WireInstructions, error) {
+func planeWire(ctx context.Context, in *client.WireIn) (*client.WireInstructions, error) {
 	if _, err := orgOf(ctx, "wire"); err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func planeWire(ctx context.Context, in *plane.WireIn) (*plane.WireInstructions, 
 	if werr != nil {
 		return nil, zip.Errorf(503, "wire transfer not configured")
 	}
-	return &plane.WireInstructions{
+	return &client.WireInstructions{
 		BankName: w.BankName, BankAddress: w.BankAddress,
 		AccountNumber: w.AccountNumber, RoutingNumber: w.RoutingNumber,
 		SwiftCode: w.SwiftCode, IBAN: w.IBAN,
@@ -146,8 +146,8 @@ func planeWire(ctx context.Context, in *plane.WireIn) (*plane.WireInstructions, 
 // cryptoRow moves one intent onto the wire. AddressTag keeps its omitempty and
 // keeps its "0": the tag is decimal text, so the first one ever issued is not
 // empty, and a payment to a pooled address with no tag names nobody.
-func cryptoRow(d commercebilling.CryptoDeposit) *plane.CryptoDeposit {
-	return &plane.CryptoDeposit{
+func cryptoRow(d commercebilling.CryptoDeposit) *client.CryptoDeposit {
+	return &client.CryptoDeposit{
 		ID: d.ID, Status: d.Status, Chain: d.Chain, Token: d.Token,
 		DepositAddress: d.DepositAddress, AddressTag: d.AddressTag,
 		ExpiresAt: d.ExpiresAt,

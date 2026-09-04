@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -28,16 +28,16 @@ import (
 // Splitting the read into its own file would say they are different boundaries,
 // and they are not.
 func exposeImport() {
-	zip.Post[plane.ImportIn, plane.Imported](cloud.Plane(), "/git/import", planeImport,
-		zip.WithOperationID(plane.GitImport),
+	zip.Post[client.ImportIn, client.Imported](cloud.Plane(), "/git/import", planeImport,
+		zip.WithOperationID(client.GitImport),
 		zip.WithSummary("Create a repo and mirror an upstream into it"))
 
-	zip.Post[plane.InboundIn, plane.Synced](cloud.Plane(), "/git/inbound", planeInbound,
-		zip.WithOperationID(plane.GitInbound),
+	zip.Post[client.InboundIn, client.Synced](cloud.Plane(), "/git/inbound", planeInbound,
+		zip.WithOperationID(client.GitInbound),
 		zip.WithSummary("Advance one branch from an upstream push"))
 
-	zip.Post[plane.StatusIn, plane.Statuses](cloud.Plane(), "/git/status", planeStatus,
-		zip.WithOperationID(plane.GitStatus),
+	zip.Post[client.StatusIn, client.Statuses](cloud.Plane(), "/git/status", planeStatus,
+		zip.WithOperationID(client.GitStatus),
 		zip.WithSummary("Which of these repos are imported, and which are in conflict"))
 }
 
@@ -50,7 +50,7 @@ func exposeImport() {
 // advance another's refs.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeInbound(ctx context.Context, in *plane.InboundIn) (*plane.Synced, error) {
+func planeInbound(ctx context.Context, in *client.InboundIn) (*client.Synced, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("git inbound: org required")
@@ -67,7 +67,7 @@ func planeInbound(ctx context.Context, in *plane.InboundIn) (*plane.Synced, erro
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Synced{
+	return &client.Synced{
 		Applied: res.Applied, NoOp: res.NoOp, Conflict: res.Conflict,
 		Detail: res.Detail, Before: res.Before, After: res.After,
 	}, nil
@@ -82,7 +82,7 @@ func planeInbound(ctx context.Context, in *plane.InboundIn) (*plane.Synced, erro
 // distinct repos rather than one overwriting the other.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeImport(ctx context.Context, in *plane.ImportIn) (*plane.Imported, error) {
+func planeImport(ctx context.Context, in *client.ImportIn) (*client.Imported, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("git import: org required")
@@ -101,7 +101,7 @@ func planeImport(ctx context.Context, in *plane.ImportIn) (*plane.Imported, erro
 	}); err != nil {
 		return nil, err
 	}
-	return &plane.Imported{Repo: in.Repo}, nil
+	return &client.Imported{Repo: in.Repo}, nil
 }
 
 // planeStatus reports which of the named repos the CALLER's org has imported and
@@ -126,7 +126,7 @@ func planeImport(ctx context.Context, in *plane.ImportIn) (*plane.Imported, erro
 // to this same handler.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeStatus(ctx context.Context, in *plane.StatusIn) (*plane.Statuses, error) {
+func planeStatus(ctx context.Context, in *client.StatusIn) (*client.Statuses, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("git status: org required")
@@ -141,7 +141,7 @@ func planeStatus(ctx context.Context, in *plane.StatusIn) (*plane.Statuses, erro
 	}
 	// Walked in the caller's order so the reply is stable, and each name is spent
 	// as it is emitted so a name asked twice is one row rather than two.
-	rows := make([]plane.RepoStatus, 0, len(st))
+	rows := make([]client.RepoStatus, 0, len(st))
 	for _, n := range in.Names {
 		name := normalizeName(n)
 		r, ok := st[name]
@@ -149,9 +149,9 @@ func planeStatus(ctx context.Context, in *plane.StatusIn) (*plane.Statuses, erro
 			continue
 		}
 		delete(st, name)
-		rows = append(rows, plane.RepoStatus{
+		rows = append(rows, client.RepoStatus{
 			Name: name, Imported: r.Imported, Conflict: r.Conflict, LastSyncedAt: r.LastSyncedAt,
 		})
 	}
-	return &plane.Statuses{Rows: rows}, nil
+	return &client.Statuses{Rows: rows}, nil
 }

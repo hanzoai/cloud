@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // telegram.go is the Telegram transport: envelope normalization from the
@@ -28,7 +28,7 @@ var telegramEndpoint = func(ctx context.Context, org string, chatID, replyTo int
 	if replyTo != 0 {
 		reply = strconv.FormatInt(replyTo, 10)
 	}
-	_, err := post(ctx, org, plane.ChatSendIn{Provider: "telegram", Room: room, ReplyTo: reply, Text: text})
+	_, err := post(ctx, org, client.ChatSendIn{Provider: "telegram", Room: room, ReplyTo: reply, Text: text})
 	return err
 }
 
@@ -43,7 +43,7 @@ var telegramTransport = transport{
 // chat id, User = from.id, ThreadID = triggering message id, DedupeKey =
 // update_id) into the envelope. Telegram's ThreadID is the message to reply
 // under, so it maps to ReplyTo, never RoomThread.
-func telegramNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
+func telegramNormalize(ev client.ChannelsIngestIn) (Message, bool) {
 	in := ev
 	kind, ok := telegramRoomKind(in.Channel)
 	if !ok {

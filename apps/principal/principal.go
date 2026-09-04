@@ -271,7 +271,7 @@ func WithOrg(ctx context.Context, c *zip.Ctx) context.Context {
 // CO-RESIDENT resolved the old one (zip.Here hands the caller's own context
 // straight to the handler, where the slot below still held the original org and
 // is asked first). One call, two answers, decided by whether the two apps
-// happened to be in one binary — which is exactly the thing plane.Ask exists to
+// happened to be in one binary — which is exactly the thing client.Call exists to
 // keep from being the caller's business.
 //
 // It grants nothing. Naming an org was never what granted anything: the callee

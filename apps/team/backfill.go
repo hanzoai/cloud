@@ -7,8 +7,8 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	"github.com/hanzoai/cloud/plane/iam"
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/client/iam"
 	"github.com/hanzoai/orm/query"
 )
 
@@ -49,7 +49,7 @@ func backfill(ctx context.Context, s *accountStore) error {
 		if role == "" {
 			role = "member"
 		}
-		if _, err := iam.IAMGrant(cloud.For(ctx, r.Org), &plane.GrantIn{
+		if _, err := iam.IAMGrant(cloud.For(ctx, r.Org), &client.GrantIn{
 			User: r.Account, Space: r.SpaceUUID, Role: role,
 		}); err != nil {
 			return fmt.Errorf("team: backfill %s/%s: %w", r.Org, r.Account, err)

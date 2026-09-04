@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // envelope_test.go proves the portable envelope's closure: per-transport
@@ -15,16 +15,16 @@ import (
 // renderer. Pure — no store, no HTTP.
 
 func TestNormalize(t *testing.T) {
-	ev := func(provider, externalID, user, channel, thread, text, key string) plane.ChannelsIngestIn {
-		return plane.ChannelsIngestIn{
+	ev := func(provider, externalID, user, channel, thread, text, key string) client.ChannelsIngestIn {
+		return client.ChannelsIngestIn{
 			Org: "acme", Provider: provider, ExternalID: externalID, User: user,
 			Channel: channel, ThreadID: thread, Text: text, DedupeKey: key,
 		}
 	}
 	cases := []struct {
 		name string
-		norm func(plane.ChannelsIngestIn) (Message, bool)
-		ev   plane.ChannelsIngestIn
+		norm func(client.ChannelsIngestIn) (Message, bool)
+		ev   client.ChannelsIngestIn
 		ok   bool
 		want Message
 	}{

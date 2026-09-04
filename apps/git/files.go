@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -54,7 +54,7 @@ func coreRev(s *cloud.Service[state], ctx context.Context, t tenant, name, ref s
 // read at `main` could straddle a push and assemble half an inventory from one
 // commit and half from the next; pinning here makes the read consistent by
 // construction rather than by every caller remembering to.
-func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref, glob string) (rev string, files []plane.File, err error) {
+func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref, glob string) (rev string, files []client.File, err error) {
 	if strings.TrimSpace(glob) == "" {
 		return "", nil, errBadInput
 	}
@@ -67,7 +67,7 @@ func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref
 	if err != nil {
 		return "", nil, err
 	}
-	out := make([]plane.File, 0, len(paths))
+	out := make([]client.File, 0, len(paths))
 	for _, p := range paths {
 		blob, err := repo.Blob(ctx, res, p, maxBlobBytes)
 		if err != nil {
@@ -77,7 +77,7 @@ func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref
 			// assembling a desired set would prune whatever went missing.
 			return "", nil, fmt.Errorf("read %s at %s: %w", p, ShortRev(res), err)
 		}
-		f := plane.File{Path: p, Truncated: blob.Truncated}
+		f := client.File{Path: p, Truncated: blob.Truncated}
 		if !blob.Truncated {
 			f.Data = blob.Content
 		}
@@ -94,11 +94,11 @@ func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref
 // is refused rather than defaulted — delivery reaching git with no principal
 // must fail, not read someone's repo.
 func exposeFiles() {
-	zip.Post[plane.FilesIn, plane.Files](cloud.Plane(), "/git/files", planeFiles,
-		zip.WithOperationID(plane.GitFiles),
+	zip.Post[client.FilesIn, client.Files](cloud.Plane(), "/git/files", planeFiles,
+		zip.WithOperationID(client.GitFiles),
 		zip.WithSummary("A repo's files at one revision"))
-	zip.Post[plane.RevIn, plane.Rev](cloud.Plane(), "/git/rev", planeRev,
-		zip.WithOperationID(plane.GitRev),
+	zip.Post[client.RevIn, client.Rev](cloud.Plane(), "/git/rev", planeRev,
+		zip.WithOperationID(client.GitRev),
 		zip.WithSummary("The commit a ref resolves to"))
 }
 
@@ -107,7 +107,7 @@ func exposeFiles() {
 // the CALLER's plane identity, never the argument — an anonymous caller is
 // refused. A named handler, not a closure, so zipdoc can lift this prose into the
 // registry.
-func planeRev(ctx context.Context, in *plane.RevIn) (*plane.Rev, error) {
+func planeRev(ctx context.Context, in *client.RevIn) (*client.Rev, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("git rev: org required")
@@ -120,7 +120,7 @@ func planeRev(ctx context.Context, in *plane.RevIn) (*plane.Rev, error) {
 	if err != nil {
 		return nil, zip.ErrNotFound("repo, ref or revision not found")
 	}
-	return &plane.Rev{Rev: rev.String(), Ref: label}, nil
+	return &client.Rev{Rev: rev.String(), Ref: label}, nil
 }
 
 // planeFiles reads the glob-selected files of one of the caller's repos at one
@@ -129,7 +129,7 @@ func planeRev(ctx context.Context, in *plane.RevIn) (*plane.Rev, error) {
 // caller is refused — and the whole reply is read at one resolved commit, so a
 // caller can never assemble half an inventory from each side of a push. A named
 // handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeFiles(ctx context.Context, in *plane.FilesIn) (*plane.Files, error) {
+func planeFiles(ctx context.Context, in *client.FilesIn) (*client.Files, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("git files: org required")
@@ -147,5 +147,5 @@ func planeFiles(ctx context.Context, in *plane.FilesIn) (*plane.Files, error) {
 	case err != nil:
 		return nil, zip.Errorf(500, "%v", err)
 	}
-	return &plane.Files{Rev: rev, Files: files}, nil
+	return &client.Files{Rev: rev, Files: files}, nil
 }

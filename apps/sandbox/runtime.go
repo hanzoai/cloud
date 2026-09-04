@@ -44,9 +44,9 @@ import (
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/fleet"
-	"github.com/hanzoai/cloud/k8s"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/iam"
+	"github.com/hanzoai/cloud/k8s"
 	"github.com/zap-proto/zip"
 
 	corev1 "k8s.io/api/core/v1"
@@ -457,7 +457,7 @@ func (r *runtime) imageFor(class string, super bool) string {
 // same shape of bug as a tag that looks pinned and is not, which is what this
 // function exists to end.
 func (r *runtime) digestFor(class string) string {
-	return environ.Or("SANDBOX_IMAGE_DIGEST_" + strings.ToUpper(class), "")
+	return environ.Or("SANDBOX_IMAGE_DIGEST_"+strings.ToUpper(class), "")
 }
 
 // runtimes are the isolation boundaries we run, and for each the TWO facts that

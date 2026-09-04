@@ -16,8 +16,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/framework"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 )
 
 // storefront.go is the CATALOG client: when a product Asset goes live (lifecycle →
@@ -146,7 +146,7 @@ func (s commerceStorefront) Publish(ctx context.Context, org string, req Storefr
 	// the internal plane. They used to be HTTP calls to commerce's own endpoint,
 	// which production resolves to this pod's own public edge — the request left
 	// the process and came back through the edge.
-	store, err := commercepeer.StoreCurrent(cloud.For(ctx, org), &plane.StoreIn{})
+	store, err := commercepeer.StoreCurrent(cloud.For(ctx, org), &client.StoreIn{})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
 			// This deployment runs no commerce, which is the honest
@@ -172,7 +172,7 @@ func (s commerceStorefront) Publish(ctx context.Context, org string, req Storefr
 			"alt":  req.Caption,
 		},
 	})
-	if _, err := commercepeer.StoreListing(cloud.For(ctx, org), &plane.ListingIn{
+	if _, err := commercepeer.StoreListing(cloud.For(ctx, org), &client.ListingIn{
 		StoreID: storeID, Key: req.Design, Patch: body,
 	}); err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {

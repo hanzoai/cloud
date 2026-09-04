@@ -14,9 +14,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -52,7 +52,7 @@ type depositCapture struct {
 	org    string
 	user   string // the SUBJECT credited inside that org's ledger
 	amount int64
-	idem   string // plane.CreditIn.Ref — the idempotency key, never empty
+	idem   string // client.CreditIn.Ref — the idempotency key, never empty
 }
 
 // adminHdr is a validated SuperAdmin identity (what SanitizeIdentity mints for
@@ -639,45 +639,45 @@ func (f *cockpitFakes) servePlaneBooks(t *testing.T) {
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 
-	// The MONEY READ every fleet board folds (core.OrgMoney → plane.FinanceSpend). It
+	// The MONEY READ every fleet board folds (core.OrgMoney → client.FinanceSpend). It
 	// belongs on this stand-in and not on a second one: two apps answering "commerce"
 	// would shadow each other, and which a call reached would depend on which fixture
 	// was built last. The consumption is fixed per org; the balance is read LIVE, so a
 	// grant made through the HTTP half is visible to the next money read.
-	zip.Post[plane.SpendIn, plane.Spend](cloud.Plane(), "/finance/spend",
-		func(ctx context.Context, _ *plane.SpendIn) (*plane.Spend, error) {
+	zip.Post[client.SpendIn, client.Spend](cloud.Plane(), "/finance/spend",
+		func(ctx context.Context, _ *client.SpendIn) (*client.Spend, error) {
 			org := cloud.Who(ctx).Org
 			if org == "" {
 				return nil, zip.ErrForbidden("spend: no org on the call")
 			}
 			f.mu.Lock()
 			defer f.mu.Unlock()
-			return &plane.Spend{
-				Consumed: plane.Amount(money.FromCents(f.spend[org]).Unwrap()),
-				Balance:  plane.Amount(money.FromCents(f.balances[org]).Unwrap()),
+			return &client.Spend{
+				Consumed: client.Amount(money.FromCents(f.spend[org]).Unwrap()),
+				Balance:  client.Amount(money.FromCents(f.balances[org]).Unwrap()),
 			}, nil
-		}, zip.WithOperationID(plane.FinanceSpend))
+		}, zip.WithOperationID(client.FinanceSpend))
 
 	// Subscriptions, on the same stand-in for the same reason: two apps answering
 	// "commerce" would shadow each other. Pro on acme, nothing on globex — the
 	// split the HTTP fixture served before the plan read left HTTP.
-	zip.Post[plane.SubsIn, plane.Subs](cloud.Plane(), "/finance/subs",
-		func(ctx context.Context, _ *plane.SubsIn) (*plane.Subs, error) {
+	zip.Post[client.SubsIn, client.Subs](cloud.Plane(), "/finance/subs",
+		func(ctx context.Context, _ *client.SubsIn) (*client.Subs, error) {
 			org := cloud.Who(ctx).Org
 			if org == "" {
 				return nil, zip.ErrForbidden("subs: no org on the call")
 			}
 			if org != "acme" {
-				return &plane.Subs{}, nil
+				return &client.Subs{}, nil
 			}
-			return &plane.Subs{Rows: []plane.Sub{
+			return &client.Subs{Rows: []client.Sub{
 				{Status: "active", MRRCents: 5000, PlanName: "Pro"},
 			}}, nil
-		}, zip.WithOperationID(plane.FinanceSubs))
+		}, zip.WithOperationID(client.FinanceSubs))
 
-	zip.Post[plane.CreditIn, plane.Credited](cloud.Plane(), "/finance/credit",
-		func(ctx context.Context, in *plane.CreditIn) (*plane.Credited, error) {
-			// The org rides the CALLER — plane.CreditIn cannot name one — and the
+	zip.Post[client.CreditIn, client.Credited](cloud.Plane(), "/finance/credit",
+		func(ctx context.Context, in *client.CreditIn) (*client.Credited, error) {
+			// The org rides the CALLER — client.CreditIn cannot name one — and the
 			// ref is required, both exactly as the real op enforces them. A fixture
 			// that admitted either would let a test pass through a way in production
 			// closes.
@@ -698,11 +698,11 @@ func (f *cockpitFakes) servePlaneBooks(t *testing.T) {
 			}
 			f.deposits = append(f.deposits, depositCapture{org: org, user: in.Subject, amount: cents, idem: in.Ref})
 			f.mu.Unlock()
-			return &plane.Credited{Amount: in.Amount, ID: fmt.Sprintf("fe-%s-%d", org, cents)}, nil
-		}, zip.WithOperationID(plane.FinanceCredit))
+			return &client.Credited{Amount: in.Amount, ID: fmt.Sprintf("fe-%s-%d", org, cents)}, nil
+		}, zip.WithOperationID(client.FinanceCredit))
 
-	zip.Post[plane.BalanceIn, plane.Balance](cloud.Plane(), "/finance/balance",
-		func(ctx context.Context, in *plane.BalanceIn) (*plane.Balance, error) {
+	zip.Post[client.BalanceIn, client.Balance](cloud.Plane(), "/finance/balance",
+		func(ctx context.Context, in *client.BalanceIn) (*client.Balance, error) {
 			org := cloud.Who(ctx).Org
 			if org == "" {
 				return nil, zip.ErrForbidden("balance: no org on the call")
@@ -713,8 +713,8 @@ func (f *cockpitFakes) servePlaneBooks(t *testing.T) {
 			if in.Subject != org {
 				bal = 0
 			}
-			return &plane.Balance{Amount: plane.Amount(money.FromCents(bal).Unwrap())}, nil
-		}, zip.WithOperationID(plane.FinanceBalance))
+			return &client.Balance{Amount: client.Amount(money.FromCents(bal).Unwrap())}, nil
+		}, zip.WithOperationID(client.FinanceBalance))
 
 	stop, err := cloud.ServePlane("commerce", luxlog.NewNoOpLogger())
 	if err != nil {

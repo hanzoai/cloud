@@ -48,7 +48,7 @@ func TestAChangeOffTheHTTPPathIsNotForgeable(t *testing.T) {
 func TestOnlyAGovernedChangeIsAsked(t *testing.T) {
 	for _, op := range []zip.Op{
 		{Method: "GET", Path: "/v1/crm/companies"},  // a read is not a change
-		{Method: "POST", Path: "/v1/project"},      // not yet governed
+		{Method: "POST", Path: "/v1/project"},       // not yet governed
 		{Method: "POST", Path: "/v1/crm/companies"}, // governed, but off the HTTP path
 	} {
 		if err := Intent()(context.Background(), op, nil); err != nil {

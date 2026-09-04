@@ -235,12 +235,12 @@ func TestAuthorize_PerCallOrgOverride(t *testing.T) {
 // silently did not.
 //
 // THE PROPERTY. The debit goes to the process that owns the ledger over the internal
-// plane, where the act's name is a field of its own (plane.Usage.Ref) — so the same act
+// plane, where the act's name is a field of its own (client.Usage.Ref) — so the same act
 // re-sent carries the same key, and the billed ORG still comes from the caller rather than
 // the argument. Everything the HTTP contract asserted is asserted here on the crossing
 // that replaced it.
 //
-// MUTATION PROOF: drop `Ref: u.Ref` from the plane.Usage that Record builds and the sealed
+// MUTATION PROOF: drop `Ref: u.Ref` from the client.Usage that Record builds and the sealed
 // act crosses nameless — exactly the hole the HTTP body had — and this test fails on it.
 func TestRecord_CrossesThePlaneCarryingTheAct(t *testing.T) {
 	peer := (&planeCommerce{}).serve(t)

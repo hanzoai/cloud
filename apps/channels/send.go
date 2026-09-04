@@ -17,12 +17,12 @@ package channels
 import (
 	"context"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // ask is the plane call the send rides; a test swaps it to read what actually
 // reached the wire, which is where the org went missing.
-var ask = plane.Ask[plane.ChatSendIn, plane.ChatSendOut]
+var ask = client.Call[client.ChatSendIn, client.ChatSendOut]
 
 // post carries one outbound message to the transport that owns the provider, AS
 // an org.
@@ -33,9 +33,9 @@ var ask = plane.Ask[plane.ChatSendIn, plane.ChatSendOut]
 // could not deliver at all, and discord and teams spent a shared app credential
 // with nothing to check it against. A parameter cannot be forgotten the way a
 // field can.
-func post(ctx context.Context, org string, in plane.ChatSendIn) (string, error) {
+func post(ctx context.Context, org string, in client.ChatSendIn) (string, error) {
 	in.Org = org
-	out, err := ask(ctx, "integration", plane.ChatSend, &in)
+	out, err := ask(ctx, "integration", client.ChatSend, &in)
 	if err != nil {
 		return "", err
 	}

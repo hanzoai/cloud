@@ -29,9 +29,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/iamtest"
 	"github.com/hanzoai/cloud/internal/planetest"
-	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -977,11 +977,11 @@ func TestTheApiOriginIsTheSocketsOwn(t *testing.T) {
 // seats is a space authority that admits with a row naming the given account —
 // including the empty one, which is a member the media server cannot seat.
 func seats(id string) *answers {
-	a := &answers{list: plane.Spaces{Account: id}}
-	a.row = func(string, string) plane.Member {
-		return plane.Member{Member: true, Role: token.RoleMember, Account: id}
+	a := &answers{list: client.Spaces{Account: id}}
+	a.row = func(string, string) client.Member {
+		return client.Member{Member: true, Role: token.RoleMember, Account: id}
 	}
-	a.list.Items = append(a.list.Items, plane.Space{UUID: spaceA, Role: token.RoleMember})
+	a.list.Items = append(a.list.Items, client.Space{UUID: spaceA, Role: token.RoleMember})
 	return a
 }
 

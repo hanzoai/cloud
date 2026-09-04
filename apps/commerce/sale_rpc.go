@@ -27,7 +27,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // exposeSale publishes the card endpoints and the recharge sweep. Mount calls it.
@@ -45,31 +45,31 @@ import (
 // standing instruction, and is refused at the endpoint to anything but platform
 // authority.
 func exposeSale(s screen) {
-	zip.Post[plane.CardIn, plane.Charged](cloud.Plane(), "/billing/topup/card",
+	zip.Post[client.CardIn, client.Charged](cloud.Plane(), "/billing/topup/card",
 		screened(s, "/billing/topup/card",
-			func(in *plane.CardIn) (int64, string) { return in.AmountCents, in.Currency },
-			func(out *plane.Charged) (string, string) {
+			func(in *client.CardIn) (int64, string) { return in.AmountCents, in.Currency },
+			func(out *client.Charged) (string, string) {
 				return firstRefOf(out.ProcessorRef, out.TransactionID), out.TransactionID
 			}, planeTopupCard),
-		zip.WithOperationID(plane.BillingTopupCard),
+		zip.WithOperationID(client.BillingTopupCard),
 		zip.WithSummary("Charge a single-use card token and credit the wallet"))
-	zip.Post[plane.SavedCardIn, plane.Charged](cloud.Plane(), "/billing/topup",
+	zip.Post[client.SavedCardIn, client.Charged](cloud.Plane(), "/billing/topup",
 		screened(s, "/billing/topup",
-			func(in *plane.SavedCardIn) (int64, string) { return in.AmountCents, in.Currency },
-			func(out *plane.Charged) (string, string) {
+			func(in *client.SavedCardIn) (int64, string) { return in.AmountCents, in.Currency },
+			func(out *client.Charged) (string, string) {
 				return firstRefOf(out.ProcessorRef, out.TransactionID), out.TransactionID
 			}, planeTopup),
-		zip.WithOperationID(plane.BillingTopup),
+		zip.WithOperationID(client.BillingTopup),
 		zip.WithSummary("Charge a saved card and credit the wallet"))
-	zip.Post[plane.SaleIn, plane.Sold](cloud.Plane(), "/billing/subscribe",
+	zip.Post[client.SaleIn, client.Sold](cloud.Plane(), "/billing/subscribe",
 		screened(s, "/billing/subscribe",
 			// A sale carries NO amount — the price is the catalog's at the level
 			// asked for — so the worth a sale states is what the card was actually
 			// charged, which only the receipt knows. Zero on the way in is the
 			// honest reading: the axis is blind here, and blind is not zero-risk,
 			// which is why it is stated rather than inferred.
-			func(in *plane.SaleIn) (int64, string) { return 0, in.Currency },
-			func(out *plane.Sold) (string, string) {
+			func(in *client.SaleIn) (int64, string) { return 0, in.Currency },
+			func(out *client.Sold) (string, string) {
 				if out.Sale == nil {
 					// A REPLAY settled nothing new: the money moved on the first
 					// attempt and was recorded then. Reporting a settlement here
@@ -78,16 +78,16 @@ func exposeSale(s screen) {
 				}
 				return out.Sale.SubscriptionID, out.Sale.SubscriptionID
 			}, planeSubscribe),
-		zip.WithOperationID(plane.BillingSubscribe),
+		zip.WithOperationID(client.BillingSubscribe),
 		zip.WithSummary("Buy a plan with a card"))
-	zip.Post[struct{}, plane.AutoRecharge](cloud.Plane(), "/billing/auto-recharge", planeAutoRecharge,
-		zip.WithOperationID(plane.BillingAutoRecharge),
+	zip.Post[struct{}, client.AutoRecharge](cloud.Plane(), "/billing/auto-recharge", planeAutoRecharge,
+		zip.WithOperationID(client.BillingAutoRecharge),
 		zip.WithSummary("This org's auto-reload rule"))
-	zip.Post[plane.AutoRechargeEdit, plane.AutoRecharge](cloud.Plane(), "/billing/auto-recharge/set", planeAutoRechargeSet,
-		zip.WithOperationID(plane.BillingAutoRechargeSet),
+	zip.Post[client.AutoRechargeEdit, client.AutoRecharge](cloud.Plane(), "/billing/auto-recharge/set", planeAutoRechargeSet,
+		zip.WithOperationID(client.BillingAutoRechargeSet),
 		zip.WithSummary("Set this org's auto-reload rule"))
-	zip.Post[struct{}, plane.Recharge](cloud.Plane(), "/billing/recharge", planeRecharge,
-		zip.WithOperationID(plane.BillingRecharge),
+	zip.Post[struct{}, client.Recharge](cloud.Plane(), "/billing/recharge", planeRecharge,
+		zip.WithOperationID(client.BillingRecharge),
 		zip.WithSummary("Recharge every org that has fallen below its threshold"))
 }
 
@@ -102,7 +102,7 @@ func exposeSale(s screen) {
 // have to bind where the money moves.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeTopupCard(ctx context.Context, in *plane.CardIn) (*plane.Charged, error) {
+func planeTopupCard(ctx context.Context, in *client.CardIn) (*client.Charged, error) {
 	org, err := orgOf(ctx, "topup")
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func planeTopupCard(ctx context.Context, in *plane.CardIn) (*plane.Charged, erro
 		// re-derived from the message.
 		return nil, zip.Errorf(f.Status, "%s", f.Message)
 	}
-	return &plane.Charged{
+	return &client.Charged{
 		TransactionID: out.TransactionID,
 		BalanceCents:  out.BalanceCents,
 		Status:        out.Status,
@@ -138,7 +138,7 @@ func planeTopupCard(ctx context.Context, in *plane.CardIn) (*plane.Charged, erro
 // why the caller says it rather than this side inventing a sentence.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeTopup(ctx context.Context, in *plane.SavedCardIn) (*plane.Charged, error) {
+func planeTopup(ctx context.Context, in *client.SavedCardIn) (*client.Charged, error) {
 	org, err := orgOf(ctx, "topup")
 	if err != nil {
 		return nil, err
@@ -156,7 +156,7 @@ func planeTopup(ctx context.Context, in *plane.SavedCardIn) (*plane.Charged, err
 	if terr != nil {
 		return nil, chargeFault(terr)
 	}
-	return &plane.Charged{
+	return &client.Charged{
 		TransactionID: out.TransactionID,
 		BalanceCents:  out.BalanceCents,
 		Status:        out.Status,
@@ -176,7 +176,7 @@ func planeTopup(ctx context.Context, in *plane.SavedCardIn) (*plane.Charged, err
 // second subscription having been opened.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeSubscribe(ctx context.Context, in *plane.SaleIn) (*plane.Sold, error) {
+func planeSubscribe(ctx context.Context, in *client.SaleIn) (*client.Sold, error) {
 	org, err := orgOf(ctx, "subscribe")
 	if err != nil {
 		return nil, err
@@ -199,9 +199,9 @@ func planeSubscribe(ctx context.Context, in *plane.SaleIn) (*plane.Sold, error) 
 	if serr != nil {
 		return nil, saleFault(serr)
 	}
-	out := &plane.Sold{Replayed: sold.Replayed}
+	out := &client.Sold{Replayed: sold.Replayed}
 	if sold.Sale != nil {
-		out.Sale = &plane.Sale{
+		out.Sale = &client.Sale{
 			SubscriptionID:  sold.Sale.SubscriptionID,
 			InvoiceID:       sold.Sale.InvoiceID,
 			PlanID:          sold.Sale.PlanID,
@@ -227,15 +227,15 @@ func planeSubscribe(ctx context.Context, in *plane.SaleIn) (*plane.Sold, error) 
 // reader tells "nobody was below threshold" from "the sweep never ran".
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeRecharge(ctx context.Context, _ *cloud.Unit) (*plane.Recharge, error) {
+func planeRecharge(ctx context.Context, _ *cloud.Unit) (*client.Recharge, error) {
 	run, err := commercebilling.RunAutoRecharge(ctx, kmsFrom(ctx), eventsFrom(ctx))
 	if err != nil {
 		return nil, zip.Errorf(500, "failed to list organizations")
 	}
-	out := &plane.Recharge{Orgs: run.Orgs, Charged: run.Charged}
-	out.Results = make([]plane.Recharged, 0, len(run.Results))
+	out := &client.Recharge{Orgs: run.Orgs, Charged: run.Charged}
+	out.Results = make([]client.Recharged, 0, len(run.Results))
 	for _, r := range run.Results {
-		out.Results = append(out.Results, plane.Recharged{
+		out.Results = append(out.Results, client.Recharged{
 			OrgName: r.OrgName, UserID: r.UserId, Charged: r.Charged,
 			AmountCents: r.AmountCents, BalanceCents: r.BalanceCents,
 			TransactionID: r.TransactionId, Error: r.Error,
@@ -321,7 +321,7 @@ func saleFault(err error) error {
 // difference between never having set one and having turned one off.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeAutoRecharge(ctx context.Context, _ *cloud.Unit) (*plane.AutoRecharge, error) {
+func planeAutoRecharge(ctx context.Context, _ *cloud.Unit) (*client.AutoRecharge, error) {
 	org, err := orgOf(ctx, "auto-recharge")
 	if err != nil {
 		return nil, err
@@ -346,7 +346,7 @@ func planeAutoRecharge(ctx context.Context, _ *cloud.Unit) (*plane.AutoRecharge,
 // input names none, so a write cannot be steered onto another tenant's schedule.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeAutoRechargeSet(ctx context.Context, in *plane.AutoRechargeEdit) (*plane.AutoRecharge, error) {
+func planeAutoRechargeSet(ctx context.Context, in *client.AutoRechargeEdit) (*client.AutoRecharge, error) {
 	org, err := orgOf(ctx, "set auto-recharge")
 	if err != nil {
 		return nil, err
@@ -370,8 +370,8 @@ func planeAutoRechargeSet(ctx context.Context, in *plane.AutoRechargeEdit) (*pla
 
 // autoRechargeView is the ONE mapping from the module's record to the wire, so the
 // read and the write cannot describe one rule two ways.
-func autoRechargeView(cfg commercebilling.AutoRecharge) *plane.AutoRecharge {
-	return &plane.AutoRecharge{
+func autoRechargeView(cfg commercebilling.AutoRecharge) *client.AutoRecharge {
+	return &client.AutoRecharge{
 		Subject:         cfg.Subject,
 		Enabled:         cfg.Enabled,
 		ThresholdCents:  cfg.ThresholdCents,

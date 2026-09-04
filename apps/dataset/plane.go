@@ -1,6 +1,6 @@
 package dataset
 
-// plane.go is THE entry point to the store, and the place the tenant boundary is
+// peer.go is THE entry point to the store, and the place the tenant boundary is
 // decided. Every statement this package can run is in this file, and every one
 // of them opens with `org = ?`.
 //

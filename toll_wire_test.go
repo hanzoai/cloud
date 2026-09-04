@@ -237,7 +237,7 @@ func refusal(answer string) bool {
 }
 
 // TestTheInternalPlaneIsOutsideThePricedSurface proves the OTHER half of the money
-// rule's placement: the plane (plane.go) is a different zip.App and is deliberately
+// rule's placement: the plane (peer.go) is a different zip.App and is deliberately
 // not under it.
 //
 // Two facts make that right. The plane listens on the pod's own socket, so no browser

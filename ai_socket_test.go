@@ -48,7 +48,7 @@ func TestSiblingFollowsTheConfiguredListenerPort(t *testing.T) {
 }
 
 // A sibling never dials the peer's plane socket. That socket is zip's typed-op
-// plane (plane.Ask), it does not speak HTTP, and the app's own routes are not on
+// plane (client.Call), it does not speak HTTP, and the app's own routes are not on
 // it — so naming it here can only ever produce an EOF or a 404.
 func TestSiblingNeverDialsThePlaneSocket(t *testing.T) {
 	_, base := aiRoute(&Config{Enable: []string{"agents"}, ListenAddr: ":8000"})

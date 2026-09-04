@@ -30,9 +30,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/gateway/edge"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client/commerce"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/zap-proto/zip"
 	zipmw "github.com/zap-proto/zip/middleware"
 )

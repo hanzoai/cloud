@@ -10,7 +10,7 @@ package sandbox
 // have them, so it proxied to a workload nobody deployed instead.
 //
 // So the domain moves here and the handlers become adapters over it: bind, call,
-// JSON. The same functions back the internal plane (plane.go), which is how a peer
+// JSON. The same functions back the internal plane (peer.go), which is how a peer
 // app composes over sandboxes without a router, a request or a socket in the way.
 //
 // It is functions-taking-*Service rather than methods for a reason the compiler

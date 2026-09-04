@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 
 	"github.com/hanzoai/cloud"
-	planeops "github.com/hanzoai/cloud/plane"
+	planeops "github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/o11y/pkg/community"
 	"github.com/hanzoai/o11y/pkg/modules/sentry/implsentry"
 	o11yrt "github.com/hanzoai/o11y/pkg/o11y"
@@ -154,7 +154,7 @@ func ingestKeyOrg(ctx context.Context, key string) (string, bool) {
 //
 // Projects first, IAM second, because the fallback is a genuine org-scoped key and
 // IAM does own those. It is the same op analytics resolves this key through
-// (apps/event/plane.go), so one key now means one org at both endpoints.
+// (apps/event/peer.go), so one key now means one org at both endpoints.
 //
 // The resolver it feeds answers a bool and carries no error, so a projects outage
 // reads here as "not this space" and falls through to IAM, which will not know the

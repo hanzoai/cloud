@@ -89,9 +89,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/datastore"
 	"github.com/hanzoai/cloud/apps/principal"
-	planeops "github.com/hanzoai/cloud/plane"
+	planeops "github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/datastore"
 	"github.com/hanzoai/types"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -255,7 +255,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// The Sentry error wire, on the SAME endpoint:
 	// POST /v1/event/{project}/envelope|store. The project segment is variable, so
 	// the endpoint's owner carries the route and relays to the o11y PROCESS over the
-	// plane socket (plane.ObsErrorPost). It used to call a package global that o11y
+	// plane socket (client.ObsErrorPost). It used to call a package global that o11y
 	// set in its own process, which read nil here and answered 503 "error ingest not
 	// initialized" for every SDK.
 	//

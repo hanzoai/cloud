@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -41,8 +41,8 @@ func serveBank(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 
 	app := zip.New(zip.Config{AppName: "bank"})
-	zip.Post[plane.BalanceIn, plane.Balance](app, "/bank/balance",
-		func(ctx context.Context, in *plane.BalanceIn) (*plane.Balance, error) {
+	zip.Post[client.BalanceIn, client.Balance](app, "/bank/balance",
+		func(ctx context.Context, in *client.BalanceIn) (*client.Balance, error) {
 			// Fail CLOSED on an absent tenant. Answering with a default, the first
 			// key, or zero would each be a different way of inventing an answer
 			// nobody is authorized to receive.
@@ -50,7 +50,7 @@ func serveBank(t *testing.T) {
 			if who == "" {
 				return nil, zip.ErrForbidden("no org on the call")
 			}
-			return &plane.Balance{Amount: plane.Money{
+			return &client.Balance{Amount: client.Money{
 				Decimal:  decimalOf(books[who]),
 				Currency: "USD",
 			}}, nil
@@ -78,8 +78,8 @@ func waitFor(t *testing.T, app string) {
 }
 
 // ask drives one real round trip over the socket.
-func ask(ctx context.Context, in *plane.BalanceIn) (*plane.Balance, error) {
-	return cloud.Ask[plane.BalanceIn, plane.Balance](ctx, "bank", "bank_balance", in)
+func ask(ctx context.Context, in *client.BalanceIn) (*client.Balance, error) {
+	return cloud.Ask[client.BalanceIn, client.Balance](ctx, "bank", "bank_balance", in)
 }
 
 // The adversarial case: a caller acting for acme must NEVER be able to read
@@ -87,7 +87,7 @@ func ask(ctx context.Context, in *plane.BalanceIn) (*plane.Balance, error) {
 func TestTenantScopesTheAnswer(t *testing.T) {
 	serveBank(t)
 
-	got, err := ask(cloud.For(context.Background(), "acme"), &plane.BalanceIn{Currency: "usd"})
+	got, err := ask(cloud.For(context.Background(), "acme"), &client.BalanceIn{Currency: "usd"})
 	if err != nil {
 		t.Fatalf("acme read: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestTenantScopesTheAnswer(t *testing.T) {
 	// because the input type has no field that names an org — see the structural
 	// test below — and the subject is not one.
 	for _, subject := range []string{"initech", "initech/admin", "../initech", "acme initech"} {
-		got, err := ask(cloud.For(context.Background(), "acme"), &plane.BalanceIn{
+		got, err := ask(cloud.For(context.Background(), "acme"), &client.BalanceIn{
 			Subject: subject, Currency: "usd",
 		})
 		if err != nil {
@@ -116,7 +116,7 @@ func TestTenantScopesTheAnswer(t *testing.T) {
 func TestNoTenantIsRefused(t *testing.T) {
 	serveBank(t)
 
-	_, err := ask(context.Background(), &plane.BalanceIn{Currency: "usd"})
+	_, err := ask(context.Background(), &client.BalanceIn{Currency: "usd"})
 	if err == nil {
 		t.Fatal("a call with no org was answered")
 	}
@@ -131,17 +131,17 @@ func TestNoTenantIsRefused(t *testing.T) {
 // every guard above becomes advisory.
 func TestNoPlaneInputCanNameAnOrg(t *testing.T) {
 	inputs := []any{
-		plane.AuthorizeIn{}, plane.RecordIn{}, plane.BalanceIn{}, plane.TxnsIn{},
-		plane.SecretIn{}, plane.FilesIn{}, plane.Visibility{}, plane.ReserveIn{},
-		plane.FlagIn{},
+		client.AuthorizeIn{}, client.RecordIn{}, client.BalanceIn{}, client.TxnsIn{},
+		client.SecretIn{}, client.FilesIn{}, client.Visibility{}, client.ReserveIn{},
+		client.FlagIn{},
 		// The billing family, which is where the rule is easiest to break: every
 		// one of these carries a SUBJECT, and a subject is a wallet inside the
 		// org the caller already pinned. One field named Org beside it and the
 		// same input would name the tenant instead of an account within it.
-		plane.SubjectIn{}, plane.CallerIn{}, plane.HoldersIn{},
-		plane.TransactionsIn{}, plane.InvoicesIn{}, plane.RaiseIn{}, plane.InvoiceRef{},
-		plane.AlertSpec{}, plane.AlertPatch{}, plane.AlertRef{}, plane.CapIn{},
-		plane.CryptoMintIn{}, plane.CryptoDepositIn{}, plane.WireIn{},
+		client.SubjectIn{}, client.CallerIn{}, client.HoldersIn{},
+		client.TransactionsIn{}, client.InvoicesIn{}, client.RaiseIn{}, client.InvoiceRef{},
+		client.AlertSpec{}, client.AlertPatch{}, client.AlertRef{}, client.CapIn{},
+		client.CryptoMintIn{}, client.CryptoDepositIn{}, client.WireIn{},
 	}
 	for _, in := range inputs {
 		typ := reflect.TypeOf(in)

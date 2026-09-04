@@ -8,7 +8,7 @@ package dataset
 // allowlist to package-constant column names; the kind is checked against a
 // closed set; the window, the seed, the share and the caps all BIND. That is not
 // a convention here — [normalize] is the only way to obtain a [spec], it is
-// total, and every statement in plane.go takes the normalised value.
+// total, and every statement in peer.go takes the normalised value.
 
 import (
 	"encoding/json"

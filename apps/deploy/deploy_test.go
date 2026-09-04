@@ -244,4 +244,3 @@ func TestBuildTreeOwnership(t *testing.T) {
 }
 
 // ── image ref helpers ───────────────────────────────────────────────────────
-

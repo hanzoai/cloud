@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -35,8 +35,8 @@ import (
 // linked-subject attribution and the billing that hang off it are identical
 // whichever way the call arrived.
 func exposeRunOnBehalf() {
-	zip.Post[plane.RunOnBehalfIn, plane.RunOnBehalfOut](cloud.Plane(), "/agents/run-on-behalf", planeRunOnBehalf,
-		zip.WithOperationID(plane.AgentsRunOnBehalf),
+	zip.Post[client.RunOnBehalfIn, client.RunOnBehalfOut](cloud.Plane(), "/agents/run-on-behalf", planeRunOnBehalf,
+		zip.WithOperationID(client.AgentsRunOnBehalf),
 		zip.WithSummary("Run one agent turn as a linked user, for a chat bridge in another process"))
 }
 
@@ -52,7 +52,7 @@ func exposeRunOnBehalf() {
 // An empty subject is refused rather than defaulted. A turn that lost its caller
 // must not run AS THE ORG: that would bill the tenant for an unattributable act
 // and hand an unlinked user the org's agent.
-func planeRunOnBehalf(ctx context.Context, in *plane.RunOnBehalfIn) (*plane.RunOnBehalfOut, error) {
+func planeRunOnBehalf(ctx context.Context, in *client.RunOnBehalfIn) (*client.RunOnBehalfOut, error) {
 	if mounted == nil {
 		return nil, fmt.Errorf("%w: agents", cloud.ErrNoPeer)
 	}
@@ -73,7 +73,7 @@ func planeRunOnBehalf(ctx context.Context, in *plane.RunOnBehalfIn) (*plane.RunO
 	//
 	// The org must therefore be on the WIRE, stated by the dispatcher on a detached
 	// context before the hop (Caller.headers renders it, caller.go:302). The bridge
-	// does that — see the cloud.For(context.Background(), org) at the plane.Ask in
+	// does that — see the cloud.For(context.Background(), org) at the client.Call in
 	// apps/integrations/channel.go. By the time we are here it has already arrived as
 	// a header and rides onward for free. in.Org remains in the payload because the
 	// run RECORD needs it; it is not what authorizes the spend.
@@ -81,7 +81,7 @@ func planeRunOnBehalf(ctx context.Context, in *plane.RunOnBehalfIn) (*plane.RunO
 	if err != nil {
 		return nil, err
 	}
-	return &plane.RunOnBehalfOut{Status: run.Status, Output: run.Output, RunID: run.ID, Error: run.Error}, nil
+	return &client.RunOnBehalfOut{Status: run.Status, Output: run.Output, RunID: run.ID, Error: run.Error}, nil
 }
 
 // transcript turns the room's turns into the conversation the model reads.
@@ -92,9 +92,9 @@ func planeRunOnBehalf(ctx context.Context, in *plane.RunOnBehalfIn) (*plane.RunO
 // asked the platform; nothing in this process could work it out.
 //
 // The turns arrived over the plane, which is why the conversion exists at all:
-// plane.Turn is the wire's shape and types.ChatMessage is the model's, and
+// client.Turn is the wire's shape and types.ChatMessage is the model's, and
 // neither package should have to know the other's.
-func transcript(turns []plane.Turn) []types.ChatMessage {
+func transcript(turns []client.Turn) []types.ChatMessage {
 	if len(turns) == 0 {
 		return nil
 	}

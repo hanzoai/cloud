@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/samples"
-	"github.com/hanzoai/cloud/plane"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
 	"github.com/zap-proto/zip"
 )
@@ -487,9 +487,9 @@ func allActivitiesForOrg(ctx context.Context, org, ns string) []tasks.Standalone
 	var out []tasks.StandaloneActivity
 	cursor := ""
 	for range maxActivityPages {
-		page, err := cloud.Ask[plane.ActivitiesIn, plane.Activities](
-			cloud.For(ctx, org), "tasks", plane.TasksActivities,
-			&plane.ActivitiesIn{Namespace: ns, Cursor: cursor, Size: activityPageSize})
+		page, err := cloud.Ask[client.ActivitiesIn, client.Activities](
+			cloud.For(ctx, org), "tasks", client.TasksActivities,
+			&client.ActivitiesIn{Namespace: ns, Cursor: cursor, Size: activityPageSize})
 		if err != nil || page == nil {
 			return out
 		}

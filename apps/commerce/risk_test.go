@@ -29,7 +29,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 const (
@@ -61,8 +61,8 @@ func gateApp(t *testing.T) *zip.App {
 	// The scorer's socket is resolved under a directory that has none, so
 	// "not deployed" is the state of the world unless a test installs a scorer.
 	shortRuntimeDir(t)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 	t.Cleanup(func() { cloud.SetRiskScorer(nil) })
 
 	app := zip.New(zip.Config{Logger: luxlog.New("gatetest"), DisableStartupMessage: true})
@@ -134,12 +134,12 @@ func TestRiskGate_ANotDeployedScorerDoesNotCloseTheCreditEndpoint(t *testing.T) 
 // asserts the SHAPE of the answer, which the status code above cannot see.
 func TestScoreOverPlane_AnUndeployedPeerIsAbsentRatherThanAnOutage(t *testing.T) {
 	shortRuntimeDir(t)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 
 	q := cloud.RiskQuery{
 		Stage:      cloud.StagePayment,
-		Subject:    cloud.RiskSubject{Kind: plane.KindAccount, ID: "acme/u_412"},
+		Subject:    cloud.RiskSubject{Kind: client.KindAccount, ID: "acme/u_412"},
 		Privileged: true,
 	}
 	v, err := scoreOverPlane(context.Background(), luxlog.New("gatetest"), gateOrg, q)
@@ -182,7 +182,7 @@ func shortRuntimeDir(t *testing.T) {
 }
 
 // unusableRuntimeDir points the fleet's socket scheme at a directory whose socket
-// paths cannot be DIALLED — the third fact [plane.Listening] separates, and the one
+// paths cannot be DIALLED — the third fact [client.Listening] separates, and the one
 // the converse controls below turn on.
 //
 // The path is longer than sun_path (108 bytes on Linux, 104 on Darwin), so the
@@ -195,8 +195,8 @@ func shortRuntimeDir(t *testing.T) {
 func unusableRuntimeDir(t *testing.T) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", filepath.Join(t.TempDir(), strings.Repeat("d", 200)))
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 }
 
 // TestScoreOverPlane_AnUnusableSocketIsAnOutageRatherThanAnAbsence — THE MIRROR
@@ -220,7 +220,7 @@ func TestScoreOverPlane_AnUnusableSocketIsAnOutageRatherThanAnAbsence(t *testing
 
 	q := cloud.RiskQuery{
 		Stage:      cloud.StagePayment,
-		Subject:    cloud.RiskSubject{Kind: plane.KindAccount, ID: "acme/u_412"},
+		Subject:    cloud.RiskSubject{Kind: client.KindAccount, ID: "acme/u_412"},
 		Privileged: true,
 	}
 
@@ -412,10 +412,10 @@ func TestRiskGate_JudgesThePayerThatWillBeCredited(t *testing.T) {
 	// windowed value bounds the aggregate rule reads (a PAYMENTS appetite) accrue on
 	// that same key: a customer with a large inference bill is examined for it, and
 	// no restatement of the number can fix a population.
-	if asked.Subject.Kind != plane.KindPayer {
+	if asked.Subject.Kind != client.KindPayer {
 		t.Errorf("kind %q, want %q — a top-up is the PAYER moving money in, and an account's "+
 			"aggregates are its inference spend; one key for both is one appetite over two populations",
-			asked.Subject.Kind, plane.KindPayer)
+			asked.Subject.Kind, client.KindPayer)
 	}
 	// The ONE subject rule, stated here independently of the gate: the wallet key
 	// the balance read, the spend gate and the credit all address.
@@ -427,7 +427,7 @@ func TestRiskGate_JudgesThePayerThatWillBeCredited(t *testing.T) {
 		t.Error("the query is not privileged — a scorer outage would mint spendable balance, " +
 			"and cloud.Privileged() does not match this route")
 	}
-	if got := asked.Signals[plane.SignalNano]; got != "42000000000" {
+	if got := asked.Signals[client.SignalNano]; got != "42000000000" {
 		t.Errorf("nano %q, want %q — $42.00 is 4200 cents is 42e9 nano", got, "42000000000")
 	}
 	if got := asked.Signals["currency"]; got != "usd" {
@@ -474,8 +474,8 @@ func TestPaymentSignals_AnAmountThatIsNotUSDIsNotStated(t *testing.T) {
 			if _, err := app.Test(r); err != nil {
 				t.Fatalf("probe: %v", err)
 			}
-			if got[plane.SignalNano] != tc.nano {
-				t.Errorf("nano %q, want %q", got[plane.SignalNano], tc.nano)
+			if got[client.SignalNano] != tc.nano {
+				t.Errorf("nano %q, want %q", got[client.SignalNano], tc.nano)
 			}
 		})
 	}
@@ -486,7 +486,7 @@ func TestPaymentSignals_AnAmountThatIsNotUSDIsNotStated(t *testing.T) {
 // rejected field — and an unordered wire is one that cannot be compared with
 // itself.
 func TestSignalsOf_CrossesAsASortedList(t *testing.T) {
-	got := signalsOf(map[string]string{"ip": "203.0.113.7", "currency": "usd", plane.SignalNano: "1"})
+	got := signalsOf(map[string]string{"ip": "203.0.113.7", "currency": "usd", client.SignalNano: "1"})
 	if len(got) != 3 {
 		t.Fatalf("%d signals, want 3", len(got))
 	}

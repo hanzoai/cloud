@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -71,15 +71,15 @@ func TestPushReachesPlatform(t *testing.T) {
 
 	type got struct {
 		org string
-		in  plane.PushIn
+		in  client.PushIn
 	}
 	seen := make(chan got, 1)
 	serve(t, "platform", func(app *zip.App) {
-		zip.Post[plane.PushIn, plane.Built](app, "/platform/push",
-			func(ctx context.Context, in *plane.PushIn) (*plane.Built, error) {
+		zip.Post[client.PushIn, client.Built](app, "/platform/push",
+			func(ctx context.Context, in *client.PushIn) (*client.Built, error) {
 				seen <- got{org: cloud.Who(ctx).Org, in: *in}
-				return &plane.Built{Repo: in.Repo}, nil
-			}, zip.WithOperationID(plane.PlatformPush))
+				return &client.Built{Repo: in.Repo}, nil
+			}, zip.WithOperationID(client.PlatformPush))
 	})
 
 	_, err := cloud.OnGitPush(context.Background(), cloud.GitPushEvent{
@@ -93,7 +93,7 @@ func TestPushReachesPlatform(t *testing.T) {
 
 	select {
 	case g := <-seen:
-		// The tenant arrives from the CALLER. plane.PushIn has no Org field on
+		// The tenant arrives from the CALLER. client.PushIn has no Org field on
 		// purpose — a push able to name one would enqueue builds against another
 		// tenant's apps and spend that tenant's compute.
 		if g.org != "acme" {
@@ -119,13 +119,13 @@ func TestSyncReachesEngine(t *testing.T) {
 	t.Cleanup(func() { cloud.RegisterSync(nil) })
 
 	serve(t, "sync", func(app *zip.App) {
-		zip.Post[plane.SyncIn, plane.SyncRan](app, "/sync/run",
-			func(ctx context.Context, in *plane.SyncIn) (*plane.SyncRan, error) {
+		zip.Post[client.SyncIn, client.SyncRan](app, "/sync/run",
+			func(ctx context.Context, in *client.SyncIn) (*client.SyncRan, error) {
 				if cloud.Who(ctx).Org != "acme" {
 					return nil, zip.ErrForbidden("sync run: wrong org")
 				}
-				return &plane.SyncRan{Ran: 2, Skipped: 1}, nil
-			}, zip.WithOperationID(plane.SyncRun))
+				return &client.SyncRan{Ran: 2, Skipped: 1}, nil
+			}, zip.WithOperationID(client.SyncRun))
 	})
 
 	res, err := cloud.Sync(context.Background(), cloud.SyncEvent{
@@ -148,16 +148,16 @@ func TestUpsertReachesTodo(t *testing.T) {
 	t.Cleanup(func() { cloud.RegisterIssueSink(nil) })
 
 	serve(t, "todo", func(app *zip.App) {
-		zip.Post[plane.IssueIn, plane.IssueUpserted](app, "/todo/upsert",
-			func(ctx context.Context, in *plane.IssueIn) (*plane.IssueUpserted, error) {
+		zip.Post[client.IssueIn, client.IssueUpserted](app, "/todo/upsert",
+			func(ctx context.Context, in *client.IssueIn) (*client.IssueUpserted, error) {
 				if cloud.Who(ctx).Org != "acme" {
 					return nil, zip.ErrForbidden("todo upsert: wrong org")
 				}
 				if in.ExtRef != "github:acme/site#42" {
 					return nil, zip.ErrBadRequest("todo upsert: ExtRef did not cross intact")
 				}
-				return &plane.IssueUpserted{Created: true, Number: 42, Identifier: "GH-42"}, nil
-			}, zip.WithOperationID(plane.TodoUpsert))
+				return &client.IssueUpserted{Created: true, Number: 42, Identifier: "GH-42"}, nil
+			}, zip.WithOperationID(client.TodoUpsert))
 	})
 
 	res, err := cloud.UpsertIssue(context.Background(), cloud.IssueUpsert{

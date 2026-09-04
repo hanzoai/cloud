@@ -32,9 +32,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/finance"
-	"github.com/hanzoai/cloud/plane"
-	"github.com/hanzoai/cloud/plane/commerce"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -242,7 +242,7 @@ const txnLimit = 2000
 // error is an OUTAGE and is returned as one: a dead ledger read as an empty one
 // would advance the ingestion cursor over a gap nobody could see afterwards.
 func (ledgerReader) transactions(ctx context.Context, org string, sandbox bool) ([]commerceTxn, error) {
-	reply, err := commerce.FinanceTxns(cloud.For(ctx, org), &plane.TxnsIn{Test: sandbox, Limit: txnLimit})
+	reply, err := commerce.FinanceTxns(cloud.For(ctx, org), &client.TxnsIn{Test: sandbox, Limit: txnLimit})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
 			return nil, nil // no commerce in this fleet: nothing to post, honestly

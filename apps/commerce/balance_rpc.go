@@ -7,8 +7,8 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	financeclient "github.com/hanzoai/cloud/finance"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -69,8 +69,8 @@ func books(op string) (financeclient.Client, error) {
 
 // exposeBalance publishes the ledger read. Mount calls it.
 func exposeBalance() {
-	zip.Post[plane.BalanceIn, plane.Balance](cloud.Plane(), "/finance/balance", planeBalance,
-		zip.WithOperationID(plane.FinanceBalance),
+	zip.Post[client.BalanceIn, client.Balance](cloud.Plane(), "/finance/balance", planeBalance,
+		zip.WithOperationID(client.FinanceBalance),
 		zip.WithSummary("Spendable prepaid balance"))
 }
 
@@ -90,7 +90,7 @@ func exposeBalance() {
 // between the one writer and every reader.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeBalance(ctx context.Context, in *plane.BalanceIn) (*plane.Balance, error) {
+func planeBalance(ctx context.Context, in *client.BalanceIn) (*client.Balance, error) {
 	org, err := callerOrg(ctx, "balance")
 	if err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func planeBalance(ctx context.Context, in *plane.BalanceIn) (*plane.Balance, err
 	if err != nil {
 		return nil, fmt.Errorf("balance: read %s/%s: %w", org, subject, err)
 	}
-	return &plane.Balance{Amount: plane.Amount(bal.Unwrap())}, nil
+	return &client.Balance{Amount: client.Amount(bal.Unwrap())}, nil
 }
 
 // usageReadLimit matches what the co-resident reader asks for, so the page a
@@ -125,8 +125,8 @@ const usageReadLimit = 2000
 // from these — sending the envelope would need the renderer to live with the
 // ledger, which is the import cycle that shape implies.
 func exposeUsage() {
-	zip.Post[struct{}, plane.UsageRows](cloud.Plane(), "/finance/usage", planeUsage,
-		zip.WithOperationID(plane.FinanceUsage),
+	zip.Post[struct{}, client.UsageRows](cloud.Plane(), "/finance/usage", planeUsage,
+		zip.WithOperationID(client.FinanceUsage),
 		zip.WithSummary("Recorded debits for this org"))
 }
 
@@ -147,7 +147,7 @@ func exposeUsage() {
 // the flatten, a wire type promising precision the value had already lost.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeUsage(ctx context.Context, _ *cloud.Unit) (*plane.UsageRows, error) {
+func planeUsage(ctx context.Context, _ *cloud.Unit) (*client.UsageRows, error) {
 	org, err := callerOrg(ctx, "usage")
 	if err != nil {
 		return nil, err
@@ -166,22 +166,22 @@ func planeUsage(ctx context.Context, _ *cloud.Unit) (*plane.UsageRows, error) {
 	if err != nil {
 		return nil, fmt.Errorf("usage: %w", err)
 	}
-	out := make([]plane.UsageRow, 0, len(rows))
+	out := make([]client.UsageRow, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, plane.UsageRow{
+		out = append(out, client.UsageRow{
 			ID: r.ID, Model: r.Model,
-			Amount:    plane.Amount(r.Amount.Unwrap()),
+			Amount:    client.Amount(r.Amount.Unwrap()),
 			CreatedAt: r.CreatedAt,
 		})
 	}
-	return &plane.UsageRows{Rows: out}, nil
+	return &client.UsageRows{Rows: out}, nil
 }
 
 // The ledger's entries. Three customer-facing pages read this one list, and all
 // three answered 501 from a process that does not hold the ledger.
 func exposeTxns() {
-	zip.Post[plane.TxnsIn, plane.Txns](cloud.Plane(), "/finance/txns", planeTxns,
-		zip.WithOperationID(plane.FinanceTxns),
+	zip.Post[client.TxnsIn, client.Txns](cloud.Plane(), "/finance/txns", planeTxns,
+		zip.WithOperationID(client.FinanceTxns),
 		zip.WithSummary("Ledger entries for this org"))
 }
 
@@ -205,7 +205,7 @@ func exposeTxns() {
 // cannot list entries is an error, not an empty page.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeTxns(ctx context.Context, in *plane.TxnsIn) (*plane.Txns, error) {
+func planeTxns(ctx context.Context, in *client.TxnsIn) (*client.Txns, error) {
 	org, err := callerOrg(ctx, "txns")
 	if err != nil {
 		return nil, err
@@ -228,17 +228,17 @@ func planeTxns(ctx context.Context, in *plane.TxnsIn) (*plane.Txns, error) {
 	if err != nil {
 		return nil, fmt.Errorf("txns: %w", err)
 	}
-	out := make([]plane.Txn, 0, len(rows))
+	out := make([]client.Txn, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, plane.Txn{
+		out = append(out, client.Txn{
 			// The kind crosses as the LEDGER'S own spelling, and the reader parses
 			// it back with finance.ParseKind. It travels as text because the wire is
 			// text; it is never re-spelled here into some other vocabulary, which is
 			// how the reader came to classify on strings this ledger never writes.
 			ID: r.ID, Kind: string(r.Kind), Ref: r.Ref, Memo: r.Memo,
-			Amount:    plane.Money{Decimal: r.Amount.String(), Currency: "USD"},
+			Amount:    client.Money{Decimal: r.Amount.String(), Currency: "USD"},
 			CreatedAt: r.CreatedAt,
 		})
 	}
-	return &plane.Txns{Rows: out}, nil
+	return &client.Txns{Rows: out}, nil
 }

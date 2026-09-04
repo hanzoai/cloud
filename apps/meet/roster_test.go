@@ -14,7 +14,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -36,15 +36,15 @@ type answers struct {
 	// what the two-replica race in record_test.go models, and what made this the
 	// first fixture in the package to need a lock.
 	mu      sync.Mutex
-	row     func(space, subject string) plane.Member // what the rows say about one space
-	list    plane.Spaces                             // what they say about all of them
-	err     error                                    // or why they cannot be read
-	asked   int                                      // how many times the authority was consulted
-	subject string                                   // the subject it was consulted about
-	saw     string                                   // the space it was consulted about
+	row     func(space, subject string) client.Member // what the rows say about one space
+	list    client.Spaces                             // what they say about all of them
+	err     error                                     // or why they cannot be read
+	asked   int                                       // how many times the authority was consulted
+	subject string                                    // the subject it was consulted about
+	saw     string                                    // the space it was consulted about
 }
 
-func (a *answers) member(_ context.Context, space, subject string) (*plane.Member, error) {
+func (a *answers) member(_ context.Context, space, subject string) (*client.Member, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.asked++
@@ -53,13 +53,13 @@ func (a *answers) member(_ context.Context, space, subject string) (*plane.Membe
 		return nil, a.err
 	}
 	if a.row == nil {
-		return &plane.Member{}, nil
+		return &client.Member{}, nil
 	}
 	m := a.row(space, subject)
 	return &m, nil
 }
 
-func (a *answers) spaces(_ context.Context, subject string) (*plane.Spaces, error) {
+func (a *answers) spaces(_ context.Context, subject string) (*client.Spaces, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.asked++
@@ -75,13 +75,13 @@ func (a *answers) spaces(_ context.Context, subject string) (*plane.Spaces, erro
 // space. BOTH answers come off the one map, so the lobby's offer and the
 // mint's grant cannot be handed different rows and drift apart.
 func holds(roles map[string]string) *answers {
-	a := &answers{list: plane.Spaces{Account: account}}
-	a.row = func(space, _ string) plane.Member {
+	a := &answers{list: client.Spaces{Account: account}}
+	a.row = func(space, _ string) client.Member {
 		role, ok := roles[space]
-		return plane.Member{Member: ok, Role: role, Account: account}
+		return client.Member{Member: ok, Role: role, Account: account}
 	}
 	for ws, role := range roles {
-		a.list.Items = append(a.list.Items, plane.Space{UUID: ws, Role: role})
+		a.list.Items = append(a.list.Items, client.Space{UUID: ws, Role: role})
 	}
 	return a
 }
@@ -91,10 +91,10 @@ func holds(roles map[string]string) *answers {
 // refused was refused before the authority was ever reached.
 func anyone() *answers {
 	return &answers{
-		row: func(string, string) plane.Member {
-			return plane.Member{Member: true, Role: token.RoleOwner, Account: account}
+		row: func(string, string) client.Member {
+			return client.Member{Member: true, Role: token.RoleOwner, Account: account}
 		},
-		list: plane.Spaces{Account: account, Items: []plane.Space{{UUID: spaceA, Role: token.RoleOwner}}},
+		list: client.Spaces{Account: account, Items: []client.Space{{UUID: spaceA, Role: token.RoleOwner}}},
 	}
 }
 
@@ -171,16 +171,16 @@ func TestIAMLaneSeatsAHumanAndRefusesAMachine(t *testing.T) {
 // one string needed to name a room in it.
 func TestLobbyOffersToAHumanAndRefusesAMachine(t *testing.T) {
 	const seat = "550e8400-e29b-41d4-a716-446655440000"
-	rows := plane.Spaces{
+	rows := client.Spaces{
 		Account: seat,
 		Name:    "Ada",
-		Items:   []plane.Space{{UUID: spaceA, Name: "Acme", Role: token.RoleOwner}},
+		Items:   []client.Space{{UUID: spaceA, Name: "Acme", Role: token.RoleOwner}},
 	}
 
 	t.Run("a human is offered their spaces", func(t *testing.T) {
 		a := &answers{list: rows}
 		st := state{authority: a}
-		var sp plane.Spaces
+		var sp client.Spaces
 		var ok bool
 		onLane(t, human, func(c *zip.Ctx) { sp, ok = st.spaces(c) })
 		if !ok {
@@ -231,7 +231,7 @@ func TestTheAuthoritysRoleDecides(t *testing.T) {
 		st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 
 		var admitted, read bool
-		var sp plane.Spaces
+		var sp client.Spaces
 		onLane(t, human, func(c *zip.Ctx) {
 			_, admitted = st.admits(c, roomIn(spaceA))
 			sp, read = st.spaces(c)

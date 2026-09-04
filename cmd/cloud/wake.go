@@ -7,7 +7,6 @@ import (
 
 	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -50,7 +49,7 @@ import (
 // gather where the routing table is written. A tool the MCP server will not project
 // to Slack is not routable for an agent either, and both hear the same -32602.
 
-// serveWake opens the router's start endpoint at plane.HostApp's socket.
+// serveWake opens the router's start endpoint at client.HostApp's socket.
 //
 // It returns NOTHING and takes its teardown from the app's own shutdown hooks, on
 // purpose. The version that returned a stop function was called
@@ -81,8 +80,8 @@ func serveWake(app *zip.App, mcp *client.MCP) {
 	// The edge's own mount is untouched and still forwards to the edge.
 	mcp.Serve(host, manifest.MCPPath, inside(app))
 
-	zip.Post[plane.StartIn, plane.Started](host, "/host/start",
-		func(_ context.Context, in *plane.StartIn) (*plane.Started, error) {
+	zip.Post[client.StartIn, client.Started](host, "/host/start",
+		func(_ context.Context, in *client.StartIn) (*client.Started, error) {
 			// No tenancy check, because there is no tenant: starting a process
 			// reads nobody's books and returns nobody's data. The boundary is the
 			// socket — 0700 in the surface's own run dir, reachable only by the
@@ -100,13 +99,13 @@ func serveWake(app *zip.App, mcp *client.MCP) {
 				// Anything else is a deployed app that would not start: an outage,
 				// and an outage must fail the call rather than describe the surface.
 				if isUnknownApp(app, in.App) {
-					return &plane.Started{}, nil
+					return &client.Started{}, nil
 				}
 				return nil, zip.Errorf(503, "start %s: %v", in.App, err)
 			}
-			return &plane.Started{Addr: addr, Known: true}, nil
+			return &client.Started{Addr: addr, Known: true}, nil
 		},
-		zip.WithOperationID(plane.HostStart),
+		zip.WithOperationID(client.HostStart),
 		zip.WithSummary("Start one lazily-composed app"))
 
 	// done is CLOSED when Listen returns, rather than carrying the error itself: the
@@ -120,8 +119,8 @@ func serveWake(app *zip.App, mcp *client.MCP) {
 	// child looked, so waking a lazy app failed with "this process runs under a router
 	// whose start socket is not there" and every call to a not-yet-started app was
 	// unreachable.
-	plane.BindRuntimeDir()
-	path := zip.SocketPath(plane.HostApp)
+	client.BindRuntimeDir()
+	path := zip.SocketPath(client.HostApp)
 	done := make(chan struct{})
 	var listenErr error
 	go func() { listenErr = host.Listen(path); close(done) }()

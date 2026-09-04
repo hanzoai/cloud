@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	"github.com/zap-proto/zip"
 )
@@ -27,9 +27,9 @@ import (
 
 // exposeApproval publishes the waitlist read. Mount calls it.
 func exposeApproval() {
-	zip.Post[struct{}, plane.Approval](cloud.Plane(), "/iam/approval",
+	zip.Post[struct{}, client.Approval](cloud.Plane(), "/iam/approval",
 		approval,
-		zip.WithOperationID(plane.IAMApproval),
+		zip.WithOperationID(client.IAMApproval),
 		zip.WithSummary("Whether the caller is off the waitlist"))
 }
 
@@ -49,7 +49,7 @@ func exposeApproval() {
 // wave through exactly the callers least entitled to it. The error path is
 // admission's documented fail-open, which is a decision it makes knowingly about
 // an IAM it could not reach — not one this handler makes for it silently.
-func approval(ctx context.Context, _ *cloud.Unit) (*plane.Approval, error) {
+func approval(ctx context.Context, _ *cloud.Unit) (*client.Approval, error) {
 	who := cloud.Who(ctx)
 	if who.User == "" {
 		return nil, zip.ErrUnauthorized("approval: no subject on the call")
@@ -67,5 +67,5 @@ func approval(ctx context.Context, _ *cloud.Unit) (*plane.Approval, error) {
 	}
 	// Properties is a map, which cannot cross the plane at all (zapenc refuses
 	// one), and should not: the caller asked one question and gets one answer.
-	return &plane.Approval{Status: u.Properties["approvalStatus"]}, nil
+	return &client.Approval{Status: u.Properties["approvalStatus"]}, nil
 }

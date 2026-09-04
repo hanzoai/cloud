@@ -63,8 +63,8 @@ import (
 	// test build only — green `go build`, red `go test`.
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 	"gopkg.in/yaml.v3"
 )
@@ -133,22 +133,22 @@ type state struct {
 // when these were bare cloud.Ask calls, so a caller cannot ask about another
 // tenant by naming one.
 type roster interface {
-	member(ctx context.Context, space, subject string) (*plane.Member, error)
-	spaces(ctx context.Context, subject string) (*plane.Spaces, error)
+	member(ctx context.Context, space, subject string) (*client.Member, error)
+	spaces(ctx context.Context, subject string) (*client.Spaces, error)
 }
 
 // peer is the real authority: apps/team over the internal plane. Stateless, so
 // the zero value is the whole implementation.
 type peer struct{}
 
-func (peer) member(ctx context.Context, space, subject string) (*plane.Member, error) {
-	return cloud.Ask[plane.MemberIn, plane.Member](ctx, "team", plane.TeamMember,
-		&plane.MemberIn{Space: space, Subject: subject})
+func (peer) member(ctx context.Context, space, subject string) (*client.Member, error) {
+	return cloud.Ask[client.MemberIn, client.Member](ctx, "team", client.TeamMember,
+		&client.MemberIn{Space: space, Subject: subject})
 }
 
-func (peer) spaces(ctx context.Context, subject string) (*plane.Spaces, error) {
-	return cloud.Ask[plane.SpacesIn, plane.Spaces](ctx, "team", plane.TeamSpaces,
-		&plane.SpacesIn{Subject: subject})
+func (peer) spaces(ctx context.Context, subject string) (*client.Spaces, error) {
+	return cloud.Ask[client.SpacesIn, client.Spaces](ctx, "team", client.TeamSpaces,
+		&client.SpacesIn{Subject: subject})
 }
 
 // rows is the authority to ask. A state that names none asks the real peer — so
@@ -520,7 +520,7 @@ type lobby struct {
 	WS string `json:"ws"`
 	// Spaces is every space this caller may open a room in — already
 	// narrowed to the roles mint would admit, so the offer and the grant agree.
-	Spaces []plane.Space `json:"spaces"`
+	Spaces []client.Space `json:"spaces"`
 }
 
 // session answers GET /v1/meet/session. It admits on the SAME two lanes as mint
@@ -543,7 +543,7 @@ func session(s *cloud.Service[state], c *zip.Ctx) error {
 		// answer says nothing about which lane failed or what exists.
 		return zip.Errorf(http.StatusUnauthorized, "not signed in")
 	}
-	out := lobby{Identity: sp.Account, Name: sp.Name, WS: s.State.ws, Spaces: make([]plane.Space, 0, len(sp.Items))}
+	out := lobby{Identity: sp.Account, Name: sp.Name, WS: s.State.ws, Spaces: make([]client.Space, 0, len(sp.Items))}
 	// A space is only OFFERED if the caller could actually be seated in it, and
 	// a seat needs the identity LiveKit takes it under — which is the account on the
 	// row. Rows that name a space but no account would put a room in front of
@@ -574,17 +574,17 @@ func session(s *cloud.Service[state], c *zip.Ctx) error {
 // IAM LANE, selected on principal.Minted for the reason admits documents at
 // length: the org/user headers are the client's in a process where no boundary
 // ran, and here they would decide whose spaces get listed.
-func (s state) spaces(c *zip.Ctx) (plane.Spaces, bool) {
+func (s state) spaces(c *zip.Ctx) (client.Spaces, bool) {
 	if p, ok := principal.Minted(c); ok && p.Subject != "" && p.Org != "" {
 		out, err := s.rows().spaces(cloud.As(c, p.Org), p.Subject)
 		if err != nil || out == nil {
 			// An unreachable authority is a refusal, never an assumption — the same
 			// posture admitsMember takes when team cannot answer.
-			return plane.Spaces{}, false
+			return client.Spaces{}, false
 		}
 		return *out, true
 	}
-	return plane.Spaces{}, false
+	return client.Spaces{}, false
 }
 
 // request is the office client's wire. `_id` is the SPA's person ref — accepted because
@@ -707,7 +707,7 @@ type joiner struct{ account string }
 // requiring one refuses it structurally rather than by naming credential kinds.
 //
 // The verdict says nothing about a space, so the space ROWS decide: apps/team
-// owns them and answers over the internal plane (plane.TeamMember) with the caller's
+// owns them and answers over the internal plane (client.TeamMember) with the caller's
 // role and the account id it joined the subject to. A caller with no row, or one
 // whose role is not privileged, is refused, and so is a peer that cannot answer —
 // an unreachable authority is a refusal, never an assumption.

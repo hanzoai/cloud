@@ -22,8 +22,8 @@ import (
 
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/k8s"
-	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -239,7 +239,7 @@ func TestRuntimeForNeverAnswersABoundaryTheClusterCannotPlace(t *testing.T) {
 // What replaces it is the test below, which asserts the thing actually worth
 // asserting — that asking does not get.
 func TestNoWireFieldCanNameAnOrg(t *testing.T) {
-	for _, in := range []any{plane.LeaseIn{}, createBody{}} {
+	for _, in := range []any{client.LeaseIn{}, createBody{}} {
 		ty := reflect.TypeOf(in)
 		for field := range ty.Fields() {
 			switch n := strings.ToLower(field.Name); {

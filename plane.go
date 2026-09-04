@@ -12,13 +12,13 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
-	"github.com/hanzoai/cloud/plane"
 	zapmcp "github.com/zap-proto/mcp"
 	"github.com/zap-proto/zip"
 )
 
-// plane.go — the internal plane: one app calling another, over ZAP on a unix
+// peer.go — the internal plane: one app calling another, over ZAP on a unix
 // socket, as ordinary typed ops.
 //
 // # It is a SECOND app, and that is the point
@@ -52,7 +52,7 @@ import (
 //
 // # The CLIENT half lives in the leaf
 //
-// Ask and everything under it moved to package plane (plane/ask.go). This file
+// Ask and everything under it moved to package plane (client/ask.go). This file
 // keeps the SERVER half — registering ops and binding the socket — because
 // binding reports itself to o11y, and o11y is cloud's.
 //
@@ -64,19 +64,19 @@ import (
 // cloud.Ask keep saying it; there is still exactly one implementation.
 
 // runDirEnv overrides where app sockets live. Default: {CLOUD_DATA_DIR}/run.
-const runDirEnv = plane.RunDirEnv
+const runDirEnv = client.RunDirEnv
 
 // ErrNoPeer reports that an app is NOT PART OF THIS DEPLOYMENT. See
-// [plane.ErrNoPeer] — this is that error, not a second one, so errors.Is holds
+// [client.ErrNoPeer] — this is that error, not a second one, so errors.Is holds
 // across both spellings.
-var ErrNoPeer = plane.ErrNoPeer
+var ErrNoPeer = client.ErrNoPeer
 
 // bindRuntimeDir points zip's runtime dir at cloud's, before anything serves or
 // dials.
-func bindRuntimeDir() { plane.Bind() }
+func bindRuntimeDir() { client.Bind() }
 
 // listening reports whether path has a LISTENER behind it.
-func listening(path string) (bool, error) { return plane.Listening(path) }
+func listening(path string) (bool, error) { return client.Listening(path) }
 
 // Ask is the whole client half: dial the app, invoke the op, close.
 //
@@ -84,7 +84,7 @@ func listening(path string) (bool, error) { return plane.Listening(path) }
 // the app name, the op name and the In/Out pair already fixed to each other, so
 // the compiler checks what only a running fleet could check here.
 func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error) {
-	return plane.Ask[In, Out](ctx, app, op, in)
+	return client.Call[In, Out](ctx, app, op, in)
 }
 
 // UseMCP publishes app's AGENT MCP SERVER on the internal plane, at
@@ -174,8 +174,8 @@ var planeApp struct {
 //
 // Declare an op on it exactly as on any app:
 //
-//	zip.Post[plane.SecretIn, plane.Secret](cloud.Plane(), "/kms/get", read,
-//	    zip.WithOperationID(plane.KMSGet))
+//	zip.Post[client.SecretIn, client.Secret](cloud.Plane(), "/kms/get", read,
+//	    zip.WithOperationID(client.KMSGet))
 //
 // planeMode is the mode the plane socket is bound with: 0600 unless the process
 // serves a [Plugin] that declared itself Shared, in which case Listen opens it
@@ -289,7 +289,7 @@ func unpriced(app *zip.App) error {
 const (
 	// planeBindWait bounds how long ServePlane waits for its own socket. The
 	// client half's own budgets (the wake ceiling, the liveness probe) live with
-	// it in plane/ask.go.
+	// it in client/ask.go.
 	planeBindWait = 5 * time.Second
 )
 
@@ -323,9 +323,9 @@ func awaitSocket(path string, errs <-chan error, within time.Duration) error {
 
 // For states the tenant a BACKGROUND call acts for — a reconcile loop, a grant
 // issued when an org opens, a meter that debits after the response has gone
-// out. See [plane.For] — this is that function, not a second one, so a caller
+// out. See [client.For] — this is that function, not a second one, so a caller
 // below the cloud import edge states the tenant exactly the same way.
-func For(ctx context.Context, org string) context.Context { return plane.For(ctx, org) }
+func For(ctx context.Context, org string) context.Context { return client.For(ctx, org) }
 
 // Who reads the principal a plane op is acting for. A handler that needs
 // authority refuses an empty org rather than treating it as permission.
@@ -412,7 +412,7 @@ func As(c *zip.Ctx, org string) context.Context {
 	// and which one a callee saw turned on whether it happened to be co-resident.
 	// A socket hop reads the caller off headers and answers the new tenant;
 	// zip.Here hands this very context to the handler and answers the old one.
-	// Same call, two tenants, decided by a deployment shape plane.Ask exists to
+	// Same call, two tenants, decided by a deployment shape client.Call exists to
 	// keep from being the caller's business.
 	//
 	// principal.WithActing is the one that can refuse — an org bearing a

@@ -71,11 +71,11 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/tenant"
 	"github.com/zap-proto/zip"
 
-	flagsplane "github.com/hanzoai/cloud/plane/flag"
+	flagsplane "github.com/hanzoai/cloud/client/flag"
 )
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
@@ -258,7 +258,7 @@ func routes(app cloud.Router, s *service) {
 // hold it.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) get(ctx context.Context, _ *cloud.Unit) (*plane.Allowance, error) {
+func (o ops) get(ctx context.Context, _ *cloud.Unit) (*client.Allowance, error) {
 	c, has := cloud.Request(ctx)
 	if !has {
 		return nil, zip.ErrForbidden("allowance: a validated principal is required")
@@ -301,8 +301,8 @@ func (s *service) bounds(ctx context.Context, subject, org string, now time.Time
 // standing turns a set of windows into the one answer the wire carries: the window
 // that BINDS. A refused window binds; otherwise the one with least left does, so a
 // caller reading "3 of 10" is reading the number that will actually stop them.
-func standing(tier string, bs []bound, used map[string]int64, now time.Time) *plane.Allowance {
-	out := &plane.Allowance{Plan: tier}
+func standing(tier string, bs []bound, used map[string]int64, now time.Time) *client.Allowance {
+	out := &client.Allowance{Plan: tier}
 	var chosen *bound
 	var chosenUsed int64
 	for i := range bs {
@@ -333,7 +333,7 @@ func standing(tier string, bs []bound, used map[string]int64, now time.Time) *pl
 }
 
 // read answers subject's standing without taking anything.
-func (s *service) read(ctx context.Context, org, subject string, now time.Time) (*plane.Allowance, error) {
+func (s *service) read(ctx context.Context, org, subject string, now time.Time) (*client.Allowance, error) {
 	tier, bs := s.bounds(ctx, subject, org, now)
 	used := map[string]int64{}
 	for _, b := range bs {
@@ -355,7 +355,7 @@ func (s *service) read(ctx context.Context, org, subject string, now time.Time) 
 // hour on a call the day then refuses, so a caller at their daily ceiling would burn
 // an hourly slot every time they were turned away — and the hour would never
 // recover while they kept trying.
-func (s *service) take(ctx context.Context, org, subject string, now time.Time) (*plane.Allowance, error) {
+func (s *service) take(ctx context.Context, org, subject string, now time.Time) (*client.Allowance, error) {
 	tier, bs := s.bounds(ctx, subject, org, now)
 	used := map[string]int64{}
 	for _, b := range bs {

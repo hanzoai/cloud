@@ -9,7 +9,7 @@ import (
 )
 
 // The ledger keeps EIGHTEEN decimals — per-token charges are routinely finer than a
-// cent — so plane.Money.Minor() refuses to answer rather than round behind the caller's
+// cent — so client.Money.Minor() refuses to answer rather than round behind the caller's
 // back. The balance gate wants a coarse cents figure and must therefore round
 // EXPLICITLY, and in one direction only.
 //
@@ -26,7 +26,7 @@ import (
 // HALF-AWAY-FROM-ZERO — so the test passed while the property it named was false, and
 // 4.995 was admitted against a 5.00 charge. A test that reads the source can only
 // confirm the code still says what it said; it cannot notice that the sentence is
-// wrong. The arithmetic is asserted where the rounding now lives, plane/money_test.go.
+// wrong. The arithmetic is asserted where the rounding now lives, client/money_test.go.
 // What is left here is the one thing only this package can say: that THIS gate still
 // asks for the floored figure, and has not drifted back to the helper that refuses.
 func TestBalanceGateDoesNotCallRefusingMinor(t *testing.T) {

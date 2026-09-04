@@ -30,8 +30,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -132,8 +132,8 @@ func invoicePDF(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view billing")
 	}
-	doc, err := ask(c.Context(), org, "invoice pdf", func(ctx context.Context) (*plane.Document, error) {
-		return commercepeer.BillingInvoicePDF(ctx, &plane.InvoiceRef{ID: c.Param("id")})
+	doc, err := ask(c.Context(), org, "invoice pdf", func(ctx context.Context) (*client.Document, error) {
+		return commercepeer.BillingInvoicePDF(ctx, &client.InvoiceRef{ID: c.Param("id")})
 	})
 	if err != nil {
 		return err

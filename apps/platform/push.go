@@ -27,7 +27,7 @@ import (
 // one: the forge shows a delivery green whenever the receiver answered 2xx, so a
 // push that matched no application looked exactly like a push that built. That is
 // the same shape as the 204 this whole path was rebuilt to end, one layer up. The
-// plane leg carries it too (plane.Built.Builds), which is what that type's comment
+// plane leg carries it too (client.Built.Builds), which is what that type's comment
 // was waiting for — "the day something needs the count".
 func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPushEvent) (int, error) {
 	apps, err := s.State.store.ListAllApplications(ctx, ev.Org)

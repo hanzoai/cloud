@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	"github.com/zap-proto/zip"
 )
@@ -32,9 +32,9 @@ import (
 // from an anonymous one — the op published a summary, an operationID and no
 // description at all, which is a plane call no generated client can explain.
 func exposeRoster() {
-	zip.Post[struct{}, plane.Roster](cloud.Plane(), "/iam/mailable",
+	zip.Post[struct{}, client.Roster](cloud.Plane(), "/iam/mailable",
 		mailable,
-		zip.WithOperationID(plane.IAMMailable),
+		zip.WithOperationID(client.IAMMailable),
 		zip.WithSummary("Who this org may mail"))
 }
 
@@ -60,7 +60,7 @@ func exposeRoster() {
 // nil handle is a boot-order fault, and an empty roster would read as "this org has
 // nobody" — an announcement that silently reaches no one is worse than one that
 // refuses out loud.
-func mailable(ctx context.Context, _ *cloud.Unit) (*plane.Roster, error) {
+func mailable(ctx context.Context, _ *cloud.Unit) (*client.Roster, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("roster: no org on the call")
@@ -73,12 +73,12 @@ func mailable(ctx context.Context, _ *cloud.Unit) (*plane.Roster, error) {
 	if err != nil {
 		return nil, fmt.Errorf("roster: %w", err)
 	}
-	out := make([]plane.Recipient, 0, len(users))
+	out := make([]client.Recipient, 0, len(users))
 	for _, u := range users {
 		if u == nil {
 			continue
 		}
-		out = append(out, plane.Recipient{ID: u.Id, Owner: u.Owner, Name: u.Name, Email: u.Email})
+		out = append(out, client.Recipient{ID: u.Id, Owner: u.Owner, Name: u.Name, Email: u.Email})
 	}
-	return &plane.Roster{Recipients: out}, nil
+	return &client.Roster{Recipients: out}, nil
 }

@@ -3,7 +3,7 @@ package billing
 // balance_outage_test.go — a peer that is HERE and failed is an outage, never a fleet
 // that does not run commerce.
 //
-// cloud.Ask states the rule (plane.go): "a router that does not know the name — or a
+// cloud.Ask states the rule (peer.go): "a router that does not know the name — or a
 // fleet with no router at all — answers ErrNoPeer, which is the ONLY error a caller may
 // read as 'fall back'. Every other failure is an outage." availableCents read every
 // error as ErrNoPeer. So when commerce was reachable-in-principle and the call failed,
@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -51,10 +51,10 @@ func planeDir(t *testing.T) {
 func brokenCommerce(t *testing.T) {
 	t.Helper()
 	app := zip.New(zip.Config{AppName: "commerce"})
-	zip.Post[plane.BalanceIn, plane.Balance](app, "/finance/balance",
-		func(context.Context, *plane.BalanceIn) (*plane.Balance, error) {
+	zip.Post[client.BalanceIn, client.Balance](app, "/finance/balance",
+		func(context.Context, *client.BalanceIn) (*client.Balance, error) {
 			return nil, zip.Errorf(http.StatusInternalServerError, "ledger is locked")
-		}, zip.WithOperationID(plane.FinanceBalance))
+		}, zip.WithOperationID(client.FinanceBalance))
 	go func() { _ = app.Listen(zip.SocketPath("commerce")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 

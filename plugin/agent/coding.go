@@ -40,7 +40,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/agents"
 	"github.com/hanzoai/cloud/apps/coding"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -130,7 +130,7 @@ func shutdownAgents(ctx context.Context) error {
 // the route by hand would stay green through exactly the mutation that matters,
 // and this op's reachability is now the only way a chat turn gets to a sandbox.
 func codingEndpoint(app *zip.App) {
-	zip.Post[plane.CodingStartIn, plane.CodingStarted](app, "/v1/agent/coding", startCoding,
+	zip.Post[client.CodingStartIn, client.CodingStarted](app, "/v1/agent/coding", startCoding,
 		zip.WithStatus(http.StatusAccepted),
 		zip.WithSummary("Start one autonomous coding run against a repo in the caller's org"))
 }
@@ -155,7 +155,7 @@ func codingEndpoint(app *zip.App) {
 // on the branch already pushed instead of a fresh clone. The follow-up still gets
 // its own branch and its own session — one run, one branch, always reviewable on
 // its own.
-func startCoding(ctx context.Context, in *plane.CodingStartIn) (*plane.CodingStarted, error) {
+func startCoding(ctx context.Context, in *client.CodingStartIn) (*client.CodingStarted, error) {
 	org := strings.TrimSpace(cloud.Who(ctx).Org)
 	if org == "" {
 		// Anonymous is refused, never defaulted. A run with no tenant has no
@@ -173,7 +173,7 @@ func startCoding(ctx context.Context, in *plane.CodingStartIn) (*plane.CodingSta
 	if err != nil {
 		return nil, codingRefusal(err)
 	}
-	return &plane.CodingStarted{
+	return &client.CodingStarted{
 		SessionID: acc.SessionID, Branch: acc.Branch, Repo: acc.Repo,
 		Routed: acc.Routed, TargetID: acc.TargetID,
 	}, nil

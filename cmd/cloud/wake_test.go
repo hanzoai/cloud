@@ -30,7 +30,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
-	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -51,9 +50,9 @@ func TestMain(m *testing.M) {
 	app := zip.New(zip.Config{AppName: name})
 	// The op goes on cloud.Plane(), which is what ServePlane serves — the same
 	// place every real app declares its internal surface.
-	zip.Post[struct{}, plane.Started](cloud.Plane(), "/alive",
-		func(context.Context, *struct{}) (*plane.Started, error) {
-			return &plane.Started{Addr: name}, nil
+	zip.Post[struct{}, client.Started](cloud.Plane(), "/alive",
+		func(context.Context, *struct{}) (*client.Started, error) {
+			return &client.Started{Addr: name}, nil
 		}, zip.WithOperationID("wake_alive"))
 
 	stop, err := cloud.ServePlane(name, nil)
@@ -94,7 +93,7 @@ func router(t *testing.T, name string) {
 	// The agent MCP server rides the same socket, over this host's own children —
 	// which is one lazy plugin here, and none of it is what this file tests.
 	serveWake(app, client.Use(app, manifest.MCPPath, routed([]string{name}), locate(app)))
-	waitFor(t, zip.SocketPath(plane.HostApp))
+	waitFor(t, zip.SocketPath(client.HostApp))
 }
 
 // runDir is the plane's run directory for one test, and it is SHORT on purpose: a
@@ -126,7 +125,7 @@ func TestWakeStartsALazyAppForAPlaneCall(t *testing.T) {
 		t.Fatal("the app was already running; this test proves nothing")
 	}
 
-	out, err := cloud.Ask[struct{}, plane.Started](context.Background(), name, "wake_alive", &struct{}{})
+	out, err := cloud.Ask[struct{}, client.Started](context.Background(), name, "wake_alive", &struct{}{})
 	if err != nil {
 		t.Fatalf("a plane call to a lazy app failed: %v", err)
 	}
@@ -138,7 +137,7 @@ func TestWakeStartsALazyAppForAPlaneCall(t *testing.T) {
 	}
 
 	// Idempotent: a second call reuses the child rather than starting another.
-	if _, err := cloud.Ask[struct{}, plane.Started](context.Background(), name, "wake_alive", &struct{}{}); err != nil {
+	if _, err := cloud.Ask[struct{}, client.Started](context.Background(), name, "wake_alive", &struct{}{}); err != nil {
 		t.Fatalf("second call to a woken app failed: %v", err)
 	}
 	if n := running(t); n != 1 {
@@ -165,7 +164,7 @@ func running(t *testing.T) int {
 func TestWakeRefusesAnAppThisFleetDoesNotRun(t *testing.T) {
 	router(t, "sleepy")
 
-	_, err := cloud.Ask[struct{}, plane.Started](context.Background(), "nosuchapp", "wake_alive", &struct{}{})
+	_, err := cloud.Ask[struct{}, client.Started](context.Background(), "nosuchapp", "wake_alive", &struct{}{})
 	if err == nil {
 		t.Fatal("calling an app this fleet does not run SUCCEEDED")
 	}
@@ -182,7 +181,7 @@ func TestWakeWithNoRouterIsNoPeer(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	cloud.ResetPlane()
 
-	_, err := cloud.Ask[struct{}, plane.Started](context.Background(), "sleepy", "wake_alive", &struct{}{})
+	_, err := cloud.Ask[struct{}, client.Started](context.Background(), "sleepy", "wake_alive", &struct{}{})
 	if !errors.Is(err, cloud.ErrNoPeer) {
 		t.Fatalf("no socket and no router must be ErrNoPeer, got: %v", err)
 	}
@@ -208,14 +207,14 @@ func TestWakeAgainstAnOlderRouterIsAnOutage(t *testing.T) {
 	// A router of the previous generation: a plane socket at the host's name, with
 	// some other op on it and no host_start.
 	old := zip.New(zip.Config{AppName: "plane", Logger: luxlog.New("test")})
-	zip.Post[struct{}, plane.Started](old, "/host/other",
-		func(context.Context, *struct{}) (*plane.Started, error) { return &plane.Started{}, nil },
+	zip.Post[struct{}, client.Started](old, "/host/other",
+		func(context.Context, *struct{}) (*client.Started, error) { return &client.Started{}, nil },
 		zip.WithOperationID("host_other"))
-	go func() { _ = old.Listen(zip.SocketPath(plane.HostApp)) }()
+	go func() { _ = old.Listen(zip.SocketPath(client.HostApp)) }()
 	t.Cleanup(func() { _ = old.Shutdown() })
-	waitFor(t, zip.SocketPath(plane.HostApp))
+	waitFor(t, zip.SocketPath(client.HostApp))
 
-	_, err := cloud.Ask[struct{}, plane.Started](context.Background(), "sleepy", "wake_alive", &struct{}{})
+	_, err := cloud.Ask[struct{}, client.Started](context.Background(), "sleepy", "wake_alive", &struct{}{})
 	if err == nil {
 		t.Fatal("a call through a router that cannot start anything SUCCEEDED")
 	}
@@ -263,7 +262,7 @@ func TestWakeStartsALazyAppBehindALeftoverSocket(t *testing.T) {
 		t.Fatal("the leftover socket still ACCEPTS; this does not reproduce prod")
 	}
 
-	out, err := cloud.Ask[struct{}, plane.Started](context.Background(), name, "wake_alive", &struct{}{})
+	out, err := cloud.Ask[struct{}, client.Started](context.Background(), name, "wake_alive", &struct{}{})
 	if err != nil {
 		t.Fatalf("a leftover socket file suppressed the wake of a cold app: %v\n"+
 			"this is the outage: commerce never started, every prepaid balance read "+
@@ -274,7 +273,7 @@ func TestWakeStartsALazyAppBehindALeftoverSocket(t *testing.T) {
 	}
 
 	// It is really up: a second call is answered by the SAME child, not a new one.
-	if _, err := cloud.Ask[struct{}, plane.Started](context.Background(), name, "wake_alive", &struct{}{}); err != nil {
+	if _, err := cloud.Ask[struct{}, client.Started](context.Background(), name, "wake_alive", &struct{}{}); err != nil {
 		t.Fatalf("second call to the woken app failed: %v", err)
 	}
 	if n := running(t); n != 1 {

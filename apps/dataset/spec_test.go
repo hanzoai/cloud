@@ -2,7 +2,7 @@ package dataset
 
 // spec_test.go walks the entry point. [normalize] is the ONLY constructor of a
 // spec, so everything it refuses is unreachable from the rest of the package —
-// which is what lets plane.go compose statements without re-checking anything.
+// which is what lets peer.go compose statements without re-checking anything.
 
 import (
 	"encoding/json"

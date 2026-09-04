@@ -239,7 +239,7 @@ type VFSClient = types.VFSClient
 //
 // They are not placeholders waiting on a generator. The ops that DO cross a
 // process boundary declare their own In/Out types in package plane, and
-// plane/gen emits the typed peer client from them — that is where a wire shape
+// client/gen emits the typed peer client from them — that is where a wire shape
 // comes from now.
 
 type ChatRequest = types.ChatRequest

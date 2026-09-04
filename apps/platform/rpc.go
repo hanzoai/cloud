@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -43,8 +43,8 @@ import (
 // because that is an observation; and an RBAC denial surfaces as an error, so a
 // board never shows a denial as an empty estate.
 func exposeFleet(s *cloud.Service[fleetState]) {
-	zip.Post[struct{}, plane.Fleet](cloud.Plane(), "/platform/fleet",
-		func(ctx context.Context, _ *cloud.Unit) (*plane.Fleet, error) {
+	zip.Post[struct{}, client.Fleet](cloud.Plane(), "/platform/fleet",
+		func(ctx context.Context, _ *cloud.Unit) (*client.Fleet, error) {
 			// The input carries nothing and there is nothing for it to carry: every
 			// fact that decides WHICH namespaces are observed comes from the caller,
 			// so there is no field a caller could name a scope in.
@@ -62,9 +62,9 @@ func exposeFleet(s *cloud.Service[fleetState]) {
 			if err != nil {
 				return nil, err
 			}
-			out := make([]plane.App, 0, len(views))
+			out := make([]client.App, 0, len(views))
 			for _, v := range views {
-				out = append(out, plane.App{
+				out = append(out, client.App{
 					Org:  v.Org,
 					Name: v.App, Env: v.Env, Repo: v.Repo, Role: v.Role,
 					Cluster: v.Cluster, Namespace: v.Namespace,
@@ -74,9 +74,9 @@ func exposeFleet(s *cloud.Service[fleetState]) {
 					DriftSeverity: string(v.Drift.Severity),
 				})
 			}
-			return &plane.Fleet{Apps: out}, nil
+			return &client.Fleet{Apps: out}, nil
 		},
-		zip.WithOperationID(plane.PlatformFleet),
+		zip.WithOperationID(client.PlatformFleet),
 		zip.WithSummary("Every app this org can observe"))
 }
 
@@ -102,8 +102,8 @@ func exposeFleet(s *cloud.Service[fleetState]) {
 // the plane. Same tenancy as exposePush: the org is the caller's, never the
 // input's, and the `mounted` global is read at call time for the same reason.
 func exposeBuild() {
-	zip.Post[plane.BuildIn, plane.Queued](cloud.Plane(), "/platform/build",
-		func(ctx context.Context, in *plane.BuildIn) (*plane.Queued, error) {
+	zip.Post[client.BuildIn, client.Queued](cloud.Plane(), "/platform/build",
+		func(ctx context.Context, in *client.BuildIn) (*client.Queued, error) {
 			who := cloud.Who(ctx)
 			if who.Org == "" {
 				return nil, zip.ErrForbidden("platform build: org required")
@@ -120,15 +120,15 @@ func exposeBuild() {
 			if err != nil {
 				return nil, err
 			}
-			return &plane.Queued{BuildJobID: out.BuildJobID, Status: out.Status, RunnerPool: out.RunnerPool, Image: out.Image}, nil
+			return &client.Queued{BuildJobID: out.BuildJobID, Status: out.Status, RunnerPool: out.RunnerPool, Image: out.Image}, nil
 		},
-		zip.WithOperationID(plane.PlatformBuild),
+		zip.WithOperationID(client.PlatformBuild),
 		zip.WithSummary("Build one image from a repository at a commit"))
 }
 
 func exposePush() {
-	zip.Post[plane.PushIn, plane.Built](cloud.Plane(), "/platform/push",
-		func(ctx context.Context, in *plane.PushIn) (*plane.Built, error) {
+	zip.Post[client.PushIn, client.Built](cloud.Plane(), "/platform/push",
+		func(ctx context.Context, in *client.PushIn) (*client.Built, error) {
 			who := cloud.Who(ctx)
 			if who.Org == "" {
 				return nil, zip.ErrForbidden("platform push: org required")
@@ -144,9 +144,9 @@ func exposePush() {
 			if err != nil {
 				return nil, err
 			}
-			return &plane.Built{Repo: in.Repo, Builds: launched}, nil
+			return &client.Built{Repo: in.Repo, Builds: launched}, nil
 		},
-		zip.WithOperationID(plane.PlatformPush),
+		zip.WithOperationID(client.PlatformPush),
 		zip.WithSummary("Turn a landed push into a build for every app tracking it"))
 }
 
@@ -164,8 +164,8 @@ func exposePush() {
 // an error, which stays an error. Reporting a refusal as a rollout is the failure
 // mode this op exists to end, so it is not smoothed over into a success.
 func exposeRelease(s *cloud.Service[fleetState]) {
-	zip.Post[plane.ReleaseIn, plane.Released](cloud.Plane(), "/platform/release",
-		func(ctx context.Context, in *plane.ReleaseIn) (*plane.Released, error) {
+	zip.Post[client.ReleaseIn, client.Released](cloud.Plane(), "/platform/release",
+		func(ctx context.Context, in *client.ReleaseIn) (*client.Released, error) {
 			p := capPrincipal(cloud.Who(ctx))
 			if !p.Validated {
 				return nil, zip.ErrForbidden("platform release: authentication required")
@@ -177,8 +177,8 @@ func exposeRelease(s *cloud.Service[fleetState]) {
 			if err != nil {
 				return nil, err
 			}
-			return &plane.Released{Patched: changed}, nil
+			return &client.Released{Patched: changed}, nil
 		},
-		zip.WithOperationID(plane.PlatformRelease),
+		zip.WithOperationID(client.PlatformRelease),
 		zip.WithSummary("Roll a proven, clean-semver image onto its operator Service CR"))
 }

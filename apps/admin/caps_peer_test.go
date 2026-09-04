@@ -9,8 +9,8 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/planetest"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // capsPeer serves the spend-cap ops as app "commerce" on this process's plane,
@@ -51,37 +51,37 @@ func newCapsPeer(t *testing.T) *capsPeer {
 		return nil
 	}
 
-	zip.Post[plane.SubjectIn, plane.Alerts](cloud.Plane(), "/billing/alerts",
-		func(ctx context.Context, _ *plane.SubjectIn) (*plane.Alerts, error) {
-			if err := record(ctx, plane.BillingAlerts); err != nil {
+	zip.Post[client.SubjectIn, client.Alerts](cloud.Plane(), "/billing/alerts",
+		func(ctx context.Context, _ *client.SubjectIn) (*client.Alerts, error) {
+			if err := record(ctx, client.BillingAlerts); err != nil {
 				return nil, err
 			}
-			return &plane.Alerts{Rows: []plane.Alert{{ID: "a1", Threshold: 10000, Enforce: true}}}, nil
-		}, zip.WithOperationID(plane.BillingAlerts))
+			return &client.Alerts{Rows: []client.Alert{{ID: "a1", Threshold: 10000, Enforce: true}}}, nil
+		}, zip.WithOperationID(client.BillingAlerts))
 
-	zip.Post[plane.AlertSpec, plane.Alert](cloud.Plane(), "/billing/alert/raise",
-		func(ctx context.Context, in *plane.AlertSpec) (*plane.Alert, error) {
-			if err := record(ctx, plane.BillingAlertRaise); err != nil {
+	zip.Post[client.AlertSpec, client.Alert](cloud.Plane(), "/billing/alert/raise",
+		func(ctx context.Context, in *client.AlertSpec) (*client.Alert, error) {
+			if err := record(ctx, client.BillingAlertRaise); err != nil {
 				return nil, err
 			}
-			return &plane.Alert{ID: "a1", Threshold: in.Threshold}, nil
-		}, zip.WithOperationID(plane.BillingAlertRaise))
+			return &client.Alert{ID: "a1", Threshold: in.Threshold}, nil
+		}, zip.WithOperationID(client.BillingAlertRaise))
 
-	zip.Post[plane.AlertPatch, plane.Alert](cloud.Plane(), "/billing/alert/amend",
-		func(ctx context.Context, _ *plane.AlertPatch) (*plane.Alert, error) {
-			if err := record(ctx, plane.BillingAlertAmend); err != nil {
+	zip.Post[client.AlertPatch, client.Alert](cloud.Plane(), "/billing/alert/amend",
+		func(ctx context.Context, _ *client.AlertPatch) (*client.Alert, error) {
+			if err := record(ctx, client.BillingAlertAmend); err != nil {
 				return nil, err
 			}
-			return &plane.Alert{ID: "a1"}, nil
-		}, zip.WithOperationID(plane.BillingAlertAmend))
+			return &client.Alert{ID: "a1"}, nil
+		}, zip.WithOperationID(client.BillingAlertAmend))
 
-	zip.Post[plane.AlertRef, plane.Dropped](cloud.Plane(), "/billing/alert/drop",
-		func(ctx context.Context, _ *plane.AlertRef) (*plane.Dropped, error) {
-			if err := record(ctx, plane.BillingAlertDrop); err != nil {
+	zip.Post[client.AlertRef, client.Dropped](cloud.Plane(), "/billing/alert/drop",
+		func(ctx context.Context, _ *client.AlertRef) (*client.Dropped, error) {
+			if err := record(ctx, client.BillingAlertDrop); err != nil {
 				return nil, err
 			}
-			return &plane.Dropped{OK: true}, nil
-		}, zip.WithOperationID(plane.BillingAlertDrop))
+			return &client.Dropped{OK: true}, nil
+		}, zip.WithOperationID(client.BillingAlertDrop))
 
 	stop, err := cloud.ServePlane("commerce", luxlog.NewNoOpLogger())
 	if err != nil {

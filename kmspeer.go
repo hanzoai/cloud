@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // KMSPeer is the KMS client for a process that does not hold the sealed store —
@@ -38,7 +38,7 @@ func (k KMSPeer) call(ctx context.Context, op, ref string, value []byte) ([]byte
 	if org := orgOf(ref); org != "" {
 		ctx = For(ctx, org)
 	}
-	out, err := Ask[plane.SecretIn, plane.Secret](ctx, "kms", op, &plane.SecretIn{Ref: ref, Value: value})
+	out, err := Ask[client.SecretIn, client.Secret](ctx, "kms", op, &client.SecretIn{Ref: ref, Value: value})
 	if err != nil {
 		return nil, fmt.Errorf("kms %s: %w", op, err)
 	}
@@ -52,12 +52,12 @@ func (k KMSPeer) call(ctx context.Context, op, ref string, value []byte) ([]byte
 // callers treat empty as "not configured" and fail closed on it, so returning
 // empty for a transport failure would read as a deliberate absence.
 func (k KMSPeer) GetSecret(ctx context.Context, ref string) ([]byte, error) {
-	return k.call(ctx, plane.KMSGet, ref, nil)
+	return k.call(ctx, client.KMSGet, ref, nil)
 }
 
 // PutSecret writes one secret.
 func (k KMSPeer) PutSecret(ctx context.Context, ref string, value []byte) error {
-	_, err := k.call(ctx, plane.KMSPut, ref, value)
+	_, err := k.call(ctx, client.KMSPut, ref, value)
 	return err
 }
 
@@ -65,12 +65,12 @@ func (k KMSPeer) PutSecret(ctx context.Context, ref string, value []byte) error 
 // is the reason signing is an op here rather than a key fetch.
 // DeleteSecret asks the store to forget one secret.
 func (k KMSPeer) DeleteSecret(ctx context.Context, ref string) error {
-	_, err := k.call(ctx, plane.KMSDel, ref, nil)
+	_, err := k.call(ctx, client.KMSDel, ref, nil)
 	return err
 }
 
 func (k KMSPeer) Sign(ctx context.Context, keyRef string, payload []byte) ([]byte, error) {
-	return k.call(ctx, plane.KMSSign, keyRef, payload)
+	return k.call(ctx, client.KMSSign, keyRef, payload)
 }
 
 // orgOf reads the tenant out of a fully-qualified ref. Refs are "orgs/<org>/…";

@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 
 	"github.com/zap-proto/zip"
 )
@@ -39,17 +39,17 @@ import (
 // The handler here is a stand-in for apps/iam's, deliberately: this file is the
 // CALLER's half, so the callee asserts nothing and simply answers. What is real
 // is everything between them — the socket, the frames, the op name, the types.
-func servePeer(t *testing.T, rows []plane.Project) func() error {
+func servePeer(t *testing.T, rows []client.Project) func() error {
 	t.Helper()
 	cloud.ResetPlane()
-	zip.Post[struct{}, plane.Projects](cloud.Plane(), "/iam/projects",
-		func(ctx context.Context, _ *struct{}) (*plane.Projects, error) {
+	zip.Post[struct{}, client.Projects](cloud.Plane(), "/iam/projects",
+		func(ctx context.Context, _ *struct{}) (*client.Projects, error) {
 			if cloud.Who(ctx).Org == "" {
 				return nil, zip.ErrUnauthorized("projects: no org on the call")
 			}
-			return &plane.Projects{Projects: rows}, nil
+			return &client.Projects{Projects: rows}, nil
 		},
-		zip.WithOperationID(plane.IAMProjects))
+		zip.WithOperationID(client.IAMProjects))
 	stop, err := cloud.ServePlane("iam", nil)
 	if err != nil {
 		t.Fatalf("ServePlane(iam): %v", err)
@@ -89,8 +89,8 @@ func TestNewProjectStoreSelector(t *testing.T) {
 // the far side.
 func TestCanonicalProjectsRoundTrip(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
-	plane.Unbind()
-	stop := servePeer(t, []plane.Project{
+	client.Unbind()
+	stop := servePeer(t, []client.Project{
 		{Owner: "acme", Name: "web", DisplayName: "Web", Description: "the site", CreatedTime: "2026-08-01T00:00:00Z"},
 		{Owner: "acme", Name: "api"},
 	})
@@ -133,15 +133,15 @@ func TestCanonicalProjectsRoundTrip(t *testing.T) {
 // in the QUERY STRING and had to mint a credential to stop it mattering.
 func TestCanonicalProjectsCarriesNoScope(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
-	plane.Unbind()
+	client.Unbind()
 	var sawOrg string
 	cloud.ResetPlane()
-	zip.Post[struct{}, plane.Projects](cloud.Plane(), "/iam/projects",
-		func(ctx context.Context, _ *struct{}) (*plane.Projects, error) {
+	zip.Post[struct{}, client.Projects](cloud.Plane(), "/iam/projects",
+		func(ctx context.Context, _ *struct{}) (*client.Projects, error) {
 			sawOrg = cloud.Who(ctx).Org
-			return &plane.Projects{}, nil
+			return &client.Projects{}, nil
 		},
-		zip.WithOperationID(plane.IAMProjects))
+		zip.WithOperationID(client.IAMProjects))
 	stop, err := cloud.ServePlane("iam", nil)
 	if err != nil {
 		t.Fatalf("ServePlane(iam): %v", err)
@@ -169,7 +169,7 @@ func TestCanonicalProjectsCarriesNoScope(t *testing.T) {
 // already exists.
 func TestCanonicalProjectsNoPeerIsAnError(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
-	plane.Unbind()
+	client.Unbind()
 	cloud.ResetPlane() // nothing listening
 
 	rows, err := (canonicalProjects{}).List(context.Background(), "acme")
@@ -186,7 +186,7 @@ func TestCanonicalProjectsNoPeerIsAnError(t *testing.T) {
 
 // TestCanonicalProjectsCoresidentSkipsTheWire pins the half of Ask that is NOT a
 // transport. When the peer is THIS process — a fused binary where iam and
-// platform are both mounted — plane.Ask finds it with zip.Serving and runs the op
+// platform are both mounted — client.Call finds it with zip.Serving and runs the op
 // through zip.Here, the same opByName and invoke the socket plane uses, with
 // nothing encoded and no kernel in the middle.
 //
@@ -195,8 +195,8 @@ func TestCanonicalProjectsNoPeerIsAnError(t *testing.T) {
 // going to touch it.
 func TestCanonicalProjectsCoresidentSkipsTheWire(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
-	plane.Unbind()
-	stop := servePeer(t, []plane.Project{{Owner: "acme", Name: "web"}})
+	client.Unbind()
+	stop := servePeer(t, []client.Project{{Owner: "acme", Name: "web"}})
 	t.Cleanup(func() { _ = stop() })
 
 	if zip.Serving("iam") == nil {
@@ -236,15 +236,15 @@ func TestCanonicalProjectsSocketIsLoadBearing(t *testing.T) {
 	front, back := planetest.Dir(t), planetest.Dir(t)
 
 	t.Setenv("ZIP_RUNTIME_DIR", back)
-	plane.Unbind()
-	stop := servePeer(t, []plane.Project{{Owner: "acme", Name: "web"}})
+	client.Unbind()
+	stop := servePeer(t, []client.Project{{Owner: "acme", Name: "web"}})
 	t.Cleanup(func() { _ = stop() })
 	peer := filepath.Join(back, "iam.sock")
 
 	// front is where the caller dials; it forwards to the peer's real socket.
 	relayTo(t, filepath.Join(front, "iam.sock"), peer)
 	t.Setenv("ZIP_RUNTIME_DIR", front)
-	plane.Unbind()
+	client.Unbind()
 	if zip.Serving("iam") != nil {
 		t.Fatal("the caller must NOT find iam locally, or this proves nothing about a wire")
 	}

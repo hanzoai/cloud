@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud/apps/sites"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // planeSites resolves a published site by asking the app that owns the project
@@ -31,20 +31,20 @@ type planeSites struct{}
 // transient failure of the owning app, which looks exactly like the site being
 // deleted.
 func (planeSites) Resolve(ctx context.Context, slug string) (sites.Site, bool, error) {
-	return askSite(ctx, &plane.SiteIn{Slug: slug}, plane.SitesResolve)
+	return askSite(ctx, &client.SiteIn{Slug: slug}, client.SitesResolve)
 }
 
 // ResolveOrg is the first-party path, pinned to one org so an internal host is
 // never served by a customer's same-named project.
 func (planeSites) ResolveOrg(ctx context.Context, org, slug string) (sites.Site, bool, error) {
-	return askSite(ctx, &plane.SiteIn{Slug: slug, Org: org}, plane.SitesResolveOrg)
+	return askSite(ctx, &client.SiteIn{Slug: slug, Org: org}, client.SitesResolveOrg)
 }
 
-func askSite(ctx context.Context, in *plane.SiteIn, op string) (sites.Site, bool, error) {
+func askSite(ctx context.Context, in *client.SiteIn, op string) (sites.Site, bool, error) {
 	// The site plane read is org-less by construction: the HOST is the tenant
 	// key, and the answer names the org. Passing one in would let a caller point
 	// at someone else's project.
-	out, err := Ask[plane.SiteIn, plane.Site](For(ctx, ""), "project", op, in)
+	out, err := Ask[client.SiteIn, client.Site](For(ctx, ""), "project", op, in)
 	if err != nil {
 		return sites.Site{}, false, fmt.Errorf("sites: ask projects: %w", err)
 	}

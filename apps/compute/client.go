@@ -31,11 +31,11 @@
 package compute
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"cmp"
 	"encoding/json"
 	"errors"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"net/url"
@@ -83,14 +83,14 @@ func computeBase() string {
 func serviceClientID() string     { return environ.Or("COMPUTE_CLIENT_ID", "") }
 func serviceClientSecret() string { return environ.Or("COMPUTE_CLIENT_SECRET", "") }
 
-// client is the tenant-scoped Visor HTTP client. target has no trailing slash.
-type client struct {
+// computeClient is the tenant-scoped Visor HTTP client. target has no trailing slash.
+type computeClient struct {
 	target string
 	cc     *http.Client
 }
 
-func newClient() *client {
-	return &client{target: computeBase(), cc: &http.Client{Timeout: 30 * time.Second}}
+func newClient() *computeClient {
+	return &computeClient{target: computeBase(), cc: &http.Client{Timeout: 30 * time.Second}}
 }
 
 // envelope is Visor's response wrapper. Data is deferred so call() can
@@ -110,7 +110,7 @@ type envelope struct {
 //
 // Error mapping is honest and customer-appropriate: an unreachable Visor → 502,
 // and a non-2xx HTTP status → that status with a snippet of what came back.
-func (cl *client) do(c *zip.Ctx, method, path, query string, body any) ([]byte, error) {
+func (cl *computeClient) do(c *zip.Ctx, method, path, query string, body any) ([]byte, error) {
 	u := cl.target + path
 	if query != "" {
 		u += "?" + query
@@ -159,7 +159,7 @@ func (cl *client) do(c *zip.Ctx, method, path, query string, body any) ([]byte, 
 // This is the OLD half of Visor's surface and it shrinks: a route converted to a
 // typed zip op answers its Out directly and moves to op below. When the last one
 // has moved, this and the envelope type go with it.
-func (cl *client) call(c *zip.Ctx, method, path, query string, body any, out any) error {
+func (cl *computeClient) call(c *zip.Ctx, method, path, query string, body any, out any) error {
 	raw, err := cl.do(c, method, path, query, body)
 	if err != nil {
 		return err
@@ -195,7 +195,7 @@ func (cl *client) call(c *zip.Ctx, method, path, query string, body any, out any
 // AgentBinding carries its OWN `status` field, so reading one with call above
 // takes "Pending" for an envelope status, decides the upstream failed, and
 // answers 502. A real answer becomes an outage.
-func (cl *client) op(c *zip.Ctx, method, path, query string, body any, out any) error {
+func (cl *computeClient) op(c *zip.Ctx, method, path, query string, body any, out any) error {
 	raw, err := cl.do(c, method, path, query, body)
 	if err != nil {
 		return err

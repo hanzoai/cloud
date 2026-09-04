@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	contract "github.com/hanzoai/cloud/plane"
+	contract "github.com/hanzoai/cloud/client"
 )
 
 // TestFan_ThePeerAxisIsReachableFromTheCreditEndpoint.
@@ -38,7 +38,7 @@ import (
 // drives the rule the way the endpoint drives it: twenty nominally unrelated payers
 // behind one address, then a first ordinary payment from the twenty-first.
 //
-// Mutation proof: drop [plane.SignalPeer] from [paymentFacts] (or the peer link from
+// Mutation proof: drop [client.SignalPeer] from [paymentFacts] (or the peer link from
 // [plane.prior]) and this fails with action=allow.
 func TestFan_ThePeerAxisIsReachableFromTheCreditEndpoint(t *testing.T) {
 	probe.reset(true)

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/plane"
-	"github.com/hanzoai/cloud/plane/entitlement"
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/client/entitlement"
 	"github.com/hanzoai/doctype"
 	"github.com/zap-proto/zip"
 )
@@ -49,9 +49,9 @@ func elective(c *zip.Ctx) error {
 	if !ok || org == "" {
 		return missing()
 	}
-	ctx, cancel := context.WithTimeout(plane.For(c.Context(), org), wait)
+	ctx, cancel := context.WithTimeout(client.For(c.Context(), org), wait)
 	defer cancel()
-	held, err := entitlement.EntitlementHolds(ctx, &plane.ProductIn{Product: module})
+	held, err := entitlement.EntitlementHolds(ctx, &client.ProductIn{Product: module})
 	if err != nil {
 		// Fail closed: admitting when entitlement cannot answer makes every module
 		// free for everyone. The reason goes to the log, never the wire.

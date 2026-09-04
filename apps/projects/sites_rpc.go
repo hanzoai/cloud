@@ -7,7 +7,7 @@ import (
 
 	cloud "github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/sites"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // The site edge asks projects which published site a host belongs to.
@@ -31,16 +31,16 @@ import (
 // project; ResolveOrg pins an org only for the first-party path, which is
 // exactly what it is for.
 func exposeSites() {
-	zip.Post[plane.SiteIn, plane.Site](cloud.Plane(), "/sites/resolve", planeResolveSite,
-		zip.WithOperationID(plane.SitesResolve),
+	zip.Post[client.SiteIn, client.Site](cloud.Plane(), "/sites/resolve", planeResolveSite,
+		zip.WithOperationID(client.SitesResolve),
 		zip.WithSummary("Resolve a published site by host label"))
 
-	zip.Post[plane.SiteIn, plane.Site](cloud.Plane(), "/sites/resolve-org", planeResolveSiteOrg,
-		zip.WithOperationID(plane.SitesResolveOrg),
+	zip.Post[client.SiteIn, client.Site](cloud.Plane(), "/sites/resolve-org", planeResolveSiteOrg,
+		zip.WithOperationID(client.SitesResolveOrg),
 		zip.WithSummary("Resolve a published site pinned to one org"))
 
-	zip.Post[plane.LiveSitesIn, plane.LiveSitesOut](cloud.Plane(), "/sites/live", planeLiveSites,
-		zip.WithOperationID(plane.SitesLive),
+	zip.Post[client.LiveSitesIn, client.LiveSitesOut](cloud.Plane(), "/sites/live", planeLiveSites,
+		zip.WithOperationID(client.SitesLive),
 		zip.WithSummary("Every serving site, across orgs"))
 }
 
@@ -57,14 +57,14 @@ func exposeSites() {
 // No org, on purpose, exactly like the resolve above. This is the one cross-org
 // read in the package and the visibility rule that makes it safe lives in its
 // query, not in its caller.
-func planeLiveSites(ctx context.Context, _ *plane.LiveSitesIn) (*plane.LiveSitesOut, error) {
+func planeLiveSites(ctx context.Context, _ *client.LiveSitesIn) (*client.LiveSitesOut, error) {
 	live, err := LiveSites(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := &plane.LiveSitesOut{Sites: make([]plane.LiveSite, 0, len(live))}
+	out := &client.LiveSitesOut{Sites: make([]client.LiveSite, 0, len(live))}
 	for _, s := range live {
-		out.Sites = append(out.Sites, plane.LiveSite{
+		out.Sites = append(out.Sites, client.LiveSite{
 			Org: s.Org, Slug: s.Slug, Name: s.Name, URL: s.URL,
 			Repo: s.Repo, ForkedFrom: s.ForkedFrom, UpdatedAt: s.UpdatedAt,
 			Upstream: s.Upstream, License: s.License,
@@ -77,7 +77,7 @@ func planeLiveSites(ctx context.Context, _ *plane.LiveSitesIn) (*plane.LiveSites
 // bound custom domains. Not-found is `Found:false`, never an error: the edge
 // turns that into an honest 404, and an error into a 503. Collapsing the two
 // would serve 404s for real live sites during a transient failure.
-func planeResolveSite(ctx context.Context, in *plane.SiteIn) (*plane.Site, error) {
+func planeResolveSite(ctx context.Context, in *client.SiteIn) (*client.Site, error) {
 	r, err := currentResolver()
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func planeResolveSite(ctx context.Context, in *plane.SiteIn) (*plane.Site, error
 // planeResolveSiteOrg is the first-party path: it NEVER falls back to
 // unique-across-orgs, so an internal host is served only by our own project and
 // never a customer's same-named one.
-func planeResolveSiteOrg(ctx context.Context, in *plane.SiteIn) (*plane.Site, error) {
+func planeResolveSiteOrg(ctx context.Context, in *client.SiteIn) (*client.Site, error) {
 	r, err := currentResolver()
 	if err != nil {
 		return nil, err
@@ -122,11 +122,11 @@ func currentResolver() (siteResolver, error) {
 
 // planeSite projects a resolved Site onto the plane shape, carrying found-ness
 // explicitly so the edge can tell "no such site" from "could not ask".
-func planeSite(s sites.Site, ok bool) *plane.Site {
+func planeSite(s sites.Site, ok bool) *client.Site {
 	if !ok {
-		return &plane.Site{Found: false}
+		return &client.Site{Found: false}
 	}
-	return &plane.Site{
+	return &client.Site{
 		Found:                true,
 		Org:                  s.Org,
 		Slug:                 s.Slug,

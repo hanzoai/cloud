@@ -7,7 +7,7 @@ import (
 	"sort"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -22,8 +22,8 @@ import (
 
 // serveRecent publishes the read. Mount calls it beside serveIngest.
 func serveRecent() {
-	zip.Post[plane.RecentIn, plane.Recent](cloud.Plane(), "/channels/recent", planeRecent,
-		zip.WithOperationID(plane.ChannelsRecent),
+	zip.Post[client.RecentIn, client.Recent](cloud.Plane(), "/channels/recent", planeRecent,
+		zip.WithOperationID(client.ChannelsRecent),
 		zip.WithSummary("The last turns of one room, oldest first"))
 }
 
@@ -49,7 +49,7 @@ const recentLimit, recentMax = 20, 100
 // a reader needs them in the order they were said; a bridge that had to sort them
 // itself is a bridge that will one day forget to, and a transcript in the wrong
 // order is worse than none — it invents an exchange that never happened.
-func planeRecent(ctx context.Context, in *plane.RecentIn) (*plane.Recent, error) {
+func planeRecent(ctx context.Context, in *client.RecentIn) (*client.Recent, error) {
 	if in == nil || in.Channel == "" || in.Room == "" {
 		return nil, zip.ErrBadRequest("recent: channel and room are required")
 	}
@@ -76,12 +76,12 @@ func planeRecent(ctx context.Context, in *plane.RecentIn) (*plane.Recent, error)
 	// Newest-first out of the store so the LIMIT keeps the RECENT ones; reversed
 	// here so the caller reads a conversation forwards.
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
-	turns := make([]plane.Turn, 0, len(rows))
+	turns := make([]client.Turn, 0, len(rows))
 	for _, r := range rows {
 		if r.Text == "" {
 			continue // an event with no words is not a turn
 		}
-		turns = append(turns, plane.Turn{Sender: r.SenderUser, Text: r.Text, At: r.CreatedAt})
+		turns = append(turns, client.Turn{Sender: r.SenderUser, Text: r.Text, At: r.CreatedAt})
 	}
-	return &plane.Recent{Turns: turns}, nil
+	return &client.Recent{Turns: turns}, nil
 }

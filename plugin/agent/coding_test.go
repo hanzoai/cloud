@@ -34,7 +34,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -232,7 +231,7 @@ func TestNothingInTheInputCanNameWhoTheRunIsFor(t *testing.T) {
 		"subject": true, "actor": true, "user": true, "userid": true, // whose name
 		"token": true, "credtoken": true, "cred": true, "key": true, // whose credential
 	}
-	rt := reflect.TypeOf(plane.CodingStartIn{})
+	rt := reflect.TypeOf(client.CodingStartIn{})
 	for i := range rt.NumField() {
 		f := rt.Field(i)
 		name := strings.ToLower(f.Name)
@@ -258,11 +257,11 @@ func TestNothingInTheInputCanNameWhoTheRunIsFor(t *testing.T) {
 // tenant reaches the engine's own org check, which is only possible if the
 // value that travelled was the CALLER's rather than a constant.
 func TestARunTakesItsTenantAndItsPersonFromTheCaller(t *testing.T) {
-	work := plane.CodingStartIn{Repo: "cloud", Prompt: "fix the thing"}
+	work := client.CodingStartIn{Repo: "cloud", Prompt: "fix the thing"}
 
 	for name, tc := range map[string]struct {
 		ctx  context.Context
-		in   plane.CodingStartIn
+		in   client.CodingStartIn
 		want string
 	}{
 		"anonymous": {
@@ -278,7 +277,7 @@ func TestARunTakesItsTenantAndItsPersonFromTheCaller(t *testing.T) {
 			"needs a tenant",
 		},
 		"both present, so the work is what is judged": {
-			caller(t, "acme", "u"), plane.CodingStartIn{Repo: "cloud"},
+			caller(t, "acme", "u"), client.CodingStartIn{Repo: "cloud"},
 			"repo and task are required",
 		},
 	} {
