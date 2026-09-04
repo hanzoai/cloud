@@ -91,6 +91,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	s := &cloud.Service[state]{Base: base, State: state{engines: engines}}
 	mounted = s
+	serveLane()
 
 	g := app.Group(prefix)
 	g.Use(zip.H(roles))
@@ -911,6 +912,9 @@ func engineOfService(s *cloud.Service[state], org string) (*engine.Engine, error
 // Ingest creates a document from already-trusted field data, running the full
 // validate + lifecycle-hook pipeline.
 func Ingest(ctx context.Context, org string, id ID, data map[string]any, requestedName string) (Ingested, error) {
+	if mounted == nil {
+		return remoteIngest(ctx, org, id, data, requestedName)
+	}
 	e, err := engineOf(org)
 	if err != nil {
 		return Ingested{}, err
@@ -939,6 +943,9 @@ func Delete(ctx context.Context, org string, id ID, name string) error {
 
 // Get returns one document by name in (org, id).
 func Get(ctx context.Context, org string, id ID, name string) (Document, error) {
+	if mounted == nil {
+		return remoteGet(ctx, org, id, name)
+	}
 	e, err := engineOf(org)
 	if err != nil {
 		return Document{}, err
@@ -948,6 +955,9 @@ func Get(ctx context.Context, org string, id ID, name string) (Document, error) 
 
 // Search is the in-process, org-scoped document list.
 func Search(ctx context.Context, org string, id ID, filters map[string]string, limit int) ([]Document, error) {
+	if mounted == nil {
+		return remoteSearch(ctx, org, id, filters, limit)
+	}
 	e, err := engineOf(org)
 	if err != nil {
 		return nil, err
@@ -958,6 +968,9 @@ func Search(ctx context.Context, org string, id ID, filters map[string]string, l
 // FindByField returns the name of the first document whose `field` equals
 // `value`, or "" if none.
 func FindByField(ctx context.Context, org string, id ID, field, value string) (string, error) {
+	if mounted == nil {
+		return remoteFind(ctx, org, id, field, value)
+	}
 	e, err := engineOf(org)
 	if err != nil {
 		return "", err
@@ -967,6 +980,9 @@ func FindByField(ctx context.Context, org string, id ID, field, value string) (s
 
 // Installed reports whether the DocType `id` exists in `org`.
 func Installed(ctx context.Context, org string, id ID) bool {
+	if mounted == nil {
+		return remoteInstalled(ctx, org, id)
+	}
 	e, err := engineOf(org)
 	if err != nil {
 		return false
