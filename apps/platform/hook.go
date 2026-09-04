@@ -8,8 +8,7 @@
 // apps/git, a different process, where that registrant is nil forever: every
 // delivery was signed, accepted, answered 204, and built nothing. A receiver has
 // to sit in the process that can act, which is why moving the address was the fix
-// and not a rename. apps/git's route is a 410 naming platform.hanzo.ai — a
-// different deployment, not this one (see [hookPath]).
+// and not a rename. apps/git's route is a 410 naming this receiver.
 //
 // The forge and native pushes now travel the SAME two clients. apps/git's
 // fireBranchBuild fires OnGitPush + EmitLifecycle for a push its own receive-pack
@@ -38,8 +37,9 @@
 //	Branch filter *
 //
 // api.hanzo.ai is the fleet's one endpoint and the only host that reaches this
-// receiver. platform.hanzo.ai is a separate deployment; the address apps/git's
-// 410 names resolves there, not here.
+// receiver; it is the address apps/git's 410 names. Nothing delivers to
+// platform.hanzo.ai: a native push needs no webhook, and a forge that is still a
+// separate process delivers here.
 //
 // The secret is CONFIGURED, not generated here: the forge and this receiver share
 // one value, and the KMS ref is where the deployment keeps it. Rotating means
@@ -78,11 +78,9 @@ import (
 // compound §2.3 refuses and a second spelling of the transport the first
 // segment already gives.
 //
-// NOTHING OUTSIDE THIS REPO FOLLOWS THIS ADDRESS. api.hanzo.ai is the only host
-// that reaches this receiver, and the forge's system webhook targets
-// platform.hanzo.ai — a separate deployment, the one apps/git's 410 names.
-// Moving this leaf changes what a forge would have to be pointed at to reach
-// THIS receiver, and nothing that is pointed anywhere today.
+// This is the address a separate-process forge is pointed at, and the one
+// apps/git's 410 names, so moving this leaf changes the forge's system-webhook
+// configuration. Nothing else outside this repo follows it.
 const hookPath = "/v1/platform/hook"
 
 const (

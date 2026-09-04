@@ -10,10 +10,12 @@ import (
 
 // webhook.go is a TOMBSTONE: this address is retired and answers 410.
 //
-// Push-to-deploy belongs to platform.hanzo.ai, which owns the buildJob
-// system-of-record and dispatches BuildKit Jobs on its own runner pools. ONE
-// forge-wide system webhook on git.hanzo.ai delivers there for every repo; a
-// repo opts in by committing hanzo.yml, not by owning a hook.
+// Push-to-deploy is the platform app's, which holds the builder. A push into
+// this host's own git server needs no webhook at all: it fires the builder over
+// the host's plugin transport (build_on_push.go). A forge that is still a
+// separate process delivers to the platform app's receiver, POST
+// /v1/platform/hook on api.hanzo.ai — ONE forge-wide system webhook covering
+// every repository; a repo opts in by committing hanzo.yml, not by owning a hook.
 //
 // The route is KEPT rather than deleted, because a deleted route 404s and a 404
 // from this estate is ambiguous: Hanzo Git serves /v1, so /api/v1 404s too and
@@ -49,9 +51,10 @@ import (
 // cloud.Terminal (git.go) therefore stays: it writes the 410 in-band so a
 // co-mounted /v1 ErrorHandlerJSON cannot flatten the propagated error to 500.
 
-// buildEndpoint is where a forge delivery belongs. Stated once, in the message a
-// caller actually receives, so the answer carries its own fix.
-const buildEndpoint = "https://platform.hanzo.ai/v1/git-webhook"
+// buildEndpoint is where a separate-process forge delivers: the platform app's
+// receiver on the fleet's one endpoint. Stated once, in the message a caller
+// actually receives, so the answer carries its own fix.
+const buildEndpoint = "https://api.hanzo.ai/v1/platform/hook"
 
 // The prose. "Cannot be a typed op" is not "must be undocumented": a raw route
 // carries an operationId and a tag and nothing else, which no consumer of the
@@ -69,11 +72,13 @@ const buildEndpoint = "https://platform.hanzo.ai/v1/git-webhook"
 // runs once per Mount.
 func init() {
 	openapi.Describe("/v1/git/webhook", http.MethodPost,
-		"Retired — forge pushes build via platform.hanzo.ai",
-		"GONE (410). Push-to-deploy belongs to POST "+buildEndpoint+", which owns the build "+
-			"system-of-record and dispatches BuildKit Jobs. git.hanzo.ai delivers there "+
-			"through ONE forge-wide system webhook covering every repository; a repo opts "+
-			"in by committing hanzo.yml, not by owning a hook of its own.\n\n"+
+		"Retired — a forge push is delivered to /v1/platform/hook",
+		"GONE (410). Push-to-deploy belongs to POST "+buildEndpoint+", the platform app's "+
+			"receiver, which holds the builder. A push into this host's own git server "+
+			"needs no webhook: it fires the builder over the host's plugin transport. "+
+			"git.hanzo.ai, while it remains a separate process, delivers there through ONE "+
+			"forge-wide system webhook covering every repository; a repo opts in by "+
+			"committing hanzo.yml, not by owning a hook of its own.\n\n"+
 			"Every delivery answers 410 whatever it carries — this endpoint reads no body "+
 			"and authenticates nothing.\n\n"+
 			"410 rather than 404, because the address was real and its meaning moved, which "+
@@ -93,6 +98,6 @@ func init() {
 func webhook(*cloud.Service[state], *zip.Ctx) error {
 	return zip.Errorf(http.StatusGone,
 		"POST /v1/git/webhook is retired. Send forge deliveries to %s instead — on "+
-			"git.hanzo.ai this is already the forge-wide system webhook, and a repo opts "+
-			"in by committing hanzo.yml.", buildEndpoint)
+			"git.hanzo.ai that is the forge-wide system webhook, and a repo opts in by "+
+			"committing hanzo.yml.", buildEndpoint)
 }

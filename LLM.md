@@ -5531,6 +5531,15 @@ Cloud is the machine, so it calls the release in-process and the build token is
 never handed to a caller. The trigger runs BEFORE the token mint and the mirror,
 because a build reads from GitHub and must not be lost to a sync outage.
 
+**2026-09-04 — one address, not two.** apps/git's 410 named
+`platform.hanzo.ai/v1/git-webhook`, a separate deployment that answers 404 to
+everything (`/`, `/v1/health`, that leaf), while hook.go named
+`api.hanzo.ai/v1/platform/hook`; a forge pointed at the former delivered into a
+wall. The 410 now names the receiver that exists. The native path is the FIRST
+transport — a push into apps/git fires the builder over the host's plugin
+transport with no webhook — and git.hanzo.ai served by apps/git is where the
+separate-process forge, and its HTTP delivery, retire to.
+
 **The forge does not retry, so the answer is the recovery.** hanzoai/git marks a
 delivery delivered before it attempts it; the only redelivery is a person clicking
 Replay. So the endpoint records a push as landed only after a SUCCESSFUL dispatch
