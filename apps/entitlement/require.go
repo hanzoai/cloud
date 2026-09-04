@@ -21,7 +21,6 @@ package entitlement
 // @hanzo/plans, resolved by commerce.CheckEntitlement.
 
 import (
-
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/flags"
 )

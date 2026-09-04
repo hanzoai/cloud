@@ -35,7 +35,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // The settlement fixture: a real [TakePaymentOut] shape, because what this endpoint
@@ -56,7 +56,7 @@ func settledBody(status int, body string) zip.Handler {
 // caught is one observation that LEFT this process, as the client saw it.
 type caught struct {
 	org string
-	in  *plane.RiskObserveIn
+	in  *client.RiskObserveIn
 }
 
 // watchTeaching substitutes the plane client and hands back what leaves. The client is a
@@ -71,9 +71,9 @@ func watchTeaching(t *testing.T) <-chan caught {
 	mute(t)
 	seen := make(chan caught, 16)
 	prior := teach
-	teach = func(ctx context.Context, in *plane.RiskObserveIn) (*plane.RiskObserved, error) {
+	teach = func(ctx context.Context, in *client.RiskObserveIn) (*client.RiskObserved, error) {
 		seen <- caught{org: cloud.Who(ctx).Org, in: in}
-		return &plane.RiskObserved{Learned: 1}, nil
+		return &client.RiskObserved{Learned: 1}, nil
 	}
 	t.Cleanup(func() { teach = prior })
 	return seen
@@ -83,8 +83,8 @@ func watchTeaching(t *testing.T) <-chan caught {
 func endpointApp(t *testing.T, status int, body string) *zip.App {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 	t.Cleanup(func() { cloud.SetRiskScorer(nil) })
 	cloud.SetRiskScorer(func(context.Context, string, cloud.RiskQuery) (cloud.RiskVerdict, error) {
 		return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
@@ -173,14 +173,14 @@ func none(t *testing.T, seen <-chan caught) {
 func TestPaymentFacts_StatesThePeerThatArmsTheFanOut(t *testing.T) {
 	const address = "198.51.100.22"
 	facts := paymentFacts(address, "US", 4200, "USD")
-	if got := facts[plane.SignalPeer]; got != address {
+	if got := facts[client.SignalPeer]; got != address {
 		t.Errorf("peer %q, want %q — an axis the endpoint does not state cannot be read, and the "+
 			"fan-out half is unreachable without it", got, address)
 	}
 	// ABSENT, NEVER EMPTY. cloud.Facts drops an empty value, but the map itself must
 	// not carry one: a key present with no value is a gate claiming to have looked.
 	bare := paymentFacts("", "", 4200, "USD")
-	if got, held := bare[plane.SignalPeer]; held {
+	if got, held := bare[client.SignalPeer]; held {
 		t.Errorf("the endpoint stated a peer of %q when the edge resolved none — every payer whose "+
 			"address we cannot resolve then shares ONE identifier, and the fan-out reports a "+
 			"farm made of strangers", got)
@@ -251,9 +251,9 @@ func TestTeachSettlement_ASettledTopUpTeachesThePayer(t *testing.T) {
 	// record taught another would leave the judged one's velocity empty forever,
 	// however many payments settled.
 	want := account.Payer(account.Credential{Owner: gateOrg, Name: gateUser}).Subject()
-	if got.in.Kind != plane.KindPayer || got.in.Subject != want {
+	if got.in.Kind != client.KindPayer || got.in.Subject != want {
 		t.Errorf("taught %q/%q, want %q/%q — the record must name the subject the screen judged",
-			got.in.Kind, got.in.Subject, plane.KindPayer, want)
+			got.in.Kind, got.in.Subject, client.KindPayer, want)
 	}
 	// THE SETTLEMENT IS THE KEY, so a retry converges instead of counting the money
 	// again.
@@ -263,7 +263,7 @@ func TestTeachSettlement_ASettledTopUpTeachesThePayer(t *testing.T) {
 	// AND THE VALUE THAT SETTLED, on the axis the accrual is read over.
 	var nano string
 	for _, s := range got.in.Signals {
-		if s.Name == plane.SignalNano {
+		if s.Name == client.SignalNano {
 			nano = s.Value
 		}
 	}
@@ -355,26 +355,26 @@ func TestTeachSettlement_CannotFailTheSettledPayment(t *testing.T) {
 	const body = `{"transactionId":"` + settledReceipt + `","status":"ok","processorRef":"` + settledRef + `"}`
 	for _, tc := range []struct {
 		name string
-		call func(context.Context, *plane.RiskObserveIn) (*plane.RiskObserved, error)
+		call func(context.Context, *client.RiskObserveIn) (*client.RiskObserved, error)
 	}{
-		{"the plane refuses", func(context.Context, *plane.RiskObserveIn) (*plane.RiskObserved, error) {
+		{"the plane refuses", func(context.Context, *client.RiskObserveIn) (*client.RiskObserved, error) {
 			return nil, errors.New("no peer")
 		}},
-		{"the plane answers nothing", func(context.Context, *plane.RiskObserveIn) (*plane.RiskObserved, error) {
+		{"the plane answers nothing", func(context.Context, *client.RiskObserveIn) (*client.RiskObserved, error) {
 			return nil, nil
 		}},
-		{"the plane panics", func(context.Context, *plane.RiskObserveIn) (*plane.RiskObserved, error) {
+		{"the plane panics", func(context.Context, *client.RiskObserveIn) (*client.RiskObserved, error) {
 			panic("the risk child died mid-call")
 		}},
-		{"the settlement was already recorded", func(context.Context, *plane.RiskObserveIn) (*plane.RiskObserved, error) {
-			return &plane.RiskObserved{Learned: 0}, nil
+		{"the settlement was already recorded", func(context.Context, *client.RiskObserveIn) (*client.RiskObserved, error) {
+			return &client.RiskObserved{Learned: 0}, nil
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mute(t)
 			done := make(chan struct{})
 			prior := teach
-			teach = func(ctx context.Context, in *plane.RiskObserveIn) (*plane.RiskObserved, error) {
+			teach = func(ctx context.Context, in *client.RiskObserveIn) (*client.RiskObserved, error) {
 				defer close(done)
 				return tc.call(ctx, in)
 			}

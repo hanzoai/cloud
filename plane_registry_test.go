@@ -3,7 +3,7 @@ package cloud_test
 // plane_registry_test.go — the gate that lets the peer clients be GENERATED FROM
 // SOURCE without the document drifting away from the program.
 //
-// plane/gen reads the declarations (zipdoc, the repo's other Go emitter, reads
+// client/gen reads the declarations (zipdoc, the repo's other Go emitter, reads
 // the same call sites the same way). zip's own Declaration argues the opposite —
 // project from the LIVE ROUTER, never the AST — and it is right about the case it
 // is about: a host discovering a plugin it does not build cannot parse source it
@@ -26,12 +26,12 @@ import (
 	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/apps/risk"
-	allowancepeer "github.com/hanzoai/cloud/plane/allowance"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
-	entitlementpeer "github.com/hanzoai/cloud/plane/entitlement"
-	eventpeer "github.com/hanzoai/cloud/plane/event"
-	flagspeer "github.com/hanzoai/cloud/plane/flag"
-	riskpeer "github.com/hanzoai/cloud/plane/risk"
+	allowancepeer "github.com/hanzoai/cloud/client/allowance"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
+	entitlementpeer "github.com/hanzoai/cloud/client/entitlement"
+	eventpeer "github.com/hanzoai/cloud/client/event"
+	flagspeer "github.com/hanzoai/cloud/client/flag"
+	riskpeer "github.com/hanzoai/cloud/client/risk"
 	"github.com/zap-proto/zip"
 )
 
@@ -62,7 +62,7 @@ func liveOps(t *testing.T, name string, mount cloud.UseFunc, global bool) []stri
 	return got
 }
 
-// TestGeneratedSurfaceIsTheLiveSurface: what plane/commerce offers is exactly
+// TestGeneratedSurfaceIsTheLiveSurface: what client/commerce offers is exactly
 // what commerce registers — no more, no less.
 func TestGeneratedSurfaceIsTheLiveSurface(t *testing.T) {
 	live := liveOps(t, commercepeer.App, commerce.Use, true)
@@ -177,11 +177,11 @@ func sameSurface(t *testing.T, app string, generated, live []string, empty strin
 	sort.Strings(generated)
 	if len(generated) != len(live) {
 		t.Fatalf("generated %d ops, %s serves %d\n  generated: %v\n  live:      %v\n"+
-			"  fix: go run ./plane/gen", len(generated), app, len(live), generated, live)
+			"  fix: go run ./client/gen", len(generated), app, len(live), generated, live)
 	}
 	for i := range live {
 		if generated[i] != live[i] {
-			t.Fatalf("op %d: generated %q, %s serves %q\n  fix: go run ./plane/gen",
+			t.Fatalf("op %d: generated %q, %s serves %q\n  fix: go run ./client/gen",
 				i, generated[i], app, live[i])
 		}
 	}

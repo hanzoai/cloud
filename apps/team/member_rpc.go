@@ -19,23 +19,23 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // exposeMember publishes the membership read. Mount calls it.
 func exposeMember(accounts *accountStore) {
-	zip.Post[plane.MemberIn, plane.Member](cloud.Plane(), "/team/member",
-		func(ctx context.Context, in *plane.MemberIn) (*plane.Member, error) {
+	zip.Post[client.MemberIn, client.Member](cloud.Plane(), "/team/member",
+		func(ctx context.Context, in *client.MemberIn) (*client.Member, error) {
 			return memberOf(ctx, accounts, in)
 		},
-		zip.WithOperationID(plane.TeamMember),
+		zip.WithOperationID(client.TeamMember),
 		zip.WithSummary("This person's role in that space"))
 
-	zip.Post[plane.SpacesIn, plane.Spaces](cloud.Plane(), "/team/spaces",
-		func(ctx context.Context, in *plane.SpacesIn) (*plane.Spaces, error) {
+	zip.Post[client.SpacesIn, client.Spaces](cloud.Plane(), "/team/spaces",
+		func(ctx context.Context, in *client.SpacesIn) (*client.Spaces, error) {
 			return spacesOf(ctx, accounts, in)
 		},
-		zip.WithOperationID(plane.TeamSpaces),
+		zip.WithOperationID(client.TeamSpaces),
 		zip.WithSummary("The spaces this person is in"))
 }
 
@@ -55,7 +55,7 @@ func exposeMember(accounts *accountStore) {
 //
 // SpacesOf is already owner_org-scoped on its join, so a subject known in
 // another tenant returns nothing here rather than that tenant's spaces.
-func spacesOf(ctx context.Context, accounts *accountStore, in *plane.SpacesIn) (*plane.Spaces, error) {
+func spacesOf(ctx context.Context, accounts *accountStore, in *client.SpacesIn) (*client.Spaces, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("team: no org on the call")
@@ -68,13 +68,13 @@ func spacesOf(ctx context.Context, accounts *accountStore, in *plane.SpacesIn) (
 	}
 	account, ok := accounts.AccountForSubject(ctx, org, in.Subject)
 	if !ok {
-		return &plane.Spaces{}, nil
+		return &client.Spaces{}, nil
 	}
 	spaces, err := accounts.SpacesOf(ctx, org, account)
 	if err != nil {
 		return nil, zip.Errorf(500, "team: spaces of: %v", err)
 	}
-	out := &plane.Spaces{Account: account, Items: make([]plane.Space, 0, len(spaces))}
+	out := &client.Spaces{Account: account, Items: make([]client.Space, 0, len(spaces))}
 	for _, w := range spaces {
 		// The role is READ per row rather than assumed from the join, because the
 		// join proves a row exists and the peer decides on what the row SAYS. A row
@@ -83,7 +83,7 @@ func spacesOf(ctx context.Context, accounts *accountStore, in *plane.SpacesIn) (
 		if !ok {
 			continue
 		}
-		out.Items = append(out.Items, plane.Space{UUID: w.UUID, Name: w.Name, Role: role})
+		out.Items = append(out.Items, client.Space{UUID: w.UUID, Name: w.Name, Role: role})
 		if out.Name == "" {
 			out.Name = accounts.MemberName(ctx, org, w.UUID, account)
 		}
@@ -111,7 +111,7 @@ func spacesOf(ctx context.Context, accounts *accountStore, in *plane.SpacesIn) (
 // It fails closed on a store that is not open: this process owns the store, so a
 // nil handle is a boot-order fault, and "not a member" would read as a real
 // answer about a space nobody could check.
-func memberOf(ctx context.Context, accounts *accountStore, in *plane.MemberIn) (*plane.Member, error) {
+func memberOf(ctx context.Context, accounts *accountStore, in *client.MemberIn) (*client.Member, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("team: no org on the call")
@@ -130,17 +130,17 @@ func memberOf(ctx context.Context, accounts *accountStore, in *plane.MemberIn) (
 	// `sub` from resolving to whoever its username names.
 	account, ok := accounts.AccountForSubject(ctx, org, in.Subject)
 	if !ok {
-		return &plane.Member{}, nil
+		return &client.Member{}, nil
 	}
 	w, err := accounts.SpaceByUUID(ctx, org, in.Space)
 	if err != nil {
 		// Not this tenant's space, or none at all — the same answer either way,
 		// so a probe learns nothing about what exists in another org.
-		return &plane.Member{}, nil
+		return &client.Member{}, nil
 	}
 	role, ok := accounts.Membership(ctx, org, w.UUID, account)
 	if !ok {
-		return &plane.Member{}, nil
+		return &client.Member{}, nil
 	}
-	return &plane.Member{Member: true, Role: role, Account: account}, nil
+	return &client.Member{Member: true, Role: role, Account: account}, nil
 }

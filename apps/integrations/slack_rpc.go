@@ -16,14 +16,14 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
 // exposeSlack publishes the Slack egress on the internal plane. Mount calls it.
 func exposeSlack() {
-	zip.Post[plane.SlackSendIn, plane.SlackSent](cloud.Plane(), "/integrations/slack/send", planeSlackSend,
-		zip.WithOperationID(plane.IntegrationsSlackSend),
+	zip.Post[client.SlackSendIn, client.SlackSent](cloud.Plane(), "/integrations/slack/send", planeSlackSend,
+		zip.WithOperationID(client.IntegrationsSlackSend),
 		zip.WithSummary("Post to an org's Slack channel via the org's KMS-custodied bot token"))
 }
 
@@ -31,7 +31,7 @@ func exposeSlack() {
 // the CALLER's (cloud.Who(ctx).Org, set on the peer context by the caller), never
 // an argument — a caller able to name it could post as another tenant. A named
 // handler, not a closure, so zipdoc lifts this prose into the registry.
-func planeSlackSend(ctx context.Context, in *plane.SlackSendIn) (*plane.SlackSent, error) {
+func planeSlackSend(ctx context.Context, in *client.SlackSendIn) (*client.SlackSent, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrForbidden("slack send: no org on the call")
@@ -40,5 +40,5 @@ func planeSlackSend(ctx context.Context, in *plane.SlackSendIn) (*plane.SlackSen
 	if err != nil {
 		return nil, err
 	}
-	return &plane.SlackSent{TS: ts}, nil
+	return &client.SlackSent{TS: ts}, nil
 }

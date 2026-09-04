@@ -5,7 +5,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/todo"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -21,8 +21,8 @@ import (
 // gives: the capability is todo's and already exported; what is being added
 // is the endpoint.
 func init() {
-	zip.Post[plane.AgentPRIn, plane.AgentPROut](cloud.Plane(), "/todo/agent-pr", planeAgentPR,
-		zip.WithOperationID(plane.TodoAgentPR),
+	zip.Post[client.AgentPRIn, client.AgentPROut](cloud.Plane(), "/todo/agent-pr", planeAgentPR,
+		zip.WithOperationID(client.TodoAgentPR),
 		zip.WithSummary("Open the native PR work item for a coding run's pushed branch"))
 }
 
@@ -38,7 +38,7 @@ func init() {
 // onto ANOTHER tenant's board by naming it. Anonymous is refused rather than
 // defaulted: a run arriving with no principal must fail, not land on somebody's
 // board.
-func planeAgentPR(ctx context.Context, in *plane.AgentPRIn) (*plane.AgentPROut, error) {
+func planeAgentPR(ctx context.Context, in *client.AgentPRIn) (*client.AgentPROut, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("todo agent-pr: org required")
@@ -50,5 +50,5 @@ func planeAgentPR(ctx context.Context, in *plane.AgentPRIn) (*plane.AgentPROut, 
 	if err != nil {
 		return nil, err
 	}
-	return &plane.AgentPROut{Identifier: pr.Identifier, ProjectKey: pr.ProjectKey, Number: pr.Number}, nil
+	return &client.AgentPROut{Identifier: pr.Identifier, ProjectKey: pr.ProjectKey, Number: pr.Number}, nil
 }

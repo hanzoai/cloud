@@ -38,8 +38,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/k8s"
 	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/k8s"
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
@@ -341,7 +341,7 @@ func instanceName(kind, org, name string) string {
 // override (CLOUD_DEDICATED_SIZE_DATASTORE), else the global CLOUD_DEDICATED_SIZE,
 // else 10Gi.
 func dedicatedSize(kind string) string {
-	if v := environ.Or(dedicatedSizeEnvPrefix + "_" + strings.ToUpper(kind), ""); v != "" {
+	if v := environ.Or(dedicatedSizeEnvPrefix+"_"+strings.ToUpper(kind), ""); v != "" {
 		return v
 	}
 	return environ.Or(dedicatedSizeEnvPrefix, defaultDedicatedSize)

@@ -6,8 +6,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
+	"github.com/hanzoai/cloud/client"
 	ledger "github.com/hanzoai/cloud/finance"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // BackfillIn is the POST /v1/admin/finance/backfill input.
@@ -77,8 +77,8 @@ func Backfill(ctx context.Context, in *BackfillIn) (*BackfillOut, error) {
 	// As(c, org) delegates the SuperAdmin core.Admit just validated and points it
 	// at the tenant being migrated, which is the org whose books the callee scopes
 	// to. The admin's own identity still travels whole and the callee re-checks it.
-	bal, err := cloud.Ask[plane.BalanceIn, plane.Balance](cloud.As(c, org), "commerce",
-		plane.FinanceBalance, &plane.BalanceIn{Subject: org, Currency: "usd"})
+	bal, err := cloud.Ask[client.BalanceIn, client.Balance](cloud.As(c, org), "commerce",
+		client.FinanceBalance, &client.BalanceIn{Subject: org, Currency: "usd"})
 	if err != nil {
 		return &BackfillOut{Status: core.Err, Msg: "read commerce balance: " + err.Error()}, nil
 	}

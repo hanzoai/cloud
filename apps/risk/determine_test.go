@@ -21,7 +21,7 @@ import (
 	"github.com/luxfi/aml/pkg/velocity"
 
 	"github.com/hanzoai/cloud"
-	contract "github.com/hanzoai/cloud/plane"
+	contract "github.com/hanzoai/cloud/client"
 )
 
 // tenMillion is the payment the deliverable names, in the unit the wire carries.

@@ -38,9 +38,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 )
 
 // errUnconfigured marks a write (Deposit) attempted against an unwired commerce.
@@ -73,7 +73,7 @@ func (c *Client) Ready() bool { return c != nil && c.base != "" }
 // HTTP /v1/billing/*. Neither reaches anything: those routes are behind `//go:build
 // cloud` and are compiled into no binary here, so usage/rollup was an unrouted 404 and
 // balance re-entered the CUSTOMER handler with no principal. The money question is asked
-// by name now (core.OrgMoney → plane.FinanceSpend), which answers both halves at once
+// by name now (core.OrgMoney → client.FinanceSpend), which answers both halves at once
 // from the process that owns the ledger. Nothing was left behind for the next reader to
 // call by mistake.
 
@@ -104,7 +104,7 @@ func (c *Client) Plan(ctx context.Context, subject string) (Plan, error) {
 	// and the endpoint reads `?userId=` — so the filter never applied and this has
 	// always folded over the org's whole list. Passing one now would silently
 	// narrow a number the cockpit has been showing for as long as it has shown it.
-	reply, err := commercepeer.FinanceSubs(cloud.For(ctx, subject), &plane.SubsIn{})
+	reply, err := commercepeer.FinanceSubs(cloud.For(ctx, subject), &client.SubsIn{})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
 			// The router answered from the manifest it owns: this deployment runs
@@ -215,7 +215,7 @@ func (c *Client) Costs(ctx context.Context, period string) (Costs, error) {
 	// The platform's own books live in the reserved admin org, and this read is a
 	// fleet god-view rather than a tenant one — so it names that org rather than
 	// a subject.
-	reply, err := commercepeer.FinanceCosts(cloud.For(ctx, authz.AdminOrg), &plane.CostsIn{Period: period})
+	reply, err := commercepeer.FinanceCosts(cloud.For(ctx, authz.AdminOrg), &client.CostsIn{Period: period})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
 			// This deployment runs no commerce. An honest zero, which is what an

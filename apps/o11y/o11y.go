@@ -51,8 +51,8 @@
 package o11y
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/http"
 	"net/http/httputil"
 	"net/url"

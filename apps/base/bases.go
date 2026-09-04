@@ -16,14 +16,14 @@ package base
 // has not been opened yet is a Base you can walk into, not an error.
 
 import (
-	"github.com/hanzoai/cloud"
 	"context"
+	"github.com/hanzoai/cloud"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/hanzoai/cloud/goja"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/goja"
 	"github.com/zap-proto/zip"
 )
 

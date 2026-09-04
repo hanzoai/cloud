@@ -17,8 +17,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/plane"
-	agentspeer "github.com/hanzoai/cloud/plane/agent"
+	"github.com/hanzoai/cloud/client"
+	agentspeer "github.com/hanzoai/cloud/client/agent"
 )
 
 // botsBridge holds the transactor + account stores the bots routes read/write.
@@ -176,12 +176,12 @@ func (b *botsBridge) syncOrg(ctx context.Context, org string) (int, error) {
 // context: zip reads a stated caller only where there is NO request behind the
 // context (caller.go), so stating it on a live request's context is silently
 // discarded and the peer answers "org required". This is the same shape
-// apps/integrations uses at its own plane.Ask, and the reason is written out at
+// apps/integrations uses at its own client.Call, and the reason is written out at
 // apps/agents/onbehalf_rpc.go — the one place it was learned the expensive way.
 func agentsBotLister(_ context.Context, org string) ([]Bot, error) {
 	ctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), rosterTimeout)
 	defer cancel()
-	roster, err := agentspeer.AgentsRoster(ctx, &plane.RosterIn{})
+	roster, err := agentspeer.AgentsRoster(ctx, &client.RosterIn{})
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +223,7 @@ func botActive(status string) bool {
 func agentReplyRunner(_ context.Context, org, userSub, agentID, input string) (string, error) {
 	ctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), agentReplyTimeout)
 	defer cancel()
-	run, err := agentspeer.AgentsRunOnBehalf(ctx, &plane.RunOnBehalfIn{
+	run, err := agentspeer.AgentsRunOnBehalf(ctx, &client.RunOnBehalfIn{
 		Org: org, Subject: userSub, Ref: agentID, Input: input,
 	})
 	if err != nil {

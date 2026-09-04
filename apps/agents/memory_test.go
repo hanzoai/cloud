@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -65,7 +65,7 @@ func TestAStandingInstructionIsTheAskWhenThereIsNoQuestion(t *testing.T) {
 // the inbox alone could never be the source (it records what arrives, and an
 // answer leaves).
 func TestTheAssistantsOwnTurnsComeBackAsItsOwn(t *testing.T) {
-	msgs := transcript([]plane.Turn{
+	msgs := transcript([]client.Turn{
 		{Sender: "U1", Text: "weather in Benicia"},
 		{Self: true, Text: "It is 24 degrees and clear."},
 		{Sender: "U1", Text: "   "}, // an event with no words is not a turn

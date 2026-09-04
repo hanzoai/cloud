@@ -1,12 +1,12 @@
 package git
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net"
 	"net/http"
 	"net/url"
@@ -425,7 +425,7 @@ func mirrorCredential(host string) string {
 	if name == "" {
 		return ""
 	}
-	return environ.Or(mirrorTokenStem + "_" + envHost(name), "")
+	return environ.Or(mirrorTokenStem+"_"+envHost(name), "")
 }
 
 // envHost renders a hostname as the tail of an environment-variable name: upper

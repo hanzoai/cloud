@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -36,8 +36,8 @@ import (
 
 // exposeSettle publishes the rail. Mount calls it.
 func exposeSettle(s *cloud.Service[state]) {
-	zip.Post[plane.SettleIn, plane.Settled](cloud.Plane(), "/x402/settle", rail{s}.planeSettle,
-		zip.WithOperationID(plane.X402Settle),
+	zip.Post[client.SettleIn, client.Settled](cloud.Plane(), "/x402/settle", rail{s}.planeSettle,
+		zip.WithOperationID(client.X402Settle),
 		zip.WithSummary("Settle payment for one priced resource"))
 }
 
@@ -67,7 +67,7 @@ type rail struct{ s *cloud.Service[state] }
 // The PAYER is the caller's own tenant, resolved at the edge that holds the request
 // and delegated on the call. It is not a field: a caller that could name the payer
 // could spend another tenant's ledger.
-func (r rail) planeSettle(ctx context.Context, in *plane.SettleIn) (*plane.Settled, error) {
+func (r rail) planeSettle(ctx context.Context, in *client.SettleIn) (*client.Settled, error) {
 	// CLONED, because this outlives the call. ZAP decodes the request against the
 	// server's body buffer, which fasthttp recycles, and the resource is written to
 	// the settlement row and to the audit record — the same aliasing that had a payee
@@ -84,7 +84,7 @@ func (r rail) planeSettle(ctx context.Context, in *plane.SettleIn) (*plane.Settl
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "settle: price %s: %v", resource, err)
 	}
 	if !priced {
-		return &plane.Settled{OK: true, Free: true}, nil
+		return &client.Settled{OK: true, Free: true}, nil
 	}
 
 	g := run(r.s, ctx, cloud.Who(ctx).Org, in.Payment, resource, terms)
@@ -92,7 +92,7 @@ func (r rail) planeSettle(ctx context.Context, in *plane.SettleIn) (*plane.Settl
 	// holds the request is the one that must write them and it does not link this
 	// package: a caller that had to re-render them would be a second encoder of the
 	// same wire, free to drift from this one.
-	out := &plane.Settled{Response: EncodeHeader(g.settlement())}
+	out := &client.Settled{Response: EncodeHeader(g.settlement())}
 	if req := g.required(); req != nil {
 		out.Challenge = EncodeHeader(req)
 	}

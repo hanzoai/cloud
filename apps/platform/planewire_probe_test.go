@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -120,16 +120,16 @@ func TestPlaneWireIsZAPNotJSON(t *testing.T) {
 
 	// The peer binds in `back`.
 	t.Setenv("ZIP_RUNTIME_DIR", back)
-	plane.Unbind()
+	client.Unbind()
 	cloud.ResetPlane()
-	zip.Post[struct{}, plane.Projects](cloud.Plane(), "/iam/projects",
-		func(ctx context.Context, _ *struct{}) (*plane.Projects, error) {
-			return &plane.Projects{Projects: []plane.Project{{
+	zip.Post[struct{}, client.Projects](cloud.Plane(), "/iam/projects",
+		func(ctx context.Context, _ *struct{}) (*client.Projects, error) {
+			return &client.Projects{Projects: []client.Project{{
 				Owner: "acme", Name: "web", DisplayName: "Web",
 				Description: "the site", CreatedTime: "2026-08-01T00:00:00Z",
 			}}}, nil
 		},
-		zip.WithOperationID(plane.IAMProjects))
+		zip.WithOperationID(client.IAMProjects))
 	stop, err := cloud.ServePlane("iam", nil)
 	if err != nil {
 		t.Fatalf("ServePlane(iam): %v", err)
@@ -161,7 +161,7 @@ func TestPlaneWireIsZAPNotJSON(t *testing.T) {
 
 	// The caller dials `front` — and knows only the NAME "iam".
 	t.Setenv("ZIP_RUNTIME_DIR", front)
-	plane.Unbind()
+	client.Unbind()
 	rows, err := (canonicalProjects{}).List(context.Background(), "acme")
 	if err != nil {
 		t.Fatalf("List through the relay: %v", err)
@@ -182,7 +182,7 @@ func TestPlaneWireIsZAPNotJSON(t *testing.T) {
 		t.Errorf("no ZAP magic in the reply; the frame is not a ZAP frame")
 	}
 	// The op is addressed by NAME on the call plane, not by a REST path.
-	if !strings.Contains(req, "/.well-known/zip/op/"+plane.IAMProjects) {
+	if !strings.Contains(req, "/.well-known/zip/op/"+client.IAMProjects) {
 		t.Errorf("the request did not address the op by name; got:\n%s", dump(req))
 	}
 

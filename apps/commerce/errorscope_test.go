@@ -67,7 +67,7 @@ func TestCommerceErrorScope(t *testing.T) {
 		wantCode int
 	}{
 		{"/v1/kms/health", 403},             // before commerce
-		{"/v1/project", 403},               // after commerce — must NOT be clobbered to 500
+		{"/v1/project", 403},                // after commerce — must NOT be clobbered to 500
 		{"/v1/commerce/store/current", 403}, // commerce's own route — its handler still honors 403
 	} {
 		code, body := probe(tc.path)

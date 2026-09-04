@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	toolspeer "github.com/hanzoai/cloud/plane/tool"
+	"github.com/hanzoai/cloud/client"
+	toolspeer "github.com/hanzoai/cloud/client/tool"
 )
 
 // skills_on_push.go — a push to a repository's default branch replaces the
@@ -15,7 +15,7 @@ import (
 //
 // The files are `.agents/skills/<name>/SKILL.md`, the Agent Skills layout. Git
 // reads them from the pushed tree and hands them to tools over the plane
-// (plane.ToolsSkills); tools decides what is a skill. Reading is bounded the
+// (client.ToolsSkills); tools decides what is a skill. Reading is bounded the
 // way the code index is: one file cap, one count cap. Like the other reactors
 // it is detached and best-effort — a tools plane that is not answering is
 // logged, and the push has already landed.
@@ -48,7 +48,7 @@ func skillsOnPush(s *cloud.Service[state], ctx context.Context, ev cloud.Lifecyc
 	}
 	ctx, cancel := context.WithTimeout(cloud.For(ctx, ev.Org), skillsCallTimeout)
 	defer cancel()
-	out, err := toolspeer.ToolsSkills(ctx, &plane.SkillsIn{Source: skillSource(ev.Project, ev.Repo), Files: files})
+	out, err := toolspeer.ToolsSkills(ctx, &client.SkillsIn{Source: skillSource(ev.Project, ev.Repo), Files: files})
 	if err != nil {
 		s.Log.Warn("skills: replace failed", "org", ev.Org, "repo", ev.Repo, "err", err)
 		return
@@ -77,12 +77,12 @@ func isSkillPath(p string) bool {
 }
 
 // treeSkillFiles resolves the pushed tip and returns its skill files, bounded.
-func treeSkillFiles(ctx context.Context, repo Repository, after string) ([]plane.SkillFile, error) {
+func treeSkillFiles(ctx context.Context, repo Repository, after string) ([]client.SkillFile, error) {
 	rev, _, err := repo.Resolve(ctx, after)
 	if err != nil {
 		return nil, err
 	}
-	var out []plane.SkillFile
+	var out []client.SkillFile
 	err = repo.WalkText(ctx, rev, maxSkillFileBytes, func(path, content string) error {
 		if !isSkillPath(path) {
 			return nil
@@ -90,7 +90,7 @@ func treeSkillFiles(ctx context.Context, repo Repository, after string) ([]plane
 		if len(out) >= maxSkillFiles {
 			return StopWalk
 		}
-		out = append(out, plane.SkillFile{Path: path, Content: content})
+		out = append(out, client.SkillFile{Path: path, Content: content})
 		return nil
 	})
 	return out, err

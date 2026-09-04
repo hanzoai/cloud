@@ -19,8 +19,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/commerce"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -37,8 +37,8 @@ func shortRun(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	t.Setenv("ZIP_RUNTIME_DIR", "")
 	t.Setenv("CLOUD_RUN_DIR", dir)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 }
 
 // liveCommerce mounts the real commerce subsystem and binds its plane socket,
@@ -81,7 +81,7 @@ func TestGeneratedClientReachesTheRealApp(t *testing.T) {
 	liveCommerce(t)
 
 	ctx := cloud.For(context.Background(), "acme")
-	got, err := commercepeer.FinanceBalance(ctx, &plane.BalanceIn{Currency: "usd"})
+	got, err := commercepeer.FinanceBalance(ctx, &client.BalanceIn{Currency: "usd"})
 	if err != nil {
 		t.Fatalf("FinanceBalance over the plane: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestGeneratedClientReachesTheRealApp(t *testing.T) {
 func TestGeneratedClientCarriesTheCallersOrg(t *testing.T) {
 	liveCommerce(t)
 
-	if _, err := commercepeer.FinanceBalance(context.Background(), &plane.BalanceIn{Currency: "usd"}); err == nil {
+	if _, err := commercepeer.FinanceBalance(context.Background(), &client.BalanceIn{Currency: "usd"}); err == nil {
 		t.Fatal("a call with no caller org was answered — the org must never be optional")
 	}
 }
@@ -121,7 +121,7 @@ func TestColdPeerIsNamedNotGuessed(t *testing.T) {
 	// An empty run directory: commerce has no socket, and there is no router in
 	// this process tree to start it.
 	_, err := commercepeer.FinanceBalance(cloud.For(context.Background(), "acme"),
-		&plane.BalanceIn{Currency: "usd"})
+		&client.BalanceIn{Currency: "usd"})
 	if err == nil {
 		t.Fatal("a cold peer answered — there is nothing here to have answered it")
 	}

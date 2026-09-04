@@ -1,10 +1,10 @@
 package git
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/url"
 	"strconv"
 	"strings"

@@ -14,7 +14,7 @@ import (
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // THE SIX OPS ARE SERVED ON TWO SURFACES AND THE TENANT RULE HOLDS ON BOTH.
@@ -39,7 +39,7 @@ func TestTheTenantIsNeverJustAHeader(t *testing.T) {
 	app.Use(zip.H(cloud.Bridge()))
 	// The op under test is `lease`: it is the one that creates, and every other op
 	// acts on what it returns. Registered exactly as Mount registers it.
-	zip.Post[plane.LeaseIn, plane.Leased](app, "/v1/sandbox/lease", planeLease,
+	zip.Post[client.LeaseIn, client.Leased](app, "/v1/sandbox/lease", planeLease,
 		zip.WithOperationID("probe_lease_sandbox"))
 
 	for _, tc := range []struct {

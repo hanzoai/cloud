@@ -12,8 +12,8 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -36,13 +36,13 @@ func mountCredits(app cloud.Router, o ops) {
 // Scoped to the caller's own wallet, resolved server-side.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) credits(ctx context.Context, _ *cloud.Unit) (*plane.CreditGrants, error) {
+func (o ops) credits(ctx context.Context, _ *cloud.Unit) (*client.CreditGrants, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "credits", func(ctx context.Context) (*plane.CreditGrants, error) {
-		return commercepeer.BillingCredits(ctx, &plane.SubjectIn{Subject: subject})
+	return ask(ctx, org, "credits", func(ctx context.Context) (*client.CreditGrants, error) {
+		return commercepeer.BillingCredits(ctx, &client.SubjectIn{Subject: subject})
 	})
 }
 
@@ -55,13 +55,13 @@ func (o ops) credits(ctx context.Context, _ *cloud.Unit) (*plane.CreditGrants, e
 // a reader.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) creditBalance(ctx context.Context, _ *cloud.Unit) (*plane.CreditBalance, error) {
+func (o ops) creditBalance(ctx context.Context, _ *cloud.Unit) (*client.CreditBalance, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "credit balance", func(ctx context.Context) (*plane.CreditBalance, error) {
-		return commercepeer.BillingCreditBalance(ctx, &plane.SubjectIn{Subject: subject})
+	return ask(ctx, org, "credit balance", func(ctx context.Context) (*client.CreditBalance, error) {
+		return commercepeer.BillingCreditBalance(ctx, &client.SubjectIn{Subject: subject})
 	})
 }
 
@@ -75,12 +75,12 @@ func (o ops) creditBalance(ctx context.Context, _ *cloud.Unit) (*plane.CreditBal
 // being offered their trial and being told they have none.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) creditBreakdown(ctx context.Context, _ *cloud.Unit) (*plane.CreditBreakdown, error) {
+func (o ops) creditBreakdown(ctx context.Context, _ *cloud.Unit) (*client.CreditBreakdown, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "credit breakdown", func(ctx context.Context) (*plane.CreditBreakdown, error) {
-		return commercepeer.BillingCreditBreakdown(ctx, &plane.SubjectIn{Subject: subject})
+	return ask(ctx, org, "credit breakdown", func(ctx context.Context) (*client.CreditBreakdown, error) {
+		return commercepeer.BillingCreditBreakdown(ctx, &client.SubjectIn{Subject: subject})
 	})
 }

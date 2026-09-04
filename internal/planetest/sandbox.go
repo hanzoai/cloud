@@ -26,8 +26,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
-	sandboxpeer "github.com/hanzoai/cloud/plane/sandbox"
+	"github.com/hanzoai/cloud/client"
+	sandboxpeer "github.com/hanzoai/cloud/client/sandbox"
 	"github.com/zap-proto/zip"
 )
 
@@ -76,16 +76,16 @@ func ServeSandboxes(t *testing.T) *Sandboxes {
 	runtimeDir(t)
 
 	app := zip.New(zip.Config{AppName: sandboxpeer.App})
-	zip.Post[plane.LeaseIn, plane.Leased](app, "/sandbox/lease", s.lease,
-		zip.WithOperationID(plane.SandboxLease))
-	zip.Post[plane.RunIn, plane.Ran](app, "/sandbox/run", s.run,
-		zip.WithOperationID(plane.SandboxRun))
-	zip.Post[plane.PathIn, plane.Blob](app, "/sandbox/read", s.read,
-		zip.WithOperationID(plane.SandboxRead))
-	zip.Post[plane.WriteIn, plane.Wrote](app, "/sandbox/write", s.write,
-		zip.WithOperationID(plane.SandboxWrite))
-	zip.Post[plane.EndIn, struct{}](app, "/sandbox/end", s.end,
-		zip.WithOperationID(plane.SandboxEnd))
+	zip.Post[client.LeaseIn, client.Leased](app, "/sandbox/lease", s.lease,
+		zip.WithOperationID(client.SandboxLease))
+	zip.Post[client.RunIn, client.Ran](app, "/sandbox/run", s.run,
+		zip.WithOperationID(client.SandboxRun))
+	zip.Post[client.PathIn, client.Blob](app, "/sandbox/read", s.read,
+		zip.WithOperationID(client.SandboxRead))
+	zip.Post[client.WriteIn, client.Wrote](app, "/sandbox/write", s.write,
+		zip.WithOperationID(client.SandboxWrite))
+	zip.Post[client.EndIn, struct{}](app, "/sandbox/end", s.end,
+		zip.WithOperationID(client.SandboxEnd))
 
 	listen(t, app, sandboxpeer.App)
 	return s
@@ -145,7 +145,7 @@ func (s *Sandboxes) Args() []string {
 // which.
 func isProgram(line string) bool { return strings.HasPrefix(line, ": > ") }
 
-func (s *Sandboxes) lease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
+func (s *Sandboxes) lease(ctx context.Context, in *client.LeaseIn) (*client.Leased, error) {
 	// The tenant rides the CALLER. Refusing an empty one is what makes a test that
 	// asserts tenancy mean something — and it is what caught cloud.For being read
 	// only on a context with no request behind it.
@@ -163,10 +163,10 @@ func (s *Sandboxes) lease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased
 		s.pods[id] = &Pod{Files: map[string][]byte{}, mtime: map[string]time.Time{},
 			marks: map[string]time.Time{}}
 	}
-	return &plane.Leased{ID: id, Class: "exec", Status: "running", Workdir: Workdir}, nil
+	return &client.Leased{ID: id, Class: "exec", Status: "running", Workdir: Workdir}, nil
 }
 
-func (s *Sandboxes) write(ctx context.Context, in *plane.WriteIn) (*plane.Wrote, error) {
+func (s *Sandboxes) write(ctx context.Context, in *client.WriteIn) (*client.Wrote, error) {
 	p := s.Pod(in.ID)
 	if p == nil {
 		return nil, zip.ErrNotFound("sandbox not found")
@@ -176,10 +176,10 @@ func (s *Sandboxes) write(ctx context.Context, in *plane.WriteIn) (*plane.Wrote,
 	rel := rel(in.Path)
 	p.Files[rel] = in.Data
 	p.mtime[rel] = time.Now()
-	return &plane.Wrote{Path: Workdir + "/" + rel, Bytes: len(in.Data)}, nil
+	return &client.Wrote{Path: Workdir + "/" + rel, Bytes: len(in.Data)}, nil
 }
 
-func (s *Sandboxes) read(ctx context.Context, in *plane.PathIn) (*plane.Blob, error) {
+func (s *Sandboxes) read(ctx context.Context, in *client.PathIn) (*client.Blob, error) {
 	p := s.Pod(in.ID)
 	if p == nil {
 		return nil, zip.ErrNotFound("sandbox not found")
@@ -188,20 +188,20 @@ func (s *Sandboxes) read(ctx context.Context, in *plane.PathIn) (*plane.Blob, er
 	defer s.mu.Unlock()
 	r := rel(in.Path)
 	if r == "" {
-		return &plane.Blob{Path: Workdir, Dir: true, Entries: slices.Sorted(maps.Keys(p.Files))}, nil
+		return &client.Blob{Path: Workdir, Dir: true, Entries: slices.Sorted(maps.Keys(p.Files))}, nil
 	}
 	b, ok := p.Files[r]
 	if !ok {
 		return nil, zip.ErrNotFound("no such path")
 	}
-	return &plane.Blob{Path: Workdir + "/" + r, Data: b}, nil
+	return &client.Blob{Path: Workdir + "/" + r, Data: b}, nil
 }
 
 // run interprets the three shell shapes a caller actually sends — the marker-plus-
 // program line, the `-newer` artifact sweep, and the mtime listing. Anything else is
 // recorded and answers empty, which is how a test notices a caller started sending a
 // fourth.
-func (s *Sandboxes) run(ctx context.Context, in *plane.RunIn) (*plane.Ran, error) {
+func (s *Sandboxes) run(ctx context.Context, in *client.RunIn) (*client.Ran, error) {
 	p := s.Pod(in.ID)
 	if p == nil {
 		return nil, zip.ErrNotFound("sandbox not found")
@@ -238,7 +238,7 @@ func (s *Sandboxes) run(ctx context.Context, in *plane.RunIn) (*plane.Ran, error
 			p.mtime[path] = time.Now()
 		}
 		s.mu.Unlock()
-		return &plane.Ran{ExitCode: code, Stdout: out, Stderr: errout}, nil
+		return &client.Ran{ExitCode: code, Stdout: out, Stderr: errout}, nil
 
 	case strings.Contains(line, "-newer "):
 		s.mu.Lock()
@@ -250,7 +250,7 @@ func (s *Sandboxes) run(ctx context.Context, in *plane.RunIn) (*plane.Ran, error
 			}
 		}
 		sort.Strings(names)
-		return &plane.Ran{Stdout: strings.Join(names, "\n")}, nil
+		return &client.Ran{Stdout: strings.Join(names, "\n")}, nil
 
 	case strings.Contains(line, "date -u -r"):
 		// The RECURSIVE listing: stamp then path, one pair per file, at any depth.
@@ -268,12 +268,12 @@ func (s *Sandboxes) run(ctx context.Context, in *plane.RunIn) (*plane.Ran, error
 			}
 			rows = append(rows, p.mtime[n].UTC().Format("2006-01-02T15:04:05Z"), "./"+n)
 		}
-		return &plane.Ran{Stdout: strings.Join(rows, "\n")}, nil
+		return &client.Ran{Stdout: strings.Join(rows, "\n")}, nil
 	}
-	return &plane.Ran{}, nil
+	return &client.Ran{}, nil
 }
 
-func (s *Sandboxes) end(ctx context.Context, in *plane.EndIn) (*struct{}, error) {
+func (s *Sandboxes) end(ctx context.Context, in *client.EndIn) (*struct{}, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.pods, in.ID)

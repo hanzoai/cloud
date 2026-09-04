@@ -21,8 +21,8 @@ import (
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
 	"github.com/hanzoai/cloud/apps/admin/health"
 	"github.com/hanzoai/cloud/apps/admin/iam"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -821,7 +821,7 @@ func TestMount_NilGuards(t *testing.T) {
 	}
 }
 
-// serveCommerce stands up the commerce app answering plane.FinanceSpend, which is how
+// serveCommerce stands up the commerce app answering client.FinanceSpend, which is how
 // the fleet boards ask for money now. `by` decides each org's answer, so a test can make
 // ONE tenant fail and assert the fold reports a partial rather than an undercount that
 // reads healthy. Without a peer at all the router says ErrNoPeer, which is a different
@@ -835,8 +835,8 @@ func serveCommerce(t *testing.T, by func(org string) (int64, int64, error)) {
 	t.Setenv("CLOUD_RUN_DIR", planeRunDir(t))
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
-	zip.Post[plane.SpendIn, plane.Spend](cloud.Plane(), "/finance/spend",
-		func(ctx context.Context, _ *plane.SpendIn) (*plane.Spend, error) {
+	zip.Post[client.SpendIn, client.Spend](cloud.Plane(), "/finance/spend",
+		func(ctx context.Context, _ *client.SpendIn) (*client.Spend, error) {
 			org := cloud.Who(ctx).Org
 			if org == "" {
 				return nil, zip.ErrForbidden("spend: no org on the call")
@@ -845,31 +845,31 @@ func serveCommerce(t *testing.T, by func(org string) (int64, int64, error)) {
 			if err != nil {
 				return nil, err
 			}
-			return &plane.Spend{
-				Consumed: plane.Amount(money.FromCents(spend).Unwrap()),
-				Balance:  plane.Amount(money.FromCents(balance).Unwrap()),
+			return &client.Spend{
+				Consumed: client.Amount(money.FromCents(spend).Unwrap()),
+				Balance:  client.Amount(money.FromCents(balance).Unwrap()),
 			}, nil
-		}, zip.WithOperationID(plane.FinanceSpend))
+		}, zip.WithOperationID(client.FinanceSpend))
 
 	// Subscriptions, on the same stand-in: the plan read left HTTP for the plane,
 	// and two apps answering "commerce" would shadow each other. One active $50/mo
 	// sub per org — the figure the HTTP fixture served.
-	zip.Post[plane.SubsIn, plane.Subs](cloud.Plane(), "/finance/subs",
-		func(ctx context.Context, _ *plane.SubsIn) (*plane.Subs, error) {
+	zip.Post[client.SubsIn, client.Subs](cloud.Plane(), "/finance/subs",
+		func(ctx context.Context, _ *client.SubsIn) (*client.Subs, error) {
 			if cloud.Who(ctx).Org == "" {
 				return nil, zip.ErrForbidden("subs: no org on the call")
 			}
-			return &plane.Subs{Rows: []plane.Sub{
+			return &client.Subs{Rows: []client.Sub{
 				{Status: "active", MRRCents: 5000, PlanName: "Pro"},
 			}}, nil
-		}, zip.WithOperationID(plane.FinanceSubs))
+		}, zip.WithOperationID(client.FinanceSubs))
 
 	// The vendor COGS god-view, on the same stand-in: DO compute $3,000 + OpenAI
 	// $500 = $3,500, the multi-vendor figure the boards fold. Two lines, because a
 	// single line cannot show that the fold sums them rather than reporting the
 	// first — which is the bug a one-vendor fixture would hide.
-	zip.Post[plane.CostsIn, plane.Costs](cloud.Plane(), "/finance/costs",
-		func(ctx context.Context, in *plane.CostsIn) (*plane.Costs, error) {
+	zip.Post[client.CostsIn, client.Costs](cloud.Plane(), "/finance/costs",
+		func(ctx context.Context, in *client.CostsIn) (*client.Costs, error) {
 			if cloud.Who(ctx).Org == "" {
 				return nil, zip.ErrForbidden("costs: no org on the call")
 			}
@@ -877,10 +877,10 @@ func serveCommerce(t *testing.T, by func(org string) (int64, int64, error)) {
 			if in != nil {
 				period = in.Period
 			}
-			return &plane.Costs{
+			return &client.Costs{
 				Period:   period,
 				Currency: "usd",
-				Vendors: []plane.VendorCost{
+				Vendors: []client.VendorCost{
 					{Vendor: "digitalocean", Service: "compute", AmountCents: 300_000,
 						Period: period, Source: "actual", Currency: "usd"},
 					{Vendor: "openai", Service: "llm-inference", AmountCents: 50_000,
@@ -888,7 +888,7 @@ func serveCommerce(t *testing.T, by func(org string) (int64, int64, error)) {
 				},
 				TotalCents: 350_000,
 			}, nil
-		}, zip.WithOperationID(plane.FinanceCosts))
+		}, zip.WithOperationID(client.FinanceCosts))
 
 	// Bind the canonical socket for the name, so a read that asks for "commerce"
 	// reaches this process's plane. Without it the router answers ErrNoPeer, which
@@ -924,10 +924,10 @@ func servePlatformEmpty(t *testing.T) {
 	t.Helper()
 	app := zip.New(zip.Config{AppName: "platform"})
 	compose(app)
-	zip.Post[struct{}, plane.Fleet](app, "/platform/fleet",
-		func(context.Context, *struct{}) (*plane.Fleet, error) {
-			return &plane.Fleet{}, nil
-		}, zip.WithOperationID(plane.PlatformFleet))
+	zip.Post[struct{}, client.Fleet](app, "/platform/fleet",
+		func(context.Context, *struct{}) (*client.Fleet, error) {
+			return &client.Fleet{}, nil
+		}, zip.WithOperationID(client.PlatformFleet))
 	go func() { _ = app.Listen(zip.SocketPath("platform")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	for range 200 {

@@ -400,7 +400,7 @@ func leaf(path string) string {
 // the small residue of it. Per address that is a method list and two booleans.
 type rendered struct {
 	endpoints map[string][]byte
-	known *addresses
+	known     *addresses
 }
 
 // at reports what the contract says about the address this path matched.

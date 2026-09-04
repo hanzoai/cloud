@@ -20,15 +20,15 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
 // exposeFigures publishes the ledger's headline read on the internal plane.
 // Called from Mount.
 func exposeFigures() {
-	zip.Post[plane.FiguresIn, plane.FiguresOut](cloud.Plane(), "/books/figures", planeFigures,
-		zip.WithOperationID(plane.BooksFigures),
+	zip.Post[client.FiguresIn, client.FiguresOut](cloud.Plane(), "/books/figures", planeFigures,
+		zip.WithOperationID(client.BooksFigures),
 		zip.WithSummary("The caller's headline ledger figures"))
 }
 
@@ -36,7 +36,7 @@ func exposeFigures() {
 // figures.
 //
 // The org is the CALLER's plane identity and there is no argument that could
-// name another: [plane.FiguresIn] is empty, and the identity zip forwards is the
+// name another: [client.FiguresIn] is empty, and the identity zip forwards is the
 // one the gateway minted. Anonymous is REFUSED rather than defaulted — a books
 // read with no principal behind it is not a read of nobody's ledger, it is a
 // read of the first org whose name a bug supplies.
@@ -45,7 +45,7 @@ func exposeFigures() {
 // about the business would be a fabricated number wearing a real one's label,
 // and the selector that would let a caller ask for it is the same argument this
 // op refuses to grow.
-func planeFigures(ctx context.Context, _ *plane.FiguresIn) (*plane.FiguresOut, error) {
+func planeFigures(ctx context.Context, _ *client.FiguresIn) (*client.FiguresOut, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("books figures: org required")
@@ -61,17 +61,17 @@ func planeFigures(ctx context.Context, _ *plane.FiguresIn) (*plane.FiguresOut, e
 	if err != nil {
 		return nil, zip.ErrInternal("books figures: metrics failed")
 	}
-	return &plane.FiguresOut{Figures: planeFiguresOf(metricsFigures(m))}, nil
+	return &client.FiguresOut{Figures: planeFiguresOf(metricsFigures(m))}, nil
 }
 
 // planeFiguresOf carries books' own figures onto the plane shape unchanged. It is
 // a projection and never a computation: same labels, same already-formatted
 // values, same period. The two types are separate because the plane package
 // cannot import an app, not because the figures differ.
-func planeFiguresOf(in []Figure) []plane.Figure {
-	out := make([]plane.Figure, 0, len(in))
+func planeFiguresOf(in []Figure) []client.Figure {
+	out := make([]client.Figure, 0, len(in))
 	for _, f := range in {
-		out = append(out, plane.Figure{Label: f.Label, Value: f.Value, Period: f.Period})
+		out = append(out, client.Figure{Label: f.Label, Value: f.Value, Period: f.Period})
 	}
 	return out
 }

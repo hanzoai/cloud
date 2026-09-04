@@ -9,8 +9,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -136,7 +136,7 @@ func (o ops) listCaps(ctx context.Context, in *capIn) (*rawOut, error) {
 	if !ok {
 		return &rawOut{Status: core.Err, Msg: "org required"}, nil
 	}
-	out, cerr := commercepeer.BillingAlerts(cloud.As(c, org), &plane.SubjectIn{Subject: org})
+	out, cerr := commercepeer.BillingAlerts(cloud.As(c, org), &client.SubjectIn{Subject: org})
 	if cerr != nil {
 		return capFailed(cerr), nil
 	}
@@ -160,7 +160,7 @@ func (o ops) createCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	if !ok {
 		return &rawOut{Status: core.Err, Msg: "org required"}, nil
 	}
-	spec := plane.AlertSpec{Subject: org}
+	spec := client.AlertSpec{Subject: org}
 	if len(c.Body()) > 0 {
 		if err := json.Unmarshal(c.Body(), &spec); err != nil {
 			return &rawOut{Status: core.Err, Msg: "invalid request body"}, nil
@@ -194,7 +194,7 @@ func (o ops) updateCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	if id == "" {
 		return &rawOut{Status: core.Err, Msg: "cap id required"}, nil
 	}
-	patch := plane.AlertPatch{Subject: org, ID: id}
+	patch := client.AlertPatch{Subject: org, ID: id}
 	if len(c.Body()) > 0 {
 		if err := json.Unmarshal(c.Body(), &patch); err != nil {
 			return &rawOut{Status: core.Err, Msg: "invalid request body"}, nil
@@ -226,7 +226,7 @@ func (o ops) deleteCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	if id == "" {
 		return &rawOut{Status: core.Err, Msg: "cap id required"}, nil
 	}
-	if _, cerr := commercepeer.BillingAlertDrop(cloud.As(c, org), &plane.AlertRef{Subject: org, ID: id}); cerr != nil {
+	if _, cerr := commercepeer.BillingAlertDrop(cloud.As(c, org), &client.AlertRef{Subject: org, ID: id}); cerr != nil {
 		return capFailed(cerr), nil
 	}
 	return &rawOut{Status: core.OK, Data: map[string]bool{"ok": true}}, nil

@@ -100,7 +100,7 @@ func TestGrantRefBindsTheSubject(t *testing.T) {
 // TestGrantRefIsAlwaysPresentAndAdditiveWithoutANonce pins the property the plane
 // leg depends on and the co-resident leg is indifferent to.
 //
-// plane.CreditIn.Ref is REQUIRED — commerce refuses an empty one, because an op that
+// client.CreditIn.Ref is REQUIRED — commerce refuses an empty one, because an op that
 // CREATES money and can be replayed is a money printer — so a grant that answered ""
 // here could not be credited over the plane at all. It must therefore always produce
 // a ref. And with no operator nonce it must produce a DIFFERENT one every attempt:

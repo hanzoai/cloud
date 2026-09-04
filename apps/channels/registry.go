@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // registry.go is the closed transport registry — the connected chat transports
@@ -77,7 +77,7 @@ type capabilities struct {
 type transport struct {
 	id        string
 	caps      capabilities
-	normalize func(ev plane.ChannelsIngestIn) (Message, bool)
+	normalize func(ev client.ChannelsIngestIn) (Message, bool)
 	send      func(ctx context.Context, s *cloud.Service[state], org string, m Message) (Delivery, error)
 }
 

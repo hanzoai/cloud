@@ -23,8 +23,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -139,7 +139,7 @@ type topupIn struct {
 //
 // Retry-safe on X-Idempotency-Key: the same key settles one charge and returns
 // the first receipt.
-func (o ops) topupToken(ctx context.Context, in *topupIn) (*plane.Charged, error) {
+func (o ops) topupToken(ctx context.Context, in *topupIn) (*client.Charged, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -151,8 +151,8 @@ func (o ops) topupToken(ctx context.Context, in *topupIn) (*plane.Charged, error
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "topup", func(ctx context.Context) (*plane.Charged, error) {
-		return commercepeer.BillingTopupCard(ctx, &plane.CardIn{
+	return ask(ctx, org, "topup", func(ctx context.Context) (*client.Charged, error) {
+		return commercepeer.BillingTopupCard(ctx, &client.CardIn{
 			SourceID:       in.SourceID,
 			AmountCents:    in.AmountCents,
 			Currency:       in.Currency,
@@ -166,7 +166,7 @@ func (o ops) topupToken(ctx context.Context, in *topupIn) (*plane.Charged, error
 // balance. Same receipt and the same retry safety as the token endpoint; the only
 // difference is which card, so a caller topping up from a saved method never
 // re-enters one.
-func (o ops) topupSaved(ctx context.Context, in *topupIn) (*plane.Charged, error) {
+func (o ops) topupSaved(ctx context.Context, in *topupIn) (*client.Charged, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -178,8 +178,8 @@ func (o ops) topupSaved(ctx context.Context, in *topupIn) (*plane.Charged, error
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "topup", func(ctx context.Context) (*plane.Charged, error) {
-		return commercepeer.BillingTopup(ctx, &plane.SavedCardIn{
+	return ask(ctx, org, "topup", func(ctx context.Context) (*client.Charged, error) {
+		return commercepeer.BillingTopup(ctx, &client.SavedCardIn{
 			MethodID:       in.MethodID,
 			AmountCents:    in.AmountCents,
 			Currency:       in.Currency,
@@ -215,8 +215,8 @@ func (o ops) dropAlert(ctx context.Context, in *alertRef) (*cloud.Unit, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := ask(ctx, org, "drop cap", func(ctx context.Context) (*plane.Dropped, error) {
-		return commercepeer.BillingAlertDrop(ctx, &plane.AlertRef{Subject: subject, ID: in.ID})
+	if _, err := ask(ctx, org, "drop cap", func(ctx context.Context) (*client.Dropped, error) {
+		return commercepeer.BillingAlertDrop(ctx, &client.AlertRef{Subject: subject, ID: in.ID})
 	}); err != nil {
 		return nil, err
 	}
@@ -232,7 +232,7 @@ func (o ops) dropAlert(ctx context.Context, in *alertRef) (*cloud.Unit, error) {
 // The answer explains a sweep that charged nobody as readily as one that
 // charged: it names how many orgs were considered and how many needed charging,
 // with a row each.
-func (o ops) rechargeAll(ctx context.Context, _ *cloud.Unit) (*plane.Recharge, error) {
+func (o ops) rechargeAll(ctx context.Context, _ *cloud.Unit) (*client.Recharge, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ func (o ops) rechargeAll(ctx context.Context, _ *cloud.Unit) (*plane.Recharge, e
 	if !mayMint(ctx) {
 		return nil, zip.ErrForbidden("platform authority required to run the recharge sweep")
 	}
-	return ask(ctx, org, "recharge", func(ctx context.Context) (*plane.Recharge, error) {
+	return ask(ctx, org, "recharge", func(ctx context.Context) (*client.Recharge, error) {
 		return commercepeer.BillingRecharge(ctx)
 	})
 }
@@ -264,7 +264,7 @@ type methodRef struct {
 // that eventually disagrees with itself.
 //
 // The card is vaulted at the processor, so what goes is our token for it.
-func (o ops) detachMethod(ctx context.Context, in *methodRef) (*plane.Detachment, error) {
+func (o ops) detachMethod(ctx context.Context, in *methodRef) (*client.Detachment, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -276,8 +276,8 @@ func (o ops) detachMethod(ctx context.Context, in *methodRef) (*plane.Detachment
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "detach method", func(ctx context.Context) (*plane.Detachment, error) {
-		return commercepeer.BillingMethodDetach(ctx, &plane.MethodRef{
+	return ask(ctx, org, "detach method", func(ctx context.Context) (*client.Detachment, error) {
+		return commercepeer.BillingMethodDetach(ctx, &client.MethodRef{
 			ID:         in.ID,
 			Subject:    subject,
 			Privileged: principal.IsSuperAdmin(c),
@@ -288,6 +288,6 @@ func (o ops) detachMethod(ctx context.Context, in *methodRef) (*plane.Detachment
 // DetachPortalMethod is DetachMethod at the address a hosted checkout addresses
 // it by. One set of rows, two spellings: a card detached at either is gone from
 // both, because there is one store behind them.
-func (o ops) detachPortalMethod(ctx context.Context, in *methodRef) (*plane.Detachment, error) {
+func (o ops) detachPortalMethod(ctx context.Context, in *methodRef) (*client.Detachment, error) {
 	return o.detachMethod(ctx, in)
 }

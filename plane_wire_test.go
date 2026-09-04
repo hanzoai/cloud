@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -39,16 +39,16 @@ func TestCoresidentCallTakesNoWire(t *testing.T) {
 		seen = append([]byte(nil), c.Body()...)
 		return c.Next()
 	}))
-	zip.Post[plane.BalanceIn, plane.Balance](app, "/probe/balance",
-		func(context.Context, *plane.BalanceIn) (*plane.Balance, error) {
-			return &plane.Balance{Amount: plane.Money{Decimal: "50.00", Currency: "USD"}}, nil
+	zip.Post[client.BalanceIn, client.Balance](app, "/probe/balance",
+		func(context.Context, *client.BalanceIn) (*client.Balance, error) {
+			return &client.Balance{Amount: client.Money{Decimal: "50.00", Currency: "USD"}}, nil
 		}, zip.WithOperationID("probe_balance"))
 	go func() { _ = app.Listen(zip.SocketPath("probe")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	waitFor(t, "probe")
 
-	out, err := cloud.Ask[plane.BalanceIn, plane.Balance](cloud.For(context.Background(), "acme"),
-		"probe", "probe_balance", &plane.BalanceIn{Subject: "acme", Currency: "usd"})
+	out, err := cloud.Ask[client.BalanceIn, client.Balance](cloud.For(context.Background(), "acme"),
+		"probe", "probe_balance", &client.BalanceIn{Subject: "acme", Currency: "usd"})
 	if err != nil {
 		t.Fatalf("call: %v", err)
 	}

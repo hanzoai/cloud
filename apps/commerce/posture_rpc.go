@@ -22,28 +22,28 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // exposePosture publishes the posture, methods and catalog ops. Mount calls it.
 func exposePosture() {
-	zip.Post[struct{}, plane.PaymentConfig](cloud.Plane(), "/billing/settings", planeSettings,
-		zip.WithOperationID(plane.BillingSettings),
+	zip.Post[struct{}, client.PaymentConfig](cloud.Plane(), "/billing/settings", planeSettings,
+		zip.WithOperationID(client.BillingSettings),
 		zip.WithSummary("Public processor configuration for this org"))
-	zip.Post[plane.ModeIn, plane.Mode](cloud.Plane(), "/billing/mode", planeMode,
-		zip.WithOperationID(plane.BillingMode),
+	zip.Post[client.ModeIn, client.Mode](cloud.Plane(), "/billing/mode", planeMode,
+		zip.WithOperationID(client.BillingMode),
 		zip.WithSummary("Move this org between test and live money"))
-	zip.Post[plane.MethodsIn, plane.Rendered](cloud.Plane(), "/billing/methods", planeMethods,
-		zip.WithOperationID(plane.BillingMethods),
+	zip.Post[client.MethodsIn, client.Rendered](cloud.Plane(), "/billing/methods", planeMethods,
+		zip.WithOperationID(client.BillingMethods),
 		zip.WithSummary("Cards and accounts a subject has on file"))
-	zip.Post[plane.MethodSaveIn, plane.Rendered](cloud.Plane(), "/billing/method/save", planeMethodSave,
-		zip.WithOperationID(plane.BillingMethodSave),
+	zip.Post[client.MethodSaveIn, client.Rendered](cloud.Plane(), "/billing/method/save", planeMethodSave,
+		zip.WithOperationID(client.BillingMethodSave),
 		zip.WithSummary("Save a payment method for a subject"))
-	zip.Post[plane.MethodRef, plane.Detachment](cloud.Plane(), "/billing/method/detach", planeMethodDetach,
-		zip.WithOperationID(plane.BillingMethodDetach),
+	zip.Post[client.MethodRef, client.Detachment](cloud.Plane(), "/billing/method/detach", planeMethodDetach,
+		zip.WithOperationID(client.BillingMethodDetach),
 		zip.WithSummary("Remove one saved payment method"))
-	zip.Post[plane.PlansIn, plane.Rendered](cloud.Plane(), "/billing/plans", planePlans,
-		zip.WithOperationID(plane.BillingPlans),
+	zip.Post[client.PlansIn, client.Rendered](cloud.Plane(), "/billing/plans", planePlans,
+		zip.WithOperationID(client.BillingPlans),
 		zip.WithSummary("The public plan catalog"))
 }
 
@@ -58,13 +58,13 @@ func exposePosture() {
 // a card that vaults and then cannot be charged.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeSettings(ctx context.Context, _ *cloud.Unit) (*plane.PaymentConfig, error) {
+func planeSettings(ctx context.Context, _ *cloud.Unit) (*client.PaymentConfig, error) {
 	org, err := orgOf(ctx, "settings")
 	if err != nil {
 		return nil, err
 	}
 	cfg := commercebilling.ReadPaymentConfig(ctx, org)
-	return &plane.PaymentConfig{
+	return &client.PaymentConfig{
 		Provider:      cfg.Provider,
 		ApplicationID: cfg.ApplicationId,
 		LocationID:    cfg.LocationId,
@@ -81,7 +81,7 @@ func planeSettings(ctx context.Context, _ *cloud.Unit) (*plane.PaymentConfig, er
 // readers use, from the single authority that decided it.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeMode(ctx context.Context, in *plane.ModeIn) (*plane.Mode, error) {
+func planeMode(ctx context.Context, in *client.ModeIn) (*client.Mode, error) {
 	org, err := orgOf(ctx, "mode")
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func planeMode(ctx context.Context, in *plane.ModeIn) (*plane.Mode, error) {
 	if merr != nil {
 		return nil, zip.Errorf(500, "failed to set test mode")
 	}
-	return &plane.Mode{OrgID: m.OrgId, OrgName: m.OrgName, Live: m.Live, TestMode: m.TestMode}, nil
+	return &client.Mode{OrgID: m.OrgId, OrgName: m.OrgName, Live: m.Live, TestMode: m.TestMode}, nil
 }
 
 // Lists the cards and accounts one subject has on file, optionally of one kind.
@@ -109,7 +109,7 @@ func planeMode(ctx context.Context, in *plane.ModeIn) (*plane.Mode, error) {
 // query cannot widen the list to another customer of the same org.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeMethods(ctx context.Context, in *plane.MethodsIn) (*plane.Rendered, error) {
+func planeMethods(ctx context.Context, in *client.MethodsIn) (*client.Rendered, error) {
 	org, err := orgOf(ctx, "methods")
 	if err != nil {
 		return nil, err
@@ -139,7 +139,7 @@ func planeMethods(ctx context.Context, in *plane.MethodsIn) (*plane.Rendered, er
 // identity it was not handed.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeMethodSave(ctx context.Context, in *plane.MethodSaveIn) (*plane.Rendered, error) {
+func planeMethodSave(ctx context.Context, in *client.MethodSaveIn) (*client.Rendered, error) {
 	org, err := orgOf(ctx, "save method")
 	if err != nil {
 		return nil, err
@@ -179,7 +179,7 @@ func planeMethodSave(ctx context.Context, in *plane.MethodSaveIn) (*plane.Render
 // authority decided twice is authority that eventually disagrees with itself.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeMethodDetach(ctx context.Context, in *plane.MethodRef) (*plane.Detachment, error) {
+func planeMethodDetach(ctx context.Context, in *client.MethodRef) (*client.Detachment, error) {
 	org, err := orgOf(ctx, "detach method")
 	if err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func planeMethodDetach(ctx context.Context, in *plane.MethodRef) (*plane.Detachm
 		}
 		return nil, zip.Errorf(500, "failed to detach payment method")
 	}
-	return &plane.Detachment{Deleted: d.Deleted, ID: d.Id}, nil
+	return &client.Detachment{Deleted: d.Deleted, ID: d.Id}, nil
 }
 
 // Answers the public plan catalog, optionally narrowed to one category.
@@ -206,7 +206,7 @@ func planeMethodDetach(ctx context.Context, in *plane.MethodRef) (*plane.Detachm
 // offer is a different catalog.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planePlans(ctx context.Context, in *plane.PlansIn) (*plane.Rendered, error) {
+func planePlans(ctx context.Context, in *client.PlansIn) (*client.Rendered, error) {
 	rows, err := commercebilling.ReadPlans(ctx, in.Category, promoNow(ctx))
 	if err != nil {
 		return nil, zip.Errorf(500, "failed to list plans")
@@ -228,10 +228,10 @@ func promoNow(ctx context.Context) *promo.Promo { return promo.Current(ctx) }
 // rendered families cannot come to encode differently, and a marshal that fails
 // is a 500 rather than an empty body — an empty document is a lie a client will
 // happily parse.
-func rendered(v any) (*plane.Rendered, error) {
+func rendered(v any) (*client.Rendered, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return nil, zip.Errorf(500, "failed to render answer")
 	}
-	return &plane.Rendered{Body: b}, nil
+	return &client.Rendered{Body: b}, nil
 }

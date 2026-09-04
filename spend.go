@@ -307,7 +307,7 @@ var meteredApps = []string{
 	// app then called automations, and the entry priced no surface while still
 	// gating one — it cost nobody a charge and cost somebody a 402. The name is
 	// back and it is the app's now, so the entry gates exactly the tree it prices.
-	"agent",       // the per-run fee, and RUNTIME by the hour — an open session or a resident bot (apps/agents/meter.go).
+	"agent",        // the per-run fee, and RUNTIME by the hour — an open session or a resident bot (apps/agents/meter.go).
 	"ai",           // LLM token costs (ai self-meters).
 	"ask",          // the answer engine's per-question fee.
 	"auto",         // per-run automation fee.
@@ -321,13 +321,13 @@ var meteredApps = []string{
 	"domain",       // registrations, renewals and transfers, at the registrar's price.
 	"exec",         // one program run in a sandbox.
 	"flow",         // flow executions.
-	"function",    // serverless invoke.
+	"function",     // serverless invoke.
 	"knowledge",    // a connector piece executed on the engine's pods; native-Go pulls are free.
 	"lsp",          // code intelligence: a cold checkout+index is billed, a warm query is not.
 	"meet",         // one seat on the media server; the lobby beside it is a free read.
 	"ml",           // predict + train (compute).
 	"platform",     // builds and runs (compute).
-	"project",     // site hosting fee.
+	"project",      // site hosting fee.
 	"provisioning", // sql/kv/vector/docdb/s3/search/datastore creates.
 	"risk",         // per-screen fee inside each op.
 	"s3",           // object-storage data plane.
@@ -337,7 +337,7 @@ var meteredApps = []string{
 	"space",        // the drive and file plane over the same object store; one operation, one fee.
 	"seo",          // measurement resold at the vendor's own per-call price.
 	"tel",          // numbers, messages and calls, at the carrier's price.
-	"tool",        // per-tool dispatch.
+	"tool",         // per-tool dispatch.
 	"todo",         // per-project/issue fee.
 	"translate",    // per-character fee.
 	"validator",    // one validator node materialized on the cluster, 200Gi, until deleted.
@@ -496,7 +496,7 @@ var reachableTrees = []string{
 	"/v1/plan/",        // the plan catalog — WHAT to buy (@hanzo/plans) — and its sub-routes.
 	"/v1/models/",      // the model catalog the shell reads for discovery, and /v1/models/:id.
 	"/v1/waitlist/",    // admission's join API — an un-admitted user must still reach it.
-	"/v1/flag/",       // the guard's public mode read; also how the kill switch is observed.
+	"/v1/flag/",        // the guard's public mode read; also how the kill switch is observed.
 	"/v1/entitlement/", // per-org enablement reads/writes that sit beside the projection.
 }
 

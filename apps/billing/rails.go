@@ -20,8 +20,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -45,12 +45,12 @@ func mountRails(app cloud.Router, o ops) {
 // them means try again later.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) cryptoOptions(ctx context.Context, _ *cloud.Unit) (*plane.CryptoOptions, error) {
+func (o ops) cryptoOptions(ctx context.Context, _ *cloud.Unit) (*client.CryptoOptions, error) {
 	org, err := principalOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "crypto options", func(ctx context.Context) (*plane.CryptoOptions, error) {
+	return ask(ctx, org, "crypto options", func(ctx context.Context) (*client.CryptoOptions, error) {
 		return commercepeer.BillingCryptoOptions(ctx)
 	})
 }
@@ -71,7 +71,7 @@ func (o ops) cryptoOptions(ctx context.Context, _ *cloud.Unit) (*plane.CryptoOpt
 // shut for that asset is 503 — nothing sent now can be credited.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) mintCryptoDeposit(ctx context.Context, in *cryptoAsset) (*plane.CryptoDeposit, error) {
+func (o ops) mintCryptoDeposit(ctx context.Context, in *cryptoAsset) (*client.CryptoDeposit, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -79,8 +79,8 @@ func (o ops) mintCryptoDeposit(ctx context.Context, in *cryptoAsset) (*plane.Cry
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "crypto deposit", func(ctx context.Context) (*plane.CryptoDeposit, error) {
-		return commercepeer.BillingCryptoMint(ctx, &plane.CryptoMintIn{
+	return ask(ctx, org, "crypto deposit", func(ctx context.Context) (*client.CryptoDeposit, error) {
+		return commercepeer.BillingCryptoMint(ctx, &client.CryptoMintIn{
 			Payer: subject, Chain: in.Chain, Token: in.Token, AmountCents: in.AmountCents,
 		})
 	})
@@ -106,13 +106,13 @@ type cryptoAsset struct {
 // nothing, so a guessed id cannot confirm that somebody else's deposit exists.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) cryptoDeposit(ctx context.Context, in *depositRef) (*plane.CryptoDeposit, error) {
+func (o ops) cryptoDeposit(ctx context.Context, in *depositRef) (*client.CryptoDeposit, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "crypto deposit", func(ctx context.Context) (*plane.CryptoDeposit, error) {
-		return commercepeer.BillingCryptoDeposit(ctx, &plane.CryptoDepositIn{Payer: subject, ID: in.ID})
+	return ask(ctx, org, "crypto deposit", func(ctx context.Context) (*client.CryptoDeposit, error) {
+		return commercepeer.BillingCryptoDeposit(ctx, &client.CryptoDepositIn{Payer: subject, ID: in.ID})
 	})
 }
 
@@ -135,7 +135,7 @@ type depositRef struct {
 // because nobody can wire to three fields out of five.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) wire(ctx context.Context, _ *cloud.Unit) (*plane.WireInstructions, error) {
+func (o ops) wire(ctx context.Context, _ *cloud.Unit) (*client.WireInstructions, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ func (o ops) wire(ctx context.Context, _ *cloud.Unit) (*plane.WireInstructions, 
 			host = c.Fiber().Hostname()
 		}
 	}
-	return ask(ctx, org, "wire", func(ctx context.Context) (*plane.WireInstructions, error) {
-		return commercepeer.BillingWire(ctx, &plane.WireIn{Host: host, Payer: subject})
+	return ask(ctx, org, "wire", func(ctx context.Context) (*client.WireInstructions, error) {
+		return commercepeer.BillingWire(ctx, &client.WireIn{Host: host, Payer: subject})
 	})
 }

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -25,24 +25,24 @@ func serveFleet(t *testing.T, runtime string) {
 	t.Helper()
 	dir := planetest.Dir(t)
 	t.Setenv("ZIP_RUNTIME_DIR", dir)
-	plane.Unbind()
+	client.Unbind()
 	cloud.ResetPlane()
 
 	doc, err := json.Marshal(map[string]string{"runtime": runtime})
 	if err != nil {
 		t.Fatalf("marshal config: %v", err)
 	}
-	zip.Post[plane.Product, plane.Configured](cloud.Plane(), "/settings/fleet",
-		func(context.Context, *plane.Product) (*plane.Configured, error) {
-			return &plane.Configured{Config: string(doc)}, nil
+	zip.Post[client.Product, client.Configured](cloud.Plane(), "/settings/fleet",
+		func(context.Context, *client.Product) (*client.Configured, error) {
+			return &client.Configured{Config: string(doc)}, nil
 		},
-		zip.WithOperationID(plane.SettingsFleet))
+		zip.WithOperationID(client.SettingsFleet))
 
 	stop, err := cloud.ServePlane("settings", nil)
 	if err != nil {
 		t.Fatalf("ServePlane(settings): %v", err)
 	}
-	t.Cleanup(func() { _ = stop(); cloud.ResetPlane(); plane.Unbind() })
+	t.Cleanup(func() { _ = stop(); cloud.ResetPlane(); client.Unbind() })
 	waitBound(t, filepath.Join(dir, "settings.sock"))
 }
 
@@ -112,9 +112,9 @@ func TestAMistypedSettingFallsToTheBoundaryThatServes(t *testing.T) {
 // sandbox onto the node's kernel.
 func TestNoSettingsPeerStillIsolates(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
-	plane.Unbind()
+	client.Unbind()
 	cloud.ResetPlane()
-	t.Cleanup(func() { cloud.ResetPlane(); plane.Unbind() })
+	t.Cleanup(func() { cloud.ResetPlane(); client.Unbind() })
 
 	r := newRuntime()
 	if got := r.preference(context.Background()); got != "" {

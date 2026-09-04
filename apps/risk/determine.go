@@ -75,7 +75,7 @@ package risk
 
 import (
 	"github.com/hanzoai/cloud"
-	contract "github.com/hanzoai/cloud/plane"
+	contract "github.com/hanzoai/cloud/client"
 )
 
 // The tiers [reference.Jurisdictions] answers with. Its package returns them as

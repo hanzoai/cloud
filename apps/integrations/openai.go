@@ -12,12 +12,12 @@ package integrations
 // client id is baked in — no operator app creds exist for this flow.
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"net/url"

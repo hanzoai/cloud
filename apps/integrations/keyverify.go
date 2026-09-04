@@ -10,10 +10,10 @@ package integrations
 // non-2xx stores nothing, and no error ever carries the credential value.
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"net/url"

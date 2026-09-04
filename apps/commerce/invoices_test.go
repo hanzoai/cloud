@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // The invoice ops exist to be CALLED BY AN AGENT, and an agent can only call what
@@ -52,9 +52,9 @@ func toolsFor(t *testing.T) map[string]map[string]any {
 func TestInvoiceLifecycleIsTools(t *testing.T) {
 	tools := toolsFor(t)
 	for _, want := range []string{
-		plane.BillingInvoiceRaise, plane.BillingInvoiceIssue, plane.BillingInvoiceCollect,
-		plane.BillingInvoiceVoid, plane.BillingInvoiceRead, plane.BillingInvoices,
-		plane.BillingInvoicePDF,
+		client.BillingInvoiceRaise, client.BillingInvoiceIssue, client.BillingInvoiceCollect,
+		client.BillingInvoiceVoid, client.BillingInvoiceRead, client.BillingInvoices,
+		client.BillingInvoicePDF,
 	} {
 		if _, ok := tools[want]; !ok {
 			t.Errorf("tool %q missing — the invoice lifecycle is not fully callable", want)
@@ -67,9 +67,9 @@ func TestInvoiceLifecycleIsTools(t *testing.T) {
 // A lines array that lost its element schema still compiles and still serves, and
 // an agent handed it can only guess what a line looks like.
 func TestRaiseInvoiceIsTyped(t *testing.T) {
-	tool, ok := toolsFor(t)[plane.BillingInvoiceRaise]
+	tool, ok := toolsFor(t)[client.BillingInvoiceRaise]
 	if !ok {
-		t.Fatal(plane.BillingInvoiceRaise + " not registered")
+		t.Fatal(client.BillingInvoiceRaise + " not registered")
 	}
 	schema, _ := json.Marshal(tool["inputSchema"])
 	for _, want := range []string{`"userId"`, `"lines"`, `"$defs"`, `"description"`, `"amount"`} {
@@ -88,19 +88,19 @@ func TestRaiseInvoiceIsTyped(t *testing.T) {
 func TestInvoiceOpsRefuseAnonymousCallers(t *testing.T) {
 	o := invoiceOps{}
 	ctx := context.Background()
-	if _, err := o.raise(ctx, &plane.RaiseIn{UserID: "someone"}); err == nil {
+	if _, err := o.raise(ctx, &client.RaiseIn{UserID: "someone"}); err == nil {
 		t.Error("raise accepted a call with no validated org")
 	}
-	if _, err := o.issue(ctx, &plane.InvoiceRef{ID: "x"}); err == nil {
+	if _, err := o.issue(ctx, &client.InvoiceRef{ID: "x"}); err == nil {
 		t.Error("issue accepted a call with no validated org")
 	}
-	if _, err := o.collect(ctx, &plane.InvoiceRef{ID: "x"}); err == nil {
+	if _, err := o.collect(ctx, &client.InvoiceRef{ID: "x"}); err == nil {
 		t.Error("collect accepted a call with no validated org")
 	}
-	if _, err := o.void(ctx, &plane.InvoiceRef{ID: "x"}); err == nil {
+	if _, err := o.void(ctx, &client.InvoiceRef{ID: "x"}); err == nil {
 		t.Error("void accepted a call with no validated org")
 	}
-	if _, err := o.read(ctx, &plane.InvoiceRef{ID: "x"}); err == nil {
+	if _, err := o.read(ctx, &client.InvoiceRef{ID: "x"}); err == nil {
 		t.Error("read accepted a call with no validated org")
 	}
 }

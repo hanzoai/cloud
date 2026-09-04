@@ -345,15 +345,15 @@ var productStems = []string{
 	"rerank",      //
 	"models",      // what can it call
 	"agent",       // the agent loop: conversations, presets, sessions, runs,
-	               // targets, and the run in a sandbox
-	"code",        // code intelligence: ask, context, index, search
-	"lsp",         // …and the live language server beside it
-	"search",      //
-	"git",         // source control
-	"deploy",      // ship it
-	"exec",        // run it
-	"project",    // …and the things shipped
-	"websearch",   //
+	// targets, and the run in a sandbox
+	"code",      // code intelligence: ask, context, index, search
+	"lsp",       // …and the live language server beside it
+	"search",    //
+	"git",       // source control
+	"deploy",    // ship it
+	"exec",      // run it
+	"project",   // …and the things shipped
+	"websearch", //
 }
 
 // httpMethod is the leading word of a DERIVED operation id — the half [rank]
@@ -467,7 +467,6 @@ func union(ms ...map[string]bool) map[string]bool {
 	}
 	return out
 }
-
 
 // Withheld answers whether an operation is kept off the agent surface, applying
 // the same rule ([TheRule]) the endpoint applies when it assembles a tool list.

@@ -197,7 +197,7 @@ func TestInvoke_AllowsAndDebitsCallerOrg(t *testing.T) {
 // nothing is debited (no free usage, and no charge for work that never happened).
 func TestInvoke_UnreachableSandboxNotBilled(t *testing.T) {
 	bs := &billServer{available: 100000}
-	// NO sandboxes peer is served, so the call cannot reach one: plane.Ask answers
+	// NO sandboxes peer is served, so the call cannot reach one: client.Call answers
 	// ErrNoPeer and run() reports a deployment that cannot execute code.
 	s := newBilledService(t, bs.start(t))
 	seedFn(t, s, "acme", "resize")

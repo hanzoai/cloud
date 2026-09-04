@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -28,7 +28,7 @@ type Identity struct {
 	// Keyed by ORG, because a grant belongs to one tenant and every read is
 	// scoped to the caller's. A flat list answers one org's question with
 	// another's rows, which is the failure a roster read must never have.
-	grants map[string][]plane.Membership
+	grants map[string][]client.Membership
 	names  map[string]string
 }
 
@@ -42,10 +42,10 @@ func (i *Identity) Named(user, name string) {
 }
 
 // Grants is every grant recorded, oldest first.
-func (i *Identity) Grants() []plane.Membership {
+func (i *Identity) Grants() []client.Membership {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	var out []plane.Membership
+	var out []client.Membership
 	for _, g := range i.grants {
 		out = append(out, g...)
 	}
@@ -66,7 +66,7 @@ func ServeIdentity(t *testing.T) *Identity {
 		return i
 	}
 	runtimeDir(t)
-	i := &Identity{grants: map[string][]plane.Membership{}, names: map[string]string{}}
+	i := &Identity{grants: map[string][]client.Membership{}, names: map[string]string{}}
 	served[t.Name()] = i
 	t.Cleanup(func() {
 		servedMu.Lock()
@@ -75,8 +75,8 @@ func ServeIdentity(t *testing.T) *Identity {
 	})
 
 	app := zip.New(zip.Config{AppName: "iam"})
-	zip.Post[plane.GrantIn, struct{}](app, "/iam/grant",
-		func(ctx context.Context, in *plane.GrantIn) (*struct{}, error) {
+	zip.Post[client.GrantIn, struct{}](app, "/iam/grant",
+		func(ctx context.Context, in *client.GrantIn) (*struct{}, error) {
 			org := zip.CallerOf(ctx).Org
 			if org == "" {
 				return nil, zip.ErrUnauthorized("grant: no org on the call")
@@ -88,22 +88,22 @@ func ServeIdentity(t *testing.T) *Identity {
 					return &struct{}{}, nil // never downgrade, matching EnsureMembershipIn
 				}
 			}
-			i.grants[org] = append(i.grants[org], plane.Membership{
+			i.grants[org] = append(i.grants[org], client.Membership{
 				User: in.User, Role: in.Role, Name: in.User,
 				Space: in.Space, Project: in.Project,
 			})
 			return &struct{}{}, nil
-		}, zip.WithOperationID(plane.IAMGrant))
+		}, zip.WithOperationID(client.IAMGrant))
 
-	zip.Post[plane.Scope, plane.Memberships](app, "/iam/members",
-		func(ctx context.Context, in *plane.Scope) (*plane.Memberships, error) {
+	zip.Post[client.Scope, client.Memberships](app, "/iam/members",
+		func(ctx context.Context, in *client.Scope) (*client.Memberships, error) {
 			org := zip.CallerOf(ctx).Org
 			if org == "" {
 				return nil, zip.ErrUnauthorized("members: no org on the call")
 			}
 			i.mu.Lock()
 			defer i.mu.Unlock()
-			out := []plane.Membership{}
+			out := []client.Membership{}
 			for _, g := range i.grants[org] {
 				if in != nil && in.User != "" && g.User != in.User {
 					continue
@@ -117,11 +117,11 @@ func ServeIdentity(t *testing.T) *Identity {
 				out = append(out, g)
 			}
 			sort.SliceStable(out, func(a, b int) bool { return out[a].User < out[b].User })
-			return &plane.Memberships{Memberships: out}, nil
-		}, zip.WithOperationID(plane.IAMMembers))
+			return &client.Memberships{Memberships: out}, nil
+		}, zip.WithOperationID(client.IAMMembers))
 
-	zip.Post[struct{}, plane.Seats](app, "/iam/seats",
-		func(ctx context.Context, _ *struct{}) (*plane.Seats, error) {
+	zip.Post[struct{}, client.Seats](app, "/iam/seats",
+		func(ctx context.Context, _ *struct{}) (*client.Seats, error) {
 			org := zip.CallerOf(ctx).Org
 			if org == "" {
 				// Refusing matches the real handler. Answering 0 would let a caller
@@ -144,13 +144,13 @@ func ServeIdentity(t *testing.T) *Identity {
 					delete(guest, u)
 				}
 			}
-			return &plane.Seats{Seats: len(full) + len(guest), Guests: len(guest)}, nil
-		}, zip.WithOperationID(plane.IAMSeats))
+			return &client.Seats{Seats: len(full) + len(guest), Guests: len(guest)}, nil
+		}, zip.WithOperationID(client.IAMSeats))
 
-	zip.Post[struct{}, plane.Roles](app, "/iam/roles",
-		func(context.Context, *struct{}) (*plane.Roles, error) {
-			return &plane.Roles{Roles: []string{"System Manager"}}, nil
-		}, zip.WithOperationID(plane.IAMRoles))
+	zip.Post[struct{}, client.Roles](app, "/iam/roles",
+		func(context.Context, *struct{}) (*client.Roles, error) {
+			return &client.Roles{Roles: []string{"System Manager"}}, nil
+		}, zip.WithOperationID(client.IAMRoles))
 
 	listen(t, app, "iam")
 	return i

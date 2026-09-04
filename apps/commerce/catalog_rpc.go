@@ -11,7 +11,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // exposeCatalogRefresh publishes the scheduled model sync as a plane op. Mount
@@ -24,8 +24,8 @@ import (
 // header, and it refuses a tenant, because a sync writes every org's upstream
 // cost and a tenant running one would be writing the fleet's.
 func exposeCatalogRefresh() {
-	zip.Post[struct{}, plane.Refreshed](cloud.Plane(), "/commerce/catalog/refresh", planeCatalogRefresh,
-		zip.WithOperationID(plane.CatalogRefresh),
+	zip.Post[struct{}, client.Refreshed](cloud.Plane(), "/commerce/catalog/refresh", planeCatalogRefresh,
+		zip.WithOperationID(client.CatalogRefresh),
 		zip.WithSummary("Refresh the model catalog by reading the upstream provider"))
 }
 
@@ -35,7 +35,7 @@ func exposeCatalogRefresh() {
 // be read is an error and writes NOTHING: a sync that cannot see its source must
 // never conclude the source is empty, because that would withdraw every model on
 // sale.
-func planeCatalogRefresh(ctx context.Context, _ *struct{}) (*plane.Refreshed, error) {
+func planeCatalogRefresh(ctx context.Context, _ *struct{}) (*client.Refreshed, error) {
 	if cloud.Who(ctx).Org != authz.AdminOrg {
 		return nil, zip.ErrForbidden("catalog refresh: the platform runs the sync")
 	}
@@ -47,7 +47,7 @@ func planeCatalogRefresh(ctx context.Context, _ *struct{}) (*plane.Refreshed, er
 	if err != nil {
 		return nil, zip.Errorf(500, "refresh the model catalog: %v", err)
 	}
-	return &plane.Refreshed{
+	return &client.Refreshed{
 		Serves: res.Serves, Upstream: res.Upstream, Created: res.Created, Updated: res.Updated,
 		Withdrawn: res.Withdrawn, Restored: res.Restored, SyncedAt: res.SyncedAt,
 	}, nil

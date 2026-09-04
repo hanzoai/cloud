@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -44,8 +44,8 @@ func spendWindow(since int64) int64 {
 
 // exposeSpend publishes the totals read. Mount calls it.
 func exposeSpend() {
-	zip.Post[plane.SpendIn, plane.Spend](cloud.Plane(), "/finance/spend", planeSpend,
-		zip.WithOperationID(plane.FinanceSpend),
+	zip.Post[client.SpendIn, client.Spend](cloud.Plane(), "/finance/spend", planeSpend,
+		zip.WithOperationID(client.FinanceSpend),
 		zip.WithSummary("Metered consumption over a window, and the wallet behind it"))
 }
 
@@ -65,7 +65,7 @@ func exposeSpend() {
 // month, silently — which is exactly what the HTTP read it replaces did.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeSpend(ctx context.Context, in *plane.SpendIn) (*plane.Spend, error) {
+func planeSpend(ctx context.Context, in *client.SpendIn) (*client.Spend, error) {
 	org, err := callerOrg(ctx, "spend")
 	if err != nil {
 		return nil, err
@@ -82,11 +82,11 @@ func planeSpend(ctx context.Context, in *plane.SpendIn) (*plane.Spend, error) {
 	if err != nil {
 		return nil, fmt.Errorf("spend: balance for %s: %w", org, err)
 	}
-	return &plane.Spend{
+	return &client.Spend{
 		// The sum arrives from the ledger as a cent figure — that is the
 		// precision it has, and money.FromCents says so exactly rather than
 		// implying a tail the sum never carried.
-		Consumed: plane.Amount(money.FromCents(cents).Unwrap()),
-		Balance:  plane.Amount(bal.Unwrap()),
+		Consumed: client.Amount(money.FromCents(cents).Unwrap()),
+		Balance:  client.Amount(bal.Unwrap()),
 	}, nil
 }

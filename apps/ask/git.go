@@ -26,8 +26,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/forge"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // activeWindow is what "recently" means for a repository. Thirty days is the
@@ -72,7 +72,7 @@ func forgeRepos(ctx context.Context) ([]forge.Repo, error) {
 // gitFigures is the org's git rollup: how many repositories, their total
 // footprint, how many moved inside [activeWindow], and which one moved last.
 //
-// It carries the domain client's signature ([plane.FiguresIn] is empty and stays
+// It carries the domain client's signature ([client.FiguresIn] is empty and stays
 // empty) so the registry stays a value: there is nothing to ask for because
 // there is nothing a caller may choose, and the one field this struct might
 // plausibly grow is exactly the field that would let one tenant read another's.
@@ -80,7 +80,7 @@ func forgeRepos(ctx context.Context) ([]forge.Repo, error) {
 // An org with no repositories answers figures of zero, not an error. "You have
 // no repositories" is a true and useful answer; only a failure to find out is an
 // error, and the advisor above tells the two apart.
-func gitFigures(ctx context.Context, _ *plane.FiguresIn) (*plane.FiguresOut, error) {
+func gitFigures(ctx context.Context, _ *client.FiguresIn) (*client.FiguresOut, error) {
 	repos, err := inventory(ctx)
 	if err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func gitFigures(ctx context.Context, _ *plane.FiguresIn) (*plane.FiguresOut, err
 		}
 	}
 
-	figs := []plane.Figure{
+	figs := []client.Figure{
 		{Label: "Repositories", Value: fmt.Sprint(len(repos))},
 		{Label: "Code stored", Value: bytes(kib * 1024)},
 		{Label: "Repositories updated", Value: fmt.Sprint(active), Period: "last 30 days"},
@@ -110,17 +110,17 @@ func gitFigures(ctx context.Context, _ *plane.FiguresIn) (*plane.FiguresOut, err
 	// labelled "Most recently updated" with nothing after it, and the advisor
 	// above states figures verbatim — it would narrate the blank.
 	if latest != "" {
-		figs = append(figs, plane.Figure{
+		figs = append(figs, client.Figure{
 			Label:  "Most recently updated",
 			Value:  latest,
 			Period: newest.UTC().Format("2006-01-02"),
 		})
 	}
-	return &plane.FiguresOut{Figures: figs}, nil
+	return &client.FiguresOut{Figures: figs}, nil
 }
 
 // bytes renders a byte count the way a person reads one. The domain that owns a
-// number owns what it looks like — see [plane.Figure] — so the formatting is
+// number owns what it looks like — see [client.Figure] — so the formatting is
 // here and never on the wire.
 func bytes(n int64) string {
 	const u = 1024

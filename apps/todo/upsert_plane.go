@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -25,8 +25,8 @@ import (
 // exposeUpsert publishes the mirror upsert on the internal plane. Mount calls it,
 // beside registerIssueSink — two entry points, one upsert.
 func exposeUpsert() {
-	zip.Post[plane.IssueIn, plane.IssueUpserted](cloud.Plane(), "/todo/upsert", planeUpsert,
-		zip.WithOperationID(plane.TodoUpsert),
+	zip.Post[client.IssueIn, client.IssueUpserted](cloud.Plane(), "/todo/upsert", planeUpsert,
+		zip.WithOperationID(client.TodoUpsert),
 		zip.WithSummary("Mirror one external work item into the native todo"))
 }
 
@@ -34,7 +34,7 @@ func exposeUpsert() {
 // row, or updating the one already carrying that ExtRef — and reports which it did
 // plus the todo identity the item is now known by.
 //
-// The org is the caller's plane identity and never the argument — plane.IssueIn has
+// The org is the caller's plane identity and never the argument — client.IssueIn has
 // no org field, deliberately, because a feeder able to state the org could file
 // into another tenant's todo. Anonymous is refused rather than defaulted: an
 // item arriving with no principal must fail, not land on somebody's board.
@@ -44,7 +44,7 @@ func exposeUpsert() {
 // back through it would dial its own socket and ask itself, forever.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeUpsert(ctx context.Context, in *plane.IssueIn) (*plane.IssueUpserted, error) {
+func planeUpsert(ctx context.Context, in *client.IssueIn) (*client.IssueUpserted, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("todo upsert: org required")
@@ -61,5 +61,5 @@ func planeUpsert(ctx context.Context, in *plane.IssueIn) (*plane.IssueUpserted, 
 	if err != nil {
 		return nil, err
 	}
-	return &plane.IssueUpserted{Created: res.Created, Number: res.Number, Identifier: res.Identifier}, nil
+	return &client.IssueUpserted{Created: res.Created, Number: res.Number, Identifier: res.Identifier}, nil
 }

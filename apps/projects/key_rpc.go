@@ -7,7 +7,7 @@ import (
 
 	cloud "github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/event"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // The ingest endpoint asks projects which project minted a beacon's key.
@@ -18,8 +18,8 @@ import (
 // endpoint reads it. In-process when they are co-resident, over the plane when they
 // are not.
 func exposeKeys() {
-	zip.Post[plane.KeyIn, plane.Attribution](cloud.Plane(), "/projects/resolve-key", planeResolveKey,
-		zip.WithOperationID(plane.ProjectsResolveKey),
+	zip.Post[client.KeyIn, client.Attribution](cloud.Plane(), "/projects/resolve-key", planeResolveKey,
+		zip.WithOperationID(client.ProjectsResolveKey),
 		zip.WithSummary("Resolve a publishable ingest key to the project that minted it"))
 }
 
@@ -27,7 +27,7 @@ func exposeKeys() {
 // `Found:false`, never an error: the endpoint turns that into an honest refusal, and
 // an error into a 5xx. Collapsing them would refuse every live site's beacons
 // during a transient failure of this app.
-func planeResolveKey(ctx context.Context, in *plane.KeyIn) (*plane.Attribution, error) {
+func planeResolveKey(ctx context.Context, in *client.KeyIn) (*client.Attribution, error) {
 	r, err := currentKeyResolver()
 	if err != nil {
 		return nil, err
@@ -37,9 +37,9 @@ func planeResolveKey(ctx context.Context, in *plane.KeyIn) (*plane.Attribution, 
 		return nil, err
 	}
 	if !ok {
-		return &plane.Attribution{Found: false}, nil
+		return &client.Attribution{Found: false}, nil
 	}
-	return &plane.Attribution{Found: true, Org: sc.Org, Project: sc.Project}, nil
+	return &client.Attribution{Found: true, Org: sc.Org, Project: sc.Project}, nil
 }
 
 // The resolver this process serves plane answers from. Set at Mount beside

@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -34,8 +34,8 @@ import (
 // that zipdoc has a doc comment to lift (tasks.go carries the directive); a
 // closure is a call expression with nothing to read.
 func exposeActivities() {
-	zip.Post[plane.ActivitiesIn, plane.Activities](cloud.Plane(), "/tasks/activities", planeActivities,
-		zip.WithOperationID(plane.TasksActivities),
+	zip.Post[client.ActivitiesIn, client.Activities](cloud.Plane(), "/tasks/activities", planeActivities,
+		zip.WithOperationID(client.TasksActivities),
 		zip.WithSummary("One page of a namespace's standalone activities"))
 }
 
@@ -54,7 +54,7 @@ func exposeActivities() {
 //
 // A missing engine is an ERROR, never an empty page: answering "no activities"
 // from the process that owns the file is how an online fleet reads as no fleet.
-func planeActivities(ctx context.Context, in *plane.ActivitiesIn) (*plane.Activities, error) {
+func planeActivities(ctx context.Context, in *client.ActivitiesIn) (*client.Activities, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrForbidden("activities: no org on the call")
@@ -71,5 +71,5 @@ func planeActivities(ctx context.Context, in *plane.ActivitiesIn) (*plane.Activi
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Activities{Rows: b, Next: next}, nil
+	return &client.Activities{Rows: b, Next: next}, nil
 }

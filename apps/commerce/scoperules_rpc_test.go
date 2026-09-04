@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // TestPlaneScopeRules_OrgFromCaller pins the tenancy of the rate-ceiling read:
@@ -30,7 +30,7 @@ func TestPlaneScopeRules_OrgFromCaller(t *testing.T) {
 // held by the TYPE, not by a reviewer remembering it. A ScopeRule names a scope
 // inside one org and nothing else.
 func TestScopeRuleCarriesNoOrg(t *testing.T) {
-	var r plane.ScopeRule
+	var r client.ScopeRule
 	r.Project, r.Service, r.RateLimitRpm = "p", "s", 1
 	// (compile-time: any `r.Org` here would fail to build, which is the point)
 	if r.RateLimitRpm != 1 {

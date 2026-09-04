@@ -18,15 +18,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/forge"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
 // iamAddr is what the identity store answers about each subject, keyed by the
 // caller's subject exactly as the real op keys it. A test states the rows it
 // needs before standing the peers up.
-var iamAddr map[string]plane.Email
+var iamAddr map[string]client.Email
 
 // forgeFor stands up a forge that answers per SUDO ACTOR, and points this
 // process at it. writers is the set of logins allowed to push.
@@ -91,28 +91,28 @@ func forgeAs(t *testing.T, can map[string]bool, addr func(login string) string) 
 	// confirmed unless the test states otherwise — an unverified one is its own
 	// case (TestResolveActor_RefusesAnUnverifiedAddress).
 	iamApp := zip.New(zip.Config{AppName: "iam", DisableStartupMessage: true})
-	zip.Post[struct{}, plane.Email](iamApp, "/iam/email",
-		func(ctx context.Context, _ *struct{}) (*plane.Email, error) {
+	zip.Post[struct{}, client.Email](iamApp, "/iam/email",
+		func(ctx context.Context, _ *struct{}) (*client.Email, error) {
 			a, ok := iamAddr[zip.CallerOf(ctx).User]
 			if !ok {
 				return nil, zip.ErrUnauthorized("no such subject")
 			}
 			return &a, nil
-		}, zip.WithOperationID(plane.IAMEmail))
+		}, zip.WithOperationID(client.IAMEmail))
 	kms := zip.New(zip.Config{AppName: "kms", DisableStartupMessage: true})
-	zip.Post[plane.SecretIn, plane.Secret](kms, "/kms/get",
-		func(_ context.Context, in *plane.SecretIn) (*plane.Secret, error) {
+	zip.Post[client.SecretIn, client.Secret](kms, "/kms/get",
+		func(_ context.Context, in *client.SecretIn) (*client.Secret, error) {
 			switch in.Ref {
 			case forge.TokenRef:
-				return &plane.Secret{Value: []byte("machine")}, nil
+				return &client.Secret{Value: []byte("machine")}, nil
 			case forge.HostKeyRef:
 				// The CONFIGURED pin. With it there is no handshake and no first use
 				// to intercept — which is also why these tests need no SSH server.
-				return &plane.Secret{Value: []byte("git.test ssh-ed25519 AAAAPINNED")}, nil
+				return &client.Secret{Value: []byte("git.test ssh-ed25519 AAAAPINNED")}, nil
 			}
 			return nil, zip.ErrNotFound("no such secret")
-		}, zip.WithOperationID(plane.KMSGet))
-	plane.Bind()
+		}, zip.WithOperationID(client.KMSGet))
+	client.Bind()
 	for name, app := range map[string]*zip.App{"kms": kms, "iam": iamApp} {
 		app := app
 		go func(path string) { _ = app.Listen(path) }(zip.SocketPath(name))
@@ -126,7 +126,7 @@ func forgeAs(t *testing.T, can map[string]bool, addr func(login string) string) 
 // repository on the way to refusing them.
 func TestDelegate_RefusesAMemberWhoCannotPush(t *testing.T) {
 	minted := forgeFor(t, "zoe") // zoe may push; nobody else may
-	iamAddr = map[string]plane.Email{"sub": verified("zoe@hanzo.ai")}
+	iamAddr = map[string]client.Email{"sub": verified("zoe@hanzo.ai")}
 	ctx := asCaller("sub")
 
 	if _, err := delegate(ctx, "hanzo", "reader", "cloud", "sess_1"); err == nil {
@@ -150,7 +150,7 @@ func TestDelegate_RefusesAMemberWhoCannotPush(t *testing.T) {
 // site administrator, so falling back IS the escalation.
 func TestDelegate_RefusesWithNoActor(t *testing.T) {
 	minted := forgeFor(t, "zoe")
-	iamAddr = map[string]plane.Email{"sub": verified("zoe@hanzo.ai")}
+	iamAddr = map[string]client.Email{"sub": verified("zoe@hanzo.ai")}
 	ctx := asCaller("sub")
 
 	if _, err := delegate(ctx, "hanzo", "", "cloud", "sess_1"); err == nil {
@@ -166,7 +166,7 @@ func TestDelegate_RefusesWithNoActor(t *testing.T) {
 // being spelled one, so signing up as `hanzoai` reached the estate's own repos.
 func TestDelegate_RefusesAnOrgWithNoForgeNamespace(t *testing.T) {
 	minted := forgeFor(t, "zoe")
-	iamAddr = map[string]plane.Email{"sub": verified("zoe@hanzo.ai")}
+	iamAddr = map[string]client.Email{"sub": verified("zoe@hanzo.ai")}
 	ctx := zip.WithCaller(context.Background(), zip.Caller{Org: "hanzoai", User: "sub"})
 
 	// `zoe` is a writer, and the repo and protection are fine. The ONLY thing

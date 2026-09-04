@@ -11,10 +11,10 @@ package integrations
 // refresh token exists in this flow, so ExpiresAt stays 0.
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"net/url"

@@ -22,13 +22,13 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // exposeIndex publishes the reconcile op. Mount calls it.
 func exposeIndex() {
-	zip.Post[plane.IndexIn, plane.Indexed](cloud.Plane(), "/code/index", planeIndex,
-		zip.WithOperationID(plane.CodeIndex),
+	zip.Post[client.IndexIn, client.Indexed](cloud.Plane(), "/code/index", planeIndex,
+		zip.WithOperationID(client.CodeIndex),
 		zip.WithSummary("Fold a pushed tree into an organization's code index"))
 }
 
@@ -41,12 +41,12 @@ func exposeIndex() {
 // An unmounted service answers an EMPTY reconcile rather than an error: this is a
 // background enrichment reached from a push reactor, and a deployment that hosts
 // no code index is not a fault in the push that landed.
-func planeIndex(ctx context.Context, in *plane.IndexIn) (*plane.Indexed, error) {
+func planeIndex(ctx context.Context, in *client.IndexIn) (*client.Indexed, error) {
 	if in.Org == "" || in.Repo == "" {
 		return nil, zip.ErrBadRequest("code index: org and repo are required")
 	}
 	if mounted == nil {
-		return &plane.Indexed{}, nil
+		return &client.Indexed{}, nil
 	}
 
 	files := make([]File, 0, len(in.Files))
@@ -61,7 +61,7 @@ func planeIndex(ctx context.Context, in *plane.IndexIn) (*plane.Indexed, error) 
 	// Skipped is THIS side's own count, not a subtraction: the receiver caps
 	// files again, and reporting len(sent)-indexed would silently fold a real
 	// refusal into an arithmetic artifact whenever the two ends disagree.
-	return &plane.Indexed{
+	return &client.Indexed{
 		Files:   res.Indexed,
 		Chunks:  res.Chunks,
 		Pruned:  res.Pruned,

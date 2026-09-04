@@ -21,7 +21,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // luxAdminHdr is a validated Lux-tenant org admin: a pinned own-org (lux) + the
@@ -104,7 +104,7 @@ func TestScope_LuxAdminCannotReachDO(t *testing.T) {
 //
 // The recording moved with the address. The write used to be a forward carrying
 // X-Org-Id to commerce's own HTTP endpoint; it is a call BY NAME now, and the org
-// rides the CALLER — plane.AlertSpec cannot name one — so the peer records the
+// rides the CALLER — client.AlertSpec cannot name one — so the peer records the
 // tenant the call was answered for, which is the same question asked where the
 // answer now lives. The fixture refuses an org-less call exactly as commerce
 // does, so this cannot pass through an endpoint production closes.
@@ -124,8 +124,8 @@ func TestScope_LuxAdminSpendCapWriteHardPinned(t *testing.T) {
 		t.Fatalf("admitted Lux WL admin must reach the scoped caps WRITE, got 403 (%s)", body)
 	}
 	org, op := caps.seen()
-	if op != plane.BillingAlertRaise {
-		t.Fatalf("the cap WRITE reached %q, want %s — a write that never arrived proves nothing about which tenant it targeted", op, plane.BillingAlertRaise)
+	if op != client.BillingAlertRaise {
+		t.Fatalf("the cap WRITE reached %q, want %s — a write that never arrived proves nothing about which tenant it targeted", op, client.BillingAlertRaise)
 	}
 	if org != "lux" {
 		t.Fatalf("Lux admin spend-cap WRITE targeted org=%q, want lux — cross-brand WRITE into Zoo (?org=zoo honored)!", org)

@@ -38,17 +38,17 @@ package coding
 // /v1/agent/coding — never from a field a client can set.
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/forge"
-	"github.com/hanzoai/cloud/plane"
 )
 
 const (
@@ -117,7 +117,7 @@ func Engine(log func(msg string, kv ...any)) Dispatcher {
 // credential, open the session — and detached after it. That split is what lets
 // an endpoint answer immediately with a real handle instead of an empty promise,
 // and it is why the session is opened HERE rather than inside Run.
-func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log func(msg string, kv ...any)) (Accepted, error) {
+func Start(ctx context.Context, org, subject string, in client.CodingStartIn, log func(msg string, kv ...any)) (Accepted, error) {
 	org = strings.TrimSpace(org)
 	if !OrgRE.MatchString(org) {
 		// Shape-checked, not merely non-empty. The org becomes a git namespace and

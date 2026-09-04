@@ -28,13 +28,13 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // exposeRate publishes the meter-price op. Mount calls it.
 func exposeRate() {
-	zip.Post[plane.RateIn, plane.Rate](cloud.Plane(), "/billing/rate", planeRate,
-		zip.WithOperationID(plane.BillingRate),
+	zip.Post[client.RateIn, client.Rate](cloud.Plane(), "/billing/rate", planeRate,
+		zip.WithOperationID(client.BillingRate),
 		zip.WithSummary("What one unit of a metered product costs"))
 }
 
@@ -47,7 +47,7 @@ func exposeRate() {
 // is a different thing and is returned as one: that is the authority being
 // unwell, not the rate being absent, and a caller that cannot tell them apart
 // would quietly charge its floor while the real price sat unreadable.
-func planeRate(ctx context.Context, in *plane.RateIn) (*plane.Rate, error) {
+func planeRate(ctx context.Context, in *client.RateIn) (*client.Rate, error) {
 	if e := currentEmbedded(); e == nil || e.App() == nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable,
 			"rate: commerce is not co-resident in this process")
@@ -68,15 +68,15 @@ func planeRate(ctx context.Context, in *plane.RateIn) (*plane.Rate, error) {
 		return nil, zip.Errorf(http.StatusBadGateway, "rate: read %s: %v", key.Slug, err)
 	}
 	if !found {
-		return &plane.Rate{Product: product, Meter: meter}, nil
+		return &client.Rate{Product: product, Meter: meter}, nil
 	}
 	// An archived or draft rate is not what the platform charges today, so it
 	// reads as absent and the caller takes its floor — the same answer the public
 	// plan catalog gives for a row that is stored but not sold.
 	if !row.Listed() {
-		return &plane.Rate{Product: product, Meter: meter}, nil
+		return &client.Rate{Product: product, Meter: meter}, nil
 	}
-	return &plane.Rate{
+	return &client.Rate{
 		Product: row.Product,
 		Meter:   row.Meter,
 		Unit:    row.Unit,

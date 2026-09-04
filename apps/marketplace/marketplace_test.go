@@ -14,8 +14,8 @@ import (
 	"github.com/hanzoai/cloud/money"
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
+	"github.com/hanzoai/cloud/client"
 	_ "github.com/hanzoai/cloud/internal/devmaster"
-	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -169,7 +169,7 @@ func TestMonetizedListingIsPriced(t *testing.T) {
 		t.Fatalf("publish monetized want 201, got %d (%s)", code, body)
 	}
 
-	terms, priced, err := (&registry{store: mounted.State.store}).Price(context.Background(), plane.ToolResource("conn_premium"))
+	terms, priced, err := (&registry{store: mounted.State.store}).Price(context.Background(), client.ToolResource("conn_premium"))
 	if err != nil || !priced {
 		t.Fatalf("published listing must be priced: priced=%v err=%v", priced, err)
 	}
@@ -182,7 +182,7 @@ func TestMonetizedListingIsPriced(t *testing.T) {
 	}
 
 	// A tool nobody listed, and any resource that is not a tool id, are free.
-	for _, resource := range []string{plane.ToolResource("conn_unlisted"), "/v1/marketplace"} {
+	for _, resource := range []string{client.ToolResource("conn_unlisted"), "/v1/marketplace"} {
 		if _, priced, err := (&registry{store: mounted.State.store}).Price(context.Background(), resource); priced || err != nil {
 			t.Fatalf("%s must be unpriced, got priced=%v err=%v", resource, priced, err)
 		}

@@ -21,9 +21,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -86,7 +86,7 @@ func capAdmin(ctx context.Context) error {
 
 // caps is the org's spend caps — a bare array, which is the wire this address
 // has always had.
-type caps []plane.Alert
+type caps []client.Alert
 
 // Lists this org's spend caps: the ceiling, its scope, whether it enforces, and
 // how much of it has been spent this period.
@@ -106,8 +106,8 @@ func (o ops) alerts(ctx context.Context, _ *cloud.Unit) (*caps, error) {
 	if err != nil {
 		return nil, err
 	}
-	out, err := ask(ctx, org, "alerts", func(ctx context.Context) (*plane.Alerts, error) {
-		return commercepeer.BillingAlerts(ctx, &plane.SubjectIn{Subject: subject})
+	out, err := ask(ctx, org, "alerts", func(ctx context.Context) (*client.Alerts, error) {
+		return commercepeer.BillingAlerts(ctx, &client.SubjectIn{Subject: subject})
 	})
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func (o ops) alerts(ctx context.Context, _ *cloud.Unit) (*caps, error) {
 // bind rather than merely record.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) raiseAlert(ctx context.Context, in *plane.AlertSpec) (*plane.Alert, error) {
+func (o ops) raiseAlert(ctx context.Context, in *client.AlertSpec) (*client.Alert, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -144,7 +144,7 @@ func (o ops) raiseAlert(ctx context.Context, in *plane.AlertSpec) (*plane.Alert,
 	}
 	spec := *in
 	spec.Subject = subject
-	return ask(ctx, org, "raise cap", func(ctx context.Context) (*plane.Alert, error) {
+	return ask(ctx, org, "raise cap", func(ctx context.Context) (*client.Alert, error) {
 		return commercepeer.BillingAlertRaise(ctx, &spec)
 	})
 }
@@ -160,7 +160,7 @@ func (o ops) raiseAlert(ctx context.Context, in *plane.AlertSpec) (*plane.Alert,
 // become an oracle for what anyone else holds.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) amendAlert(ctx context.Context, in *plane.AlertPatch) (*plane.Alert, error) {
+func (o ops) amendAlert(ctx context.Context, in *client.AlertPatch) (*client.Alert, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (o ops) amendAlert(ctx context.Context, in *plane.AlertPatch) (*plane.Alert
 	}
 	patch := *in
 	patch.Subject = subject
-	return ask(ctx, org, "amend cap", func(ctx context.Context) (*plane.Alert, error) {
+	return ask(ctx, org, "amend cap", func(ctx context.Context) (*client.Alert, error) {
 		return commercepeer.BillingAlertAmend(ctx, &patch)
 	})
 }
@@ -199,13 +199,13 @@ func (o ops) amendAlert(ctx context.Context, in *plane.AlertPatch) (*plane.Alert
 // claim must not be able to refuse traffic.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) capAuthorize(ctx context.Context, in *capQuery) (*plane.CapVerdict, error) {
+func (o ops) capAuthorize(ctx context.Context, in *capQuery) (*client.CapVerdict, error) {
 	org, err := serviceOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "cap authorize", func(ctx context.Context) (*plane.CapVerdict, error) {
-		return commercepeer.BillingCapAuthorize(ctx, &plane.CapIn{
+	return ask(ctx, org, "cap authorize", func(ctx context.Context) (*client.CapVerdict, error) {
+		return commercepeer.BillingCapAuthorize(ctx, &client.CapIn{
 			Project:          in.Project,
 			Service:          in.Service,
 			Amount:           atoiOr64(in.Amount, 0),

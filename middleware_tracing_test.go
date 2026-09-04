@@ -193,8 +193,8 @@ func TestTraceable(t *testing.T) {
 	cases := map[string]bool{
 		"/v1/chat/completions": true,
 		"/v1/models":           true,
-		"/v1/agent/x/run":     true,
-		"/v1/agent/health":    false,
+		"/v1/agent/x/run":      true,
+		"/v1/agent/health":     false,
 		"/v1/kms/health":       false,
 		"/healthz":             false,
 		"/metrics":             false,

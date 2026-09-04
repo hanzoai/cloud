@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	"github.com/zap-proto/zip"
 )
@@ -30,9 +30,9 @@ import (
 
 // exposeEmail publishes the address read. Mount calls it.
 func exposeEmail() {
-	zip.Post[struct{}, plane.Email](cloud.Plane(), "/iam/email",
+	zip.Post[struct{}, client.Email](cloud.Plane(), "/iam/email",
 		email,
-		zip.WithOperationID(plane.IAMEmail),
+		zip.WithOperationID(client.IAMEmail),
 		zip.WithSummary("The caller's address, and whether they have proved it"))
 }
 
@@ -47,7 +47,7 @@ func exposeEmail() {
 // has not confirmed their address" is about a person, and "this principal is not
 // a person" is about the credential — and a caller that ever wants to tell them
 // apart should not have to guess which one it got.
-func email(ctx context.Context, _ *cloud.Unit) (*plane.Email, error) {
+func email(ctx context.Context, _ *cloud.Unit) (*client.Email, error) {
 	who := cloud.Who(ctx)
 	if who.User == "" {
 		return nil, zip.ErrUnauthorized("email: no subject on the call")
@@ -63,5 +63,5 @@ func email(ctx context.Context, _ *cloud.Unit) (*plane.Email, error) {
 	if u == nil {
 		return nil, zip.ErrUnauthorized("email: no such subject")
 	}
-	return &plane.Email{Address: u.Email, Verified: u.EmailVerified}, nil
+	return &client.Email{Address: u.Email, Verified: u.EmailVerified}, nil
 }

@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	luxlog "github.com/luxfi/log"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -46,7 +46,7 @@ func turnAttr(sp sdktrace.ReadOnlySpan, key string) string {
 func spyTransport(n *int) transport {
 	return transport{
 		id:        "slack",
-		normalize: func(plane.ChannelsIngestIn) (Message, bool) { return Message{}, false },
+		normalize: func(client.ChannelsIngestIn) (Message, bool) { return Message{}, false },
 		send: func(context.Context, *cloud.Service[state], string, Message) (Delivery, error) {
 			*n++
 			return Delivery{}, nil

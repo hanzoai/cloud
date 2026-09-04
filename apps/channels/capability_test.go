@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // capability_test.go holds the published capabilities against what the transports
@@ -29,7 +29,7 @@ import (
 // merely unlisted.
 type probe struct {
 	what string
-	ev   plane.ChannelsIngestIn
+	ev   client.ChannelsIngestIn
 	kind RoomKind
 }
 
@@ -215,11 +215,11 @@ func TestEveryTransportSendsAsTheOrg(t *testing.T) {
 // org at all, which left telegram and whatsapp undeliverable and let discord and
 // teams spend a shared app credential with nothing to check it against.
 func TestEveryEndpointNamesTheOrgOnTheWire(t *testing.T) {
-	var sent []plane.ChatSendIn
+	var sent []client.ChatSendIn
 	saved := ask
-	ask = func(ctx context.Context, app, op string, in *plane.ChatSendIn) (*plane.ChatSendOut, error) {
+	ask = func(ctx context.Context, app, op string, in *client.ChatSendIn) (*client.ChatSendOut, error) {
 		sent = append(sent, *in)
-		return &plane.ChatSendOut{MessageID: "m"}, nil
+		return &client.ChatSendOut{MessageID: "m"}, nil
 	}
 	t.Cleanup(func() { ask = saved })
 

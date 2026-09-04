@@ -38,7 +38,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	iampeer "github.com/hanzoai/cloud/plane/iam"
+	iampeer "github.com/hanzoai/cloud/client/iam"
 	model "github.com/hanzoai/iam/pkg/model"
 )
 

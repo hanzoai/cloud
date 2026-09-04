@@ -19,7 +19,7 @@ package ask
 // socket away. An in-process replay cannot cross a process boundary. A plane
 // call is the one thing that can.
 //
-// TENANCY. The org rides the CALLER and is never an argument: [plane.FiguresIn]
+// TENANCY. The org rides the CALLER and is never an argument: [client.FiguresIn]
 // is an empty struct, and zip forwards the gateway's own assertion off the
 // in-flight request to the peer (zip caller.go, forwardIdentity). So a
 // contributor cannot name an org, cannot be handed one, and cannot widen the one
@@ -32,23 +32,23 @@ import (
 	"context"
 	"strings"
 
-	"github.com/hanzoai/cloud/plane"
-	bookspeer "github.com/hanzoai/cloud/plane/books"
-	projectspeer "github.com/hanzoai/cloud/plane/project"
+	"github.com/hanzoai/cloud/client"
+	bookspeer "github.com/hanzoai/cloud/client/books"
+	projectspeer "github.com/hanzoai/cloud/client/project"
 )
 
 // domain is one grounded peer behind the advisor: the name the answer is tagged
 // with, the vocabulary that routes a question to it, the read it names as its
 // source, and the typed plane client that performs it.
 //
-// ask is the GENERATED client function (plane/<app>), never plane.Ask with loose
+// ask is the GENERATED client function (plane/<app>), never client.Call with loose
 // strings — the compiler is what checks that an op name belongs to the app it is
 // sent to and that In and Out are the pair that op declared.
 type domain struct {
 	name     string
 	source   string
 	keywords []string
-	ask      func(context.Context, *plane.FiguresIn) (*plane.FiguresOut, error)
+	ask      func(context.Context, *client.FiguresIn) (*client.FiguresOut, error)
 }
 
 func (d domain) Name() string { return d.name }
@@ -78,7 +78,7 @@ func (d domain) CanAnswer(question string) bool {
 // an error and the advisor falls back rather than stating a number it could not
 // read.
 func (d domain) Gather(ctx context.Context, _ map[string]string) ([]Fact, []string, error) {
-	out, err := d.ask(ctx, &plane.FiguresIn{})
+	out, err := d.ask(ctx, &client.FiguresIn{})
 	if err != nil {
 		return nil, nil, err
 	}

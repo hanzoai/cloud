@@ -30,11 +30,11 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/crawl"
 	"github.com/hanzoai/cloud/apps/websearch"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/tenant"
 )
 
@@ -266,9 +266,9 @@ func countFree(ctx context.Context, u aiobject.UsageEvent) error {
 	if u.Allowance == "" {
 		return nil
 	}
-	if _, err := cloud.Ask[plane.AllowanceIn, plane.Allowance](
-		cloud.For(ctx, u.Namespace), "allowance", plane.AllowanceTake,
-		&plane.AllowanceIn{Subject: u.Allowance}); err != nil {
+	if _, err := cloud.Ask[client.AllowanceIn, client.Allowance](
+		cloud.For(ctx, u.Namespace), "allowance", client.AllowanceTake,
+		&client.AllowanceIn{Subject: u.Allowance}); err != nil {
 		return fmt.Errorf("plane allowance count: %w", err)
 	}
 	return nil
@@ -395,7 +395,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// public edge was the mistake; the edge is for customers, the plane is for us.
 	//
 	// commerce already publishes the read as a plane op (apps/commerce/balance_rpc.go
-	// exposeBalance → plane.FinanceBalance) precisely because the ledger has ONE writer
+	// exposeBalance → client.FinanceBalance) precisely because the ledger has ONE writer
 	// and must be asked, not opened. Ask it the way every other in-tree caller does
 	// (apps/admin/finance, apps/marketplace): typed, over the socket, org-scoped by the
 	// caller — no HTTP hop, no token to mint, no edge to satisfy.
@@ -407,9 +407,9 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 			if currency == "" {
 				currency = "usd"
 			}
-			bal, err := cloud.Ask[plane.BalanceIn, plane.Balance](
-				cloud.For(ctx, namespace), "commerce", plane.FinanceBalance,
-				&plane.BalanceIn{Subject: subject, Currency: currency})
+			bal, err := cloud.Ask[client.BalanceIn, client.Balance](
+				cloud.For(ctx, namespace), "commerce", client.FinanceBalance,
+				&client.BalanceIn{Subject: subject, Currency: currency})
 			if err != nil {
 				return 0, fmt.Errorf("plane balance read: %w", err)
 			}
@@ -481,9 +481,9 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// bills us either way — so "we could not ask" must never become "a stranger may
 	// have as much as they want". An unanswerable ask in that lane is refused.
 	aiobject.SetSpent(func(ctx context.Context, subject, namespace string) (bool, error) {
-		out, err := cloud.Ask[plane.AllowanceIn, plane.Allowance](
-			cloud.For(ctx, namespace), "allowance", plane.AllowanceRead,
-			&plane.AllowanceIn{Subject: subject})
+		out, err := cloud.Ask[client.AllowanceIn, client.Allowance](
+			cloud.For(ctx, namespace), "allowance", client.AllowanceRead,
+			&client.AllowanceIn{Subject: subject})
 		switch {
 		case err != nil && namespace == tenant.Public:
 			return true, nil // spent: an unnamed caller gets no benefit of the doubt

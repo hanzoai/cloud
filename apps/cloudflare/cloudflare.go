@@ -41,12 +41,12 @@
 package cloudflare
 
 import (
-	cf "github.com/hanzoai/cloud/internal/cloudflare"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	cf "github.com/hanzoai/cloud/internal/cloudflare"
 	"io"
 	"net/http"
 	"net/url"

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // community_test.go proves git's half of the visibility client against the copy it
@@ -22,7 +22,7 @@ import (
 func repoAfter(t *testing.T, org, slug, want string) (there, public bool) {
 	t.Helper()
 	ctx := context.Background()
-	if err := publish(ctx, org, plane.Visibility{Slug: slug, Name: slug, State: want}); err != nil {
+	if err := publish(ctx, org, client.Visibility{Slug: slug, Name: slug, State: want}); err != nil {
 		t.Fatalf("publish %s: %v", want, err)
 	}
 	s := mounted.Load()
@@ -49,26 +49,26 @@ func repoAfter(t *testing.T, org, slug, want string) (there, public bool) {
 func TestARepoFollowsItsProjectThroughEveryState(t *testing.T) {
 	mountApp(t)
 
-	if there, public := repoAfter(t, "acme", "board", plane.Open); !there || !public {
+	if there, public := repoAfter(t, "acme", "board", client.Open); !there || !public {
 		t.Fatalf("published public: there=%v public=%v, want true/true", there, public)
 	}
-	if there, public := repoAfter(t, "acme", "board", plane.Shut); !there || public {
+	if there, public := repoAfter(t, "acme", "board", client.Shut); !there || public {
 		t.Fatalf("gone private: there=%v public=%v, want true/false", there, public)
 	}
-	if there, public := repoAfter(t, "acme", "board", plane.Open); !there || !public {
+	if there, public := repoAfter(t, "acme", "board", client.Open); !there || !public {
 		t.Fatalf("public again: there=%v public=%v, want true/true", there, public)
 	}
-	if there, _ := repoAfter(t, "acme", "board", plane.Gone); there {
+	if there, _ := repoAfter(t, "acme", "board", client.Gone); there {
 		t.Fatal("a deleted project's repo is still here, for the next project of that slug to adopt")
 	}
 	// Twice, because the delete path retries behind its own answer: an absence is
 	// the state it asked for, not a failure to report forever.
-	if there, _ := repoAfter(t, "acme", "board", plane.Gone); there {
+	if there, _ := repoAfter(t, "acme", "board", client.Gone); there {
 		t.Fatal("the second retirement resurrected the repo")
 	}
 	// And a project that reclaims the slug gets a repo that has never held
 	// anything else — there is nothing left to inherit.
-	if there, public := repoAfter(t, "acme", "board", plane.Open); !there || !public {
+	if there, public := repoAfter(t, "acme", "board", client.Open); !there || !public {
 		t.Fatalf("reclaimed: there=%v public=%v, want true/true", there, public)
 	}
 }
@@ -78,7 +78,7 @@ func TestARepoFollowsItsProjectThroughEveryState(t *testing.T) {
 // exists and is readable.
 func TestAPrivateProjectsRepoIsBornClosed(t *testing.T) {
 	mountApp(t)
-	if there, public := repoAfter(t, "acme", "secret", plane.Shut); !there || public {
+	if there, public := repoAfter(t, "acme", "secret", client.Shut); !there || public {
 		t.Fatalf("born private: there=%v public=%v, want true/false", there, public)
 	}
 }
@@ -92,7 +92,7 @@ func TestAnUnspellableNameIsRefused(t *testing.T) {
 	mountApp(t)
 	ctx := context.Background()
 	for _, slug := range []string{"", " ", "/etc/passwd", "..", "a/b", "-lead", ".git"} {
-		err := publish(ctx, "acme", plane.Visibility{Slug: slug, State: plane.Open})
+		err := publish(ctx, "acme", client.Visibility{Slug: slug, State: client.Open})
 		if err == nil {
 			t.Fatalf("publish(%q) was accepted; a name this cannot spell must be refused", slug)
 		}
@@ -100,16 +100,16 @@ func TestAnUnspellableNameIsRefused(t *testing.T) {
 	// The alphabet it DOES take is the REST surface's own, through the REST
 	// surface's normalisation: a client's trailing ".git" names the same repo the
 	// bare slug does, on the create AND on the delete.
-	if err := publish(ctx, "acme", plane.Visibility{Slug: "board.git", State: plane.Open}); err != nil {
+	if err := publish(ctx, "acme", client.Visibility{Slug: "board.git", State: client.Open}); err != nil {
 		t.Fatalf("publish(board.git): %v", err)
 	}
-	if there, public := repoAfter(t, "acme", "board", plane.Open); !there || !public {
+	if there, public := repoAfter(t, "acme", "board", client.Open); !there || !public {
 		t.Fatalf("board.git addressed some other repo: there=%v public=%v", there, public)
 	}
-	if err := publish(ctx, "acme", plane.Visibility{Slug: "board.git", State: plane.Gone}); err != nil {
+	if err := publish(ctx, "acme", client.Visibility{Slug: "board.git", State: client.Gone}); err != nil {
 		t.Fatalf("retire(board.git): %v", err)
 	}
-	if there, _ := repoAfter(t, "acme", "board", plane.Gone); there {
+	if there, _ := repoAfter(t, "acme", "board", client.Gone); there {
 		t.Fatal("the retirement addressed a different repo from the create")
 	}
 }
@@ -119,7 +119,7 @@ func TestAnUnspellableNameIsRefused(t *testing.T) {
 // newer peer's word — answers with it off.
 func TestAnUnknownStateClosesTheRepo(t *testing.T) {
 	mountApp(t)
-	if there, public := repoAfter(t, "acme", "board", plane.Open); !there || !public {
+	if there, public := repoAfter(t, "acme", "board", client.Open); !there || !public {
 		t.Fatalf("published public: there=%v public=%v, want true/true", there, public)
 	}
 	if there, public := repoAfter(t, "acme", "board", "who knows"); !there || public {

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // teams.go is the Teams transport: envelope normalization from the ingress
@@ -15,7 +15,7 @@ import (
 
 // teamsEndpoint is the send path; tests spy it, prod never repoints.
 var teamsEndpoint = func(ctx context.Context, org, serviceURL, conversationID, text string) error {
-	_, err := post(ctx, org, plane.ChatSendIn{Provider: "teams", Root: serviceURL, Room: conversationID, Text: text})
+	_, err := post(ctx, org, client.ChatSendIn{Provider: "teams", Root: serviceURL, Room: conversationID, Text: text})
 	return err
 }
 
@@ -31,7 +31,7 @@ var teamsTransport = transport{
 // envelope. Bot Framework contract: channel/group-chat conversation ids are
 // 19:...@thread.*; personal chats are a:.... Unknown shapes classify DM —
 // the fail-safe direction, since dmPolicy defaults to pairing (strictest).
-func teamsNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
+func teamsNormalize(ev client.ChannelsIngestIn) (Message, bool) {
 	in := ev
 	kind := RoomDM
 	if strings.HasPrefix(in.Channel, "19:") {

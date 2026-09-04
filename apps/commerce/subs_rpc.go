@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	billingapi "github.com/hanzoai/commerce/api/billing"
 	"github.com/zap-proto/zip"
 )
@@ -39,7 +39,7 @@ import (
 // renderer next to the datastore is the import cycle that shape implies.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeSubs(ctx context.Context, in *plane.SubsIn) (*plane.Subs, error) {
+func planeSubs(ctx context.Context, in *client.SubsIn) (*client.Subs, error) {
 	org, err := orgOf(ctx, "subs")
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func planeSubs(ctx context.Context, in *plane.SubsIn) (*plane.Subs, error) {
 	if err != nil {
 		return nil, zip.Errorf(502, "subs: list subscriptions: %v", err)
 	}
-	rows := make([]plane.Sub, 0, len(subs))
+	rows := make([]client.Sub, 0, len(subs))
 	for _, s := range subs {
 		if s == nil {
 			continue
@@ -64,7 +64,7 @@ func planeSubs(ctx context.Context, in *plane.SubsIn) (*plane.Subs, error) {
 		if slug == "" {
 			slug = s.PlanId
 		}
-		rows = append(rows, plane.Sub{
+		rows = append(rows, client.Sub{
 			// Commerce's OWN figure, through its own exported function. A reader
 			// that recomputed it would need a second copy of the interval
 			// normalization and the seat count, which is how one surface came to
@@ -82,12 +82,12 @@ func planeSubs(ctx context.Context, in *plane.SubsIn) (*plane.Subs, error) {
 			StartedAt: s.PeriodStart.Unix(),
 		})
 	}
-	return &plane.Subs{Rows: rows}, nil
+	return &client.Subs{Rows: rows}, nil
 }
 
 // exposeSubs publishes the subscriptions read. Mount calls it.
 func exposeSubs() {
-	zip.Post[plane.SubsIn, plane.Subs](cloud.Plane(), "/finance/subs", planeSubs,
-		zip.WithOperationID(plane.FinanceSubs),
+	zip.Post[client.SubsIn, client.Subs](cloud.Plane(), "/finance/subs", planeSubs,
+		zip.WithOperationID(client.FinanceSubs),
 		zip.WithSummary("Subscriptions for this org"))
 }

@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	iampeer "github.com/hanzoai/cloud/plane/iam"
+	iampeer "github.com/hanzoai/cloud/client/iam"
 	"github.com/zap-proto/zip"
 )
 
@@ -59,7 +59,7 @@ type accountLookup func(ctx context.Context) (status string, ok bool)
 //
 //  1. global admin (c.IsAdmin())            → approved (admins are never gated)
 //  2. validated header X-User-Approved      → its bit (forward-perfect, no lookup)
-//  3. the iam peer (plane.IAMApproval)      → approved unless approvalStatus=="pending"
+//  3. the iam peer (client.IAMApproval)      → approved unless approvalStatus=="pending"
 //     — cached per user for ttl; FAIL-OPEN on any error.
 type Approvals struct {
 	lookup accountLookup

@@ -123,7 +123,6 @@ func deploymentContainerImages(dep *unstructured.Unstructured) []string {
 	return imgs
 }
 
-
 // tagFromImageRef splits `ghcr.io/hanzoai/iam:v1` → `v1`; a digest ref returns the
 // digest; a bare repo returns "".
 func tagFromImageRef(ref string) string {

@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	contract "github.com/hanzoai/cloud/plane"
+	contract "github.com/hanzoai/cloud/client"
 )
 
 // TestDetermine_AnUnrecognisedActionNeverWins.

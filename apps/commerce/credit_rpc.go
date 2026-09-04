@@ -6,8 +6,8 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	credit "github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -29,15 +29,15 @@ import (
 // others move it out of a ledger, read it, or gate it; this one puts it in. The
 // plane's whole boundary is the socket — 0700 in the fleet's own run dir, reachable
 // only by the children the router spawned — and that was already the boundary
-// protecting a secret read (plane.KMSGet) and a debit (plane.FinanceRecord). It is
+// protecting a secret read (client.KMSGet) and a debit (client.FinanceRecord). It is
 // the same boundary and it is now carrying more weight. Narrowing it means peer
 // credentials on the plane itself (SO_PEERCRED, per-op), which is a fleet-wide client
 // and belongs to whoever owns it — not smuggled in behind a payment fix.
 
 // exposeCredit publishes the ledger credit. Mount calls it.
 func exposeCredit() {
-	zip.Post[plane.CreditIn, plane.Credited](cloud.Plane(), "/finance/credit", planeCredit,
-		zip.WithOperationID(plane.FinanceCredit),
+	zip.Post[client.CreditIn, client.Credited](cloud.Plane(), "/finance/credit", planeCredit,
+		zip.WithOperationID(client.FinanceCredit),
 		zip.WithSummary("Credit one subject's prepaid ledger, exactly once per ref"))
 }
 
@@ -58,7 +58,7 @@ func exposeCredit() {
 // cent and rounding to the minor unit would round it to nothing.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeCredit(ctx context.Context, in *plane.CreditIn) (*plane.Credited, error) {
+func planeCredit(ctx context.Context, in *client.CreditIn) (*client.Credited, error) {
 	org, err := callerOrg(ctx, "credit")
 	if err != nil {
 		return nil, err
@@ -92,5 +92,5 @@ func planeCredit(ctx context.Context, in *plane.CreditIn) (*plane.Credited, erro
 	// The entry id travels. Deposit has always returned it and this op used to
 	// discard it, which left every cross-process credit unciteable: the caller
 	// knew money had moved and could name nothing in the books that moved it.
-	return &plane.Credited{Amount: in.Amount, ID: entryID}, nil
+	return &client.Credited{Amount: in.Amount, ID: entryID}, nil
 }

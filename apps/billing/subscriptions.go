@@ -13,8 +13,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -37,17 +37,17 @@ func mountSubscriptions(app cloud.Router, o ops) {
 // plan is an answer.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) subscriptions(ctx context.Context, _ *cloud.Unit) (*plane.Subscriptions, error) {
+func (o ops) subscriptions(ctx context.Context, _ *cloud.Unit) (*client.Subscriptions, error) {
 	org, err := principalOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
-	in := plane.SubsIn{}
+	in := client.SubsIn{}
 	if c, ok := cloud.Request(ctx); ok {
 		in.UserID = strings.TrimSpace(c.Query("userId"))
 		in.Status = strings.TrimSpace(c.Query("status"))
 	}
-	return ask(ctx, org, "subscriptions", func(ctx context.Context) (*plane.Subscriptions, error) {
+	return ask(ctx, org, "subscriptions", func(ctx context.Context) (*client.Subscriptions, error) {
 		return commercepeer.BillingSubscriptions(ctx, &in)
 	})
 }
@@ -63,7 +63,7 @@ func (o ops) subscriptions(ctx context.Context, _ *cloud.Unit) (*plane.Subscript
 // cannot be probed for existence.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) cancelSubscription(ctx context.Context, in *plane.SubscriptionRef) (*plane.Subscription, error) {
+func (o ops) cancelSubscription(ctx context.Context, in *client.SubscriptionRef) (*client.Subscription, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -71,11 +71,11 @@ func (o ops) cancelSubscription(ctx context.Context, in *plane.SubscriptionRef) 
 	if err != nil {
 		return nil, err
 	}
-	ref := plane.SubscriptionRef{ID: pathID(ctx), AtPeriodEnd: true}
+	ref := client.SubscriptionRef{ID: pathID(ctx), AtPeriodEnd: true}
 	if in != nil && bodyStatedPeriodEnd(ctx) {
 		ref.AtPeriodEnd = in.AtPeriodEnd
 	}
-	return ask(ctx, org, "cancel subscription", func(ctx context.Context) (*plane.Subscription, error) {
+	return ask(ctx, org, "cancel subscription", func(ctx context.Context) (*client.Subscription, error) {
 		return commercepeer.BillingSubscriptionCancel(ctx, &ref)
 	})
 }
@@ -88,7 +88,7 @@ func (o ops) cancelSubscription(ctx context.Context, in *plane.SubscriptionRef) 
 // reactivate comes back with its own reason.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) reactivateSubscription(ctx context.Context, _ *plane.SubscriptionRef) (*plane.Subscription, error) {
+func (o ops) reactivateSubscription(ctx context.Context, _ *client.SubscriptionRef) (*client.Subscription, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -96,8 +96,8 @@ func (o ops) reactivateSubscription(ctx context.Context, _ *plane.SubscriptionRe
 	if err != nil {
 		return nil, err
 	}
-	ref := plane.SubscriptionRef{ID: pathID(ctx)}
-	return ask(ctx, org, "reactivate subscription", func(ctx context.Context) (*plane.Subscription, error) {
+	ref := client.SubscriptionRef{ID: pathID(ctx)}
+	return ask(ctx, org, "reactivate subscription", func(ctx context.Context) (*client.Subscription, error) {
 		return commercepeer.BillingSubscriptionReactivate(ctx, &ref)
 	})
 }

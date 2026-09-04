@@ -51,9 +51,9 @@ func ConfigFromEnv(domain string) Config {
 		// have noticed, because hanzo.ai reaches this set by DERIVATION from
 		// CLOUD_DOMAIN and no deployment states it. A set whose job is to deny must
 		// not be expressible as a replacement.
-		SelfDomains:     append(selfFloor(apex, domain), list("CLOUD_SITES_SELF_DOMAINS")...),
-		FirstPartyApex:  environ.Or("CLOUD_SITES_FIRSTPARTY_APEX", "hanzo.ai"),
-		FirstPartyOrg:   environ.Or("CLOUD_SITES_FIRSTPARTY_ORG", "hanzo"),
+		SelfDomains:    append(selfFloor(apex, domain), list("CLOUD_SITES_SELF_DOMAINS")...),
+		FirstPartyApex: environ.Or("CLOUD_SITES_FIRSTPARTY_APEX", "hanzo.ai"),
+		FirstPartyOrg:  environ.Or("CLOUD_SITES_FIRSTPARTY_ORG", "hanzo"),
 	}
 }
 

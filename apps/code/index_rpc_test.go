@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // THE OP MUST EXIST, because the thing it replaced did not.
@@ -19,8 +19,8 @@ import (
 //
 // An op cannot fail that way: it is either published or it is not, and this asks.
 func TestTheIndexOpIsPublished(t *testing.T) {
-	if plane.CodeIndex == "" {
-		t.Fatal("plane.CodeIndex has no operation id")
+	if client.CodeIndex == "" {
+		t.Fatal("client.CodeIndex has no operation id")
 	}
 }
 
@@ -28,7 +28,7 @@ func TestTheIndexOpIsPublished(t *testing.T) {
 // to bill, and indexing EMBEDS — silently accepting a blank org would run paid
 // inference against nobody.
 func TestIndexRefusesAnUnidentifiedTree(t *testing.T) {
-	for _, in := range []plane.IndexIn{
+	for _, in := range []client.IndexIn{
 		{Repo: "r"},
 		{Org: "acme"},
 		{},
@@ -48,9 +48,9 @@ func TestIndexIsQuietWhenUnmounted(t *testing.T) {
 	t.Cleanup(func() { mounted = saved })
 	mounted = nil
 
-	out, err := planeIndex(context.Background(), &plane.IndexIn{
+	out, err := planeIndex(context.Background(), &client.IndexIn{
 		Org: "acme", BillingOrg: "acme", Repo: "r",
-		Files: []plane.IndexFile{{Path: "a.go", Content: "package a"}},
+		Files: []client.IndexFile{{Path: "a.go", Content: "package a"}},
 	})
 	if err != nil {
 		t.Fatalf("an unmounted code plane returned an error: %v — a push must not fail "+

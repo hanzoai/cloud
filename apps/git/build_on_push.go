@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/contract"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // build_on_push.go is the NATIVE CI/CD orchestrator: a git-lifecycle reactor that
@@ -245,7 +245,7 @@ func enqueuePipeline(ctx context.Context, s *cloud.Service[state], ev cloud.Life
 		// with the org stated once here. This used to be an HTTP call to our own
 		// edge bearing a shared token; the plane carries the caller instead.
 		bctx, cancel := context.WithTimeout(cloud.For(ctx, ev.Org), 20*time.Second)
-		_, err := plane.Ask[plane.BuildIn, plane.Queued](bctx, "platform", plane.PlatformBuild, in)
+		_, err := client.Call[client.BuildIn, client.Queued](bctx, "platform", client.PlatformBuild, in)
 		cancel()
 		if err != nil {
 			failed++
@@ -263,7 +263,7 @@ func enqueuePipeline(ctx context.Context, s *cloud.Service[state], ev cloud.Life
 // mode:delegate path emits, so a native-push build and a delegated build produce the
 // identical ref — the two entry points converge, never fork a tag. Returns nil for an
 // image with no `repo` (nothing to push to).
-func enqueueBody(img pipelineImage, ghRepo, branch, sha string) *plane.BuildIn {
+func enqueueBody(img pipelineImage, ghRepo, branch, sha string) *client.BuildIn {
 	repo := strings.TrimSpace(img.Repo)
 	if repo == "" {
 		return nil
@@ -284,7 +284,7 @@ func enqueueBody(img pipelineImage, ghRepo, branch, sha string) *plane.BuildIn {
 	if suffix != "" {
 		tag += "-" + suffix
 	}
-	return &plane.BuildIn{
+	return &client.BuildIn{
 		Repo:       ghRepo,
 		SHA:        sha,
 		Image:      repo + ":" + tag,

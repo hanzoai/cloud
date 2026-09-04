@@ -1,6 +1,6 @@
 package sandbox
 
-// plane.go — the sandbox's SECOND adapter: the same five verbs, reachable from a
+// peer.go — the sandbox's SECOND adapter: the same five verbs, reachable from a
 // peer app instead of from a browser.
 //
 // It is a peer call and not a Go import, and that is a correctness decision rather
@@ -13,7 +13,7 @@ package sandbox
 // `go reap()` sweeping leases the real service is still serving. Two writers on
 // one store is the exact failure the writer lease exists to prevent.
 //
-// And the hop is not a cost where the two are fused: plane.Ask checks
+// And the hop is not a cost where the two are fused: client.Call checks
 // zip.Serving(app) first and dispatches IN-PROCESS when the peer is this process,
 // so the same call is a function call in a fused binary and a socket round trip in
 // a split one. Which it is, is not the caller's business — that is the whole reason
@@ -31,7 +31,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -72,26 +72,26 @@ var shutdownStores = func() error { return nil }
 // expose publishes the sandbox verbs on the internal plane. Called from Mount.
 func expose() {
 	p := cloud.Plane()
-	zip.Post[plane.LeaseIn, plane.Leased](p, "/sandbox/lease", planeLease,
-		zip.WithOperationID(plane.SandboxLease),
+	zip.Post[client.LeaseIn, client.Leased](p, "/sandbox/lease", planeLease,
+		zip.WithOperationID(client.SandboxLease),
 		zip.WithSummary("Lease a sandbox, or resume one"))
-	zip.Post[plane.RunIn, plane.Ran](p, "/sandbox/run", planeRun,
-		zip.WithOperationID(plane.SandboxRun),
+	zip.Post[client.RunIn, client.Ran](p, "/sandbox/run", planeRun,
+		zip.WithOperationID(client.SandboxRun),
 		zip.WithSummary("Run a command in a sandbox"))
-	zip.Post[plane.PathIn, plane.Blob](p, "/sandbox/read", planeRead,
-		zip.WithOperationID(plane.SandboxRead),
+	zip.Post[client.PathIn, client.Blob](p, "/sandbox/read", planeRead,
+		zip.WithOperationID(client.SandboxRead),
 		zip.WithSummary("Read a file, or list a directory"))
-	zip.Post[plane.WriteIn, plane.Wrote](p, "/sandbox/write", planeWrite,
-		zip.WithOperationID(plane.SandboxWrite),
+	zip.Post[client.WriteIn, client.Wrote](p, "/sandbox/write", planeWrite,
+		zip.WithOperationID(client.SandboxWrite),
 		zip.WithSummary("Write a file in a sandbox"))
-	zip.Post[plane.StopIn, plane.Stopped](p, "/sandbox/stop", planeStop,
-		zip.WithOperationID(plane.SandboxStop),
+	zip.Post[client.StopIn, client.Stopped](p, "/sandbox/stop", planeStop,
+		zip.WithOperationID(client.SandboxStop),
 		zip.WithSummary("Interrupt what a sandbox is running"))
-	zip.Post[plane.EndIn, struct{}](p, "/sandbox/end", planeEnd,
-		zip.WithOperationID(plane.SandboxEnd),
+	zip.Post[client.EndIn, struct{}](p, "/sandbox/end", planeEnd,
+		zip.WithOperationID(client.SandboxEnd),
 		zip.WithSummary("End a sandbox's lease"))
-	zip.Post[plane.AttachIn, plane.Attached](p, "/sandbox/attach", planeAttach,
-		zip.WithOperationID(plane.SandboxAttach),
+	zip.Post[client.AttachIn, client.Attached](p, "/sandbox/attach", planeAttach,
+		zip.WithOperationID(client.SandboxAttach),
 		zip.WithSummary("Report that somebody is watching a project"))
 }
 
@@ -101,7 +101,7 @@ func expose() {
 // when it was last CALLED, and that is a poor proxy for whether anyone is there:
 // reading a diff for twenty minutes touches nothing, and a tab closed twenty
 // minutes ago touches nothing either. Only the stream can tell those apart, and
-// the stream is in another process (see plane.SandboxAttach).
+// the stream is in another process (see client.SandboxAttach).
 //
 // KEYED ON THE PROJECT, not a sandbox id, because that is what the watcher holds
 // — an id changes when a lease is reaped and re-taken while the tab stays open,
@@ -110,7 +110,7 @@ func expose() {
 // A project with no live sandbox is a SUCCESSFUL empty answer, not an error: a
 // user who opened the page before anything was leased is the ordinary case, and
 // answering with an error would make an idle stream log a failure every beat.
-func planeAttach(ctx context.Context, in *plane.AttachIn) (*plane.Attached, error) {
+func planeAttach(ctx context.Context, in *client.AttachIn) (*client.Attached, error) {
 	s, org, err := live(ctx)
 	if err != nil {
 		return nil, err
@@ -128,12 +128,12 @@ func planeAttach(ctx context.Context, in *plane.AttachIn) (*plane.Attached, erro
 		return nil, zip.Errorf(500, "attach: %v", err)
 	}
 	if m.ID == "" {
-		return &plane.Attached{}, nil
+		return &client.Attached{}, nil
 	}
 	if err := st.Watched(ctx, org, m.ID, time.Now().Unix()); err != nil {
 		return nil, zip.Errorf(500, "attach: %v", err)
 	}
-	return &plane.Attached{ID: m.ID}, nil
+	return &client.Attached{ID: m.ID}, nil
 }
 
 // live resolves the caller's org and the mounted service together, because every
@@ -176,7 +176,7 @@ func live(ctx context.Context) (*Service, string, error) {
 // What comes back is a real computer: a pod under a runtime boundary with a
 // toolchain already in it, its own filesystem, and a lease that ends it. Every
 // other op here acts on the one this returns.
-func planeLease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
+func planeLease(ctx context.Context, in *client.LeaseIn) (*client.Leased, error) {
 	s, org, err := live(ctx)
 	if err != nil {
 		return nil, err
@@ -195,7 +195,7 @@ func planeLease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Leased{ID: m.ID, Class: m.Class, Runtime: m.Runtime, Status: m.Status,
+	return &client.Leased{ID: m.ID, Class: m.Class, Runtime: m.Runtime, Status: m.Status,
 		Workdir: workdirFor(m.Class), Cluster: m.Cluster}, nil
 }
 
@@ -213,7 +213,7 @@ func planeLease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
 // The session is named; the TENANT is not. It is the org the caller already
 // proved, so a session belonging to somebody else is absent from the org this
 // call acts for and the append is refused there.
-func planeRun(ctx context.Context, in *plane.RunIn) (*plane.Ran, error) {
+func planeRun(ctx context.Context, in *client.RunIn) (*client.Ran, error) {
 	s, org, err := live(ctx)
 	if err != nil {
 		return nil, err
@@ -224,13 +224,13 @@ func planeRun(ctx context.Context, in *plane.RunIn) (*plane.Ran, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Ran{ExitCode: r.ExitCode, Stdout: r.Stdout, Stderr: r.Stderr}, nil
+	return &client.Ran{ExitCode: r.ExitCode, Stdout: r.Stdout, Stderr: r.Stderr}, nil
 }
 
 // planeStop interrupts whatever the caller's sandbox is running and answers how
 // many commands it ended. The sandbox stays leased — stop ends the WORK, end ends
 // the RESOURCE — so whoever stopped a run can still read what it left behind.
-func planeStop(ctx context.Context, in *plane.StopIn) (*plane.Stopped, error) {
+func planeStop(ctx context.Context, in *client.StopIn) (*client.Stopped, error) {
 	s, org, err := live(ctx)
 	if err != nil {
 		return nil, err
@@ -239,12 +239,12 @@ func planeStop(ctx context.Context, in *plane.StopIn) (*plane.Stopped, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Stopped{Stopped: n}, nil
+	return &client.Stopped{Stopped: n}, nil
 }
 
 // planeRead reads one path in the caller's sandbox: a file's bytes, or a
 // directory's entries when the path names one.
-func planeRead(ctx context.Context, in *plane.PathIn) (*plane.Blob, error) {
+func planeRead(ctx context.Context, in *client.PathIn) (*client.Blob, error) {
 	s, org, err := live(ctx)
 	if err != nil {
 		return nil, err
@@ -253,12 +253,12 @@ func planeRead(ctx context.Context, in *plane.PathIn) (*plane.Blob, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Blob{Path: e.Path, Dir: e.Dir, Data: e.Data, Entries: e.Entries}, nil
+	return &client.Blob{Path: e.Path, Dir: e.Dir, Data: e.Data, Entries: e.Entries}, nil
 }
 
 // planeWrite writes bytes to one path in the caller's sandbox, creating parents,
 // and answers the resolved path.
-func planeWrite(ctx context.Context, in *plane.WriteIn) (*plane.Wrote, error) {
+func planeWrite(ctx context.Context, in *client.WriteIn) (*client.Wrote, error) {
 	s, org, err := live(ctx)
 	if err != nil {
 		return nil, err
@@ -267,12 +267,12 @@ func planeWrite(ctx context.Context, in *plane.WriteIn) (*plane.Wrote, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Wrote{Path: path, Bytes: n}, nil
+	return &client.Wrote{Path: path, Bytes: n}, nil
 }
 
 // planeEnd ends the caller's sandbox lease: the pod goes, and the volume goes only
 // when the caller asked for that too.
-func planeEnd(ctx context.Context, in *plane.EndIn) (*cloud.Unit, error) {
+func planeEnd(ctx context.Context, in *client.EndIn) (*cloud.Unit, error) {
 	s, org, err := live(ctx)
 	if err != nil {
 		return nil, err

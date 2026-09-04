@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -20,20 +20,20 @@ import (
 
 // serveLane publishes the surface. Mount calls it.
 func serveLane() {
-	zip.Post[plane.FwRef, plane.FwInstalled](cloud.Plane(), "/framework/installed", laneInstalled,
-		zip.WithOperationID(plane.FrameworkInstalled),
+	zip.Post[client.FwRef, client.FwInstalled](cloud.Plane(), "/framework/installed", laneInstalled,
+		zip.WithOperationID(client.FrameworkInstalled),
 		zip.WithSummary("Whether the caller's org holds a DocType"))
-	zip.Post[plane.FwDocsIn, plane.FwDocs](cloud.Plane(), "/framework/docs", laneDocs,
-		zip.WithOperationID(plane.FrameworkDocs),
+	zip.Post[client.FwDocsIn, client.FwDocs](cloud.Plane(), "/framework/docs", laneDocs,
+		zip.WithOperationID(client.FrameworkDocs),
 		zip.WithSummary("List one DocType's documents in the caller's org"))
-	zip.Post[plane.FwDocIn, plane.FwDoc](cloud.Plane(), "/framework/doc", laneDoc,
-		zip.WithOperationID(plane.FrameworkDoc),
+	zip.Post[client.FwDocIn, client.FwDoc](cloud.Plane(), "/framework/doc", laneDoc,
+		zip.WithOperationID(client.FrameworkDoc),
 		zip.WithSummary("Read one document in the caller's org"))
-	zip.Post[plane.FwIngestIn, plane.FwIngested](cloud.Plane(), "/framework/ingest", laneIngest,
-		zip.WithOperationID(plane.FrameworkIngest),
+	zip.Post[client.FwIngestIn, client.FwIngested](cloud.Plane(), "/framework/ingest", laneIngest,
+		zip.WithOperationID(client.FrameworkIngest),
 		zip.WithSummary("Create a document from trusted fields in the caller's org"))
-	zip.Post[plane.FwFindIn, plane.FwFound](cloud.Plane(), "/framework/find", laneFind,
-		zip.WithOperationID(plane.FrameworkFind),
+	zip.Post[client.FwFindIn, client.FwFound](cloud.Plane(), "/framework/find", laneFind,
+		zip.WithOperationID(client.FrameworkFind),
 		zip.WithSummary("Find a document by one field's value in the caller's org"))
 }
 
@@ -50,19 +50,19 @@ func laneOrg(ctx context.Context, doctype string) (string, ID, error) {
 	return org, id, nil
 }
 
-func laneInstalled(ctx context.Context, in *plane.FwRef) (*plane.FwInstalled, error) {
+func laneInstalled(ctx context.Context, in *client.FwRef) (*client.FwInstalled, error) {
 	org, id, err := laneOrg(ctx, in.Doctype)
 	if err != nil {
 		return nil, err
 	}
-	return &plane.FwInstalled{Installed: Installed(ctx, org, id)}, nil
+	return &client.FwInstalled{Installed: Installed(ctx, org, id)}, nil
 }
 
 // laneDocsMax bounds a listing whatever the caller asked; a lane that needs
 // more pages asks again with filters.
 const laneDocsMax = 50000
 
-func laneDocs(ctx context.Context, in *plane.FwDocsIn) (*plane.FwDocs, error) {
+func laneDocs(ctx context.Context, in *client.FwDocsIn) (*client.FwDocs, error) {
 	org, id, err := laneOrg(ctx, in.Doctype)
 	if err != nil {
 		return nil, err
@@ -79,18 +79,18 @@ func laneDocs(ctx context.Context, in *plane.FwDocsIn) (*plane.FwDocs, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := &plane.FwDocs{Docs: make([]plane.FwDoc, 0, len(docs))}
+	out := &client.FwDocs{Docs: make([]client.FwDoc, 0, len(docs))}
 	for _, d := range docs {
 		raw, err := json.Marshal(d.Data)
 		if err != nil {
 			return nil, err
 		}
-		out.Docs = append(out.Docs, plane.FwDoc{Name: d.Name, Data: raw})
+		out.Docs = append(out.Docs, client.FwDoc{Name: d.Name, Data: raw})
 	}
 	return out, nil
 }
 
-func laneDoc(ctx context.Context, in *plane.FwDocIn) (*plane.FwDoc, error) {
+func laneDoc(ctx context.Context, in *client.FwDocIn) (*client.FwDoc, error) {
 	org, id, err := laneOrg(ctx, in.Doctype)
 	if err != nil {
 		return nil, err
@@ -103,10 +103,10 @@ func laneDoc(ctx context.Context, in *plane.FwDocIn) (*plane.FwDoc, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &plane.FwDoc{Name: d.Name, Data: raw}, nil
+	return &client.FwDoc{Name: d.Name, Data: raw}, nil
 }
 
-func laneIngest(ctx context.Context, in *plane.FwIngestIn) (*plane.FwIngested, error) {
+func laneIngest(ctx context.Context, in *client.FwIngestIn) (*client.FwIngested, error) {
 	org, id, err := laneOrg(ctx, in.Doctype)
 	if err != nil {
 		return nil, err
@@ -119,10 +119,10 @@ func laneIngest(ctx context.Context, in *plane.FwIngestIn) (*plane.FwIngested, e
 	if err != nil {
 		return nil, err
 	}
-	return &plane.FwIngested{Name: ing.Name}, nil
+	return &client.FwIngested{Name: ing.Name}, nil
 }
 
-func laneFind(ctx context.Context, in *plane.FwFindIn) (*plane.FwFound, error) {
+func laneFind(ctx context.Context, in *client.FwFindIn) (*client.FwFound, error) {
 	org, id, err := laneOrg(ctx, in.Doctype)
 	if err != nil {
 		return nil, err
@@ -131,5 +131,5 @@ func laneFind(ctx context.Context, in *plane.FwFindIn) (*plane.FwFound, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &plane.FwFound{Name: name}, nil
+	return &client.FwFound{Name: name}, nil
 }

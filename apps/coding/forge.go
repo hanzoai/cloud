@@ -91,7 +91,7 @@ func Drain(ctx context.Context) int {
 // withdraw. Called once, in the background, by the composition root — its
 // failure is a stale key, never a process that will not start.
 func Sweep(ctx context.Context, org string) (int, error) {
-	c, err := client(ctx)
+	c, err := forgeClient(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -110,7 +110,7 @@ func Pinned() (bool, string) { return forge.Pinned() }
 // as. An unreachable KMS or an empty credential is an error and never a client:
 // a run that proceeded without one would fail at the clone, minutes later, with
 // a sandbox already leased and a session already open.
-func client(ctx context.Context) (*forge.Client, error) {
+func forgeClient(ctx context.Context) (*forge.Client, error) {
 	c, err := forge.Dial(ctx, cloud.KMSPeer{})
 	if err != nil {
 		return nil, fmt.Errorf("coding: the forge is unreachable: %w", err)
@@ -130,7 +130,7 @@ func isLocalDev() bool {
 // person here" is one of them drifting, and the one that drifted would be a
 // privilege escalation: this path spent four passes closing exactly that.
 func resolveActor(ctx context.Context) (string, error) {
-	c, err := client(ctx)
+	c, err := forgeClient(ctx)
 	if err != nil {
 		if isLocalDev() {
 			return "local", nil
@@ -181,7 +181,7 @@ func resolveActor(ctx context.Context) (string, error) {
 // repository admins could ever run an agent. The human's entitlement is
 // established first; the platform then acts on it.
 func delegate(ctx context.Context, org, actor, repo, session string) (forge.Grant, error) {
-	c, err := client(ctx)
+	c, err := forgeClient(ctx)
 	if err != nil {
 		if isLocalDev() {
 			return forge.Grant{
@@ -253,7 +253,7 @@ func withdraw(ctx context.Context, org string, g forge.Grant) error {
 	if g.ID == 0 {
 		return nil
 	}
-	c, err := client(ctx)
+	c, err := forgeClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -273,7 +273,7 @@ func withdraw(ctx context.Context, org string, g forge.Grant) error {
 // reason delegate asks as the human: the executing machine's reach is wider
 // than the caller's, and an address is the whole of what a routed run needs.
 func remote(ctx context.Context, org, actor, repo string) string {
-	c, err := client(ctx)
+	c, err := forgeClient(ctx)
 	if err != nil {
 		return ""
 	}
@@ -303,7 +303,7 @@ func remote(ctx context.Context, org, actor, repo string) string {
 // its pull request — the honest direction, because a proposal for a branch
 // nobody can fetch is worse than no proposal.
 func landed(ctx context.Context, org, repo, branch string) (string, bool) {
-	c, err := client(ctx)
+	c, err := forgeClient(ctx)
 	if err != nil {
 		return "", false
 	}
@@ -328,7 +328,7 @@ func landed(ctx context.Context, org, repo, branch string) (string, bool) {
 // that proposed on their behalf would be a second, wider authority for an act
 // they can already perform.
 func propose(ctx context.Context, org, actor, repo, base, head, title, body string) (string, error) {
-	c, err := client(ctx)
+	c, err := forgeClient(ctx)
 	if err != nil {
 		return "", err
 	}

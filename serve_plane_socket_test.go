@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // A plugin must listen on the SHARED runtime dir, because that is where every caller
@@ -24,7 +24,7 @@ func TestPluginListensOnTheSharedRuntimeDir(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", "")
 	t.Setenv(runDirEnv, "")
 	t.Setenv("CLOUD_DATA_DIR", "/var/lib/cloud")
-	plane.Unbind()
+	client.Unbind()
 
 	// listenOn is what the serve path calls; it must bind before asking for the addr.
 	_, _ = listenOn(&Config{})
@@ -42,7 +42,7 @@ func TestPluginListensOnTheSharedRuntimeDir(t *testing.T) {
 func TestExternalRuntimeDirIsHonoured(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", "/custom/run")
 	t.Setenv("CLOUD_DATA_DIR", "/var/lib/cloud")
-	plane.Unbind()
+	client.Unbind()
 
 	_, _ = listenOn(&Config{})
 

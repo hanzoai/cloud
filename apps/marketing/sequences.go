@@ -3,11 +3,11 @@
 package marketing
 
 import (
-	"github.com/hanzoai/cloud/internal/shorten"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"net/http"
 	"strings"
 	"time"

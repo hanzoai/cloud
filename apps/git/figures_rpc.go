@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -34,8 +34,8 @@ const activeWindow = 30 * 24 * time.Hour
 // exposeFigures publishes the org's git rollup on the internal plane. Called
 // from Mount.
 func exposeFigures() {
-	zip.Post[plane.FiguresIn, plane.FiguresOut](cloud.Plane(), "/git/figures", planeFigures,
-		zip.WithOperationID(plane.GitFigures),
+	zip.Post[client.FiguresIn, client.FiguresOut](cloud.Plane(), "/git/figures", planeFigures,
+		zip.WithOperationID(client.GitFigures),
 		zip.WithSummary("The caller's headline git figures"))
 }
 
@@ -44,14 +44,14 @@ func exposeFigures() {
 // [activeWindow], and which one moved last.
 //
 // The org is the CALLER's plane identity — the same rule every op in this app
-// follows, and here it is structural rather than checked: [plane.FiguresIn]
+// follows, and here it is structural rather than checked: [client.FiguresIn]
 // carries no field at all, so there is nothing to validate and nothing an
 // argument could widen. Anonymous is refused, never defaulted.
 //
 // An org with no repositories answers a figure of zero, not an error. "You have
 // no repositories" is a true and useful answer; only a failure to find out is an
 // error.
-func planeFigures(ctx context.Context, _ *plane.FiguresIn) (*plane.FiguresOut, error) {
+func planeFigures(ctx context.Context, _ *client.FiguresIn) (*client.FiguresOut, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("git figures: org required")
@@ -83,7 +83,7 @@ func planeFigures(ctx context.Context, _ *plane.FiguresIn) (*plane.FiguresOut, e
 		}
 	}
 
-	figs := []plane.Figure{
+	figs := []client.Figure{
 		{Label: "Repositories", Value: fmt.Sprint(len(rows))},
 		{Label: "Code stored", Value: humanBytes(bytes)},
 		{Label: "Repositories updated", Value: fmt.Sprint(active), Period: "last 30 days"},
@@ -92,11 +92,11 @@ func planeFigures(ctx context.Context, _ *plane.FiguresIn) (*plane.FiguresOut, e
 	// labelled "Last updated" with nothing after it, and the advisor above states
 	// figures verbatim — it would narrate the blank.
 	if latest != "" {
-		figs = append(figs, plane.Figure{
+		figs = append(figs, client.Figure{
 			Label:  "Most recently updated",
 			Value:  latest,
 			Period: time.Unix(newest, 0).UTC().Format("2006-01-02"),
 		})
 	}
-	return &plane.FiguresOut{Figures: figs}, nil
+	return &client.FiguresOut{Figures: figs}, nil
 }

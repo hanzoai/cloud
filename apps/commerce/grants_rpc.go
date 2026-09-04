@@ -25,19 +25,19 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // exposeGrants publishes the three credit reads. Mount calls it.
 func exposeGrants() {
-	zip.Post[plane.SubjectIn, plane.CreditGrants](cloud.Plane(), "/billing/credits", planeCredits,
-		zip.WithOperationID(plane.BillingCredits),
+	zip.Post[client.SubjectIn, client.CreditGrants](cloud.Plane(), "/billing/credits", planeCredits,
+		zip.WithOperationID(client.BillingCredits),
 		zip.WithSummary("A subject's credit grants"))
-	zip.Post[plane.SubjectIn, plane.CreditBalance](cloud.Plane(), "/billing/credit/balance", planeCreditBalance,
-		zip.WithOperationID(plane.BillingCreditBalance),
+	zip.Post[client.SubjectIn, client.CreditBalance](cloud.Plane(), "/billing/credit/balance", planeCreditBalance,
+		zip.WithOperationID(client.BillingCreditBalance),
 		zip.WithSummary("Spendable credit, per currency"))
-	zip.Post[plane.SubjectIn, plane.CreditBreakdown](cloud.Plane(), "/billing/credit/breakdown", planeCreditBreakdown,
-		zip.WithOperationID(plane.BillingCreditBreakdown),
+	zip.Post[client.SubjectIn, client.CreditBreakdown](cloud.Plane(), "/billing/credit/breakdown", planeCreditBreakdown,
+		zip.WithOperationID(client.BillingCreditBreakdown),
 		zip.WithSummary("Spendable credit, split by grant tag"))
 }
 
@@ -51,7 +51,7 @@ func exposeGrants() {
 // principal, so a query cannot supply one.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeCredits(ctx context.Context, in *plane.SubjectIn) (*plane.CreditGrants, error) {
+func planeCredits(ctx context.Context, in *client.SubjectIn) (*client.CreditGrants, error) {
 	org, err := orgOf(ctx, "credits")
 	if err != nil {
 		return nil, err
@@ -60,9 +60,9 @@ func planeCredits(ctx context.Context, in *plane.SubjectIn) (*plane.CreditGrants
 	if gerr != nil {
 		return nil, zip.Errorf(502, "credits: %v", gerr)
 	}
-	out := make([]plane.CreditGrant, 0, len(rows))
+	out := make([]client.CreditGrant, 0, len(rows))
 	for _, g := range rows {
-		row := plane.CreditGrant{
+		row := client.CreditGrant{
 			ID: g.ID, UserID: g.UserID, Name: g.Name,
 			AmountCents: g.AmountCents, RemainingCents: g.RemainingCents,
 			Currency: string(g.Currency), Priority: g.Priority,
@@ -74,14 +74,14 @@ func planeCredits(ctx context.Context, in *plane.SubjectIn) (*plane.CreditGrants
 		}
 		out = append(out, row)
 	}
-	return &plane.CreditGrants{Rows: out, Count: len(out)}, nil
+	return &client.CreditGrants{Rows: out, Count: len(out)}, nil
 }
 
 // Sums a subject's ACTIVE grants per currency — what is spendable right now,
 // which is why voided, exhausted and lapsed grants contribute nothing.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeCreditBalance(ctx context.Context, in *plane.SubjectIn) (*plane.CreditBalance, error) {
+func planeCreditBalance(ctx context.Context, in *client.SubjectIn) (*client.CreditBalance, error) {
 	org, err := orgOf(ctx, "credit balance")
 	if err != nil {
 		return nil, err
@@ -90,11 +90,11 @@ func planeCreditBalance(ctx context.Context, in *plane.SubjectIn) (*plane.Credit
 	if berr != nil {
 		return nil, zip.Errorf(502, "credit balance: %v", berr)
 	}
-	rows := make([]plane.CreditEntry, 0, len(bal.Balances))
+	rows := make([]client.CreditEntry, 0, len(bal.Balances))
 	for _, e := range bal.Balances {
-		rows = append(rows, plane.CreditEntry{Currency: string(e.Currency), Available: e.Available})
+		rows = append(rows, client.CreditEntry{Currency: string(e.Currency), Available: e.Available})
 	}
-	return &plane.CreditBalance{UserID: bal.UserID, Balances: rows}, nil
+	return &client.CreditBalance{UserID: bal.UserID, Balances: rows}, nil
 }
 
 // Splits that same balance by grant tag, with the earliest expiry under each,
@@ -102,10 +102,10 @@ func planeCreditBalance(ctx context.Context, in *plane.SubjectIn) (*plane.Credit
 //
 // The tags cross as a SLICE and are published as an object: a map has no fixed
 // layout, so it cannot cross this plane at all, and the rendering is done once in
-// the contract rather than once per endpoint (plane.CreditBreakdown.MarshalJSON).
+// the contract rather than once per endpoint (client.CreditBreakdown.MarshalJSON).
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeCreditBreakdown(ctx context.Context, in *plane.SubjectIn) (*plane.CreditBreakdown, error) {
+func planeCreditBreakdown(ctx context.Context, in *client.SubjectIn) (*client.CreditBreakdown, error) {
 	org, err := orgOf(ctx, "credit breakdown")
 	if err != nil {
 		return nil, err
@@ -114,20 +114,20 @@ func planeCreditBreakdown(ctx context.Context, in *plane.SubjectIn) (*plane.Cred
 	if berr != nil {
 		return nil, zip.Errorf(502, "credit breakdown: %v", berr)
 	}
-	tags := make([]plane.CreditTag, 0, len(b.Breakdown))
+	tags := make([]client.CreditTag, 0, len(b.Breakdown))
 	for name, t := range b.Breakdown {
 		if t == nil {
 			continue
 		}
-		row := plane.CreditTag{Tag: name, Cents: t.Cents}
+		row := client.CreditTag{Tag: name, Cents: t.Cents}
 		if t.ExpiresAt != nil {
 			row.ExpiresAt = stamp(*t.ExpiresAt)
 		}
 		tags = append(tags, row)
 	}
-	return &plane.CreditBreakdown{
+	return &client.CreditBreakdown{
 		UserID: b.UserID,
 		Tags:   tags,
-		Total:  plane.CreditTotal{Cents: b.Total.Cents},
+		Total:  client.CreditTotal{Cents: b.Total.Cents},
 	}, nil
 }

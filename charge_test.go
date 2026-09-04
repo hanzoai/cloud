@@ -21,9 +21,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/account"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/metering"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // ledger is a commerce double with a balance and a debit endpoint whose latency
@@ -128,7 +128,7 @@ func TestAHungLedgerDoesNotLockOutTheWallet(t *testing.T) {
 
 	block := make(chan struct{}) // never closed: the ledger has the call and keeps it
 	t.Cleanup(func() { close(block) })
-	planetest.ServeWith(t, func(string, plane.RecordIn) { <-block })
+	planetest.ServeWith(t, func(string, client.RecordIn) { <-block })
 
 	l := newLedger(t, 100000, nil) // the BALANCE still answers; only the debit hangs
 	rm := meterAt(t, l)

@@ -58,10 +58,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/datastore"
 	"github.com/hanzoai/cloud/finance"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/hanzoai/types"
 	"github.com/zap-proto/zip"
 )
@@ -556,7 +556,7 @@ type ledgerReader struct{}
 
 // spend reads the org's month-to-date consumption and the wallet behind it.
 func (ledgerReader) spend(ctx context.Context, org string) (rollup, error) {
-	reply, err := commercepeer.FinanceSpend(cloud.For(ctx, org), &plane.SpendIn{})
+	reply, err := commercepeer.FinanceSpend(cloud.For(ctx, org), &client.SpendIn{})
 	if err != nil {
 		return rollup{}, err
 	}
@@ -579,7 +579,7 @@ func (ledgerReader) spend(ctx context.Context, org string) (rollup, error) {
 
 // transactions reads the org's ledger entries, newest first, up to limit.
 func (ledgerReader) transactions(ctx context.Context, org string, limit int) ([]ledgerTxn, error) {
-	reply, err := commercepeer.FinanceTxns(cloud.For(ctx, org), &plane.TxnsIn{Limit: limit})
+	reply, err := commercepeer.FinanceTxns(cloud.For(ctx, org), &client.TxnsIn{Limit: limit})
 	if err != nil {
 		return nil, err
 	}

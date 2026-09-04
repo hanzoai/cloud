@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // whatsapp.go is the WhatsApp transport: envelope normalization from the
@@ -43,7 +43,7 @@ var whatsappTransport = transport{
 // The wamid does two jobs and is filed under both: it dedupes the delivery, and
 // it is the message a reply quotes (Meta renders `context.message_id` as a
 // quoted reply). Telegram files its triggering message id the same way.
-func whatsappNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
+func whatsappNormalize(ev client.ChannelsIngestIn) (Message, bool) {
 	in := ev
 	if strings.TrimSpace(in.Channel) == "" {
 		return Message{}, false
@@ -62,7 +62,7 @@ func whatsappNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
 
 // whatsappEndpoint is the send path; tests spy it, prod never repoints.
 var whatsappEndpoint = func(ctx context.Context, org, to, replyTo, text string) (string, error) {
-	return post(ctx, org, plane.ChatSendIn{Provider: "whatsapp", Room: to, ReplyTo: replyTo, Text: text})
+	return post(ctx, org, client.ChatSendIn{Provider: "whatsapp", Room: to, ReplyTo: replyTo, Text: text})
 }
 
 // whatsappEgress sends after the tenancy gate. A channel_route row exists only

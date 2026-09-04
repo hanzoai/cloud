@@ -71,7 +71,7 @@ import (
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
 	"github.com/hanzoai/cloud/apps/treasury/ledger/sqlstore"
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/money"
 	"github.com/zap-proto/zip"
 )
@@ -183,12 +183,12 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		},
 	}
 	mounted = s
-	// The reserve, published on the internal plane as a typed op (plane.go).
+	// The reserve, published on the internal plane as a typed op (peer.go).
 	// admin's money board reads it here — as the SuperAdmin who asked, re-checked
 	// on THIS side — instead of importing this package, which in admin's own
 	// binary could only ever return zero.
 	zip.Post(cloud.Plane(), "/treasury/reserve", planeReserve,
-		zip.WithOperationID(plane.TreasuryReserve),
+		zip.WithOperationID(client.TreasuryReserve),
 		zip.WithSummary("Reserve fund balance"))
 
 	// cloud.Bridge is not installed here: the composer owns it — the fused host
@@ -246,7 +246,7 @@ type ops struct{ s *cloud.Service[state] }
 // (A named function, not the closure it replaced: zipdoc harvests the doc comment
 // of the HANDLER, and a function literal has none, so this op used to register
 // with an empty description on every projection that reads one.)
-func planeReserve(ctx context.Context, _ *cloud.Unit) (*plane.Reserved, error) {
+func planeReserve(ctx context.Context, _ *cloud.Unit) (*client.Reserved, error) {
 	if !cloud.Who(ctx).Admin {
 		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
@@ -259,7 +259,7 @@ func planeReserve(ctx context.Context, _ *cloud.Unit) (*plane.Reserved, error) {
 	if err != nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "reserve balance: %v", err)
 	}
-	return &plane.Reserved{Amount: plane.Amount(money.FromUSD(cents))}, nil
+	return &client.Reserved{Amount: client.Amount(money.FromUSD(cents))}, nil
 }
 
 // admin is the request the SuperAdmin surface runs on. A typed op receives a

@@ -46,7 +46,6 @@
 package deploy
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"crypto/rand"
@@ -54,6 +53,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"net/url"

@@ -13,10 +13,10 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/kms"
-	"github.com/hanzoai/cloud/plane"
-	agentspeer "github.com/hanzoai/cloud/plane/agent"
-	channelspeer "github.com/hanzoai/cloud/plane/channel"
-	iampeer "github.com/hanzoai/cloud/plane/iam"
+	"github.com/hanzoai/cloud/client"
+	agentspeer "github.com/hanzoai/cloud/client/agent"
+	channelspeer "github.com/hanzoai/cloud/client/channel"
+	iampeer "github.com/hanzoai/cloud/client/iam"
 )
 
 // channel.go is the ONE ChatBridge core: the platform-agnostic @hanzo entry point
@@ -240,7 +240,7 @@ func channelReply(s *cloud.Service[state], org string, in Inbound) (reply string
 	// and balance; the linked user's Hanzo subject drives attribution. No bearer,
 	// no gateway hop, no public network.
 	//
-	// plane.Ask and NOT agents.RunOnBehalf, which reads that package's `mounted`
+	// client.Call and NOT agents.RunOnBehalf, which reads that package's `mounted`
 	// global. A plugin is a PROCESS: the global is nil unless agents happens to be
 	// in THIS binary, so the direct call made co-residency an undeclared
 	// requirement and answered ErrNoPeer for every deployment that separates them —
@@ -288,9 +288,9 @@ func channelReply(s *cloud.Service[state], org string, in Inbound) (reply string
 	// the single message it used to send, which is the behaviour it replaces.
 	history := priorTurns(s, runCtx, org, in)
 	out, rerr := agentspeer.AgentsRunOnBehalf(runCtx,
-		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: agentRefFor(runCtx, provider, in.Channel),
+		&client.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: agentRefFor(runCtx, provider, in.Channel),
 			Input: text, Model: link.Model, History: history})
-	run := plane.RunOnBehalfOut{}
+	run := client.RunOnBehalfOut{}
 	if out != nil {
 		run = *out
 	}
@@ -369,7 +369,7 @@ func federatedSubject(s *cloud.Service[state], org, provider, subject string) st
 	ctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), 5*time.Second)
 	defer cancel()
 	out, err := iampeer.IAMFederated(ctx,
-		&plane.FederatedIn{Provider: provider, Subject: subject})
+		&client.FederatedIn{Provider: provider, Subject: subject})
 	if err != nil {
 		s.Log.Warn("channel: federated lookup", "provider", provider, "org", org, "err", err)
 		return ""
@@ -480,7 +480,7 @@ func getUserLink(s *cloud.Service[state], org, provider, extUser string) (userLi
 // preference, and a person asked a question.
 func agentRefFor(ctx context.Context, provider, room string) string {
 	out, err := channelspeer.ChannelsAgent(ctx,
-		&plane.AgentForIn{Channel: provider, Room: room})
+		&client.AgentForIn{Channel: provider, Room: room})
 	if err != nil || out == nil || strings.TrimSpace(out.Ref) == "" {
 		return "hanzo"
 	}
@@ -516,7 +516,7 @@ func channelOrgConcurrency() int {
 // The inbox answers for the transports there is no read-back for, and for a
 // Slack workspace whose install predates the history scopes. A failed read is
 // never a failed turn: less context makes a worse answer, refusing makes none.
-func priorTurns(s *cloud.Service[state], ctx context.Context, org string, in Inbound) []plane.Turn {
+func priorTurns(s *cloud.Service[state], ctx context.Context, org string, in Inbound) []client.Turn {
 	if in.Provider == "slack" {
 		turns, err := slackTurns(ctx, org, in)
 		if err == nil {
@@ -536,12 +536,12 @@ func priorTurns(s *cloud.Service[state], ctx context.Context, org string, in Inb
 // The newest turn is dropped: it IS this Input, already recorded by ingest before
 // the turn ran, and sending it twice would have the agent answer a question it
 // appears to have been asked a moment ago.
-func recentTurns(ctx context.Context, provider, room string) []plane.Turn {
+func recentTurns(ctx context.Context, provider, room string) []client.Turn {
 	if room == "" {
 		return nil
 	}
 	out, err := channelspeer.ChannelsRecent(ctx,
-		&plane.RecentIn{Channel: provider, Room: room})
+		&client.RecentIn{Channel: provider, Room: room})
 	if err != nil || out == nil || len(out.Turns) == 0 {
 		return nil
 	}

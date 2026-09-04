@@ -75,8 +75,8 @@ type oauthApp struct {
 // and default scopes are the providers' standard endpoints.
 func oauthConfig(provider string) (oauthApp, bool) {
 	up := strings.ToUpper(provider)
-	id := environ.Or("KB_" + up + "_CLIENT_ID", "")
-	secret := environ.Or("KB_" + up + "_CLIENT_SECRET", "")
+	id := environ.Or("KB_"+up+"_CLIENT_ID", "")
+	secret := environ.Or("KB_"+up+"_CLIENT_SECRET", "")
 	if id == "" || secret == "" {
 		return oauthApp{}, false
 	}

@@ -26,25 +26,25 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // exposeAlerts publishes the cap CRUD and the verdict. Mount calls it.
 func exposeAlerts() {
-	zip.Post[plane.SubjectIn, plane.Alerts](cloud.Plane(), "/billing/alerts", planeAlerts,
-		zip.WithOperationID(plane.BillingAlerts),
+	zip.Post[client.SubjectIn, client.Alerts](cloud.Plane(), "/billing/alerts", planeAlerts,
+		zip.WithOperationID(client.BillingAlerts),
 		zip.WithSummary("This org's spend caps"))
-	zip.Post[plane.AlertSpec, plane.Alert](cloud.Plane(), "/billing/alert/raise", planeAlertRaise,
-		zip.WithOperationID(plane.BillingAlertRaise),
+	zip.Post[client.AlertSpec, client.Alert](cloud.Plane(), "/billing/alert/raise", planeAlertRaise,
+		zip.WithOperationID(client.BillingAlertRaise),
 		zip.WithSummary("Open a spend cap"))
-	zip.Post[plane.AlertPatch, plane.Alert](cloud.Plane(), "/billing/alert/amend", planeAlertAmend,
-		zip.WithOperationID(plane.BillingAlertAmend),
+	zip.Post[client.AlertPatch, client.Alert](cloud.Plane(), "/billing/alert/amend", planeAlertAmend,
+		zip.WithOperationID(client.BillingAlertAmend),
 		zip.WithSummary("Change one spend cap"))
-	zip.Post[plane.AlertRef, plane.Dropped](cloud.Plane(), "/billing/alert/drop", planeAlertDrop,
-		zip.WithOperationID(plane.BillingAlertDrop),
+	zip.Post[client.AlertRef, client.Dropped](cloud.Plane(), "/billing/alert/drop", planeAlertDrop,
+		zip.WithOperationID(client.BillingAlertDrop),
 		zip.WithSummary("Remove one spend cap"))
-	zip.Post[plane.CapIn, plane.CapVerdict](cloud.Plane(), "/billing/cap/authorize", planeCapAuthorize,
-		zip.WithOperationID(plane.BillingCapAuthorize),
+	zip.Post[client.CapIn, client.CapVerdict](cloud.Plane(), "/billing/cap/authorize", planeCapAuthorize,
+		zip.WithOperationID(client.BillingCapAuthorize),
 		zip.WithSummary("Whether one proposed spend fits inside this org's caps"))
 }
 
@@ -56,7 +56,7 @@ func exposeAlerts() {
 // still reported either way — a cap whose spend cannot be read is still a cap.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeAlerts(ctx context.Context, in *plane.SubjectIn) (*plane.Alerts, error) {
+func planeAlerts(ctx context.Context, in *client.SubjectIn) (*client.Alerts, error) {
 	org, err := orgOf(ctx, "alerts")
 	if err != nil {
 		return nil, err
@@ -65,11 +65,11 @@ func planeAlerts(ctx context.Context, in *plane.SubjectIn) (*plane.Alerts, error
 	if aerr != nil {
 		return nil, zip.Errorf(502, "alerts: %v", aerr)
 	}
-	out := make([]plane.Alert, 0, len(rows))
+	out := make([]client.Alert, 0, len(rows))
 	for _, a := range rows {
 		out = append(out, alertRow(a))
 	}
-	return &plane.Alerts{Rows: out}, nil
+	return &client.Alerts{Rows: out}, nil
 }
 
 // Opens a spend cap on the caller's own org.
@@ -83,7 +83,7 @@ func planeAlerts(ctx context.Context, in *plane.SubjectIn) (*plane.Alerts, error
 // other failure is the store's, and is a 502.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeAlertRaise(ctx context.Context, in *plane.AlertSpec) (*plane.Alert, error) {
+func planeAlertRaise(ctx context.Context, in *client.AlertSpec) (*client.Alert, error) {
 	org, err := orgOf(ctx, "raise cap")
 	if err != nil {
 		return nil, err
@@ -107,7 +107,7 @@ func planeAlertRaise(ctx context.Context, in *plane.AlertSpec) (*plane.Alert, er
 // refusal, so a guessed id never becomes an oracle for what the org holds.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeAlertAmend(ctx context.Context, in *plane.AlertPatch) (*plane.Alert, error) {
+func planeAlertAmend(ctx context.Context, in *client.AlertPatch) (*client.Alert, error) {
 	org, err := orgOf(ctx, "amend cap")
 	if err != nil {
 		return nil, err
@@ -130,7 +130,7 @@ func planeAlertAmend(ctx context.Context, in *plane.AlertPatch) (*plane.Alert, e
 // reason the amend does: deleting by guessed id must tell a caller nothing.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeAlertDrop(ctx context.Context, in *plane.AlertRef) (*plane.Dropped, error) {
+func planeAlertDrop(ctx context.Context, in *client.AlertRef) (*client.Dropped, error) {
 	org, err := orgOf(ctx, "drop cap")
 	if err != nil {
 		return nil, err
@@ -138,7 +138,7 @@ func planeAlertDrop(ctx context.Context, in *plane.AlertRef) (*plane.Dropped, er
 	if aerr := commercebilling.DeleteAlert(ctx, org, in.Subject, in.ID); aerr != nil {
 		return nil, capFault("drop cap", aerr)
 	}
-	return &plane.Dropped{OK: true}, nil
+	return &client.Dropped{OK: true}, nil
 }
 
 // Answers whether one proposed spend fits inside this org's caps.
@@ -153,7 +153,7 @@ func planeAlertDrop(ctx context.Context, in *plane.AlertRef) (*plane.Dropped, er
 // validation would turn an unproven claim into a refusal.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeCapAuthorize(ctx context.Context, in *plane.CapIn) (*plane.CapVerdict, error) {
+func planeCapAuthorize(ctx context.Context, in *client.CapIn) (*client.CapVerdict, error) {
 	org, err := orgOf(ctx, "cap authorize")
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ func planeCapAuthorize(ctx context.Context, in *plane.CapIn) (*plane.CapVerdict,
 	if verr != nil {
 		return nil, zip.Errorf(502, "cap authorize: %v", verr)
 	}
-	return &plane.CapVerdict{
+	return &client.CapVerdict{
 		Allow: v.Allow, Reason: v.Reason, CapCents: v.CapCents,
 		SpentCents: v.SpentCents, WarnPct: v.WarnPct,
 	}, nil
@@ -189,8 +189,8 @@ func capFault(what string, err error) error {
 
 // alertRow moves one cap onto the wire. The three derived figures stay pointers,
 // so an unreadable aggregation is reported as absent rather than as zero.
-func alertRow(a commercebilling.Alert) plane.Alert {
-	return plane.Alert{
+func alertRow(a commercebilling.Alert) client.Alert {
+	return client.Alert{
 		ID: a.Id, UserID: a.UserId, Title: a.Title,
 		Threshold: a.Threshold, Currency: a.Currency,
 		Project: a.Project, Service: a.Service, Enforce: a.Enforce,

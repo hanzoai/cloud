@@ -22,25 +22,25 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // exposePlan publishes the tier, rollup and subscription ops. Mount calls it.
 func exposePlan() {
-	zip.Post[plane.TierIn, plane.Tier](cloud.Plane(), "/billing/tier", planeTier,
-		zip.WithOperationID(plane.BillingTier),
+	zip.Post[client.TierIn, client.Tier](cloud.Plane(), "/billing/tier", planeTier,
+		zip.WithOperationID(client.BillingTier),
 		zip.WithSummary("What a subject's plan allows and what they can spend"))
-	zip.Post[plane.RollupIn, plane.Rollup](cloud.Plane(), "/billing/rollup", planeRollup,
-		zip.WithOperationID(plane.BillingRollup),
+	zip.Post[client.RollupIn, client.Rollup](cloud.Plane(), "/billing/rollup", planeRollup,
+		zip.WithOperationID(client.BillingRollup),
 		zip.WithSummary("A subject's month against their plan, and the wallet beside it"))
-	zip.Post[plane.SubsIn, plane.Subscriptions](cloud.Plane(), "/billing/subscriptions", planeSubscriptions,
-		zip.WithOperationID(plane.BillingSubscriptions),
+	zip.Post[client.SubsIn, client.Subscriptions](cloud.Plane(), "/billing/subscriptions", planeSubscriptions,
+		zip.WithOperationID(client.BillingSubscriptions),
 		zip.WithSummary("The plans a subject holds"))
-	zip.Post[plane.SubscriptionRef, plane.Subscription](cloud.Plane(), "/billing/subscription/cancel", planeSubscriptionCancel,
-		zip.WithOperationID(plane.BillingSubscriptionCancel),
+	zip.Post[client.SubscriptionRef, client.Subscription](cloud.Plane(), "/billing/subscription/cancel", planeSubscriptionCancel,
+		zip.WithOperationID(client.BillingSubscriptionCancel),
 		zip.WithSummary("End a subscription"))
-	zip.Post[plane.SubscriptionRef, plane.Subscription](cloud.Plane(), "/billing/subscription/reactivate", planeSubscriptionReactivate,
-		zip.WithOperationID(plane.BillingSubscriptionReactivate),
+	zip.Post[client.SubscriptionRef, client.Subscription](cloud.Plane(), "/billing/subscription/reactivate", planeSubscriptionReactivate,
+		zip.WithOperationID(client.BillingSubscriptionReactivate),
 		zip.WithSummary("Put a canceled subscription back on its plan"))
 }
 
@@ -57,7 +57,7 @@ func exposePlan() {
 // add up a second time.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeTier(ctx context.Context, in *plane.TierIn) (*plane.Tier, error) {
+func planeTier(ctx context.Context, in *client.TierIn) (*client.Tier, error) {
 	org, err := orgOf(ctx, "tier")
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func planeTier(ctx context.Context, in *plane.TierIn) (*plane.Tier, error) {
 	if verr != nil {
 		return nil, zip.Errorf(500, "failed to query balance")
 	}
-	return &plane.Tier{
+	return &client.Tier{
 		User:    view.User,
 		Tier:    tierLimits(view),
 		Balance: tierBalance(view),
@@ -94,7 +94,7 @@ func planeTier(ctx context.Context, in *plane.TierIn) (*plane.Tier, error) {
 // a balance.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeRollup(ctx context.Context, in *plane.RollupIn) (*plane.Rollup, error) {
+func planeRollup(ctx context.Context, in *client.RollupIn) (*client.Rollup, error) {
 	org, err := orgOf(ctx, "rollup")
 	if err != nil {
 		return nil, err
@@ -103,13 +103,13 @@ func planeRollup(ctx context.Context, in *plane.RollupIn) (*plane.Rollup, error)
 	if verr != nil {
 		return nil, zip.Errorf(500, "failed to query balance")
 	}
-	return &plane.Rollup{
+	return &client.Rollup{
 		User:     view.User,
 		Plan:     view.Plan,
 		Currency: view.Currency,
 		Period:   view.Period,
 		Windows:  windows(view.Windows),
-		Included: plane.RollupAllotment{
+		Included: client.RollupAllotment{
 			MonthlyCents:   view.Included.MonthlyCents,
 			GrantedCents:   view.Included.GrantedCents,
 			ConsumedCents:  view.Included.ConsumedCents,
@@ -117,7 +117,7 @@ func planeRollup(ctx context.Context, in *plane.RollupIn) (*plane.Rollup, error)
 		},
 		ConsumedCents: view.ConsumedCents,
 		OverageCents:  view.OverageCents,
-		Balance: plane.RollupBalance{
+		Balance: client.RollupBalance{
 			BalanceCents:   view.Balance.BalanceCents,
 			HoldsCents:     view.Balance.HoldsCents,
 			AvailableCents: view.Balance.AvailableCents,
@@ -133,7 +133,7 @@ func planeRollup(ctx context.Context, in *plane.RollupIn) (*plane.Rollup, error)
 // the board inherit the customer's.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeSubscriptions(ctx context.Context, in *plane.SubsIn) (*plane.Subscriptions, error) {
+func planeSubscriptions(ctx context.Context, in *client.SubsIn) (*client.Subscriptions, error) {
 	org, err := orgOf(ctx, "subscriptions")
 	if err != nil {
 		return nil, err
@@ -142,11 +142,11 @@ func planeSubscriptions(ctx context.Context, in *plane.SubsIn) (*plane.Subscript
 	if rerr != nil {
 		return nil, zip.Errorf(500, "failed to list subscriptions")
 	}
-	out := make([]plane.Subscription, 0, len(rows))
+	out := make([]client.Subscription, 0, len(rows))
 	for i := range rows {
 		out = append(out, subscriptionRow(&rows[i]))
 	}
-	return &plane.Subscriptions{Rows: out, Count: len(out)}, nil
+	return &client.Subscriptions{Rows: out, Count: len(out)}, nil
 }
 
 // Ends a subscription — at the end of the period already paid for, or at once.
@@ -157,7 +157,7 @@ func planeSubscriptions(ctx context.Context, in *plane.SubsIn) (*plane.Subscript
 // refused, so an id cannot be probed for existence.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeSubscriptionCancel(ctx context.Context, in *plane.SubscriptionRef) (*plane.Subscription, error) {
+func planeSubscriptionCancel(ctx context.Context, in *client.SubscriptionRef) (*client.Subscription, error) {
 	org, err := orgOf(ctx, "cancel subscription")
 	if err != nil {
 		return nil, err
@@ -177,7 +177,7 @@ func planeSubscriptionCancel(ctx context.Context, in *plane.SubscriptionRef) (*p
 // argument for it being answerable by name at all.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeSubscriptionReactivate(ctx context.Context, in *plane.SubscriptionRef) (*plane.Subscription, error) {
+func planeSubscriptionReactivate(ctx context.Context, in *client.SubscriptionRef) (*client.Subscription, error) {
 	org, err := orgOf(ctx, "reactivate subscription")
 	if err != nil {
 		return nil, err
@@ -209,8 +209,8 @@ func subscriptionFault(err error, generic string) error {
 // The four dates a subscription may not have cross as TEXT and are empty when
 // absent, because the key is dropped on a CONDITION — a trial was opened, a
 // cancel happened, the row ended — and not because a value is zero.
-func subscriptionRow(s *commercebilling.Subscription) plane.Subscription {
-	return plane.Subscription{
+func subscriptionRow(s *commercebilling.Subscription) client.Subscription {
+	return client.Subscription{
 		ID:                   s.ID,
 		UserID:               s.UserID,
 		PlanID:               s.PlanID,
@@ -222,7 +222,7 @@ func subscriptionRow(s *commercebilling.Subscription) plane.Subscription {
 		MRRCents:             s.MRRCents,
 		ProviderType:         s.ProviderType,
 		DefaultPaymentMethod: s.DefaultPaymentMethod,
-		Plan: plane.SubscriptionPlan{
+		Plan: client.SubscriptionPlan{
 			ID:       s.Plan.ID,
 			Name:     s.Plan.Name,
 			Price:    s.Plan.Price,
@@ -251,8 +251,8 @@ func stampOf(t *time.Time) string {
 // are separate functions because they answer different questions — what may this
 // caller use, and what is left to use it with — and reading them together is the
 // reader's job, not this side's.
-func tierLimits(v *commercebilling.TierView) plane.TierLimits {
-	return plane.TierLimits{
+func tierLimits(v *commercebilling.TierView) client.TierLimits {
+	return client.TierLimits{
 		Name:              string(v.Tier.Name),
 		DisplayName:       v.Tier.DisplayName,
 		MaxAgents:         v.Tier.MaxAgents,
@@ -262,8 +262,8 @@ func tierLimits(v *commercebilling.TierView) plane.TierLimits {
 	}
 }
 
-func tierBalance(v *commercebilling.TierView) plane.TierBalance {
-	return plane.TierBalance{
+func tierBalance(v *commercebilling.TierView) client.TierBalance {
+	return client.TierBalance{
 		Currency:           string(v.Balance.Currency),
 		PrepaidAvailable:   int64(v.Balance.PrepaidAvailable),
 		CreditsRemaining:   int64(v.Balance.CreditsRemaining),
@@ -275,10 +275,10 @@ func tierBalance(v *commercebilling.TierView) plane.TierBalance {
 // windows moves a plan's nested request bounds onto the wire. A window with
 // limit 0 declares NO bound at that span rather than a bound of zero, and it
 // travels as it is so a reader skips it instead of reporting it exhausted.
-func windows(in []commercebilling.Window) []plane.Window {
-	out := make([]plane.Window, 0, len(in))
+func windows(in []commercebilling.Window) []client.Window {
+	out := make([]client.Window, 0, len(in))
 	for _, w := range in {
-		out = append(out, plane.Window{
+		out = append(out, client.Window{
 			Span: w.Span, Limit: w.Limit, Used: w.Used,
 			Remaining: w.Remaining, Resets: w.Resets,
 		})

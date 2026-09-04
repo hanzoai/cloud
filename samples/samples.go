@@ -40,8 +40,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/datastore"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/datastore"
 	"github.com/hanzoai/cloud/internal/shorten"
 )
 

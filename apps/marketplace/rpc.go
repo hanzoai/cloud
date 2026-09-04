@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -35,8 +35,8 @@ import (
 // exposePrice publishes the price table. Mount calls it.
 func exposePrice(store *Store) {
 	g := &registry{store: store}
-	zip.Post[plane.PriceIn, plane.Priced](cloud.Plane(), "/market/price", g.planePrice,
-		zip.WithOperationID(plane.MarketPrice),
+	zip.Post[client.PriceIn, client.Priced](cloud.Plane(), "/market/price", g.planePrice,
+		zip.WithOperationID(client.MarketPrice),
 		zip.WithSummary("Resolve what one resource costs and who is paid"))
 }
 
@@ -58,7 +58,7 @@ func exposePrice(store *Store) {
 // the credit.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (g *registry) planePrice(ctx context.Context, in *plane.PriceIn) (*plane.Priced, error) {
+func (g *registry) planePrice(ctx context.Context, in *client.PriceIn) (*client.Priced, error) {
 	if in.Resource == "" {
 		return nil, zip.ErrBadRequest("price: no resource")
 	}
@@ -67,11 +67,11 @@ func (g *registry) planePrice(ctx context.Context, in *plane.PriceIn) (*plane.Pr
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "price %s: %v", in.Resource, err)
 	}
 	if !priced {
-		return &plane.Priced{}, nil
+		return &client.Priced{}, nil
 	}
-	return &plane.Priced{
+	return &client.Priced{
 		Priced:            true,
-		Amount:            plane.Amount(terms.Amount.Unwrap()),
+		Amount:            client.Amount(terms.Amount.Unwrap()),
 		RecipientOrg:      terms.RecipientOrg,
 		RecipientWalletID: terms.RecipientWalletID,
 		Asset:             terms.Asset,

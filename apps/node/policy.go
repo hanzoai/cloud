@@ -403,8 +403,7 @@ const (
 	RateLimitScopeHookAuth     = "hook-auth"
 )
 
-const (
-)
+const ()
 
 // ---------------------------------------------------------------------------
 // system.run: the forwarded parameters

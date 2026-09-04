@@ -11,7 +11,6 @@ package git
 // exercises, and the file fails if a writer is reopened.
 
 import (
-
 	"context"
 	"encoding/json"
 	"fmt"

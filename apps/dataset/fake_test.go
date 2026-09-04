@@ -8,7 +8,7 @@ package dataset
 // pass a tenant-isolation test even if the plane had stopped binding the tenant —
 // the test would prove nothing while looking green. So this one PARSES the
 // predicate out of the statement text and evaluates it against the bound
-// arguments, in order. Drop `org = ?` from any statement in plane.go and the
+// arguments, in order. Drop `org = ?` from any statement in peer.go and the
 // isolation tests below fail, because this store will hand back every tenant's
 // rows exactly as a real one would.
 //

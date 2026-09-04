@@ -54,9 +54,9 @@
 package o11y
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
+	"github.com/hanzoai/cloud/internal/environ"
 	"strings"
 	"time"
 

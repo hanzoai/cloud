@@ -15,7 +15,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -23,7 +23,7 @@ import (
 // spacesWithPrincipal mints an attestation directly and asks the lobby's lane
 // selector what it makes of it — the read-side twin of admitsWithPrincipal, and
 // for the same reason: an API key principal cannot be signed, only minted.
-func spacesWithPrincipal(t *testing.T, st state, p principal.Principal) (sp plane.Spaces, ok bool) {
+func spacesWithPrincipal(t *testing.T, st state, p principal.Principal) (sp client.Spaces, ok bool) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Get("/probe", func(c *zip.Ctx) error {
@@ -245,11 +245,11 @@ func TestTheClientIsNotOnThisOrigin(t *testing.T) {
 }
 
 // TestLobbyShapeIsTheOneThePlaneStates. The wire's space entries ARE
-// plane.Space, so the client and the process that owns the rows describe a
+// client.Space, so the client and the process that owns the rows describe a
 // space with one set of names. A second local struct here would be the drift.
 func TestLobbyShapeIsTheOneThePlaneStates(t *testing.T) {
 	var l lobby
-	l.Spaces = []plane.Space{{UUID: "u", Name: "n", Role: "owner"}}
+	l.Spaces = []client.Space{{UUID: "u", Name: "n", Role: "owner"}}
 	b, err := json.Marshal(l)
 	if err != nil {
 		t.Fatal(err)
@@ -277,10 +277,10 @@ func truncate(s string) string {
 // authority states it directly: a space with a role and no account.
 func TestNoAccountIsNoOffer(t *testing.T) {
 	unseated := &answers{
-		row: func(string, string) plane.Member {
-			return plane.Member{Member: true, Role: token.RoleOwner} // no account
+		row: func(string, string) client.Member {
+			return client.Member{Member: true, Role: token.RoleOwner} // no account
 		},
-		list: plane.Spaces{Items: []plane.Space{{UUID: spaceA, Role: token.RoleOwner}}},
+		list: client.Spaces{Items: []client.Space{{UUID: spaceA, Role: token.RoleOwner}}},
 	}
 	app := mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)), unseated)
 	tok := access(t, ada)

@@ -17,14 +17,14 @@ package commerce
 // public edge and recursed over the network instead.
 //
 // A plane op has no edge chain on it. The socket reaches this app's own ops and
-// nothing else (see cloud/plane.go), so the read cannot re-enter the middleware
+// nothing else (see cloud/peer.go), so the read cannot re-enter the middleware
 // that made it — the recursion is absent rather than bounded.
 
 import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	commercedatastore "github.com/hanzoai/commerce/datastore"
 	"github.com/hanzoai/commerce/models/spendalert"
 	commercensctx "github.com/hanzoai/commerce/util/nscontext"
@@ -38,8 +38,8 @@ const scopeRuleLimit = 200
 
 // exposeScopeRules publishes the rate-limit config read. Mount calls it.
 func exposeScopeRules() {
-	zip.Post[struct{}, plane.ScopeRules](cloud.Plane(), "/finance/scope-rules", planeScopeRules,
-		zip.WithOperationID(plane.FinanceScopeRules),
+	zip.Post[struct{}, client.ScopeRules](cloud.Plane(), "/finance/scope-rules", planeScopeRules,
+		zip.WithOperationID(client.FinanceScopeRules),
 		zip.WithSummary("Per-scope request-rate ceilings from this org's spend-alert rows"))
 }
 
@@ -59,7 +59,7 @@ func exposeScopeRules() {
 // impossible rather than merely unlikely.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeScopeRules(ctx context.Context, _ *cloud.Unit) (*plane.ScopeRules, error) {
+func planeScopeRules(ctx context.Context, _ *cloud.Unit) (*client.ScopeRules, error) {
 	org, err := callerOrg(ctx, "scope rules")
 	if err != nil {
 		return nil, err
@@ -72,12 +72,12 @@ func planeScopeRules(ctx context.Context, _ *cloud.Unit) (*plane.ScopeRules, err
 		GetAll(&rows); err != nil {
 		return nil, err
 	}
-	out := plane.ScopeRules{Rules: make([]plane.ScopeRule, 0, len(rows))}
+	out := client.ScopeRules{Rules: make([]client.ScopeRule, 0, len(rows))}
 	for _, r := range rows {
 		if r.RateLimitRpm <= 0 {
 			continue
 		}
-		out.Rules = append(out.Rules, plane.ScopeRule{
+		out.Rules = append(out.Rules, client.ScopeRule{
 			Project:      r.Project,
 			Service:      r.Service,
 			RateLimitRpm: r.RateLimitRpm,

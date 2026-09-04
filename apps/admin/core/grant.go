@@ -17,12 +17,12 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
+	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/hanzoai/commerce/billing/creditledger"
 	"github.com/zap-proto/zip"
 )
@@ -111,7 +111,7 @@ func grantNote(c *zip.Ctx, reason string) string {
 //
 // It changed because a grant's ref must not depend on WHICH PROCESS holds the books. The
 // co-resident ledger accepts an empty ref (no dedup); the plane REFUSES one, because
-// plane.CreditIn.Ref is the exactly-once key an op that CREATES money cannot do without.
+// client.CreditIn.Ref is the exactly-once key an op that CREATES money cannot do without.
 // Answering that question two ways, one per transport, is how the same grant comes to
 // have two identities. One rule, both paths — and every grant row now carries a citable
 // ref rather than an empty one.
@@ -277,7 +277,7 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 //
 // BOTH PATHS ADDRESS THE SUBJECT. The split-deploy leg used to refuse a member-addressed
 // grant, because commerce's HTTP deposit is org-keyed and crediting the pool instead would
-// have put the money where that member cannot spend it. plane.CreditIn carries the subject,
+// have put the money where that member cannot spend it. client.CreditIn carries the subject,
 // so that refusal became a false negative and is gone: a member of a per-member org is
 // credited at their own account whichever process holds the books.
 func grantDeposit(c *zip.Ctx, org, subject, currency, notes, tag, source string, amountCents int64) (before int64, txID string, after int64, afterExact string, err error) {
@@ -328,20 +328,20 @@ func grantDeposit(c *zip.Ctx, org, subject, currency, notes, tag, source string,
 	// ledger one socket away. Pointing that env var at svc/commerce would not have fixed
 	// it either: that Service is an alias back to this same pod's public edge, so the
 	// deposit would re-enter the binary it left, which is the self-re-entry that killed
-	// the billing gate (plane/commerce/commerce.go). A call BY NAME cannot express it.
+	// the billing gate (client/commerce/commerce.go). A call BY NAME cannot express it.
 	//
 	// As(c, org) delegates the SuperAdmin the gate already validated and points it at the
 	// tenant being credited. The principal travels WHOLE and commerce re-checks it; only
-	// the tenant is re-pointed. plane.CreditIn has no org field at all, so the credited
+	// the tenant is re-pointed. client.CreditIn has no org field at all, so the credited
 	// org rides the caller and there is no argument a caller could name another tenant's
 	// books with — the isolation is structural, not a check anyone has to remember.
 	cctx := cloud.As(c, org)
 	before, _ = planeBalance(cctx, c, subject, currency)
-	cred, derr := commercepeer.FinanceCredit(cctx, &plane.CreditIn{
+	cred, derr := commercepeer.FinanceCredit(cctx, &client.CreditIn{
 		Subject: subject,
 		// The EXACT decimal, not the minor unit. commerce deposits what it parses,
 		// so a grant crosses at full precision and cannot be rounded in transit.
-		Amount: plane.Amount(money.FromCents(amountCents).Unwrap()),
+		Amount: client.Amount(money.FromCents(amountCents).Unwrap()),
 		Ref:    grantRef(c, subject, currency, source, amountCents),
 		Notes:  notes,
 		Tags:   tag,
@@ -377,9 +377,9 @@ func grantDeposit(c *zip.Ctx, org, subject, currency, notes, tag, source string,
 // renders the same balance with money.Amount.Cents(), which rounds half-away-from-zero. One
 // grant must report one number regardless of which process holds the books, so the two legs
 // round the same way. (A balance a gate SPENDS against floors instead — see
-// plane.Money.FloorMinor.)
+// client.Money.FloorMinor.)
 func planeBalance(cctx context.Context, c *zip.Ctx, subject, currency string) (cents int64, exact string) {
-	bal, err := commercepeer.FinanceBalance(cctx, &plane.BalanceIn{Subject: subject, Currency: currency})
+	bal, err := commercepeer.FinanceBalance(cctx, &client.BalanceIn{Subject: subject, Currency: currency})
 	if err != nil || bal == nil {
 		c.Log().Warn("admin: grant receipt balance unread (the credit itself is unaffected)",
 			"subject", subject, "currency", currency, "err", err)

@@ -18,9 +18,9 @@ package integrations
 // test.salesforce.com. Linking a client's Salesforce org is an org-admin action.
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net"
 	"net/url"
 	"strings"

@@ -20,8 +20,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -345,11 +345,11 @@ type chatChannels struct {
 // A read that cannot be answered leaves the row UNCONNECTED rather than failing
 // the whole listing, which is the same rule the policy read beside it follows: one
 // unreachable peer must not blank every channel a console renders.
-func askConnection(ctx context.Context, provider string) plane.Connection {
-	out, err := plane.Ask[plane.ConnectionIn, plane.Connection](ctx, "integration",
-		plane.IntegrationsConnection, &plane.ConnectionIn{Provider: provider})
+func askConnection(ctx context.Context, provider string) client.Connection {
+	out, err := client.Call[client.ConnectionIn, client.Connection](ctx, "integration",
+		client.IntegrationsConnection, &client.ConnectionIn{Provider: provider})
 	if err != nil || out == nil {
-		return plane.Connection{}
+		return client.Connection{}
 	}
 	return *out
 }

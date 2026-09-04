@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // query.go is the lexical leg's in-process client: Query reads, Reconcile writes.
@@ -31,8 +31,8 @@ var ErrNotMounted = errors.New("index: not mounted")
 // written for everyone. A caller asking on a person's behalf passes {"", theirs}.
 func Query(ctx context.Context, org, uid, q string, users []string, limit, offset int) ([]json.RawMessage, error) {
 	if mounted == nil {
-		out, err := cloud.Ask[plane.IndexQueryIn, plane.IndexQueryOut](cloud.For(ctx, org), "index",
-			plane.IndexQuery, &plane.IndexQueryIn{UID: uid, Q: q, Users: users, Limit: limit, Offset: offset})
+		out, err := cloud.Ask[client.IndexQueryIn, client.IndexQueryOut](cloud.For(ctx, org), "index",
+			client.IndexQuery, &client.IndexQueryIn{UID: uid, Q: q, Users: users, Limit: limit, Offset: offset})
 		if err != nil {
 			return nil, err
 		}
@@ -87,8 +87,8 @@ func Reconcile(ctx context.Context, org, uid, primaryKey string, docs []map[stri
 			}
 			raws = append(raws, b)
 		}
-		out, e := cloud.Ask[plane.IndexReconcileIn, plane.IndexReconcileOut](cloud.For(ctx, org), "index",
-			plane.IndexReconcile, &plane.IndexReconcileIn{UID: uid, PrimaryKey: primaryKey, Docs: raws})
+		out, e := cloud.Ask[client.IndexReconcileIn, client.IndexReconcileOut](cloud.For(ctx, org), "index",
+			client.IndexReconcile, &client.IndexReconcileIn{UID: uid, PrimaryKey: primaryKey, Docs: raws})
 		if e != nil {
 			return 0, 0, e
 		}

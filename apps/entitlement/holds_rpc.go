@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -18,9 +18,9 @@ import (
 
 // exposeHolds publishes the enablement read. Mount calls it.
 func exposeHolds() {
-	zip.Post[plane.ProductIn, plane.Held](cloud.Plane(), "/entitlement/holds",
+	zip.Post[client.ProductIn, client.Held](cloud.Plane(), "/entitlement/holds",
 		holds,
-		zip.WithOperationID(plane.EntitlementHolds),
+		zip.WithOperationID(client.EntitlementHolds),
 		zip.WithSummary("Whether the caller's org has one product turned on"))
 }
 
@@ -29,7 +29,7 @@ func exposeHolds() {
 //
 // An unmounted store is an error, never a false: a subsystem that failed to start
 // must not read as a customer who has not subscribed.
-func holds(ctx context.Context, in *plane.ProductIn) (*plane.Held, error) {
+func holds(ctx context.Context, in *client.ProductIn) (*client.Held, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("holds: no org on the call")
@@ -45,5 +45,5 @@ func holds(ctx context.Context, in *plane.ProductIn) (*plane.Held, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Held{On: on}, nil
+	return &client.Held{On: on}, nil
 }

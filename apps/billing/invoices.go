@@ -21,9 +21,9 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -80,13 +80,13 @@ func init() {
 // refusal.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) invoices(ctx context.Context, _ *cloud.Unit) (*plane.Invoices, error) {
+func (o ops) invoices(ctx context.Context, _ *cloud.Unit) (*client.Invoices, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "invoices", func(ctx context.Context) (*plane.Invoices, error) {
-		return commercepeer.BillingInvoices(ctx, &plane.InvoicesIn{Subject: subject})
+	return ask(ctx, org, "invoices", func(ctx context.Context) (*client.Invoices, error) {
+		return commercepeer.BillingInvoices(ctx, &client.InvoicesIn{Subject: subject})
 	})
 }
 
@@ -101,7 +101,7 @@ func (o ops) invoices(ctx context.Context, _ *cloud.Unit) (*plane.Invoices, erro
 // invoice can only ever be raised on the caller's own books.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) raiseInvoice(ctx context.Context, in *plane.RaiseIn) (*plane.Invoice, error) {
+func (o ops) raiseInvoice(ctx context.Context, in *client.RaiseIn) (*client.Invoice, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func (o ops) raiseInvoice(ctx context.Context, in *plane.RaiseIn) (*plane.Invoic
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "raise invoice", func(ctx context.Context) (*plane.Invoice, error) {
+	return ask(ctx, org, "raise invoice", func(ctx context.Context) (*client.Invoice, error) {
 		return commercepeer.BillingInvoiceRaise(ctx, in)
 	})
 }
@@ -120,12 +120,12 @@ func (o ops) raiseInvoice(ctx context.Context, in *plane.RaiseIn) (*plane.Invoic
 // id belonging to another tenant is not found rather than found and then filtered.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) invoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
+func (o ops) invoice(ctx context.Context, in *client.InvoiceRef) (*client.Invoice, error) {
 	org, _, err := payer(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "read invoice", func(ctx context.Context) (*plane.Invoice, error) {
+	return ask(ctx, org, "read invoice", func(ctx context.Context) (*client.Invoice, error) {
 		return commercepeer.BillingInvoiceRead(ctx, in)
 	})
 }
@@ -138,7 +138,7 @@ func (o ops) invoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice,
 // would mint a second number for one debt.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) issueInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
+func (o ops) issueInvoice(ctx context.Context, in *client.InvoiceRef) (*client.Invoice, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (o ops) issueInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Inv
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "issue invoice", func(ctx context.Context) (*plane.Invoice, error) {
+	return ask(ctx, org, "issue invoice", func(ctx context.Context) (*client.Invoice, error) {
 		return commercepeer.BillingInvoiceIssue(ctx, in)
 	})
 }
@@ -158,7 +158,7 @@ func (o ops) issueInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Inv
 // the answer.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) voidInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
+func (o ops) voidInvoice(ctx context.Context, in *client.InvoiceRef) (*client.Invoice, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (o ops) voidInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invo
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "void invoice", func(ctx context.Context) (*plane.Invoice, error) {
+	return ask(ctx, org, "void invoice", func(ctx context.Context) (*client.Invoice, error) {
 		return commercepeer.BillingInvoiceVoid(ctx, in)
 	})
 }
@@ -181,7 +181,7 @@ func (o ops) voidInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invo
 // retry of a paid invoice replays the receipt instead of charging again.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) collectInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Collected, error) {
+func (o ops) collectInvoice(ctx context.Context, in *client.InvoiceRef) (*client.Collected, error) {
 	if err := cloud.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func (o ops) collectInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.C
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "collect invoice", func(ctx context.Context) (*plane.Collected, error) {
+	return ask(ctx, org, "collect invoice", func(ctx context.Context) (*client.Collected, error) {
 		return commercepeer.BillingInvoiceCollect(ctx, in)
 	})
 }

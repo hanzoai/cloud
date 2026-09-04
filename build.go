@@ -17,10 +17,10 @@ import (
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/ha"
 	metrics "github.com/hanzoai/o11y/metrics"
 	sqlitedrv "github.com/hanzoai/sqlite"
@@ -61,7 +61,7 @@ import (
 //
 // JSON does not appear in any of these paths. A co-resident dependency is a
 // direct Go method call; a peer that is elsewhere is reached over the peer plane
-// (plane.Ask — ZAP bytes on the peer's own socket, addressed by name). JSON
+// (client.Call — ZAP bytes on the peer's own socket, addressed by name). JSON
 // happens only at the gateway/ingress edge, through the zip jsonenc helper.
 func BuildDeps(cfg *Config) Deps {
 	transport.SetIdentity(carryIdentity)
@@ -332,7 +332,7 @@ func installFinance(cfg *Config, deps Deps, log luxlog.Logger) {
 // configured: an operator reading the boot log saw the transport come up and the
 // calls fail somewhere else. pickKMSClient made exactly this argument when it
 // dropped CLOUD_KMS_ZAP_ADDR for the plane, and the argument is not specific to
-// KMS. The peer plane is the transport (plane.Ask, over the peer's socket), and
+// KMS. The peer plane is the transport (client.Call, over the peer's socket), and
 // it is the only one; a subsystem that is not here and has no plane op is
 // honestly disabled rather than falsely addressed.
 func pick[T any](cfg *Config, log luxlog.Logger, name, label string, disabled func() T) T {
@@ -451,7 +451,7 @@ func IsBotActor(login string) bool {
 // It answers HOW MANY BUILDS IT LAUNCHED. Most pushes track no application, so
 // zero is ordinary rather than a failure — but zero and one are different facts,
 // and a client that returns only an error collapses them into the same "accepted".
-// The plane half already carried the number (plane.Built.Builds) while the
+// The plane half already carried the number (client.Built.Builds) while the
 // in-process half threw it away, so the answer a caller got depended on which
 // process the builder happened to be in.
 var pushBuilder func(ctx context.Context, ev GitPushEvent) (int, error)
@@ -489,7 +489,7 @@ func OnGitPush(ctx context.Context, ev GitPushEvent) (int, error) {
 	if pushBuilder != nil {
 		return pushBuilder(ctx, ev)
 	}
-	out, err := Ask[plane.PushIn, plane.Built](For(ctx, ev.Org), "platform", plane.PlatformPush, &plane.PushIn{
+	out, err := Ask[client.PushIn, client.Built](For(ctx, ev.Org), "platform", client.PlatformPush, &client.PushIn{
 		Project: ev.Project, Repo: ev.Repo, Ref: ev.Ref,
 		Commit: ev.Commit, CloneURL: ev.CloneURL,
 	})
@@ -552,8 +552,8 @@ func OnServiceRelease(ctx context.Context, ev ServiceReleaseEvent) error {
 	if serviceReleaser != nil {
 		return serviceReleaser(ctx, ev)
 	}
-	_, err := Ask[plane.ReleaseIn, plane.Released](ctx, "platform", plane.PlatformRelease,
-		&plane.ReleaseIn{Service: ev.Service, Image: ev.Image, SHA: ev.SHA})
+	_, err := Ask[client.ReleaseIn, client.Released](ctx, "platform", client.PlatformRelease,
+		&client.ReleaseIn{Service: ev.Service, Image: ev.Image, SHA: ev.SHA})
 	return err
 }
 
@@ -682,7 +682,7 @@ func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
 		return commerceClientFactory(cfg, log)
 	}
 	// Commerce is not in this process. The MONEY ops it owns are reachable over the
-	// peer plane (plane/commerce: authorize, balance, credit, record, scope rules,
+	// peer plane (client/commerce: authorize, balance, credit, record, scope rules,
 	// txns, usage) and the metering client already asks for them there. GetOrgConfig
 	// and CheckEntitlement declare no plane
 	// op, so there is nothing to ask and nothing to pretend: the honest client is

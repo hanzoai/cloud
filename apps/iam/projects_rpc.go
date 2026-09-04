@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	"github.com/zap-proto/zip"
 )
@@ -35,9 +35,9 @@ import (
 // op's prose off its handler's doc comment and can lift nothing from an anonymous
 // one.
 func exposeProjects() {
-	zip.Post[struct{}, plane.Projects](cloud.Plane(), "/iam/projects",
+	zip.Post[struct{}, client.Projects](cloud.Plane(), "/iam/projects",
 		projects,
-		zip.WithOperationID(plane.IAMProjects),
+		zip.WithOperationID(client.IAMProjects),
 		zip.WithSummary("Projects this org owns"))
 }
 
@@ -57,7 +57,7 @@ func exposeProjects() {
 // nil handle is a boot-order fault, and an empty list would read as "this org has
 // no projects" — a lie that a caller would act on by offering to create one that
 // already exists.
-func projects(ctx context.Context, _ *cloud.Unit) (*plane.Projects, error) {
+func projects(ctx context.Context, _ *cloud.Unit) (*client.Projects, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("projects: no org on the call")
@@ -70,12 +70,12 @@ func projects(ctx context.Context, _ *cloud.Unit) (*plane.Projects, error) {
 	if err != nil {
 		return nil, fmt.Errorf("projects: %w", err)
 	}
-	out := make([]plane.Project, 0, len(rows))
+	out := make([]client.Project, 0, len(rows))
 	for _, p := range rows {
 		if p == nil {
 			continue
 		}
-		out = append(out, plane.Project{
+		out = append(out, client.Project{
 			Owner:       p.Owner,
 			Name:        p.Name,
 			DisplayName: p.DisplayName,
@@ -83,5 +83,5 @@ func projects(ctx context.Context, _ *cloud.Unit) (*plane.Projects, error) {
 			CreatedTime: p.CreatedTime,
 		})
 	}
-	return &plane.Projects{Projects: out}, nil
+	return &client.Projects{Projects: out}, nil
 }

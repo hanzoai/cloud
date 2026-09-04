@@ -22,8 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/finance"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -34,15 +34,15 @@ import (
 // three withdraws, one of them 40 days old so a 30-day window provably excludes
 // it; globex carries a distinct set so an isolation break shows up as globex's
 // numbers rather than as an empty page.
-func txnRows(org string) []plane.Txn {
+func txnRows(org string) []client.Txn {
 	now := time.Now().UTC()
 	at := func(d time.Duration) int64 { return now.Add(-d).Unix() }
-	usd := func(cents int64) plane.Money {
-		return plane.Money{Decimal: decimalOf(cents), Currency: "usd"}
+	usd := func(cents int64) client.Money {
+		return client.Money{Decimal: decimalOf(cents), Currency: "usd"}
 	}
 	switch org {
 	case "acme":
-		return []plane.Txn{
+		return []client.Txn{
 			{ID: "d1", Kind: string(finance.KindDeposit), Amount: usd(50000), Memo: "Startup grant", Ref: "trial", CreatedAt: at(48 * time.Hour)},
 			{ID: "d2", Kind: string(finance.KindDeposit), Amount: usd(10000), Memo: "Top-up", Ref: "prepaid", CreatedAt: at(24 * time.Hour)},
 			{ID: "w1", Kind: string(finance.KindUsage), Amount: usd(1200), Ref: "zen", CreatedAt: at(2 * time.Hour)},
@@ -50,7 +50,7 @@ func txnRows(org string) []plane.Txn {
 			{ID: "w3", Kind: string(finance.KindUsage), Amount: usd(300), Ref: "zen", CreatedAt: at(40 * 24 * time.Hour)},
 		}
 	case "globex":
-		return []plane.Txn{
+		return []client.Txn{
 			{ID: "gd1", Kind: string(finance.KindDeposit), Amount: usd(900000), Memo: "Enterprise credit", Ref: "prepaid", CreatedAt: at(24 * time.Hour)},
 			{ID: "gw1", Kind: string(finance.KindUsage), Amount: usd(5000), Ref: "gpu", CreatedAt: at(1 * time.Hour)},
 		}
@@ -141,16 +141,16 @@ func ledgerPeer(t *testing.T, org string) {
 	// previous test answers this one. Same helper balance_outage_test.go uses.
 	planeDir(t)
 	app := zip.New(zip.Config{AppName: "commerce"})
-	zip.Post[plane.TxnsIn, plane.Txns](app, "/finance/txns",
-		func(context.Context, *plane.TxnsIn) (*plane.Txns, error) {
-			return &plane.Txns{Rows: txnRows(org)}, nil
-		}, zip.WithOperationID(plane.FinanceTxns))
+	zip.Post[client.TxnsIn, client.Txns](app, "/finance/txns",
+		func(context.Context, *client.TxnsIn) (*client.Txns, error) {
+			return &client.Txns{Rows: txnRows(org)}, nil
+		}, zip.WithOperationID(client.FinanceTxns))
 	// Balance rides the same peer: the finance surface reads both, and a peer that
 	// served one and not the other would fail for a reason the test is not about.
-	zip.Post[plane.BalanceIn, plane.Balance](app, "/finance/balance",
-		func(context.Context, *plane.BalanceIn) (*plane.Balance, error) {
-			return &plane.Balance{Amount: plane.Money{Decimal: decimalOf(balanceOf(org)), Currency: "usd"}}, nil
-		}, zip.WithOperationID(plane.FinanceBalance))
+	zip.Post[client.BalanceIn, client.Balance](app, "/finance/balance",
+		func(context.Context, *client.BalanceIn) (*client.Balance, error) {
+			return &client.Balance{Amount: client.Money{Decimal: decimalOf(balanceOf(org)), Currency: "usd"}}, nil
+		}, zip.WithOperationID(client.FinanceBalance))
 	go func() { _ = app.Listen(zip.SocketPath("commerce")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 

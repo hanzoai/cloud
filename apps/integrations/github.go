@@ -1,8 +1,8 @@
 package integrations
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/url"
 )
 

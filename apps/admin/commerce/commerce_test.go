@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 	"net"
 	"net/http"
@@ -33,7 +33,7 @@ func planClient(t *testing.T, body string) *Client {
 // It replaces an httptest stub of /v1/billing/subscriptions. That endpoint belonged
 // to a standalone commerce there is no longer any of, and a test that keeps
 // stubbing it proves the reader can parse a shape nothing serves.
-func subsPeer(t *testing.T, rows []plane.Sub) {
+func subsPeer(t *testing.T, rows []client.Sub) {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "ac")
 	if err != nil {
@@ -45,10 +45,10 @@ func subsPeer(t *testing.T, rows []plane.Sub) {
 	t.Cleanup(cloud.ResetPlane)
 
 	app := zip.New(zip.Config{AppName: "commerce"})
-	zip.Post[plane.SubsIn, plane.Subs](app, "/finance/subs",
-		func(context.Context, *plane.SubsIn) (*plane.Subs, error) {
-			return &plane.Subs{Rows: rows}, nil
-		}, zip.WithOperationID(plane.FinanceSubs))
+	zip.Post[client.SubsIn, client.Subs](app, "/finance/subs",
+		func(context.Context, *client.SubsIn) (*client.Subs, error) {
+			return &client.Subs{Rows: rows}, nil
+		}, zip.WithOperationID(client.FinanceSubs))
 	go func() { _ = app.Listen(zip.SocketPath("commerce")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 
@@ -69,7 +69,7 @@ func subsPeer(t *testing.T, rows []plane.Sub) {
 // showed $20 here and $200 in commerce's own rollup. The interval arithmetic is
 // pinned where it lives now, in commerce's api/billing.
 func TestPlanReadsCommerceMRR(t *testing.T) {
-	subsPeer(t, []plane.Sub{
+	subsPeer(t, []client.Sub{
 		{Status: "active", MRRCents: 20000, PlanName: "team"},
 		{Status: "active", MRRCents: 1000, PlanName: "pro"},
 	})
@@ -96,7 +96,7 @@ func TestPlanDoesNotRederiveFromPrice(t *testing.T) {
 	// The seat-inclusive figure commerce computed. Price and interval are NOT on
 	// this wire at all now — the reader cannot re-derive what it is never sent,
 	// which is a stronger guarantee than a test that it chose not to.
-	subsPeer(t, []plane.Sub{{Status: "active", MRRCents: 20000, PlanName: "team"}})
+	subsPeer(t, []client.Sub{{Status: "active", MRRCents: 20000, PlanName: "team"}})
 	c := planClient(t, `{}`)
 
 	got, err := c.Plan(context.Background(), "org-1")
@@ -120,7 +120,7 @@ func TestPlanDoesNotRederiveFromPrice(t *testing.T) {
 // The trial still names the plan and still marks the subject subscribed. It IS
 // a live plan; it just is not money yet.
 func TestPlanCountsNoRevenueForTrialOrCanceled(t *testing.T) {
-	subsPeer(t, []plane.Sub{
+	subsPeer(t, []client.Sub{
 		{Status: "canceled", MRRCents: 50000, PlanName: "enterprise"},
 		{Status: "trialing", MRRCents: 1500, PlanName: "pro"},
 	})
@@ -144,7 +144,7 @@ func TestPlanCountsNoRevenueForTrialOrCanceled(t *testing.T) {
 // An active subscription alongside a trial contributes exactly its own MRR, so
 // the trial neither adds to nor suppresses real revenue.
 func TestPlanCountsActiveAlongsideTrial(t *testing.T) {
-	subsPeer(t, []plane.Sub{
+	subsPeer(t, []client.Sub{
 		{Status: "active", MRRCents: 9900, PlanName: "pro"},
 		{Status: "trialing", MRRCents: 1500, PlanName: "enterprise"},
 	})
@@ -179,7 +179,7 @@ func TestPlanWithNoSubscriptions(t *testing.T) {
 // SURVIVES the trip: if it stopped, every revenue board would report zero rather
 // than fail, which is the failure mode worth a test.
 func TestSubsWireCarriesMRRCents(t *testing.T) {
-	var subs plane.Subs
+	var subs client.Subs
 	if err := json.Unmarshal([]byte(`{"rows":[{"status":"active","mrrCents":4242,"planName":"Pro"}]}`), &subs); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}

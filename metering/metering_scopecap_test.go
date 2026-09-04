@@ -155,7 +155,7 @@ func TestAuthorizeVerdict_ProjectValidatedForwarded(t *testing.T) {
 }
 
 // The rate-limit rules are no longer read through this client. They come over the
-// internal plane (plane.FinanceScopeRules) because this client's GET
+// internal plane (client.FinanceScopeRules) because this client's GET
 // /v1/billing/alerts re-dispatched the whole shared app back into the middleware
 // that asked, to the transport's depth guard: 502. The rows-to-rules projection
 // now lives with the rows, in commerce (apps/commerce/scoperules_rpc.go), and is

@@ -20,9 +20,9 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -91,8 +91,8 @@ func listMethods(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, aerr := ask(c.Context(), org, "methods", func(ctx context.Context) (*plane.Rendered, error) {
-		return commercepeer.BillingMethods(ctx, &plane.MethodsIn{Subject: subject, Kind: c.Query("type")})
+	out, aerr := ask(c.Context(), org, "methods", func(ctx context.Context) (*client.Rendered, error) {
+		return commercepeer.BillingMethods(ctx, &client.MethodsIn{Subject: subject, Kind: c.Query("type")})
 	})
 	if aerr != nil {
 		return aerr
@@ -113,8 +113,8 @@ func saveMethod(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, aerr := ask(c.Context(), org, "save method", func(ctx context.Context) (*plane.Rendered, error) {
-		return commercepeer.BillingMethodSave(ctx, &plane.MethodSaveIn{
+	out, aerr := ask(c.Context(), org, "save method", func(ctx context.Context) (*client.Rendered, error) {
+		return commercepeer.BillingMethodSave(ctx, &client.MethodSaveIn{
 			Subject: subject,
 			// The caller's OWN address, off its credential: it names the
 			// processor's customer profile, and the store must never read an

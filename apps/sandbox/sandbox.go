@@ -71,11 +71,11 @@ import (
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/metering"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -347,7 +347,7 @@ func Routes(app cloud.Router, s *cloud.Service[state]) {
 	//
 	// The typed ops are registered here rather than written fresh, because they
 	// already exist one file over — expose() puts these exact five on
-	// cloud.Plane() (apps/sandbox/plane.go), which is a DIFFERENT zip.App on a
+	// cloud.Plane() (apps/sandbox/peer.go), which is a DIFFERENT zip.App on a
 	// DIFFERENT socket that the fleet never asks. Same handlers, same types, now
 	// also on the server the fleet does ask. Nothing new is invented and there is
 	// no second implementation to drift.
@@ -355,26 +355,26 @@ func Routes(app cloud.Router, s *cloud.Service[state]) {
 	// This is what stands between "@hanzo can run code" and "@hanzo can lease a
 	// computer": the run path was built and reachable, and no agent could name it.
 	if reg := cloud.ZipApp(app); reg != nil {
-		zip.Post[plane.LeaseIn, plane.Leased](reg, "/v1/sandbox/lease", planeLease,
+		zip.Post[client.LeaseIn, client.Leased](reg, "/v1/sandbox/lease", planeLease,
 			zip.WithOperationID("lease_sandbox"),
 			zip.WithSummary("Lease a sandbox — a real computer — or resume one you hold"))
-		zip.Post[plane.RunIn, plane.Ran](reg, "/v1/sandbox/run", planeRun,
+		zip.Post[client.RunIn, client.Ran](reg, "/v1/sandbox/run", planeRun,
 			zip.WithOperationID("run_in_sandbox"),
 			zip.WithSummary("Run a command in a sandbox you hold and read its output"))
-		zip.Post[plane.PathIn, plane.Blob](reg, "/v1/sandbox/read", planeRead,
+		zip.Post[client.PathIn, client.Blob](reg, "/v1/sandbox/read", planeRead,
 			zip.WithOperationID("read_sandbox_file"),
 			zip.WithSummary("Read a file from a sandbox you hold"))
-		zip.Post[plane.WriteIn, plane.Wrote](reg, "/v1/sandbox/write", planeWrite,
+		zip.Post[client.WriteIn, client.Wrote](reg, "/v1/sandbox/write", planeWrite,
 			zip.WithOperationID("write_sandbox_file"),
 			zip.WithSummary("Write a file into a sandbox you hold"))
 		// STOP ENDS THE WORK; END ENDS THE RESOURCE. They are two verbs because a
 		// run that has gone wrong is one somebody still wants to look at, and an
 		// agent told to "stop" that deleted the pod would take the checkout, the
 		// logs and the half-written file with it.
-		zip.Post[plane.StopIn, plane.Stopped](reg, "/v1/sandbox/stop", planeStop,
+		zip.Post[client.StopIn, client.Stopped](reg, "/v1/sandbox/stop", planeStop,
 			zip.WithOperationID("stop_run"),
 			zip.WithSummary("Stop what a sandbox is running, and keep the sandbox"))
-		zip.Post[plane.EndIn, struct{}](reg, "/v1/sandbox/end", planeEnd,
+		zip.Post[client.EndIn, struct{}](reg, "/v1/sandbox/end", planeEnd,
 			zip.WithOperationID("end_sandbox"),
 			zip.WithSummary("End a sandbox and release it"))
 	}

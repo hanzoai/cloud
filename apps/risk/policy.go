@@ -234,7 +234,7 @@ const reviewNano = 50_000 * nanoPerUSD
 //
 // So the populations are SEPARATE SUBJECTS, not separate numbers ([contract.KindPayer]).
 // A payment is observed under the payer kind, taught only by a settlement this
-// deployment watched happen ([plane.RiskObserve]), and no rollup writes that kind — so
+// deployment watched happen ([client.RiskObserve]), and no rollup writes that kind — so
 // the accrual these two bounds are read over holds money that moved IN and nothing
 // else, and one statement of appetite still has one reading.
 

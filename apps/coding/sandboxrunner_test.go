@@ -25,8 +25,8 @@ import (
 
 	"github.com/hanzoai/cloud/internal/planetest"
 
-	"github.com/hanzoai/cloud/plane"
-	sandboxpeer "github.com/hanzoai/cloud/plane/sandbox"
+	"github.com/hanzoai/cloud/client"
+	sandboxpeer "github.com/hanzoai/cloud/client/sandbox"
 	"github.com/zap-proto/zip"
 )
 
@@ -60,20 +60,20 @@ type pod struct {
 	// run's key travels this way and nowhere else, so a test that only watched
 	// argv could not tell "the secret is confined" from "the secret is absent".
 	fed    []string
-	answer func(argv []string) plane.Ran
+	answer func(argv []string) client.Ran
 	// leased is every lease the run asked for, verbatim. A lease is a REQUEST for
 	// resources — a class, a ttl, and whether a disk is wanted — and the only place
 	// that request is visible is here, before it reaches a cluster.
-	leased []plane.LeaseIn
+	leased []client.LeaseIn
 }
 
-func (p *pod) exec(argv []string, stdin string) plane.Ran {
+func (p *pod) exec(argv []string, stdin string) client.Ran {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.ran = append(p.ran, append([]string(nil), argv...))
 	p.fed = append(p.fed, stdin)
 	if p.answer == nil {
-		return plane.Ran{}
+		return client.Ran{}
 	}
 	return p.answer(argv)
 }
@@ -123,31 +123,31 @@ func servePod(t *testing.T, p *pod) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 
 	sandboxes := zip.New(zip.Config{AppName: sandboxpeer.App, DisableStartupMessage: true})
-	zip.Post[plane.LeaseIn, plane.Leased](sandboxes, "/sandbox/lease",
-		func(_ context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
+	zip.Post[client.LeaseIn, client.Leased](sandboxes, "/sandbox/lease",
+		func(_ context.Context, in *client.LeaseIn) (*client.Leased, error) {
 			p.mu.Lock()
 			p.leased = append(p.leased, *in)
 			p.mu.Unlock()
-			return &plane.Leased{ID: "sbx_1", Class: in.Class, Status: "ready", Workdir: "/work"}, nil
-		}, zip.WithOperationID(plane.SandboxLease))
-	zip.Post[plane.RunIn, plane.Ran](sandboxes, "/sandbox/run",
-		func(_ context.Context, in *plane.RunIn) (*plane.Ran, error) {
+			return &client.Leased{ID: "sbx_1", Class: in.Class, Status: "ready", Workdir: "/work"}, nil
+		}, zip.WithOperationID(client.SandboxLease))
+	zip.Post[client.RunIn, client.Ran](sandboxes, "/sandbox/run",
+		func(_ context.Context, in *client.RunIn) (*client.Ran, error) {
 			r := p.exec(in.Argv, in.Stdin)
 			return &r, nil
-		}, zip.WithOperationID(plane.SandboxRun))
-	zip.Post[plane.EndIn, struct{}](sandboxes, "/sandbox/end",
-		func(_ context.Context, _ *plane.EndIn) (*struct{}, error) {
+		}, zip.WithOperationID(client.SandboxRun))
+	zip.Post[client.EndIn, struct{}](sandboxes, "/sandbox/end",
+		func(_ context.Context, _ *client.EndIn) (*struct{}, error) {
 			return &struct{}{}, nil
-		}, zip.WithOperationID(plane.SandboxEnd))
+		}, zip.WithOperationID(client.SandboxEnd))
 
 	commerce := zip.New(zip.Config{AppName: "commerce", DisableStartupMessage: true})
-	zip.Post[plane.AuthorizeIn, plane.Verdict](commerce, "/commerce/authorize",
-		func(_ context.Context, _ *plane.AuthorizeIn) (*plane.Verdict, error) {
-			return &plane.Verdict{OK: true}, nil
-		}, zip.WithOperationID(plane.FinanceAuthorize))
+	zip.Post[client.AuthorizeIn, client.Verdict](commerce, "/commerce/authorize",
+		func(_ context.Context, _ *client.AuthorizeIn) (*client.Verdict, error) {
+			return &client.Verdict{OK: true}, nil
+		}, zip.WithOperationID(client.FinanceAuthorize))
 
 	for name, app := range map[string]*zip.App{sandboxpeer.App: sandboxes, "commerce": commerce} {
-		plane.Bind()
+		client.Bind()
 		go func(path string) { _ = app.Listen(path) }(zip.SocketPath(name))
 		t.Cleanup(func() { _ = app.Shutdown() })
 		waitListening(t, name)
@@ -184,11 +184,11 @@ func steps(out *[]string) func(Step) {
 // goodbye, whereas a lease that never asks for a disk cannot strand one. The pod's
 // emptyDir already has exactly the lifetime a run wants.
 func TestSandboxRun_LeasesNoDiskBecauseARunIsNotAProject(t *testing.T) {
-	p := &pod{answer: func(argv []string) plane.Ran {
+	p := &pod{answer: func(argv []string) client.Ran {
 		if slices.Contains(argv, "rev-parse") {
-			return plane.Ran{Stdout: theSHA + "\n"}
+			return client.Ran{Stdout: theSHA + "\n"}
 		}
-		return plane.Ran{}
+		return client.Ran{}
 	}}
 	servePod(t, p)
 
@@ -211,14 +211,14 @@ func TestSandboxRun_LeasesNoDiskBecauseARunIsNotAProject(t *testing.T) {
 // because the false PR is the worse failure: a branch with no commits, filed as
 // work, teaches a reviewer to ignore the agent.
 func TestSandboxRun_NoEditsReportNoChangesAndWriteNoRef(t *testing.T) {
-	p := &pod{answer: func(argv []string) plane.Ran {
+	p := &pod{answer: func(argv []string) client.Ran {
 		switch {
 		case slices.Contains(argv, "rev-parse"):
-			return plane.Ran{Stdout: theSHA + "\n"} // the tip never moves
+			return client.Ran{Stdout: theSHA + "\n"} // the tip never moves
 		case slices.Contains(argv, "commit"):
-			return plane.Ran{ExitCode: 1, Stdout: "nothing to commit, working tree clean\n"}
+			return client.Ran{ExitCode: 1, Stdout: "nothing to commit, working tree clean\n"}
 		}
-		return plane.Ran{}
+		return client.Ran{}
 	}}
 	servePod(t, p)
 
@@ -243,17 +243,17 @@ func TestSandboxRun_NoEditsReportNoChangesAndWriteNoRef(t *testing.T) {
 func TestSandboxRun_EditsAreCommittedPushedAndReportedHonestly(t *testing.T) {
 	tip := theSHA
 	p := &pod{}
-	p.answer = func(argv []string) plane.Ran {
+	p.answer = func(argv []string) client.Ran {
 		switch {
 		case slices.Contains(argv, "commit"):
 			tip = newSHA // the commit is what moves it
-			return plane.Ran{}
+			return client.Ran{}
 		case slices.Contains(argv, "rev-parse"):
-			return plane.Ran{Stdout: tip + "\n"}
+			return client.Ran{Stdout: tip + "\n"}
 		case slices.Contains(argv, "diff"):
-			return plane.Ran{Stdout: " 2 files changed, 9 insertions(+), 1 deletion(-)\n"}
+			return client.Ran{Stdout: " 2 files changed, 9 insertions(+), 1 deletion(-)\n"}
 		}
-		return plane.Ran{}
+		return client.Ran{}
 	}
 	servePod(t, p)
 
@@ -314,14 +314,14 @@ func TestSandboxRun_RefusesToWriteOutsideTheAgentNamespace(t *testing.T) {
 // A tool that failed has produced nothing anyone should review, so its checkout
 // stays in the sandbox and dies there.
 func TestSandboxRun_AFailedToolWritesNoRef(t *testing.T) {
-	p := &pod{answer: func(argv []string) plane.Ran {
+	p := &pod{answer: func(argv []string) client.Ran {
 		if slices.Contains(argv, "rev-parse") {
-			return plane.Ran{Stdout: theSHA + "\n"}
+			return client.Ran{Stdout: theSHA + "\n"}
 		}
 		if slices.Contains(argv, "dev") {
-			return plane.Ran{ExitCode: 3, Stderr: "the model gave up\n"}
+			return client.Ran{ExitCode: 3, Stderr: "the model gave up\n"}
 		}
-		return plane.Ran{}
+		return client.Ran{}
 	}}
 	servePod(t, p)
 
@@ -345,11 +345,11 @@ func TestSandboxRun_AFailedToolWritesNoRef(t *testing.T) {
 // one command that carries the key must carry it on stdin, and no command may
 // carry it at all.
 func TestSandboxRun_TheKeyTravelsOnStdinAndNeverOnArgv(t *testing.T) {
-	p := &pod{answer: func(argv []string) plane.Ran {
+	p := &pod{answer: func(argv []string) client.Ran {
 		if slices.Contains(argv, "rev-parse") {
-			return plane.Ran{Stdout: theSHA + "\n"}
+			return client.Ran{Stdout: theSHA + "\n"}
 		}
-		return plane.Ran{Stdout: "done\n"}
+		return client.Ran{Stdout: "done\n"}
 	}}
 	servePod(t, p)
 
@@ -432,15 +432,15 @@ func TestSandboxRun_PinsTheForgeHostAndConfinesTheCredential(t *testing.T) {
 	// let this test pass having checked only half of them.
 	tip := theSHA
 	p := &pod{}
-	p.answer = func(argv []string) plane.Ran {
+	p.answer = func(argv []string) client.Ran {
 		switch {
 		case slices.Contains(argv, "commit"):
 			tip = newSHA
-			return plane.Ran{}
+			return client.Ran{}
 		case slices.Contains(argv, "rev-parse"):
-			return plane.Ran{Stdout: tip + "\n"}
+			return client.Ran{Stdout: tip + "\n"}
 		}
-		return plane.Ran{}
+		return client.Ran{}
 	}
 	servePod(t, p)
 
@@ -529,14 +529,14 @@ func TestSandboxRun_RefusesToCloneUnpinned(t *testing.T) {
 // event, a span or a Slack thread.
 func TestSandboxRun_AnEchoedKeyIsScrubbedOnTheWayOut(t *testing.T) {
 	body := strings.Split(theKey, "\n")[1] // one secret line, as a log would print it
-	p := &pod{answer: func(argv []string) plane.Ran {
+	p := &pod{answer: func(argv []string) client.Ran {
 		if slices.Contains(argv, "rev-parse") {
-			return plane.Ran{Stdout: theSHA + "\n"}
+			return client.Ran{Stdout: theSHA + "\n"}
 		}
 		if slices.Contains(argv, "dev") {
-			return plane.Ran{Stdout: "read key: " + body + "\n"}
+			return client.Ran{Stdout: "read key: " + body + "\n"}
 		}
-		return plane.Ran{}
+		return client.Ran{}
 	}}
 	servePod(t, p)
 

@@ -22,10 +22,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/finance"
-	"github.com/hanzoai/cloud/payout"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/payout"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -43,8 +43,8 @@ func serveLedger(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
 	t.Setenv("ZIP_RUNTIME_DIR", sockDir)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 
 	fin := finance.New(finance.Local(t.TempDir()))
 	finance.Publish(fin)
@@ -57,8 +57,8 @@ func serveLedger(t *testing.T) {
 	// end to end in apps/commerce/here_test.go; what is under test here is the
 	// client, the tenancy of the call, and what it does when the answer does not
 	// come.
-	zip.Post[plane.SpendIn, plane.Spend](cloud.Plane(), "/finance/spend",
-		func(ctx context.Context, in *plane.SpendIn) (*plane.Spend, error) {
+	zip.Post[client.SpendIn, client.Spend](cloud.Plane(), "/finance/spend",
+		func(ctx context.Context, in *client.SpendIn) (*client.Spend, error) {
 			org := cloud.Who(ctx).Org
 			if org == "" {
 				return nil, zip.ErrForbidden("spend: no org on the call")
@@ -82,11 +82,11 @@ func serveLedger(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			return &plane.Spend{
-				Consumed: plane.Amount(money.FromCents(cents).Unwrap()),
-				Balance:  plane.Amount(bal.Unwrap()),
+			return &client.Spend{
+				Consumed: client.Amount(money.FromCents(cents).Unwrap()),
+				Balance:  client.Amount(bal.Unwrap()),
 			}, nil
-		}, zip.WithOperationID(plane.FinanceSpend))
+		}, zip.WithOperationID(client.FinanceSpend))
 
 	app := cloud.Plane()
 	sock := zip.SocketPath("commerce")
@@ -182,8 +182,8 @@ func TestNoCommerceIsNamedAbsence(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	t.Setenv("ZIP_RUNTIME_DIR", dir)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 

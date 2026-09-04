@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -39,20 +39,20 @@ func exposeSecrets(c cloud.KMSClient) {
 	p := cloud.Plane()
 	o := secretOps{c: c, a: newAttest(context.Background())}
 
-	zip.Post[plane.SecretIn, plane.Secret](p, "/kms/get", o.get,
-		zip.WithOperationID(plane.KMSGet),
+	zip.Post[client.SecretIn, client.Secret](p, "/kms/get", o.get,
+		zip.WithOperationID(client.KMSGet),
 		zip.WithSummary("Read one secret"))
 
-	zip.Post[plane.SecretIn, plane.Secret](p, "/kms/put", o.put,
-		zip.WithOperationID(plane.KMSPut),
+	zip.Post[client.SecretIn, client.Secret](p, "/kms/put", o.put,
+		zip.WithOperationID(client.KMSPut),
 		zip.WithSummary("Write one secret"))
 
-	zip.Post[plane.SecretIn, plane.Secret](p, "/kms/sign", o.sign,
-		zip.WithOperationID(plane.KMSSign),
+	zip.Post[client.SecretIn, client.Secret](p, "/kms/sign", o.sign,
+		zip.WithOperationID(client.KMSSign),
 		zip.WithSummary("Sign a payload with a key that never leaves this process"))
 
-	zip.Post[plane.SecretIn, plane.Secret](p, "/kms/delete", o.del,
-		zip.WithOperationID(plane.KMSDel),
+	zip.Post[client.SecretIn, client.Secret](p, "/kms/delete", o.del,
+		zip.WithOperationID(client.KMSDel),
 		zip.WithSummary("Forget one secret"))
 }
 
@@ -67,14 +67,14 @@ func exposeSecrets(c cloud.KMSClient) {
 // already overwrite a secret into uselessness, so this adds no destructive power
 // either. The same ref rule as every other op applies, so a tenant's material is
 // removable only by a call acting for that tenant.
-func (o secretOps) del(ctx context.Context, in *plane.SecretIn) (*plane.Secret, error) {
+func (o secretOps) del(ctx context.Context, in *client.SecretIn) (*client.Secret, error) {
 	if err := o.authorize(ctx, in.Ref); err != nil {
 		return nil, err
 	}
 	if err := o.c.DeleteSecret(ctx, in.Ref); err != nil {
 		return nil, fmt.Errorf("kms.delete: %w", err)
 	}
-	return &plane.Secret{}, nil
+	return &client.Secret{}, nil
 }
 
 // Get opens one sealed secret and returns its value to the calling process. This
@@ -90,7 +90,7 @@ func (o secretOps) del(ctx context.Context, in *plane.SecretIn) (*plane.Secret, 
 // processes.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o secretOps) get(ctx context.Context, in *plane.SecretIn) (*plane.Secret, error) {
+func (o secretOps) get(ctx context.Context, in *client.SecretIn) (*client.Secret, error) {
 	if err := o.authorize(ctx, in.Ref); err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (o secretOps) get(ctx context.Context, in *plane.SecretIn) (*plane.Secret, 
 	if err != nil {
 		return nil, fmt.Errorf("kms.get: %w", err)
 	}
-	return &plane.Secret{Value: v}, nil
+	return &client.Secret{Value: v}, nil
 }
 
 // Put seals one secret into the store under the given ref, replacing whatever was
@@ -110,14 +110,14 @@ func (o secretOps) get(ctx context.Context, in *plane.SecretIn) (*plane.Secret, 
 // plant material in another's namespace.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o secretOps) put(ctx context.Context, in *plane.SecretIn) (*plane.Secret, error) {
+func (o secretOps) put(ctx context.Context, in *client.SecretIn) (*client.Secret, error) {
 	if err := o.authorize(ctx, in.Ref); err != nil {
 		return nil, err
 	}
 	if err := o.c.PutSecret(ctx, in.Ref, in.Value); err != nil {
 		return nil, fmt.Errorf("kms.put: %w", err)
 	}
-	return &plane.Secret{}, nil
+	return &client.Secret{}, nil
 }
 
 // Sign returns a signature over the submitted payload, produced by the key the ref
@@ -130,7 +130,7 @@ func (o secretOps) put(ctx context.Context, in *plane.SecretIn) (*plane.Secret, 
 // signs only for a call acting for that tenant.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o secretOps) sign(ctx context.Context, in *plane.SecretIn) (*plane.Secret, error) {
+func (o secretOps) sign(ctx context.Context, in *client.SecretIn) (*client.Secret, error) {
 	if err := o.authorize(ctx, in.Ref); err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func (o secretOps) sign(ctx context.Context, in *plane.SecretIn) (*plane.Secret,
 	if err != nil {
 		return nil, fmt.Errorf("kms.sign: %w", err)
 	}
-	return &plane.Secret{Value: sig}, nil
+	return &client.Secret{Value: sig}, nil
 }
 
 // authorize decides one call: who the kernel and the kubelet say is asking,

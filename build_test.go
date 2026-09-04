@@ -99,7 +99,7 @@ func TestBuildDeps_DisabledNoEndpointReturnsDisabled(t *testing.T) {
 // both: an operator reading the log saw the transport up, and the calls broke
 // somewhere they had no reason to look.
 //
-// The peer plane is the transport (plane.Ask, over the peer's own socket). A
+// The peer plane is the transport (client.Call, over the peer's own socket). A
 // subsystem reachable that way is reached by NAME with no address to configure;
 // one that is not reachable is honestly disabled. Neither state has room for an
 // endpoint string, so there is nothing left to set.

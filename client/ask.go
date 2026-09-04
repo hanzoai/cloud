@@ -131,7 +131,7 @@ func ask(ctx context.Context, at At, name string, req *fasthttp.Request) Answer 
 	// A PEER THIS PROCESS ALREADY SERVES IS REACHED IN MEMORY. zip.Serving is a
 	// fact about the process — something in this program bound that app's socket —
 	// so a co-resident subsystem costs no dial, no frame and no copy of the
-	// caller's request. It is the move plane.Ask already makes with zip.Here, and
+	// caller's request. It is the move client.Call already makes with zip.Here, and
 	// this hop was the one place in the surface that did not make it: every
 	// tools/list marshalled a fasthttp request into ZAP frames and sent it down a
 	// unix socket to a handler in this very process.

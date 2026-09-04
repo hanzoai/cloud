@@ -6,7 +6,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	cloud "github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // The identity trust boundary asks projects who owns a claimed project.
@@ -23,15 +23,15 @@ import (
 // In-process when the boundary and this store are co-resident, over the plane when
 // they are not — but now the question is always actually ASKED.
 func exposeOwnership() {
-	zip.Post[plane.OwnerIn, plane.Ownership](cloud.Plane(), "/projects/ownership", planeOwnership,
-		zip.WithOperationID(plane.ProjectsOwnership),
+	zip.Post[client.OwnerIn, client.Ownership](cloud.Plane(), "/projects/ownership", planeOwnership,
+		zip.WithOperationID(client.ProjectsOwnership),
 		zip.WithSummary("Report whether the calling org owns a project, and whether another org does"))
 }
 
 // planeOwnership answers whether the CALLER's org owns the named project and
 // whether some other org does.
 //
-// The org is the caller's plane identity and never the argument — plane.OwnerIn
+// The org is the caller's plane identity and never the argument — client.OwnerIn
 // has no org field, deliberately, because the org is precisely what the answer is
 // relative to: a caller able to state it could ask the question about somebody
 // else and act on the answer. An anonymous caller is refused rather than defaulted.
@@ -41,7 +41,7 @@ func exposeOwnership() {
 // the reply carries two booleans instead of one verdict — collapsing "nobody owns
 // it" into either "mine" or "another's" would respectively open the guard or break
 // every subsystem that uses a free-form project label.
-func planeOwnership(ctx context.Context, in *plane.OwnerIn) (*plane.Ownership, error) {
+func planeOwnership(ctx context.Context, in *client.OwnerIn) (*client.Ownership, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("projects ownership: org required")
@@ -54,7 +54,7 @@ func planeOwnership(ctx context.Context, in *plane.OwnerIn) (*plane.Ownership, e
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Ownership{Mine: mine, Other: other}, nil
+	return &client.Ownership{Mine: mine, Other: other}, nil
 }
 
 // The resolver this process serves plane answers from. Set at Mount beside

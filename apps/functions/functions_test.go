@@ -171,7 +171,7 @@ func TestBuildMetricsBucketsRealRows(t *testing.T) {
 // TestInvokeFailsClosedWithNoSandboxesApp: a deployment that does not run the
 // sandboxes app cannot execute customer code, and says so. It never fabricates
 // output, which is the property the old CODE_EXEC_UPSTREAM check existed for — the
-// difference is that "not deployed here" is now a fact plane.Ask ANSWERS rather than
+// difference is that "not deployed here" is now a fact client.Call ANSWERS rather than
 // a config value this package read.
 func TestInvokeFailsClosedWithNoSandboxesApp(t *testing.T) {
 	e := newExecClient()

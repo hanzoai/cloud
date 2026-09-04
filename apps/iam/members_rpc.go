@@ -8,7 +8,7 @@ import (
 	"sort"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	iamschema "github.com/hanzoai/iam/pkg/schema"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	"github.com/hanzoai/orm"
@@ -31,21 +31,21 @@ import (
 
 // exposeMembers publishes the roster read and the grant write. Mount calls it.
 func exposeMembers() {
-	zip.Post[plane.Scope, plane.Memberships](cloud.Plane(), "/iam/members",
+	zip.Post[client.Scope, client.Memberships](cloud.Plane(), "/iam/members",
 		members,
-		zip.WithOperationID(plane.IAMMembers),
+		zip.WithOperationID(client.IAMMembers),
 		zip.WithSummary("Who may act in one scope of the caller's org"))
-	zip.Post[plane.GrantIn, struct{}](cloud.Plane(), "/iam/grant",
+	zip.Post[client.GrantIn, struct{}](cloud.Plane(), "/iam/grant",
 		grant,
-		zip.WithOperationID(plane.IAMGrant),
+		zip.WithOperationID(client.IAMGrant),
 		zip.WithSummary("Record that a user may act in a scope of the caller's org"))
-	zip.Post[struct{}, plane.Seats](cloud.Plane(), "/iam/seats",
+	zip.Post[struct{}, client.Seats](cloud.Plane(), "/iam/seats",
 		seats,
-		zip.WithOperationID(plane.IAMSeats),
+		zip.WithOperationID(client.IAMSeats),
 		zip.WithSummary("The caller's org's billable people"))
-	zip.Post[plane.FederatedIn, plane.Federated](cloud.Plane(), "/iam/federated",
+	zip.Post[client.FederatedIn, client.Federated](cloud.Plane(), "/iam/federated",
 		federated,
-		zip.WithOperationID(plane.IAMFederated),
+		zip.WithOperationID(client.IAMFederated),
 		zip.WithSummary("The caller's org member behind an external identity"))
 }
 
@@ -56,7 +56,7 @@ func exposeMembers() {
 // decides who a comment runs as. The org is the caller's, and the query is
 // bounded to it, so an id that belongs to a person in another org resolves to
 // nobody here.
-func federated(ctx context.Context, in *plane.FederatedIn) (*plane.Federated, error) {
+func federated(ctx context.Context, in *client.FederatedIn) (*client.Federated, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("federated: no org on the call")
@@ -76,14 +76,14 @@ func federated(ctx context.Context, in *plane.FederatedIn) (*plane.Federated, er
 		return nil, fmt.Errorf("federated: %w", err)
 	}
 	if len(rows) != 1 || rows[0].IsDeleted || rows[0].IsForbidden {
-		return &plane.Federated{}, nil
+		return &client.Federated{}, nil
 	}
-	return &plane.Federated{User: rows[0].Id}, nil
+	return &client.Federated{User: rows[0].Id}, nil
 }
 
 // members lists the grants in one scope, each with the display name IAM holds for
 // the person — so a caller never keeps a copy of somebody's name to show it.
-func members(ctx context.Context, in *plane.Scope) (*plane.Memberships, error) {
+func members(ctx context.Context, in *client.Scope) (*client.Memberships, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("members: no org on the call")
@@ -107,18 +107,18 @@ func members(ctx context.Context, in *plane.Scope) (*plane.Memberships, error) {
 	if err != nil {
 		return nil, fmt.Errorf("members: %w", err)
 	}
-	out := make([]plane.Membership, 0, len(rows))
+	out := make([]client.Membership, 0, len(rows))
 	for _, m := range rows {
 		if m == nil || m.User == "" {
 			continue
 		}
-		out = append(out, plane.Membership{
+		out = append(out, client.Membership{
 			User: m.User, Role: m.Role, Name: displayName(db, m.User),
 			Space: m.Workspace, Project: m.Project,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].User < out[j].User })
-	return &plane.Memberships{Memberships: out}, nil
+	return &client.Memberships{Memberships: out}, nil
 }
 
 // displayName is the name IAM holds, or the user id when it holds none. It never
@@ -132,7 +132,7 @@ func displayName(db orm.DB, user string) string {
 }
 
 // grant records one membership in the caller's org, idempotently.
-func grant(ctx context.Context, in *plane.GrantIn) (*cloud.Unit, error) {
+func grant(ctx context.Context, in *client.GrantIn) (*cloud.Unit, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("grant: no org on the call")
@@ -158,7 +158,7 @@ func grant(ctx context.Context, in *plane.GrantIn) (*cloud.Unit, error) {
 //
 // The error is PROPAGATED: a wallet reading zero seats under-bills silently,
 // where a failure retries. This is the one read here that must not degrade.
-func seats(ctx context.Context, _ *cloud.Unit) (*plane.Seats, error) {
+func seats(ctx context.Context, _ *cloud.Unit) (*client.Seats, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("seats: no org on the call")
@@ -171,5 +171,5 @@ func seats(ctx context.Context, _ *cloud.Unit) (*plane.Seats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("seats: %w", err)
 	}
-	return &plane.Seats{Seats: n, Guests: guests}, nil
+	return &client.Seats{Seats: n, Guests: guests}, nil
 }

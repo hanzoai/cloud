@@ -25,8 +25,8 @@ import (
 	accountapp "github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/iamtest"
-	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -907,12 +907,12 @@ func TestIdentityComesFromTheRowsNotTheBody(t *testing.T) {
 	// second participant is not ejected as a duplicate. The account is the ROWS'
 	// answer, so two callers collide only if the rows say they are one person.
 	const other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-	two := &answers{row: func(_, subject string) plane.Member {
+	two := &answers{row: func(_, subject string) client.Member {
 		seat := account
 		if subject == bob {
 			seat = other
 		}
-		return plane.Member{Member: true, Role: token.RoleMember, Account: seat}
+		return client.Member{Member: true, Role: token.RoleMember, Account: seat}
 	}}
 	second := mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)), two)
 	_, body2 := ask(t, second, room, victim, access(t, bob))

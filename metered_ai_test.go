@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/internal/planetest"
-	"github.com/hanzoai/cloud/plane/commerce"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -354,10 +354,10 @@ func serveCommerceOK(t *testing.T) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	app := zip.New(zip.Config{AppName: commerce.App})
-	zip.Post[plane.AuthorizeIn, plane.Verdict](app, "/finance/authorize",
-		func(context.Context, *plane.AuthorizeIn) (*plane.Verdict, error) {
-			return &plane.Verdict{OK: true}, nil
-		}, zip.WithOperationID(plane.FinanceAuthorize))
+	zip.Post[client.AuthorizeIn, client.Verdict](app, "/finance/authorize",
+		func(context.Context, *client.AuthorizeIn) (*client.Verdict, error) {
+			return &client.Verdict{OK: true}, nil
+		}, zip.WithOperationID(client.FinanceAuthorize))
 
 	// RESOLVE THE ADDRESS HERE, NOT IN THE GOROUTINE.
 	//

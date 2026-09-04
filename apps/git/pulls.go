@@ -20,11 +20,11 @@ package git
 // revisions and never touches a plumbing.Hash.
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
 	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"strings"
 	"time"
 

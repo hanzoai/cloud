@@ -22,9 +22,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
 )
 
 // coResidentUsage builds the customer usage envelope from cloud's OWN finance ledger
@@ -49,8 +49,8 @@ func coResidentUsage(ctx context.Context, org, product, groupBy string) ([]byte,
 		// became their own binaries.
 		ctx, cancel := context.WithTimeout(ctx, usagePeerTimeout)
 		defer cancel()
-		reply, err := cloud.Ask[struct{}, plane.UsageRows](cloud.For(ctx, org), "commerce",
-			plane.FinanceUsage, &struct{}{})
+		reply, err := cloud.Ask[struct{}, client.UsageRows](cloud.For(ctx, org), "commerce",
+			client.FinanceUsage, &struct{}{})
 		if err != nil {
 			if errors.Is(err, cloud.ErrNoPeer) {
 				return nil, false, nil // no commerce in this fleet → the configured S2S read
@@ -132,7 +132,7 @@ func usageEnvelope(org string, rows []finance.UsageRow) []byte {
 		TransactionID string `json:"transactionId"`
 		Amount        int64  `json:"amount"`
 		// Decimal is the SAME debit, exact — the ledger's 18-decimal value as a
-		// decimal string, the spelling plane.Money already uses. `amount` stays
+		// decimal string, the spelling client.Money already uses. `amount` stays
 		// cents because that is the wire the console and enrichUsageLedger parse
 		// today; this field is what lets a reader stop summing roundings. A page
 		// of sub-cent calls totals correctly from `decimal` and totals ZERO from

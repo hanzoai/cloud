@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
@@ -41,7 +41,7 @@ func TestSpacesOfAnswersOnlyTheCallersOwnRows(t *testing.T) {
 		t.Fatalf("EnsureSpace: %v", err)
 	}
 
-	got, err := spacesOf(fromOrg("acme"), s, &plane.SpacesIn{Subject: subA})
+	got, err := spacesOf(fromOrg("acme"), s, &client.SpacesIn{Subject: subA})
 	if err != nil {
 		t.Fatalf("spacesOf: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestSpacesOfAnswersOnlyTheCallersOwnRows(t *testing.T) {
 
 	// The SAME subject, asked from the other org, knows nothing. This is the probe
 	// a caller would use to test whether an identity exists elsewhere.
-	cross, err := spacesOf(fromOrg("other"), s, &plane.SpacesIn{Subject: subA})
+	cross, err := spacesOf(fromOrg("other"), s, &client.SpacesIn{Subject: subA})
 	if err != nil {
 		t.Fatalf("spacesOf: %v", err)
 	}
@@ -85,11 +85,11 @@ func TestSpacesOfAndMemberOfAgree(t *testing.T) {
 		t.Fatalf("EnsureSpace: %v", err)
 	}
 
-	list, err := spacesOf(fromOrg("acme"), s, &plane.SpacesIn{Subject: sub})
+	list, err := spacesOf(fromOrg("acme"), s, &client.SpacesIn{Subject: sub})
 	if err != nil {
 		t.Fatalf("spacesOf: %v", err)
 	}
-	one, err := memberOf(fromOrg("acme"), s, &plane.MemberIn{Space: w.UUID, Subject: sub})
+	one, err := memberOf(fromOrg("acme"), s, &client.MemberIn{Space: w.UUID, Subject: sub})
 	if err != nil {
 		t.Fatalf("memberOf: %v", err)
 	}
@@ -110,13 +110,13 @@ func TestSpacesOfAndMemberOfAgree(t *testing.T) {
 // to mean the rows are empty and nothing else.
 func TestSpacesOfRefusesRatherThanAnsweringEmpty(t *testing.T) {
 	s := newAccountStore(t)
-	if _, err := spacesOf(context.Background(), s, &plane.SpacesIn{Subject: "ada@acme.test"}); err == nil {
+	if _, err := spacesOf(context.Background(), s, &client.SpacesIn{Subject: "ada@acme.test"}); err == nil {
 		t.Error("a call with no org was answered; it must be refused")
 	}
-	if _, err := spacesOf(fromOrg("acme"), s, &plane.SpacesIn{}); err == nil {
+	if _, err := spacesOf(fromOrg("acme"), s, &client.SpacesIn{}); err == nil {
 		t.Error("a call with no subject was answered; it must be refused")
 	}
-	if _, err := spacesOf(fromOrg("acme"), nil, &plane.SpacesIn{Subject: "ada@acme.test"}); err == nil {
+	if _, err := spacesOf(fromOrg("acme"), nil, &client.SpacesIn{Subject: "ada@acme.test"}); err == nil {
 		t.Error("a call against a closed store was answered; it must be refused")
 	}
 }
@@ -138,7 +138,7 @@ func TestSpacesOfIsSubjectOnly(t *testing.T) {
 	// if the op keyed on anything but a real subject — and it does resolve, which
 	// is exactly why the op's contract says the caller may not choose it: the
 	// value comes from the ATTESTED principal in meet, never from a body.
-	same, err := spacesOf(fromOrg("acme"), s, &plane.SpacesIn{Subject: acct})
+	same, err := spacesOf(fromOrg("acme"), s, &client.SpacesIn{Subject: acct})
 	if err != nil {
 		t.Fatalf("spacesOf: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestSpacesOfIsSubjectOnly(t *testing.T) {
 	}
 	// A subject this deployment has never seen is an empty answer, not an error:
 	// "no rows" is a real fact about a real identity.
-	none, err := spacesOf(fromOrg("acme"), s, &plane.SpacesIn{Subject: "nobody@acme.test"})
+	none, err := spacesOf(fromOrg("acme"), s, &client.SpacesIn{Subject: "nobody@acme.test"})
 	if err != nil {
 		t.Fatalf("spacesOf: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestSpacesOfIsSubjectOnly(t *testing.T) {
 	}
 }
 
-// TestAccountIsPresentWheneverASpaceIs pins the ONE-WAY invariant plane.Spaces
+// TestAccountIsPresentWheneverASpaceIs pins the ONE-WAY invariant client.Spaces
 // documents: an offered space always has an identity to seat the person under.
 //
 // The converse is deliberately NOT pinned, because it is not true — the account is
@@ -171,7 +171,7 @@ func TestAccountIsPresentWheneverASpaceIs(t *testing.T) {
 	if _, err := s.EnsureSpace(ctx, "acme", accountID(sub), "Ada"); err != nil {
 		t.Fatalf("EnsureSpace: %v", err)
 	}
-	got, err := spacesOf(fromOrg("acme"), s, &plane.SpacesIn{Subject: sub})
+	got, err := spacesOf(fromOrg("acme"), s, &client.SpacesIn{Subject: sub})
 	if err != nil {
 		t.Fatalf("spacesOf: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestAccountIsPresentWheneverASpaceIs(t *testing.T) {
 		t.Fatalf("SECURITY: %d space(s) offered with no identity to seat under: %+v", len(got.Items), got)
 	}
 	// An identity this deployment has never seen resolves to neither.
-	none, err := spacesOf(fromOrg("acme"), s, &plane.SpacesIn{Subject: "nobody@acme.test"})
+	none, err := spacesOf(fromOrg("acme"), s, &client.SpacesIn{Subject: "nobody@acme.test"})
 	if err != nil {
 		t.Fatalf("spacesOf: %v", err)
 	}

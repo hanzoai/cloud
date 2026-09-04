@@ -469,7 +469,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	UseMCP(app)
 
 	// Internal plane: this app's typed ops over ZAP on its canonical unix socket
-	// (plane.go). Served for every mounted app name — the ops declared during
+	// (peer.go). Served for every mounted app name — the ops declared during
 	// Mount are live by now — so zip.DialApp(app) resolving a socket always means
 	// "the app is up", and an up app answering 404 for an op means version skew:
 	// two different, diagnosable facts.
@@ -640,7 +640,7 @@ func listenOn(cfg *Config) (addrs []string, ops string) {
 	//	:8080  — HTTP, the edge/browser leg (and WS + SSE)
 	//
 	// The app's canonical UNIX socket is deliberately absent HERE, and belongs to
-	// the plane app instead (plane.go): a typed op rides every transport its app
+	// the plane app instead (peer.go): a typed op rides every transport its app
 	// listens on, so registering the internal ops on the edge-facing app would put
 	// the gate, the meter and the secret reads on :8080. Two apps, two address
 	// sets, and no path from the edge to an op that was never registered on it.

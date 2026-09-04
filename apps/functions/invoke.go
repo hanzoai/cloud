@@ -1,20 +1,20 @@
 package functions
 
 import (
-	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"errors"
+	"github.com/hanzoai/cloud/internal/stamp"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/exec"
-	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/internal/shorten"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/metering"
 	"github.com/zap-proto/zip"
 )
 
@@ -65,7 +65,7 @@ type execResult struct {
 // returned as (result, err) with result carrying whatever the sandbox produced; the
 // caller records the invocation regardless.
 //
-// A deployment with no sandboxes app answers 503 rather than pretending: plane.Ask
+// A deployment with no sandboxes app answers 503 rather than pretending: client.Call
 // distinguishes "not deployed here" from "deployed and failing", and only the first
 // is a configuration fact.
 func (e *execClient) run(ctx context.Context, f Function, input string, timeoutSec int) (execResult, error) {
@@ -88,7 +88,7 @@ func (e *execClient) run(ctx context.Context, f Function, input string, timeoutS
 	res, err := exec.Run(rctx, org, &exec.CodeRun{
 		Lang: langFor(f.Runtime), Code: f.Code, Args: []string{input}})
 	if err != nil {
-		if errors.Is(err, plane.ErrNoPeer) {
+		if errors.Is(err, client.ErrNoPeer) {
 			return execResult{}, errExecUnconfigured
 		}
 		return execResult{}, err

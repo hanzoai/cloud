@@ -19,8 +19,8 @@ import (
 	"strconv"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -42,13 +42,13 @@ func mountStatement(app cloud.Router, o ops) {
 // a per-provider usage breakdown it calls `accounts`. Two shapes under one
 // schema name is what openapi.Compose refuses, and the incumbent is the one that
 // is already published, so this is the one that moves.
-type accountsView []plane.BillingAccount
+type accountsView []client.BillingAccount
 
 // members is one billing account's roster.
-type members []plane.Holder
+type members []client.Holder
 
 // payouts is the org's outbound payouts.
-type payouts []plane.Payout
+type payouts []client.Payout
 
 // Answers the caller's billing accounts: the org itself, its currency, when it
 // was opened, and the caller's own standing in it.
@@ -68,7 +68,7 @@ func (o ops) accounts(ctx context.Context, _ *cloud.Unit) (*accountsView, error)
 	if err != nil {
 		return nil, err
 	}
-	out, err := ask(ctx, org, "accounts", func(ctx context.Context) (*plane.Accounts, error) {
+	out, err := ask(ctx, org, "accounts", func(ctx context.Context) (*client.Accounts, error) {
 		return commercepeer.BillingAccounts(ctx, callerIn(ctx))
 	})
 	if err != nil {
@@ -95,8 +95,8 @@ func (o ops) accountMembers(ctx context.Context, in *accountRef) (*members, erro
 		return nil, err
 	}
 	c := callerIn(ctx)
-	out, err := ask(ctx, org, "account members", func(ctx context.Context) (*plane.Holders, error) {
-		return commercepeer.BillingAccountMembers(ctx, &plane.HoldersIn{
+	out, err := ask(ctx, org, "account members", func(ctx context.Context) (*client.Holders, error) {
+		return commercepeer.BillingAccountMembers(ctx, &client.HoldersIn{
 			Account: in.ID, Subject: c.Subject, Email: c.Email, Role: c.Role,
 		})
 	})
@@ -128,7 +128,7 @@ func (o ops) payouts(ctx context.Context, _ *cloud.Unit) (*payouts, error) {
 	if err != nil {
 		return nil, err
 	}
-	out, err := ask(ctx, org, "payouts", func(ctx context.Context) (*plane.Payouts, error) {
+	out, err := ask(ctx, org, "payouts", func(ctx context.Context) (*client.Payouts, error) {
 		return commercepeer.BillingPayouts(ctx)
 	})
 	if err != nil {
@@ -163,13 +163,13 @@ type ledgerPage struct {
 // which account answered rather than guessing from their own token.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) transactions(ctx context.Context, in *ledgerPage) (*plane.Transactions, error) {
+func (o ops) transactions(ctx context.Context, in *ledgerPage) (*client.Transactions, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "transactions", func(ctx context.Context) (*plane.Transactions, error) {
-		return commercepeer.BillingTransactions(ctx, &plane.TransactionsIn{
+	return ask(ctx, org, "transactions", func(ctx context.Context) (*client.Transactions, error) {
+		return commercepeer.BillingTransactions(ctx, &client.TransactionsIn{
 			Subject:  subject,
 			Currency: in.Currency,
 			Limit:    atoiOr(in.Limit, 0),
@@ -198,16 +198,16 @@ func atoiOr(s string, def int) int {
 // The role is derived from the two authority bits the identity carries rather
 // than from a role list, because a role list is not among the nine fields an
 // internal call forwards.
-func callerIn(ctx context.Context) *plane.CallerIn {
+func callerIn(ctx context.Context) *client.CallerIn {
 	c, ok := cloud.Request(ctx)
 	if !ok {
-		return &plane.CallerIn{}
+		return &client.CallerIn{}
 	}
 	role := "member"
 	if c.IsOrgAdmin() || c.IsAdmin() {
 		role = "admin"
 	}
-	return &plane.CallerIn{Subject: c.User(), Email: c.UserEmail(), Role: role}
+	return &client.CallerIn{Subject: c.User(), Email: c.UserEmail(), Role: role}
 }
 
 // transactionRef names one ledger entry. The id is the URL's, and there is no
@@ -233,12 +233,12 @@ type transactionRef struct {
 // rather than reaching another tenant's ledger.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) transaction(ctx context.Context, in *transactionRef) (*plane.Transaction, error) {
+func (o ops) transaction(ctx context.Context, in *transactionRef) (*client.Transaction, error) {
 	org, _, err := payer(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "transaction", func(ctx context.Context) (*plane.Transaction, error) {
-		return commercepeer.BillingTransaction(ctx, &plane.TransactionRef{ID: in.ID})
+	return ask(ctx, org, "transaction", func(ctx context.Context) (*client.Transaction, error) {
+		return commercepeer.BillingTransaction(ctx, &client.TransactionRef{ID: in.ID})
 	})
 }

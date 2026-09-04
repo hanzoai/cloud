@@ -24,7 +24,7 @@ import (
 // whatever reads it gates on a validated principal. This is code that reads it, so
 // this is code that gates: a header alone proves nothing here.
 //
-// With no request there is no header in play: the org is what plane.For stamped
+// With no request there is no header in play: the org is what client.For stamped
 // in-process, after an endpoint validated it, and zip reads a stated caller only
 // on a request-free context.
 //

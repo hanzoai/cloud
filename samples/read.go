@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/datastore"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/datastore"
 )
 
 // read.go is the series' read face: two questions, two queries.

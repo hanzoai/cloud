@@ -1,10 +1,10 @@
 package sync
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"os"
 	"path/filepath"
 	"regexp"

@@ -69,8 +69,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	sandboxpeer "github.com/hanzoai/cloud/plane/sandbox"
+	"github.com/hanzoai/cloud/client"
+	sandboxpeer "github.com/hanzoai/cloud/client/sandbox"
 )
 
 // sandboxRunner is the Runner over apps/sandbox.
@@ -234,7 +234,7 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	// The work does not live on that disk anyway: deliver() commits it and pushes it
 	// to the run's ref, which is the only reason anything survives a run at all.
 	leased, err := sandboxpeer.SandboxLease(ctx,
-		&plane.LeaseIn{Class: class, TTLSec: ttl})
+		&client.LeaseIn{Class: class, TTLSec: ttl})
 	if err != nil {
 		if isLocalDev() {
 			id := "local-dev-box"
@@ -263,7 +263,7 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 		end, cancel := context.WithTimeout(cloud.For(context.Background(), org), 30*time.Second)
 		defer cancel()
 		_, _ = sandboxpeer.SandboxEnd(end,
-			&plane.EndIn{ID: id})
+			&client.EndIn{ID: id})
 		// Said AFTER the lease is actually gone, so "ended" means the pod is
 		// released and not that we intended to release it.
 		step("ended", "released sandbox "+id, "running")
@@ -406,7 +406,7 @@ type sandbox struct {
 
 // secrets is what every command of this run must never publish.
 //
-// It travels WITH each command (plane.RunIn.Blind) rather than being applied to
+// It travels WITH each command (client.RunIn.Blind) rather than being applied to
 // what comes back, because a sandbox narrates straight into the session as bytes
 // are produced — that stream never passes through this process, so a scrub here
 // would run minutes after the secret was already delivered to a durable event
@@ -586,7 +586,7 @@ func (in sandbox) tip() (string, error) {
 // "the sandbox is broken" are different facts. For the commands here they are the
 // same fact: a clone that did not clone or a push that did not push leaves
 // nothing to report, so the exit code is read and the run stops.
-func (in sandbox) do(argv []string, what string) (*plane.Ran, error) {
+func (in sandbox) do(argv []string, what string) (*client.Ran, error) {
 	ran, err := runIn(in.ctx, in.id, argv, in.ttl, in.session, "", in.secrets()...)
 	if err != nil {
 		return nil, fmt.Errorf("coding: %s: %s", what, in.scrub(err.Error()))
@@ -655,9 +655,9 @@ const redacted = "[redacted]"
 // here, because the bytes are IN THE SANDBOX and this call does not return until
 // the command is over. Streamed from where they are produced, a twenty-five
 // minute agent edit loop is watchable; collected here, it is a silence.
-func runIn(ctx context.Context, id string, argv []string, ttl int, session, stdin string, blind ...string) (*plane.Ran, error) {
+func runIn(ctx context.Context, id string, argv []string, ttl int, session, stdin string, blind ...string) (*client.Ran, error) {
 	ran, err := sandboxpeer.SandboxRun(ctx,
-		&plane.RunIn{ID: id, Argv: argv, TimeoutSec: ttl, Session: session, Stdin: stdin, Blind: blind})
+		&client.RunIn{ID: id, Argv: argv, TimeoutSec: ttl, Session: session, Stdin: stdin, Blind: blind})
 	if err != nil {
 		return nil, err
 	}
@@ -732,11 +732,11 @@ func affordable(ctx context.Context, org string) error {
 	if isLocalDev() {
 		return nil
 	}
-	v, err := plane.Ask[plane.AuthorizeIn, plane.Verdict](
-		cloud.For(context.Background(), org), "commerce", plane.FinanceAuthorize,
-		&plane.AuthorizeIn{
+	v, err := client.Call[client.AuthorizeIn, client.Verdict](
+		cloud.For(context.Background(), org), "commerce", client.FinanceAuthorize,
+		&client.AuthorizeIn{
 			Subject: org,
-			Amount:  plane.Money{Decimal: minFundedDecimal, Currency: "usd"},
+			Amount:  client.Money{Decimal: minFundedDecimal, Currency: "usd"},
 			Service: "sandbox",
 		})
 	if err != nil {

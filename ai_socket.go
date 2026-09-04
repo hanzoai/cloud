@@ -21,8 +21,8 @@ package cloud
 //	any method, any path, first connection, peer perfectly healthy.
 //
 //	THE SURFACE IS NOT THE APP'S. What binds there is the app's PLANE — the
-//	typed-op endpoint at /.well-known/zip/op/<name>, which is what plane.Ask uses
-//	(plane/ask.go: "ServePlane binds before the app's own listener"). The app's
+//	typed-op endpoint at /.well-known/zip/op/<name>, which is what client.Call uses
+//	(client/ask.go: "ServePlane binds before the app's own listener"). The app's
 //	own HTTP routes are on a listener the plane socket knows nothing about, so
 //	/v1/chat/completions is a 404 there even when the wire is spoken correctly.
 //	Measured on a healthy pod: over ZAP, ai.sock answers 404 for /v1/models and
@@ -51,7 +51,7 @@ package cloud
 // question from where the peer is.
 //
 // There is deliberately NO second mechanism here. A raw route reached
-// process-to-process is not something this fleet offers; ops are (plane.Ask), and
+// process-to-process is not something this fleet offers; ops are (client.Call), and
 // inventing a parallel path for the one surface that is not an op is what broke
 // it. One endpoint, entered from inside.
 

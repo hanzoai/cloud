@@ -24,7 +24,6 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/manifest"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -81,7 +80,7 @@ func subsystem(t *testing.T, name string, ops ...string) string {
 }
 
 // fleetEndpoint composes the real MCP server over those apps and puts it where a
-// child looks for it — plane.HostApp's socket, at manifest.MCPPath. This is
+// child looks for it — client.HostApp's socket, at manifest.MCPPath. This is
 // serveWake's two lines, not a reimplementation of them.
 //
 // at names each app's EDGE address and inside names the PLANE address of the
@@ -92,8 +91,8 @@ func fleetEndpoint(t *testing.T, at map[string]string, inside map[string]string)
 	t.Helper()
 	run := shortDir(t)
 	t.Setenv("ZIP_RUNTIME_DIR", run)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 
 	host := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
 	apps := make([]string, 0, len(at))
@@ -120,7 +119,7 @@ func fleetEndpoint(t *testing.T, at map[string]string, inside map[string]string)
 		}
 		return edge(app)
 	})
-	path := zip.SocketPath(plane.HostApp)
+	path := zip.SocketPath(client.HostApp)
 	go func() { _ = endpoint.Listen(path) }()
 	t.Cleanup(func() { _ = endpoint.Shutdown() })
 	accepts(t, path)
@@ -131,8 +130,8 @@ func fleetEndpoint(t *testing.T, at map[string]string, inside map[string]string)
 func noFleetEndpoint(t *testing.T) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", shortDir(t))
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 }
 
 // shortDir is a temp directory with a SHORT name, because a unix socket path is

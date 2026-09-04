@@ -34,7 +34,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // editBudget bounds how many edits one run spends. A run emits a line per step
@@ -175,8 +175,8 @@ func (p *progress) set(ctx context.Context, text string, terminal bool) {
 	// open, and this call is not on the run's critical path.
 	sctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	out, err := plane.Ask[plane.SlackSendIn, plane.SlackSent](sctx, "integration", plane.IntegrationsSlackSend,
-		&plane.SlackSendIn{Channel: p.channel, Thread: p.thread, Text: text, Update: ts})
+	out, err := client.Call[client.SlackSendIn, client.SlackSent](sctx, "integration", client.IntegrationsSlackSend,
+		&client.SlackSendIn{Channel: p.channel, Thread: p.thread, Text: text, Update: ts})
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if err != nil {

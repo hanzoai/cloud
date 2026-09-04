@@ -10,7 +10,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // The payment rail reached from a process that does not contain it.
@@ -71,10 +71,10 @@ func chargePeer(ctx context.Context, tool string) error {
 	// the same way.
 	c, _ := cloud.Request(ctx)
 
-	in := plane.SettleIn{Resource: plane.ToolResource(tool)}
+	in := client.SettleIn{Resource: client.ToolResource(tool)}
 	call := ctx
 	if c != nil {
-		in.Payment = strings.TrimSpace(c.Header(plane.HeaderPaymentSignature))
+		in.Payment = strings.TrimSpace(c.Header(client.HeaderPaymentSignature))
 		// The payer is resolved HERE, by the one resolver that knows the rule —
 		// principal.Ledger, which folds in the SuperAdmin masquerade — and delegated
 		// as the tenant the settlement acts for. cloud.As, never cloud.For: inside a
@@ -102,7 +102,7 @@ func chargePeer(ctx context.Context, tool string) error {
 	call, cancel := context.WithTimeout(call, settleTimeout)
 	defer cancel()
 
-	out, err := cloud.Ask[plane.SettleIn, plane.Settled](call, peerX402, plane.X402Settle, &in)
+	out, err := cloud.Ask[client.SettleIn, client.Settled](call, peerX402, client.X402Settle, &in)
 	switch {
 	case errors.Is(err, cloud.ErrNoPeer):
 		return railless(call, in.Resource)
@@ -123,10 +123,10 @@ func chargePeer(ctx context.Context, tool string) error {
 	// knows nothing about it.
 	if c != nil {
 		if out.Challenge != "" {
-			c.SetHeader(plane.HeaderPaymentRequired, out.Challenge)
+			c.SetHeader(client.HeaderPaymentRequired, out.Challenge)
 		}
 		if out.Response != "" {
-			c.SetHeader(plane.HeaderPaymentResponse, out.Response)
+			c.SetHeader(client.HeaderPaymentResponse, out.Response)
 		}
 	}
 
@@ -165,8 +165,8 @@ func chargePeer(ctx context.Context, tool string) error {
 // made, so there is no settlement for a gate to disagree with — only "is there money
 // here I cannot collect", which nothing else in this process can answer.
 func railless(ctx context.Context, resource string) error {
-	out, err := cloud.Ask[plane.PriceIn, plane.Priced](ctx, peerMarketplace, plane.MarketPrice,
-		&plane.PriceIn{Resource: resource})
+	out, err := cloud.Ask[client.PriceIn, client.Priced](ctx, peerMarketplace, client.MarketPrice,
+		&client.PriceIn{Resource: resource})
 	switch {
 	case errors.Is(err, cloud.ErrNoPeer):
 		return ErrChargerUnset

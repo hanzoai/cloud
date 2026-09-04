@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // adapters.go binds coding's clients to the apps that OWN them — across the
@@ -91,8 +91,8 @@ func (planeSessions) Open(ctx context.Context, org, actor, agent, title string) 
 func (planeSessions) OpenOn(ctx context.Context, org, actor, agent, title, target string) (string, error) {
 	ctx, cancel := bounded(ctx)
 	defer cancel()
-	out, err := plane.Ask[plane.SessionOpenIn, plane.SessionOpened](ctx, agentsApp, plane.AgentsSessionOpen,
-		&plane.SessionOpenIn{Org: org, Actor: actor, Agent: agent, Title: title, Target: target})
+	out, err := client.Call[client.SessionOpenIn, client.SessionOpened](ctx, agentsApp, client.AgentsSessionOpen,
+		&client.SessionOpenIn{Org: org, Actor: actor, Agent: agent, Title: title, Target: target})
 	if err != nil {
 		return "", err
 	}
@@ -105,16 +105,16 @@ func (planeSessions) OpenOn(ctx context.Context, org, actor, agent, title, targe
 func (planeSessions) Log(ctx context.Context, org, sessionID, kind, actor string, payload []byte) error {
 	ctx, cancel := bounded(ctx)
 	defer cancel()
-	_, err := plane.Ask[plane.SessionEventIn, plane.CodingAck](ctx, agentsApp, plane.AgentsSessionEvent,
-		&plane.SessionEventIn{Org: org, SessionID: sessionID, Kind: kind, Actor: actor, Payload: payload})
+	_, err := client.Call[client.SessionEventIn, client.CodingAck](ctx, agentsApp, client.AgentsSessionEvent,
+		&client.SessionEventIn{Org: org, SessionID: sessionID, Kind: kind, Actor: actor, Payload: payload})
 	return err
 }
 
 func (planeSessions) Close(ctx context.Context, org, sessionID, status string) error {
 	ctx, cancel := bounded(ctx)
 	defer cancel()
-	_, err := plane.Ask[plane.SessionCloseIn, plane.CodingAck](ctx, agentsApp, plane.AgentsSessionClose,
-		&plane.SessionCloseIn{Org: org, SessionID: sessionID, Status: status})
+	_, err := client.Call[client.SessionCloseIn, client.CodingAck](ctx, agentsApp, client.AgentsSessionClose,
+		&client.SessionCloseIn{Org: org, SessionID: sessionID, Status: status})
 	return err
 }
 
@@ -137,9 +137,9 @@ func (planePR) Open(ctx context.Context, in PRInput) (PRRef, error) {
 	// crossing the plane cannot be granted an org key the boundary would refuse.
 	// A body field would arrive unchecked — which is what made this a
 	// cross-tenant write. Same shape as cloud.UpsertIssue's Ask.
-	ctx = plane.For(ctx, in.Org)
-	out, err := plane.Ask[plane.AgentPRIn, plane.AgentPROut](ctx, todoApp, plane.TodoAgentPR,
-		&plane.AgentPRIn{
+	ctx = client.For(ctx, in.Org)
+	out, err := client.Call[client.AgentPRIn, client.AgentPROut](ctx, todoApp, client.TodoAgentPR,
+		&client.AgentPRIn{
 			Project: in.Project, Repo: in.Repo, Base: in.Base,
 			Head: in.Head, Title: in.Title, Body: in.Body, Assignee: in.Assignee,
 		})
@@ -204,8 +204,8 @@ func forgeVerifyRef(ctx context.Context, org, repo, branch string) (string, bool
 func planeTargetGate(ctx context.Context, org, targetID string) error {
 	ctx, cancel := bounded(ctx)
 	defer cancel()
-	_, err := plane.Ask[plane.TargetGateIn, plane.CodingAck](ctx, agentsApp, plane.AgentsTargetGate,
-		&plane.TargetGateIn{Org: org, TargetID: targetID})
+	_, err := client.Call[client.TargetGateIn, client.CodingAck](ctx, agentsApp, client.AgentsTargetGate,
+		&client.TargetGateIn{Org: org, TargetID: targetID})
 	return err
 }
 
@@ -219,8 +219,8 @@ func planeTargetGate(ctx context.Context, org, targetID string) error {
 func planeRoute(ctx context.Context, run RoutedRun) error {
 	ctx, cancel := bounded(ctx)
 	defer cancel()
-	_, err := plane.Ask[plane.RouteRunIn, plane.CodingAck](ctx, agentsApp, plane.AgentsRouteRun,
-		&plane.RouteRunIn{
+	_, err := client.Call[client.RouteRunIn, client.CodingAck](ctx, agentsApp, client.AgentsRouteRun,
+		&client.RouteRunIn{
 			Org: run.Org, TargetID: run.TargetID, SessionID: run.SessionID,
 			Repo: run.Repo, Project: run.Project, Base: run.Base, Branch: run.Branch,
 			Prompt: run.Prompt, CloneURL: run.CloneURL, TimeoutSeconds: run.TimeoutSeconds,
@@ -238,7 +238,7 @@ func planeRoute(ctx context.Context, run RoutedRun) error {
 // delivery activity has to verify the pushed ref, file the PR and close the
 // session, and it reaches those clients through that dispatcher. Enqueueing
 // without it would queue runs whose sessions never close.
-func Enqueue(ctx context.Context, in plane.RouteRunIn, log func(msg string, kv ...any)) error {
+func Enqueue(ctx context.Context, in client.RouteRunIn, log func(msg string, kv ...any)) error {
 	enqueueOnce.Do(func() { NewDispatcher(log) })
 	return enqueueRoutedRun(ctx, RoutedRun{
 		Org: in.Org, TargetID: in.TargetID, SessionID: in.SessionID,

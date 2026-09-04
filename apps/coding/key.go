@@ -25,9 +25,9 @@ package coding
 // policy having exactly one home is why the agent runner works at all.
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"sync"
 
 	"github.com/hanzoai/cloud"

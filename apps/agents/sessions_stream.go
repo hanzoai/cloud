@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -59,7 +59,7 @@ type subscriber struct {
 
 const subBuffer = 256
 
-// sandboxApp is who answers plane.SandboxAttach. Named here because agents holds
+// sandboxApp is who answers client.SandboxAttach. Named here because agents holds
 // the only thing that knows a person is watching, and apps/sandbox holds the
 // clock that changes length when they are.
 const sandboxApp = "sandbox"
@@ -180,10 +180,10 @@ func sessionsStream(s *cloud.Service[state], c *zip.Ctx) error {
 		if err := w.Flush(); err != nil {
 			return
 		}
-		// plane.AttachEvery, not a second 25s written here: the beat and the
+		// client.AttachEvery, not a second 25s written here: the beat and the
 		// staleness apps/sandbox allows are one contract between two processes, and
 		// a copy of the number is how they drift apart.
-		hb := time.NewTicker(plane.AttachEvery)
+		hb := time.NewTicker(client.AttachEvery)
 		defer hb.Stop()
 		for {
 			select {
@@ -205,9 +205,9 @@ func sessionsStream(s *cloud.Service[state], c *zip.Ctx) error {
 				// 25 seconds because sandbox is not mounted in this deployment would
 				// be noise nobody could act on.
 				if project != "" {
-					_, _ = plane.Ask[plane.AttachIn, plane.Attached](
+					_, _ = client.Call[client.AttachIn, client.Attached](
 						cloud.For(context.Background(), org), sandboxApp,
-						plane.SandboxAttach, &plane.AttachIn{Project: project})
+						client.SandboxAttach, &client.AttachIn{Project: project})
 				}
 			case u, open := <-ch:
 				if !open {

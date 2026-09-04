@@ -51,7 +51,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	planeops "github.com/hanzoai/cloud/plane"
+	planeops "github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 

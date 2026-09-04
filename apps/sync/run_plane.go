@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -26,15 +26,15 @@ import (
 // cloud.RegisterSync — the two entry points onto the ONE engine, so a co-resident
 // trigger and a remote one cannot reconcile differently.
 func exposeRun() {
-	zip.Post[plane.SyncIn, plane.SyncRan](cloud.Plane(), "/sync/run", planeRun,
-		zip.WithOperationID(plane.SyncRun),
+	zip.Post[client.SyncIn, client.SyncRan](cloud.Plane(), "/sync/run", planeRun,
+		zip.WithOperationID(client.SyncRun),
 		zip.WithSummary("Reconcile the syncs one upstream event fires"))
 }
 
 // planeRun reconciles every sync of the CALLER's org whose source matches the
 // event, answering how many changed and how many were skipped.
 //
-// The org is the caller's plane identity and never the argument — plane.SyncIn has
+// The org is the caller's plane identity and never the argument — client.SyncIn has
 // no org field, deliberately, because a trigger able to state the org could
 // reconcile another tenant's repositories. Anonymous is refused rather than
 // defaulted: an event arriving with no principal must fail, not sync somebody's
@@ -45,7 +45,7 @@ func exposeRun() {
 // it would dial its own socket and answer itself, forever.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeRun(ctx context.Context, in *plane.SyncIn) (*plane.SyncRan, error) {
+func planeRun(ctx context.Context, in *client.SyncIn) (*client.SyncRan, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("sync run: org required")
@@ -61,5 +61,5 @@ func planeRun(ctx context.Context, in *plane.SyncIn) (*plane.SyncRan, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &plane.SyncRan{Ran: res.Ran, Skipped: res.Skipped}, nil
+	return &client.SyncRan{Ran: res.Ran, Skipped: res.Skipped}, nil
 }

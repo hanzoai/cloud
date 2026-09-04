@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	planeops "github.com/hanzoai/cloud/plane"
+	planeops "github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -115,14 +115,14 @@ func TestPlaneCapture_RefusesAnUnnamedAct(t *testing.T) {
 // TestEventIn_CannotNameAnOrg is the STRUCTURAL half of the isolation: a peer
 // cannot spoof a tenant it cannot spell.
 //
-// Mutation proof: add an Org field to plane.EventIn and this names it.
+// Mutation proof: add an Org field to client.EventIn and this names it.
 func TestEventIn_CannotNameAnOrg(t *testing.T) {
 	rt := reflect.TypeFor[planeops.EventIn]()
 	for field := range rt.Fields() {
 		name := strings.ToLower(field.Name)
 		for _, banned := range []string{"org", "tenant", "brand", "owner"} {
 			if strings.Contains(name, banned) {
-				t.Errorf("plane.EventIn.%s names the tenant — the organisation a row lands under "+
+				t.Errorf("client.EventIn.%s names the tenant — the organisation a row lands under "+
 					"rides the caller, never the argument", field.Name)
 			}
 		}

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // linear.go is the Linear transport: an issue is a room, its comments the
@@ -16,7 +16,7 @@ import (
 
 // linearEndpoint is the send path; tests spy it, prod never repoints.
 var linearEndpoint = func(ctx context.Context, org, room, text string) (string, error) {
-	return post(ctx, org, plane.ChatSendIn{Provider: "linear", Room: room, Text: text})
+	return post(ctx, org, client.ChatSendIn{Provider: "linear", Room: room, Text: text})
 }
 
 var linearTransport = transport{
@@ -28,7 +28,7 @@ var linearTransport = transport{
 
 // linearNormalize maps a Linear Inbound (ExternalID = organization id, Channel =
 // issue id, DedupeKey = comment id) into the envelope. Every issue is a thread.
-func linearNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
+func linearNormalize(ev client.ChannelsIngestIn) (Message, bool) {
 	if ev.Channel == "" {
 		return Message{}, false
 	}

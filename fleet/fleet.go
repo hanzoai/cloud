@@ -24,13 +24,13 @@
 package fleet
 
 import (
-	"github.com/hanzoai/cloud/types"
-	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/types"
 	"net"
 	"net/url"
 	"slices"

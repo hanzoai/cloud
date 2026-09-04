@@ -38,16 +38,16 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // expose publishes the index's whole plane surface. Mount calls it.
 func expose() {
-	zip.Post[plane.IndexQueryIn, plane.IndexQueryOut](cloud.Plane(), "/index/query", planeQuery,
-		zip.WithOperationID(plane.IndexQuery),
+	zip.Post[client.IndexQueryIn, client.IndexQueryOut](cloud.Plane(), "/index/query", planeQuery,
+		zip.WithOperationID(client.IndexQuery),
 		zip.WithSummary("Search one index in the caller's org"))
-	zip.Post[plane.IndexReconcileIn, plane.IndexReconcileOut](cloud.Plane(), "/index/reconcile", planeReconcile,
-		zip.WithOperationID(plane.IndexReconcile),
+	zip.Post[client.IndexReconcileIn, client.IndexReconcileOut](cloud.Plane(), "/index/reconcile", planeReconcile,
+		zip.WithOperationID(client.IndexReconcile),
 		zip.WithSummary("Replace one index's whole corpus in the caller's org"))
 }
 
@@ -58,7 +58,7 @@ func expose() {
 // same tenancy rule every op on this plane follows. A caller reaches the public
 // catalog by asking as the public org, which is a different call, not a wider
 // one.
-func planeQuery(ctx context.Context, in *plane.IndexQueryIn) (*plane.IndexQueryOut, error) {
+func planeQuery(ctx context.Context, in *client.IndexQueryIn) (*client.IndexQueryOut, error) {
 	org, err := owner(ctx)
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func planeQuery(ctx context.Context, in *plane.IndexQueryIn) (*plane.IndexQueryO
 	if err != nil {
 		return nil, err
 	}
-	return &plane.IndexQueryOut{Rows: rows}, nil
+	return &client.IndexQueryOut{Rows: rows}, nil
 }
 
 // planeReconcile swaps one corpus into the index THIS process owns, so the app
@@ -85,7 +85,7 @@ func planeQuery(ctx context.Context, in *plane.IndexQueryIn) (*plane.IndexQueryO
 // would be a second copy of a decision that belongs to the corpus's owner. The
 // owner already makes it — catalog's sync refuses to reconcile a pass whose
 // sources all failed, precisely so a GitHub outage cannot prune the catalog.
-func planeReconcile(ctx context.Context, in *plane.IndexReconcileIn) (*plane.IndexReconcileOut, error) {
+func planeReconcile(ctx context.Context, in *client.IndexReconcileIn) (*client.IndexReconcileOut, error) {
 	org, err := owner(ctx)
 	if err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func planeReconcile(ctx context.Context, in *plane.IndexReconcileIn) (*plane.Ind
 	if err != nil {
 		return nil, err
 	}
-	return &plane.IndexReconcileOut{Kept: kept, Removed: removed}, nil
+	return &client.IndexReconcileOut{Kept: kept, Removed: removed}, nil
 }
 
 // owner is the tenant a plane call acts for, refused when absent or when this

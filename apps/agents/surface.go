@@ -23,9 +23,9 @@ package agents
 //
 // # The address, and what "no MCP server" means
 //
-// plane.HostApp is the router's own socket — the one plane.Reach dials to wake a
+// client.HostApp is the router's own socket — the one client.Reach dials to wake a
 // cold app — and the MCP server rides it at manifest.MCPPath. Reaching for it
-// answers one of exactly three things, which is the rule plane/ask.go already
+// answers one of exactly three things, which is the rule client/ask.go already
 // states:
 //
 //	listening      ask it; this is production
@@ -60,7 +60,6 @@ import (
 	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/manifest"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 	"github.com/valyala/fasthttp"
 	zaphttp "github.com/zap-proto/http"
@@ -75,7 +74,7 @@ type surfaceTools struct{}
 // errNoSurface reports that this process is not part of a surface: nothing is
 // listening on the router's socket, so there is no composed MCP server to ask.
 //
-// It is the ONE error a caller may read as "fall back", exactly as plane.ErrNoPeer
+// It is the ONE error a caller may read as "fall back", exactly as client.ErrNoPeer
 // is on the peer plane. Every other failure is an outage and is reported as one —
 // an MCP server that is present and broken must never read as a surface with no
 // tools.
@@ -395,7 +394,7 @@ func ask(ctx context.Context, org, actor string, body []byte) (json.RawMessage, 
 
 	req.Header.SetMethod(fasthttp.MethodPost)
 	req.Header.SetContentType("application/json")
-	req.SetHost(plane.HostApp)
+	req.SetHost(client.HostApp)
 	req.URI().SetPath(manifest.MCPPath)
 	// The RUN's identity, in zip's own spelling, and nothing else. The MCP server
 	// copies these onto every hop it makes, so a subsystem whose tools depend on
@@ -435,11 +434,11 @@ func ask(ctx context.Context, org, actor string, body []byte) (json.RawMessage, 
 //
 // It probes by CONNECTING, because the file does not answer the question: a
 // socket path outlives the process that bound it wherever the run directory is a
-// volume. plane.Listening is the one implementation of that rule.
+// volume. client.Listening is the one implementation of that rule.
 func socket() (string, error) {
-	plane.Bind()
-	path := zip.SocketPath(plane.HostApp)
-	up, err := plane.Listening(path)
+	client.Bind()
+	path := zip.SocketPath(client.HostApp)
+	up, err := client.Listening(path)
 	if err != nil {
 		return "", fmt.Errorf("agents: the surface MCP server's socket is unusable: %w", err)
 	}

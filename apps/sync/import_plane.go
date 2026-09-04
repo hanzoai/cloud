@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -18,7 +18,7 @@ import (
 // answer "git importer not registered" while both apps were healthy.
 //
 // The ops keep the SAME operation ids the retired git app published
-// (plane.GitImport and friends). The wire contract did not change — the same
+// (client.GitImport and friends). The wire contract did not change — the same
 // request, the same reply, the same meaning — only which app answers it, and
 // spelling a new id would have made every caller change to say the same thing.
 //
@@ -33,20 +33,20 @@ import (
 // answers import, inbound, status and the mirror declaration. Splitting them
 // across files would say they are different boundaries, and they are not.
 func exposeImport() {
-	zip.Post[plane.ImportIn, plane.Imported](cloud.Plane(), "/git/import", planeImport,
-		zip.WithOperationID(plane.GitImport),
+	zip.Post[client.ImportIn, client.Imported](cloud.Plane(), "/git/import", planeImport,
+		zip.WithOperationID(client.GitImport),
 		zip.WithSummary("Create a repo on the forge and advance an upstream into it"))
 
-	zip.Post[plane.InboundIn, plane.Synced](cloud.Plane(), "/git/inbound", planeInbound,
-		zip.WithOperationID(plane.GitInbound),
+	zip.Post[client.InboundIn, client.Synced](cloud.Plane(), "/git/inbound", planeInbound,
+		zip.WithOperationID(client.GitInbound),
 		zip.WithSummary("Advance one ref from an upstream push"))
 
-	zip.Post[plane.StatusIn, plane.Statuses](cloud.Plane(), "/git/status", planeStatus,
-		zip.WithOperationID(plane.GitStatus),
+	zip.Post[client.StatusIn, client.Statuses](cloud.Plane(), "/git/status", planeStatus,
+		zip.WithOperationID(client.GitStatus),
 		zip.WithSummary("Which of these repos the forge holds, and which are in conflict"))
 
-	zip.Post[plane.MirrorIn, plane.Mirrored](cloud.Plane(), "/git/mirror", planeMirror,
-		zip.WithOperationID(plane.GitMirror),
+	zip.Post[client.MirrorIn, client.Mirrored](cloud.Plane(), "/git/mirror", planeMirror,
+		zip.WithOperationID(client.GitMirror),
 		zip.WithSummary("Declare or withdraw a repo's outbound mirror target"))
 }
 
@@ -74,7 +74,7 @@ func sourceOK(cloneURL, token string) error {
 // advance another's refs.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeInbound(ctx context.Context, in *plane.InboundIn) (*plane.Synced, error) {
+func planeInbound(ctx context.Context, in *client.InboundIn) (*client.Synced, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("git inbound: org required")
@@ -94,7 +94,7 @@ func planeInbound(ctx context.Context, in *plane.InboundIn) (*plane.Synced, erro
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Synced{
+	return &client.Synced{
 		Applied: res.Applied, NoOp: res.NoOp, Conflict: res.Conflict,
 		Detail: res.Detail, Before: res.Before, After: res.After,
 	}, nil
@@ -108,7 +108,7 @@ func planeInbound(ctx context.Context, in *plane.InboundIn) (*plane.Synced, erro
 // in another's namespace.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeImport(ctx context.Context, in *plane.ImportIn) (*plane.Imported, error) {
+func planeImport(ctx context.Context, in *client.ImportIn) (*client.Imported, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("git import: org required")
@@ -129,7 +129,7 @@ func planeImport(ctx context.Context, in *plane.ImportIn) (*plane.Imported, erro
 	}); err != nil {
 		return nil, err
 	}
-	return &plane.Imported{Repo: in.Repo}, nil
+	return &client.Imported{Repo: in.Repo}, nil
 }
 
 // planeStatus reports which of the named repos the forge holds for the CALLER's
@@ -145,7 +145,7 @@ func planeImport(ctx context.Context, in *plane.ImportIn) (*plane.Imported, erro
 // the other by its result.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeStatus(ctx context.Context, in *plane.StatusIn) (*plane.Statuses, error) {
+func planeStatus(ctx context.Context, in *client.StatusIn) (*client.Statuses, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("git status: org required")
@@ -156,7 +156,7 @@ func planeStatus(ctx context.Context, in *plane.StatusIn) (*plane.Statuses, erro
 	}
 	// Walked in the caller's order so the reply is stable, and each name is spent
 	// as it is emitted so a name asked twice is one row rather than two.
-	rows := make([]plane.RepoStatus, 0, len(st))
+	rows := make([]client.RepoStatus, 0, len(st))
 	for _, n := range in.Names {
 		name := fold(n)
 		r, ok := st[name]
@@ -164,11 +164,11 @@ func planeStatus(ctx context.Context, in *plane.StatusIn) (*plane.Statuses, erro
 			continue
 		}
 		delete(st, name)
-		rows = append(rows, plane.RepoStatus{
+		rows = append(rows, client.RepoStatus{
 			Name: name, Imported: r.Imported, Conflict: r.Conflict, LastSyncedAt: r.LastSyncedAt,
 		})
 	}
-	return &plane.Statuses{Rows: rows}, nil
+	return &client.Statuses{Rows: rows}, nil
 }
 
 // planeMirror declares (Enabled) or withdraws (!Enabled) one outbound mirror
@@ -182,7 +182,7 @@ func planeStatus(ctx context.Context, in *plane.StatusIn) (*plane.Statuses, erro
 // caller cannot declare a push a local one could not.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeMirror(ctx context.Context, in *plane.MirrorIn) (*plane.Mirrored, error) {
+func planeMirror(ctx context.Context, in *client.MirrorIn) (*client.Mirrored, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("git mirror: org required")
@@ -193,5 +193,5 @@ func planeMirror(ctx context.Context, in *plane.MirrorIn) (*plane.Mirrored, erro
 	if err := (mirrorControl{}).EnsureMirror(ctx, who.Org, in.Project, in.Repo, in.URL, in.Enabled); err != nil {
 		return nil, err
 	}
-	return &plane.Mirrored{Repo: in.Repo}, nil
+	return &client.Mirrored{Repo: in.Repo}, nil
 }

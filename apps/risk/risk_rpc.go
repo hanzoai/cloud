@@ -38,7 +38,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	contract "github.com/hanzoai/cloud/plane"
+	contract "github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 

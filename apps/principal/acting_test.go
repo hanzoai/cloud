@@ -32,7 +32,7 @@ func TestActingTrustsOnlyAParkedTenant(t *testing.T) {
 	}{
 		// The boundary parked it for a validated request.
 		{"a validated principal", context.WithValue(context.Background(), orgKey{}, "acme"), true},
-		// An in-process caller stated it AND parked it — what plane.For does.
+		// An in-process caller stated it AND parked it — what client.For does.
 		{"a parked in-process tenant", WithActing(stated, "acme"), true},
 		// The same caller with nothing parked. This is the shape a forged header
 		// takes once zip has read it, so it must not resolve.

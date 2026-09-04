@@ -21,11 +21,11 @@ package integrations
 // credential-acquisition methods. See the connector HIP / hanzo dns wiring.
 
 import (
-	cf "github.com/hanzoai/cloud/internal/cloudflare"
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
+	cf "github.com/hanzoai/cloud/internal/cloudflare"
+	"github.com/hanzoai/cloud/internal/environ"
 	"io"
 	"net/http"
 	"net/url"

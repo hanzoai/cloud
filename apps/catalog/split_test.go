@@ -35,7 +35,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/index"
 	"github.com/hanzoai/cloud/apps/projects"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -53,8 +53,8 @@ func runDir(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	t.Setenv("ZIP_RUNTIME_DIR", dir)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 }
 
 // standIn is the index peer as another PROCESS presents it: one socket, the
@@ -87,8 +87,8 @@ func peer(t *testing.T) *standIn {
 	runDir(t)
 	s := &standIn{}
 	app := zip.New(zip.Config{AppName: "index", DisableStartupMessage: true})
-	zip.Post[plane.IndexReconcileIn, plane.IndexReconcileOut](app, "/index/reconcile",
-		func(ctx context.Context, in *plane.IndexReconcileIn) (*plane.IndexReconcileOut, error) {
+	zip.Post[client.IndexReconcileIn, client.IndexReconcileOut](app, "/index/reconcile",
+		func(ctx context.Context, in *client.IndexReconcileIn) (*client.IndexReconcileOut, error) {
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			s.org, s.uid, s.pk = cloud.Who(ctx).Org, in.UID, in.PrimaryKey
@@ -99,8 +99,8 @@ func peer(t *testing.T) *standIn {
 				}
 				s.docs = append(s.docs, d)
 			}
-			return &plane.IndexReconcileOut{Kept: len(in.Docs), Removed: 0}, nil
-		}, zip.WithOperationID(plane.IndexReconcile))
+			return &client.IndexReconcileOut{Kept: len(in.Docs), Removed: 0}, nil
+		}, zip.WithOperationID(client.IndexReconcile))
 	go func() { _ = app.Listen(zip.SocketPath("index")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	for range 200 {
@@ -197,14 +197,14 @@ func TestLiveSitesCrossToTheProjectsProcess(t *testing.T) {
 	runDir(t)
 
 	app := zip.New(zip.Config{AppName: "projects", DisableStartupMessage: true})
-	zip.Post[plane.LiveSitesIn, plane.LiveSitesOut](app, "/sites/live",
-		func(context.Context, *plane.LiveSitesIn) (*plane.LiveSitesOut, error) {
-			return &plane.LiveSitesOut{Sites: []plane.LiveSite{
+	zip.Post[client.LiveSitesIn, client.LiveSitesOut](app, "/sites/live",
+		func(context.Context, *client.LiveSitesIn) (*client.LiveSitesOut, error) {
+			return &client.LiveSitesOut{Sites: []client.LiveSite{
 				{Org: "hanzo", Slug: "folio", Name: "Folio", URL: "https://folio.hanzo.app",
 					Repo: "https://git.hanzo.ai/hanzo-apps/folio", UpdatedAt: 1750000000},
 				{Org: "maxpower", Slug: "dave", URL: "https://dave.hanzo.app", ForkedFrom: "hanzo/folio"},
 			}}, nil
-		}, zip.WithOperationID(plane.SitesLive))
+		}, zip.WithOperationID(client.SitesLive))
 	go func() { _ = app.Listen(zip.SocketPath("projects")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	for range 200 {
@@ -253,7 +253,7 @@ func TestNoIndexAnywhereIsAPeerFault(t *testing.T) {
 	if err == nil {
 		t.Fatal("a write with no index anywhere reported success")
 	}
-	if !errors.Is(err, plane.ErrNoPeer) {
+	if !errors.Is(err, client.ErrNoPeer) {
 		t.Errorf("write failed with %v, want ErrNoPeer", err)
 	}
 	if errors.Is(err, index.ErrNotMounted) {

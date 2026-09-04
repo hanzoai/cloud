@@ -13,10 +13,10 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/money"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 
@@ -26,7 +26,7 @@ import (
 )
 
 // serveCommerce stands the REAL money peer up on a real socket: the finance ledger the
-// process owns, behind the metering client, behind plane.FinanceRecord — the same three
+// process owns, behind the metering client, behind client.FinanceRecord — the same three
 // layers apps/commerce puts behind that op, and the same rule for where the billed org
 // comes from (the CALLER, never the argument).
 //
@@ -56,8 +56,8 @@ func serveCommerce(t *testing.T, seedSubject string, seedCents int64) (finance.C
 	}
 
 	app := zip.New(zip.Config{AppName: "commerce"})
-	zip.Post[plane.RecordIn, plane.Recorded](app, "/finance/record",
-		func(ctx context.Context, in *plane.RecordIn) (*plane.Recorded, error) {
+	zip.Post[client.RecordIn, client.Recorded](app, "/finance/record",
+		func(ctx context.Context, in *client.RecordIn) (*client.Recorded, error) {
 			org := cloud.Who(ctx).Org
 			if org == "" {
 				return nil, zip.ErrForbidden("no org on the debit")
@@ -77,8 +77,8 @@ func serveCommerce(t *testing.T, seedSubject string, seedCents int64) (finance.C
 			}); rerr != nil {
 				return nil, rerr
 			}
-			return &plane.Recorded{Amount: in.Amount}, nil
-		}, zip.WithOperationID(plane.FinanceRecord))
+			return &client.Recorded{Amount: in.Amount}, nil
+		}, zip.WithOperationID(client.FinanceRecord))
 
 	// RESOLVE THE ADDRESS HERE, NOT IN THE GOROUTINE — zip.SocketPath reads
 	// ZIP_RUNTIME_DIR on every call and each test points it at its own temp dir, so a

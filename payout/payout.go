@@ -22,7 +22,7 @@
 // answered ZERO. Referrals qualified nobody, affiliates accrued nothing, authors
 // were paid nothing — silently, for as long as that shape shipped.
 //
-// It asks the ledger BY NAME now (plane.FinanceSpend). There is no URL, no service
+// It asks the ledger BY NAME now (client.FinanceSpend). There is no URL, no service
 // token and nothing for a deployment to configure, so there is no configuration
 // that can be wrong.
 //
@@ -39,8 +39,8 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 )
 
 // Commerce is the ONE thing an attributed-credit program asks of the money plane,
@@ -86,7 +86,7 @@ func NewClient() *Client { return &Client{} }
 // returned as one: a dead ledger read as a zero is a program that quietly stops
 // paying people.
 func (c *Client) SpendCents(ctx context.Context, org string) (int64, error) {
-	spend, err := commercepeer.FinanceSpend(cloud.For(ctx, org), &plane.SpendIn{})
+	spend, err := commercepeer.FinanceSpend(cloud.For(ctx, org), &client.SpendIn{})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
 			return 0, ErrNoLedger

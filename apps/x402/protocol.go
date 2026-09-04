@@ -43,7 +43,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/luxfi/crypto"
 )
 
@@ -73,11 +73,11 @@ const (
 	// never sees it.
 
 	// HeaderPaymentRequired carries the PaymentRequired on a 402 response.
-	HeaderPaymentRequired = plane.HeaderPaymentRequired
+	HeaderPaymentRequired = client.HeaderPaymentRequired
 	// HeaderPaymentSignature carries the client's PaymentPayload on the retry.
-	HeaderPaymentSignature = plane.HeaderPaymentSignature
+	HeaderPaymentSignature = client.HeaderPaymentSignature
 	// HeaderPaymentResponse carries the SettlementResponse on the answered request.
-	HeaderPaymentResponse = plane.HeaderPaymentResponse
+	HeaderPaymentResponse = client.HeaderPaymentResponse
 
 	// DefaultMaxTimeoutSeconds is the default `maxTimeoutSeconds` advertised on a
 	// challenge — how long the client has to complete the payment.

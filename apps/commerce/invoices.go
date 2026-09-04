@@ -45,7 +45,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // invoiceOps binds the invoice ops to the subsystem. Method values, not
@@ -55,26 +55,26 @@ type invoiceOps struct{}
 // exposeInvoices publishes the invoice lifecycle on the plane. Mount calls it.
 func exposeInvoices() {
 	o := invoiceOps{}
-	zip.Post[plane.RaiseIn, plane.Invoice](cloud.Plane(), "/billing/invoice/raise", o.raise,
-		zip.WithOperationID(plane.BillingInvoiceRaise),
+	zip.Post[client.RaiseIn, client.Invoice](cloud.Plane(), "/billing/invoice/raise", o.raise,
+		zip.WithOperationID(client.BillingInvoiceRaise),
 		zip.WithSummary("Raise a draft invoice against a customer"))
-	zip.Post[plane.InvoiceRef, plane.Invoice](cloud.Plane(), "/billing/invoice/read", o.read,
-		zip.WithOperationID(plane.BillingInvoiceRead),
+	zip.Post[client.InvoiceRef, client.Invoice](cloud.Plane(), "/billing/invoice/read", o.read,
+		zip.WithOperationID(client.BillingInvoiceRead),
 		zip.WithSummary("Read one invoice"))
-	zip.Post[plane.InvoiceRef, plane.Invoice](cloud.Plane(), "/billing/invoice/issue", o.issue,
-		zip.WithOperationID(plane.BillingInvoiceIssue),
+	zip.Post[client.InvoiceRef, client.Invoice](cloud.Plane(), "/billing/invoice/issue", o.issue,
+		zip.WithOperationID(client.BillingInvoiceIssue),
 		zip.WithSummary("Issue a draft invoice, making it collectible"))
-	zip.Post[plane.InvoiceRef, plane.Collected](cloud.Plane(), "/billing/invoice/collect", o.collect,
-		zip.WithOperationID(plane.BillingInvoiceCollect),
+	zip.Post[client.InvoiceRef, client.Collected](cloud.Plane(), "/billing/invoice/collect", o.collect,
+		zip.WithOperationID(client.BillingInvoiceCollect),
 		zip.WithSummary("Collect an issued invoice from credits, balance, then card"))
-	zip.Post[plane.InvoiceRef, plane.Invoice](cloud.Plane(), "/billing/invoice/void", o.void,
-		zip.WithOperationID(plane.BillingInvoiceVoid),
+	zip.Post[client.InvoiceRef, client.Invoice](cloud.Plane(), "/billing/invoice/void", o.void,
+		zip.WithOperationID(client.BillingInvoiceVoid),
 		zip.WithSummary("Void a draft or issued invoice"))
-	zip.Post[plane.InvoiceRef, plane.Document](cloud.Plane(), "/billing/invoice/pdf", o.pdf,
-		zip.WithOperationID(plane.BillingInvoicePDF),
+	zip.Post[client.InvoiceRef, client.Document](cloud.Plane(), "/billing/invoice/pdf", o.pdf,
+		zip.WithOperationID(client.BillingInvoicePDF),
 		zip.WithSummary("Render one invoice as a PDF"))
-	zip.Post[plane.InvoicesIn, plane.Invoices](cloud.Plane(), "/billing/invoices", o.list,
-		zip.WithOperationID(plane.BillingInvoices),
+	zip.Post[client.InvoicesIn, client.Invoices](cloud.Plane(), "/billing/invoices", o.list,
+		zip.WithOperationID(client.BillingInvoices),
 		zip.WithSummary("Invoices for this subject"))
 }
 
@@ -82,7 +82,7 @@ func exposeInvoices() {
 //
 // It sends the STORE'S own projection of an invoice — the billing period, the
 // tax and discount lines, the attempt count — which is a wider shape than the
-// lifecycle's [plane.Invoice] because it answers a different question: "what
+// lifecycle's [client.Invoice] because it answers a different question: "what
 // have I been billed" rather than "what is on this invoice". The two are not
 // folded together; shapes that overlap are still two shapes.
 //
@@ -91,7 +91,7 @@ func exposeInvoices() {
 // with nothing reporting the loss.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (invoiceOps) list(ctx context.Context, in *plane.InvoicesIn) (*plane.Invoices, error) {
+func (invoiceOps) list(ctx context.Context, in *client.InvoicesIn) (*client.Invoices, error) {
 	org, err := orgOf(ctx, "invoices")
 	if err != nil {
 		return nil, err
@@ -100,9 +100,9 @@ func (invoiceOps) list(ctx context.Context, in *plane.InvoicesIn) (*plane.Invoic
 	if ierr != nil {
 		return nil, zip.Errorf(502, "invoices: %v", ierr)
 	}
-	out := make([]plane.BillingInvoice, 0, len(rows))
+	out := make([]client.BillingInvoice, 0, len(rows))
 	for _, v := range rows {
-		row := plane.BillingInvoice{
+		row := client.BillingInvoice{
 			ID: v.ID, UserID: v.UserID, CustomerEmail: v.CustomerEmail,
 			SubscriptionID: v.SubscriptionID,
 			PeriodStart:    stamp(v.PeriodStart), PeriodEnd: stamp(v.PeriodEnd),
@@ -126,7 +126,7 @@ func (invoiceOps) list(ctx context.Context, in *plane.InvoicesIn) (*plane.Invoic
 		// reproduces sends `null` for an invoice with no lines, and an empty array
 		// is a different answer to "were there any".
 		for _, l := range v.LineItems {
-			row.LineItems = append(row.LineItems, plane.InvoiceLineItem{
+			row.LineItems = append(row.LineItems, client.InvoiceLineItem{
 				ID: l.Id, Type: string(l.Type), Description: l.Description,
 				MeterID: l.MeterId, Quantity: l.Quantity, UnitPrice: l.UnitPrice,
 				PlanID: l.PlanId, PlanName: l.PlanName,
@@ -136,7 +136,7 @@ func (invoiceOps) list(ctx context.Context, in *plane.InvoicesIn) (*plane.Invoic
 		}
 		out = append(out, row)
 	}
-	return &plane.Invoices{Rows: out, Count: len(out)}, nil
+	return &client.Invoices{Rows: out, Count: len(out)}, nil
 }
 
 // Renders one invoice as a PDF — the bytes and the filename they are offered
@@ -150,7 +150,7 @@ func (invoiceOps) list(ctx context.Context, in *plane.InvoicesIn) (*plane.Invoic
 // nothing and is a 404 rather than a filtered hit.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (invoiceOps) pdf(ctx context.Context, in *plane.InvoiceRef) (*plane.Document, error) {
+func (invoiceOps) pdf(ctx context.Context, in *client.InvoiceRef) (*client.Document, error) {
 	org, err := orgOf(ctx, "invoice pdf")
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ func (invoiceOps) pdf(ctx context.Context, in *plane.InvoiceRef) (*plane.Documen
 	if derr != nil {
 		return nil, zip.Errorf(http.StatusNotFound, "invoice pdf: %v", derr)
 	}
-	return &plane.Document{Filename: doc.Filename, Body: doc.Body}, nil
+	return &client.Document{Filename: doc.Filename, Body: doc.Body}, nil
 }
 
 // Raises a DRAFT invoice against a customer in the caller's own org.
@@ -173,7 +173,7 @@ func (invoiceOps) pdf(ctx context.Context, in *plane.InvoiceRef) (*plane.Documen
 // invoice can only ever be raised on the caller's own books.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (invoiceOps) raise(ctx context.Context, in *plane.RaiseIn) (*plane.Invoice, error) {
+func (invoiceOps) raise(ctx context.Context, in *client.RaiseIn) (*client.Invoice, error) {
 	org, err := orgOf(ctx, "raise invoice")
 	if err != nil {
 		return nil, err
@@ -201,7 +201,7 @@ func (invoiceOps) raise(ctx context.Context, in *plane.RaiseIn) (*plane.Invoice,
 // id belonging to another tenant is not found rather than found and then filtered.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (invoiceOps) read(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
+func (invoiceOps) read(ctx context.Context, in *client.InvoiceRef) (*client.Invoice, error) {
 	org, err := orgOf(ctx, "read invoice")
 	if err != nil {
 		return nil, err
@@ -218,7 +218,7 @@ func (invoiceOps) read(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoic
 // would mint a second number for one debt.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (invoiceOps) issue(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
+func (invoiceOps) issue(ctx context.Context, in *client.InvoiceRef) (*client.Invoice, error) {
 	org, err := orgOf(ctx, "issue invoice")
 	if err != nil {
 		return nil, err
@@ -234,7 +234,7 @@ func (invoiceOps) issue(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoi
 // the answer.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (invoiceOps) void(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
+func (invoiceOps) void(ctx context.Context, in *client.InvoiceRef) (*client.Invoice, error) {
 	org, err := orgOf(ctx, "void invoice")
 	if err != nil {
 		return nil, err
@@ -253,7 +253,7 @@ func (invoiceOps) void(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoic
 // retry of a paid invoice replays the receipt instead of charging again.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (invoiceOps) collect(ctx context.Context, in *plane.InvoiceRef) (*plane.Collected, error) {
+func (invoiceOps) collect(ctx context.Context, in *client.InvoiceRef) (*client.Collected, error) {
 	org, err := orgOf(ctx, "collect invoice")
 	if err != nil {
 		return nil, err
@@ -262,7 +262,7 @@ func (invoiceOps) collect(ctx context.Context, in *plane.InvoiceRef) (*plane.Col
 	if f != nil {
 		return nil, zip.Errorf(f.Status, "%s", f.Message)
 	}
-	return &plane.Collected{
+	return &client.Collected{
 		Invoice:          viewOf(res.Invoice),
 		Paid:             res.Paid,
 		CreditUsedCents:  res.CreditUsedCents,
@@ -275,7 +275,7 @@ func (invoiceOps) collect(ctx context.Context, in *plane.InvoiceRef) (*plane.Col
 
 // invoiceAnswer is the ONE fault-to-error and view-to-out mapping the five ops
 // share, so they cannot disagree about how a 404 or a state refusal reads.
-func invoiceAnswer(v *commercebilling.InvoiceView, f *commercebilling.PaymentFault) (*plane.Invoice, error) {
+func invoiceAnswer(v *commercebilling.InvoiceView, f *commercebilling.PaymentFault) (*client.Invoice, error) {
 	if f != nil {
 		return nil, zip.Errorf(f.Status, "%s", f.Message)
 	}
@@ -283,11 +283,11 @@ func invoiceAnswer(v *commercebilling.InvoiceView, f *commercebilling.PaymentFau
 }
 
 // viewOf projects commerce's typed invoice onto this surface's wire type.
-func viewOf(v *commercebilling.InvoiceView) *plane.Invoice {
+func viewOf(v *commercebilling.InvoiceView) *client.Invoice {
 	if v == nil {
 		return nil
 	}
-	out := &plane.Invoice{
+	out := &client.Invoice{
 		ID:              v.ID,
 		Number:          v.Number,
 		UserID:          v.UserID,
@@ -301,7 +301,7 @@ func viewOf(v *commercebilling.InvoiceView) *plane.Invoice {
 		CreatedAt:       v.CreatedAt,
 	}
 	for _, l := range v.Lines {
-		out.Lines = append(out.Lines, plane.InvoiceLine{
+		out.Lines = append(out.Lines, client.InvoiceLine{
 			Description: l.Description,
 			Amount:      l.Amount,
 			Quantity:    l.Quantity,

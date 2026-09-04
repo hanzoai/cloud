@@ -24,8 +24,8 @@
 package deploy
 
 import (
-	"github.com/hanzoai/cloud"
 	"context"
+	"github.com/hanzoai/cloud"
 	"sort"
 
 	"github.com/hanzoai/cloud/k8s"

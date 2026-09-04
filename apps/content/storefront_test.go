@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 	"io"
 	"net"
@@ -265,18 +265,18 @@ func TestCommerceStorefrontWire(t *testing.T) {
 		gotBody                    map[string]any
 	)
 	app := zip.New(zip.Config{AppName: "commerce"})
-	zip.Post[plane.StoreIn, plane.Store](app, "/store/current",
-		func(ctx context.Context, _ *plane.StoreIn) (*plane.Store, error) {
+	zip.Post[client.StoreIn, client.Store](app, "/store/current",
+		func(ctx context.Context, _ *client.StoreIn) (*client.Store, error) {
 			gotStoreOrg = cloud.Who(ctx).Org
-			return &plane.Store{ID: "STORE123", Name: "Karma"}, nil
-		}, zip.WithOperationID(plane.StoreCurrent))
-	zip.Post[plane.ListingIn, plane.Listed](app, "/store/listing",
-		func(ctx context.Context, in *plane.ListingIn) (*plane.Listed, error) {
+			return &client.Store{ID: "STORE123", Name: "Karma"}, nil
+		}, zip.WithOperationID(client.StoreCurrent))
+	zip.Post[client.ListingIn, client.Listed](app, "/store/listing",
+		func(ctx context.Context, in *client.ListingIn) (*client.Listed, error) {
 			gotListingOrg = cloud.Who(ctx).Org
 			gotStoreID, gotKey = in.StoreID, in.Key
 			_ = json.Unmarshal(in.Patch, &gotBody)
-			return &plane.Listed{Existed: false}, nil
-		}, zip.WithOperationID(plane.StoreListing))
+			return &client.Listed{Existed: false}, nil
+		}, zip.WithOperationID(client.StoreListing))
 	go func() { _ = app.Listen(zip.SocketPath("commerce")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	for range 400 {

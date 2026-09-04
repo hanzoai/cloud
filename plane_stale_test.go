@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -69,16 +69,16 @@ func TestStaleSocketIsNotAPeer(t *testing.T) {
 	cloud.ResetPlane()
 
 	// The control: no file at all is unambiguously ErrNoPeer.
-	_, absent := cloud.Ask[plane.BalanceIn, plane.Balance](context.Background(), "commerce",
-		plane.FinanceBalance, &plane.BalanceIn{Subject: "acme", Currency: "usd"})
+	_, absent := cloud.Ask[client.BalanceIn, client.Balance](context.Background(), "commerce",
+		client.FinanceBalance, &client.BalanceIn{Subject: "acme", Currency: "usd"})
 	if !errors.Is(absent, cloud.ErrNoPeer) {
 		t.Fatalf("no socket and no router must be ErrNoPeer, got: %v", absent)
 	}
 
 	path := leftover(t, "commerce")
 
-	_, err := cloud.Ask[plane.BalanceIn, plane.Balance](context.Background(), "commerce",
-		plane.FinanceBalance, &plane.BalanceIn{Subject: "acme", Currency: "usd"})
+	_, err := cloud.Ask[client.BalanceIn, client.Balance](context.Background(), "commerce",
+		client.FinanceBalance, &client.BalanceIn{Subject: "acme", Currency: "usd"})
 	if err == nil {
 		t.Fatal("a call answered by a socket file with no listener SUCCEEDED")
 	}
@@ -107,16 +107,16 @@ func TestALiveSocketIsAPeer(t *testing.T) {
 	_ = leftover(t, "ledger")
 
 	app := zip.New(zip.Config{AppName: "ledger"})
-	zip.Post[plane.BalanceIn, plane.Balance](app, "/ledger/balance",
-		func(context.Context, *plane.BalanceIn) (*plane.Balance, error) {
-			return &plane.Balance{Amount: plane.Money{Decimal: "149533.00", Currency: "USD"}}, nil
+	zip.Post[client.BalanceIn, client.Balance](app, "/ledger/balance",
+		func(context.Context, *client.BalanceIn) (*client.Balance, error) {
+			return &client.Balance{Amount: client.Money{Decimal: "149533.00", Currency: "USD"}}, nil
 		}, zip.WithOperationID("stale_balance"))
 	go func() { _ = app.Listen(zip.SocketPath("ledger")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	waitFor(t, "ledger")
 
-	out, err := cloud.Ask[plane.BalanceIn, plane.Balance](cloud.For(context.Background(), "acme"),
-		"ledger", "stale_balance", &plane.BalanceIn{Subject: "acme", Currency: "usd"})
+	out, err := cloud.Ask[client.BalanceIn, client.Balance](cloud.For(context.Background(), "acme"),
+		"ledger", "stale_balance", &client.BalanceIn{Subject: "acme", Currency: "usd"})
 	if err != nil {
 		t.Fatalf("a live peer was not reached: %v", err)
 	}

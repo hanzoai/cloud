@@ -34,7 +34,7 @@ import (
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"net"
@@ -244,7 +244,7 @@ func issue(number int, title, state string, labels ...string) map[string]any {
 // exactly as the real op keys it. A test states rows it needs before mounting;
 // serveIdentity defaults every asUser subject to a CONFIRMED address whose local
 // part is the login, which is what the forge stub also says.
-var identity map[string]plane.Email
+var identity map[string]client.Email
 
 // serveIdentity stands up the iam peer scopeForge resolves the actor through.
 // Without it every forge-backed read refuses, which is the point: an
@@ -253,8 +253,8 @@ func serveIdentity(t *testing.T) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", shortDir(t))
 	app := zip.New(zip.Config{AppName: "iam", DisableStartupMessage: true})
-	zip.Post[struct{}, plane.Email](app, "/iam/email",
-		func(ctx context.Context, _ *struct{}) (*plane.Email, error) {
+	zip.Post[struct{}, client.Email](app, "/iam/email",
+		func(ctx context.Context, _ *struct{}) (*client.Email, error) {
 			sub := zip.CallerOf(ctx).User
 			if e, ok := identity[sub]; ok {
 				return &e, nil
@@ -262,11 +262,11 @@ func serveIdentity(t *testing.T) {
 			// Every asUser subject is "u_<login>", and by default owns the address
 			// that login derives from.
 			if login, ok := strings.CutPrefix(sub, "u_"); ok && login != "" {
-				return &plane.Email{Address: login + "@hanzo.ai", Verified: true}, nil
+				return &client.Email{Address: login + "@hanzo.ai", Verified: true}, nil
 			}
 			return nil, zip.ErrUnauthorized("no such subject")
-		}, zip.WithOperationID(plane.IAMEmail))
-	plane.Bind()
+		}, zip.WithOperationID(client.IAMEmail))
+	client.Bind()
 	go func() { _ = app.Listen(zip.SocketPath("iam")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	for i := 0; i < 200; i++ {
@@ -293,7 +293,7 @@ func shortDir(t *testing.T) string {
 
 func mountForge(t *testing.T, f *stubForge) *zip.App {
 	t.Helper()
-	identity = map[string]plane.Email{}
+	identity = map[string]client.Email{}
 	serveIdentity(t)
 	t.Setenv("CLOUD_FORGE_HOST", f.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -1259,7 +1259,7 @@ func TestForgeBrandGate_OwnBrandAndUnbrandedStillWork(t *testing.T) {
 // is what the brand gate compares the principal's vouching brand against.
 func mountForgeBranded(t *testing.T, f *stubForge, brand string) *zip.App {
 	t.Helper()
-	identity = map[string]plane.Email{}
+	identity = map[string]client.Email{}
 	serveIdentity(t)
 	t.Setenv("CLOUD_FORGE_HOST", f.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})

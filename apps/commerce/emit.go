@@ -47,8 +47,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	eventpeer "github.com/hanzoai/cloud/plane/event"
+	"github.com/hanzoai/cloud/client"
+	eventpeer "github.com/hanzoai/cloud/client/event"
 )
 
 // orderCompleted is the name the sale is filed under, and it is a CONSTANT because
@@ -58,7 +58,7 @@ import (
 const orderCompleted = "order_completed"
 
 // emitBudget bounds ONE statement end to end, including waking a cold analytics
-// child (plane.Ask single-flights the start). It is generous for [teachBudget]'s
+// child (client.Call single-flights the start). It is generous for [teachBudget]'s
 // reason: it bounds a DETACHED goroutine and not a request, so nothing here is on
 // the customer's critical path.
 const emitBudget = 5 * time.Second
@@ -156,7 +156,7 @@ func (s screen) emit(p payment, ref string) {
 // The amount is the one the card was charged, and it is only ever stated once a
 // charge really cleared — [screen.learn]'s rule, and it is the same rule here
 // because a payer who inflates it inflates their own bill.
-func purchase(p payment, ref string) *plane.EventIn {
+func purchase(p payment, ref string) *client.EventIn {
 	if p.subject == "" || ref == "" {
 		return nil
 	}
@@ -165,17 +165,17 @@ func purchase(p payment, ref string) *plane.EventIn {
 	// one is a sale of unstated size; and an empty currency restated here would be a
 	// second place deciding what empty means, when the translator already reads it as
 	// USD (apps/destination/translate.go).
-	attrs := []plane.Signal{{Name: "event_id", Value: ref}}
+	attrs := []client.Signal{{Name: "event_id", Value: ref}}
 	if p.cents > 0 {
-		attrs = append(attrs, plane.Signal{
+		attrs = append(attrs, client.Signal{
 			Name:  "revenue",
 			Value: strconv.FormatFloat(float64(p.cents)/100, 'f', -1, 64),
 		})
 	}
 	if p.currency != "" {
-		attrs = append(attrs, plane.Signal{Name: "currency", Value: p.currency})
+		attrs = append(attrs, client.Signal{Name: "currency", Value: p.currency})
 	}
-	return &plane.EventIn{
+	return &client.EventIn{
 		Name:       orderCompleted,
 		Product:    "commerce",
 		Subject:    p.subject,

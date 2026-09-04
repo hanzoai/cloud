@@ -48,8 +48,8 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -59,7 +59,7 @@ import (
 // "compute"-provider meter (the commerce attribution + spend-cap scope key), which
 // is deliberately distinct from the subsystem's own Base.Bill, so it is NOT lifted.
 type state struct {
-	cl *client
+	cl *computeClient
 	// fleet is the shared per-org BYO-cluster registry (KMS-sealed kubeconfigs);
 	// bill meters the nominal management fee. BYO clusters are MERGED into the
 	// managed clusters on /v1/compute/clusters — one fleet surface, two sources.

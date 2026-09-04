@@ -137,7 +137,7 @@ var probes = []probe{
 	{name: "healthz", method: "GET", target: "/healthz"},
 	{name: "readyz", method: "GET", target: "/readyz"},
 	{name: "zap bare", method: "GET", target: "/zap"},
-	{name: "zap subtree", method: "GET", target: "/zap/plane/thing"},
+	{name: "zap subtree", method: "GET", target: "/zap/client/thing"},
 	{name: "v1 miss by HEAD", method: "HEAD", target: "/v1/nope"},
 
 	// An address that exists for another method: 405 with the Allow the router
@@ -399,10 +399,10 @@ zap bare GET /zap
   Server: zip
   X-Content-Type-Options: nosniff
   body "not found\n"
-zap subtree GET /zap/plane/thing
+zap subtree GET /zap/client/thing
   404
   Content-Type: text/plain; charset=utf-8
-  Link: </zap/plane/thing>; rel="self"
+  Link: </zap/client/thing>; rel="self"
   Link: </.well-known/openapi.json>; rel="service-desc"
   Link: </docs>; rel="service-doc"
   Server: zip

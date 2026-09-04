@@ -72,9 +72,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
+	sandboxpeer "github.com/hanzoai/cloud/client/sandbox"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
-	sandboxpeer "github.com/hanzoai/cloud/plane/sandbox"
 	"github.com/zap-proto/zip"
 )
 
@@ -370,7 +370,7 @@ func Run(ctx context.Context, org string, in *CodeRun) (*CodeResult, error) {
 	// the collection below would then report the source as one of the run's outputs.
 	argv := append([]string{"sh", "-c", ": > " + marker + "\n" + l.run, "sh"}, in.Args...)
 	ran, err := sandboxpeer.SandboxRun(ctx,
-		&plane.RunIn{ID: sb.ID, Argv: argv})
+		&client.RunIn{ID: sb.ID, Argv: argv})
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +391,7 @@ func Run(ctx context.Context, org string, in *CodeRun) (*CodeResult, error) {
 // answering 500 because the artifact sweep tripped would throw away the one thing
 // the caller asked for.
 func produced(ctx context.Context, id string) []CodeFile {
-	ran, err := sandboxpeer.SandboxRun(ctx, &plane.RunIn{
+	ran, err := sandboxpeer.SandboxRun(ctx, &client.RunIn{
 		ID: id, Argv: []string{"sh", "-c", "find . -type f -newer " + marker + " 2>/dev/null"}})
 	if err != nil || ran.ExitCode != 0 {
 		return nil
@@ -413,7 +413,7 @@ func produced(ctx context.Context, id string) []CodeFile {
 // two pods and there is no third place for them to meet.
 func carry(ctx context.Context, f CodeFile, into string) error {
 	b, err := sandboxpeer.SandboxRead(ctx,
-		&plane.PathIn{ID: f.Session(), Path: f.ID})
+		&client.PathIn{ID: f.Session(), Path: f.ID})
 	if err != nil || b.Dir {
 		return fmt.Errorf("read %s: %v", f.ID, err)
 	}
@@ -429,18 +429,18 @@ func carry(ctx context.Context, f CodeFile, into string) error {
 func End(ctx context.Context, org, session string) error {
 	cctx, done := callCtx(ctx, org)
 	defer done()
-	_, err := sandboxpeer.SandboxEnd(cctx, &plane.EndIn{ID: session})
+	_, err := sandboxpeer.SandboxEnd(cctx, &client.EndIn{ID: session})
 	return err
 }
 
-func lease(ctx context.Context, id string) (*plane.Leased, error) {
+func lease(ctx context.Context, id string) (*client.Leased, error) {
 	return sandboxpeer.SandboxLease(ctx,
-		&plane.LeaseIn{ID: id, Class: "exec"})
+		&client.LeaseIn{ID: id, Class: "exec"})
 }
 
-func write(ctx context.Context, id, p string, data []byte) (*plane.Wrote, error) {
+func write(ctx context.Context, id, p string, data []byte) (*client.Wrote, error) {
 	return sandboxpeer.SandboxWrite(ctx,
-		&plane.WriteIn{ID: id, Path: p, Data: data})
+		&client.WriteIn{ID: id, Path: p, Data: data})
 }
 
 // tenantOf is exec's admission: the org a validated principal resolved to, and
@@ -560,7 +560,7 @@ func download(c *zip.Ctx) error {
 	ctx, done := callCtx(c.Context(), org)
 	defer done()
 	b, err := sandboxpeer.SandboxRead(ctx,
-		&plane.PathIn{ID: sid, Path: p})
+		&client.PathIn{ID: sid, Path: p})
 	if err != nil {
 		return err
 	}
@@ -638,7 +638,7 @@ func listFiles(ctx context.Context, in *sessionRef) (*listings, error) {
 	// `name.startsWith(session/id)` found nothing and read the file as EXPIRED. Two
 	// traversals of one directory is two answers about what a session holds; there is
 	// one now.
-	ran, err := sandboxpeer.SandboxRun(ctx, &plane.RunIn{
+	ran, err := sandboxpeer.SandboxRun(ctx, &client.RunIn{
 		ID: sid, Argv: []string{"sh", "-c",
 			`find . -type f -exec date -u -r {} +%Y-%m-%dT%H:%M:%SZ \; -print`}})
 	if err != nil {

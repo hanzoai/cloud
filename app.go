@@ -205,12 +205,12 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	// until something registers on it, so this costs a struct.
 	//
 	// THE INTERNAL PLANE IS NOT THIS APP and is deliberately outside the rule. It is
-	// a third zip.App (plane.go) listening on the pod's own socket: no browser and
+	// a third zip.App (peer.go) listening on the pod's own socket: no browser and
 	// no network client can address it, and its operations are the implementation of
 	// operations the edge already priced and already answered standing for. Pricing
 	// the inner hop would bill one act twice, and gating it on standing would refuse
 	// the machinery that computes standing. That its addresses are outside the
-	// priced surface is asked at every bind rather than assumed — plane.go, unpriced.
+	// priced surface is asked at every bind rather than assumed — peer.go, unpriced.
 	rule := Rule(deps.Metering, deps.Commerce)
 	app.Authorize(rule)
 	app.Peer().Authorize(rule)

@@ -3,7 +3,7 @@ package cloud
 import (
 	"context"
 	"errors"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // git_import.go is the INBOUND half of the GitHub-App bidirectional sync —
@@ -97,7 +97,7 @@ func ImportGitRepo(ctx context.Context, req GitImportReq) error {
 	// the advance — an import answered "git importer not registered" while both
 	// were healthy. The org is not sent: the callee reads it from the plane
 	// identity, so an argument can never widen the tenant an import lands in.
-	if _, err := Ask[plane.ImportIn, plane.Imported](ctx, "sync", plane.GitImport, &plane.ImportIn{
+	if _, err := Ask[client.ImportIn, client.Imported](ctx, "sync", client.GitImport, &client.ImportIn{
 		Repo:      req.Repo,
 		Project:   req.Project,
 		CloneURL:  req.CloneURL,
@@ -117,7 +117,7 @@ func InboundGitSync(ctx context.Context, req GitInboundReq) (GitSyncResult, erro
 	}
 	// Not co-resident — the app that receives the push is not the app that runs
 	// the advance, so the request travels the plane. See ImportGitRepo.
-	out, err := Ask[plane.InboundIn, plane.Synced](ctx, "sync", plane.GitInbound, &plane.InboundIn{
+	out, err := Ask[client.InboundIn, client.Synced](ctx, "sync", client.GitInbound, &client.InboundIn{
 		Project: req.Project, Repo: req.Repo, Ref: req.Ref,
 		CloneURL: req.CloneURL, Token: req.Token, Origin: req.Origin,
 	})
@@ -145,8 +145,8 @@ func GitRepoStatuses(ctx context.Context, org, project string, names []string) (
 	if gitImporter != nil {
 		return gitImporter.RepoStatus(ctx, org, project, names)
 	}
-	out, err := Ask[plane.StatusIn, plane.Statuses](For(ctx, org), "sync", plane.GitStatus,
-		&plane.StatusIn{Project: project, Names: names})
+	out, err := Ask[client.StatusIn, client.Statuses](For(ctx, org), "sync", client.GitStatus,
+		&client.StatusIn{Project: project, Names: names})
 	if err != nil {
 		return nil, err
 	}

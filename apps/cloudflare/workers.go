@@ -8,11 +8,11 @@ package cloudflare
 // zone-scoped (/zones/{zone_id}/workers/routes).
 
 import (
-	"github.com/hanzoai/cloud"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"

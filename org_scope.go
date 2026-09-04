@@ -60,7 +60,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // OrgScopeResolver reports the ownership of a project identifier relative to
@@ -169,8 +169,8 @@ func ProjectOwnership(ctx context.Context, org, idOrSlug string) (mine, other bo
 
 	// The org is STATED rather than forwarded: this may run on a detached context,
 	// and the question is "does THIS org own it", which the callee must be told.
-	out, err := Ask[plane.OwnerIn, plane.Ownership](For(ctx, org), "project",
-		plane.ProjectsOwnership, &plane.OwnerIn{IDOrSlug: idOrSlug})
+	out, err := Ask[client.OwnerIn, client.Ownership](For(ctx, org), "project",
+		client.ProjectsOwnership, &client.OwnerIn{IDOrSlug: idOrSlug})
 	if err != nil {
 		return false, false, err
 	}

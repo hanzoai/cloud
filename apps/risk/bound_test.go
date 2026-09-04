@@ -32,9 +32,9 @@ import (
 	"github.com/luxfi/aml/pkg/anomaly"
 
 	"github.com/hanzoai/cloud"
+	moneyplane "github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/metering"
-	moneyplane "github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )

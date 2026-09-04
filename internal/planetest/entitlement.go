@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -26,14 +26,14 @@ func Entitled(t *testing.T, holds func(org, product string) bool) {
 	runtimeDir(t)
 
 	app := zip.New(zip.Config{AppName: "entitlement"})
-	zip.Post[plane.ProductIn, plane.Held](app, "/entitlement/holds",
-		func(ctx context.Context, in *plane.ProductIn) (*plane.Held, error) {
+	zip.Post[client.ProductIn, client.Held](app, "/entitlement/holds",
+		func(ctx context.Context, in *client.ProductIn) (*client.Held, error) {
 			org := zip.CallerOf(ctx).Org
 			if org == "" {
 				return nil, zip.ErrUnauthorized("holds: no org on the call")
 			}
-			return &plane.Held{On: holds(org, in.Product)}, nil
-		}, zip.WithOperationID(plane.EntitlementHolds))
+			return &client.Held{On: holds(org, in.Product)}, nil
+		}, zip.WithOperationID(client.EntitlementHolds))
 
 	listen(t, app, "entitlement")
 }
@@ -48,14 +48,14 @@ func Roled(t *testing.T, roles func(org, user string) []string) {
 	runtimeDir(t)
 
 	app := zip.New(zip.Config{AppName: "iam"})
-	zip.Post[struct{}, plane.Roles](app, "/iam/roles",
-		func(ctx context.Context, _ *struct{}) (*plane.Roles, error) {
+	zip.Post[struct{}, client.Roles](app, "/iam/roles",
+		func(ctx context.Context, _ *struct{}) (*client.Roles, error) {
 			who := zip.CallerOf(ctx)
 			if who.Org == "" {
 				return nil, zip.ErrUnauthorized("roles: no caller on the call")
 			}
-			return &plane.Roles{Roles: roles(who.Org, who.User)}, nil
-		}, zip.WithOperationID(plane.IAMRoles))
+			return &client.Roles{Roles: roles(who.Org, who.User)}, nil
+		}, zip.WithOperationID(client.IAMRoles))
 
 	listen(t, app, "iam")
 }

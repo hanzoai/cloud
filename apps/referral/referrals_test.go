@@ -18,7 +18,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
@@ -317,30 +317,30 @@ func TestLedgerReceivesZeroDeposits(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
 	t.Setenv("ZIP_RUNTIME_DIR", sockDir)
-	plane.Unbind()
-	t.Cleanup(plane.Unbind)
+	client.Unbind()
+	t.Cleanup(client.Unbind)
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 
 	p := cloud.Plane()
-	zip.Post[plane.SpendIn, plane.Spend](p, "/finance/spend",
-		func(_ context.Context, _ *plane.SpendIn) (*plane.Spend, error) {
+	zip.Post[client.SpendIn, client.Spend](p, "/finance/spend",
+		func(_ context.Context, _ *client.SpendIn) (*client.Spend, error) {
 			mu.Lock()
-			hits = append(hits, plane.FinanceSpend)
+			hits = append(hits, client.FinanceSpend)
 			mu.Unlock()
 			// The qualify signal: the referee has spent.
-			return &plane.Spend{
-				Consumed: plane.Money{Decimal: "42.42", Currency: "USD"},
-				Balance:  plane.Money{Decimal: "0", Currency: "USD"},
+			return &client.Spend{
+				Consumed: client.Money{Decimal: "42.42", Currency: "USD"},
+				Balance:  client.Money{Decimal: "0", Currency: "USD"},
 			}, nil
-		}, zip.WithOperationID(plane.FinanceSpend))
+		}, zip.WithOperationID(client.FinanceSpend))
 
 	// The two money-IN ops, live on the same plane and reachable by name. ANY
 	// call to either is the bug this test exists to catch — and unlike a stub
 	// server keyed on a URL, a caller cannot reach these by accident through a
 	// path it half-matched. It has to name the op.
-	mint := func(op string) func(context.Context, *plane.CreditIn) (*plane.Credited, error) {
-		return func(_ context.Context, _ *plane.CreditIn) (*plane.Credited, error) {
+	mint := func(op string) func(context.Context, *client.CreditIn) (*client.Credited, error) {
+		return func(_ context.Context, _ *client.CreditIn) (*client.Credited, error) {
 			mu.Lock()
 			hits = append(hits, op)
 			mu.Unlock()
@@ -348,9 +348,9 @@ func TestLedgerReceivesZeroDeposits(t *testing.T) {
 			return nil, errors.New("refused")
 		}
 	}
-	zip.Post[plane.CreditIn, plane.Credited](p, "/finance/credit", mint(plane.FinanceCredit),
-		zip.WithOperationID(plane.FinanceCredit))
-	zip.Post[plane.CreditIn, plane.Credited](p, "/finance/deposit", mint("finance_deposit_probe"),
+	zip.Post[client.CreditIn, client.Credited](p, "/finance/credit", mint(client.FinanceCredit),
+		zip.WithOperationID(client.FinanceCredit))
+	zip.Post[client.CreditIn, client.Credited](p, "/finance/deposit", mint("finance_deposit_probe"),
 		zip.WithOperationID("finance_deposit_probe"))
 
 	sock := zip.SocketPath("commerce")
@@ -382,7 +382,7 @@ func TestLedgerReceivesZeroDeposits(t *testing.T) {
 		t.Fatal("the money plane was never reached at all — the no-mint proof would be vacuous")
 	}
 	for _, h := range hits {
-		if h != plane.FinanceSpend {
+		if h != client.FinanceSpend {
 			t.Fatalf("unexpected commerce op %q — the only op this surface may invoke is the spend read (all: %v)", h, hits)
 		}
 	}

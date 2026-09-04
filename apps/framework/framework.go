@@ -43,10 +43,10 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/client/entitlement"
+	"github.com/hanzoai/cloud/client/iam"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/plane"
-	"github.com/hanzoai/cloud/plane/entitlement"
-	"github.com/hanzoai/cloud/plane/iam"
 	engine "github.com/hanzoai/framework"
 	"github.com/zap-proto/zip"
 )
@@ -307,7 +307,7 @@ func roles(c *zip.Ctx) error {
 	}
 	// The USER rides too: whose roles these are is the question.
 	who := zip.WithCaller(c.Context(), zip.Caller{User: strings.Clone(strings.TrimSpace(c.User()))})
-	ctx, cancel := context.WithTimeout(plane.For(who, org), wait)
+	ctx, cancel := context.WithTimeout(client.For(who, org), wait)
 	defer cancel()
 	got, err := iam.IAMRoles(ctx)
 	if err != nil {
@@ -580,7 +580,7 @@ func (o ops) listModules(ctx context.Context, _ *cloud.Unit) (*moduleList, error
 		// One question per module, through the op the refusal asks — a batch read
 		// would be a second answer to disagree with. Unanswerable reports NOT
 		// enabled, matching what the refusal will do.
-		on, err := entitlement.EntitlementHolds(ctx, &plane.ProductIn{Product: m.Module})
+		on, err := entitlement.EntitlementHolds(ctx, &client.ProductIn{Product: m.Module})
 		out = append(out, module{ModuleInfo: m, Enabled: err == nil && on.On})
 	}
 	return &moduleList{Data: out}, nil

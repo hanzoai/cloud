@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -22,9 +22,9 @@ import (
 
 // exposeHold publishes the flag read. Mount calls it.
 func exposeHold() {
-	zip.Post[plane.FlagIn, plane.Flag](cloud.Plane(), "/flags/hold",
+	zip.Post[client.FlagIn, client.Flag](cloud.Plane(), "/flags/hold",
 		hold,
-		zip.WithOperationID(plane.FlagsHold),
+		zip.WithOperationID(client.FlagsHold),
 		zip.WithSummary("Whether the caller's org holds one flag"))
 }
 
@@ -45,7 +45,7 @@ func exposeHold() {
 // cannot answer is an ERROR, never a false — the caller fails closed on it, and
 // silently reporting "not held" would make an outage indistinguishable from a
 // decision.
-func hold(ctx context.Context, in *plane.FlagIn) (*plane.Flag, error) {
+func hold(ctx context.Context, in *client.FlagIn) (*client.Flag, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("hold: no org on the call")
@@ -61,5 +61,5 @@ func hold(ctx context.Context, in *plane.FlagIn) (*plane.Flag, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Flag{On: a.On}, nil
+	return &client.Flag{On: a.On}, nil
 }

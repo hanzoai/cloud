@@ -29,10 +29,10 @@
 package o11y
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/internal/environ"
 	"strconv"
 	"strings"
 	"sync"

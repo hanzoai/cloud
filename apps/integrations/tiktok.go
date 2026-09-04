@@ -16,9 +16,9 @@ package integrations
 // framework's OAuth-configured gate holds). Linking is an org-admin action.
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/environ"
 	"net/url"
 	"strings"
 )

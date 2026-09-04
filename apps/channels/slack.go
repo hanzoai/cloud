@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
 // slack.go is the Slack transport: envelope normalization from the ingress
@@ -15,7 +15,7 @@ import (
 
 // slackEndpoint is the send path; tests spy it, prod never repoints.
 var slackEndpoint = func(ctx context.Context, org, channel, threadTS, text string) error {
-	_, err := post(ctx, org, plane.ChatSendIn{Provider: "slack", Room: channel, ReplyTo: threadTS, Text: text})
+	_, err := post(ctx, org, client.ChatSendIn{Provider: "slack", Room: channel, ReplyTo: threadTS, Text: text})
 	return err
 }
 
@@ -30,7 +30,7 @@ var slackTransport = transport{
 // event_id) into the envelope. Slack conversation-id contract: D* = IM,
 // C* = public channel, G* = private/mpim — a D-prefixed conversation is a DM;
 // a threaded event (thread_ts set) is a thread; everything else is a group.
-func slackNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
+func slackNormalize(ev client.ChannelsIngestIn) (Message, bool) {
 	in := ev
 	kind := RoomGroup
 	switch {

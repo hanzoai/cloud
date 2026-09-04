@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -59,7 +59,7 @@ func mountAt(t *testing.T, forgeURL string, b time.Duration) *zip.App {
 	budget = b
 	t.Cleanup(func() { budget = old })
 
-	identity = map[string]plane.Email{}
+	identity = map[string]client.Email{}
 	serveIdentity(t)
 	t.Setenv("CLOUD_FORGE_HOST", forgeURL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})

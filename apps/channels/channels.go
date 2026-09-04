@@ -4,7 +4,7 @@
 // The /v1/channel routes carry a portable chat envelope, per-org access policy
 // (pairing / allowlist / open), a durable inbox, and outbound send across every
 // connected transport. Identity and token custody stay in apps/integrations:
-// inbound events arrive on the plane (plane.ChannelsIngest) and replies leave
+// inbound events arrive on the plane (client.ChannelsIngest) and replies leave
 // through that package's senders, so the dependency points one way —
 // channels → integrations, never back.
 package channels

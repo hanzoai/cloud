@@ -27,10 +27,10 @@ import (
 
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/apps/x402"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 )
 
-// The tool→resource naming is plane.ToolResource / plane.ToolOf, not a rule of this
+// The tool→resource naming is client.ToolResource / client.ToolOf, not a rule of this
 // package's own. It was one, and it could be while the price table and the tool
 // plane shared a process; they no longer do, and a spelling each end owns half of is
 // how a caller asks for "tool:x" while the table is keyed on something else and
@@ -52,7 +52,7 @@ type registry struct{ store *Store }
 // asks about) all land here. A store failure is an ERROR, so x402 fails closed
 // rather than serving a priced tool for nothing.
 func (g *registry) Price(ctx context.Context, resource string) (x402.Terms, bool, error) {
-	tool, ok := plane.ToolOf(resource)
+	tool, ok := client.ToolOf(resource)
 	if !ok {
 		return x402.Terms{}, false, nil // not a tool resource — this table prices nothing else
 	}
@@ -92,7 +92,7 @@ type charger struct{}
 // a caller with no billable ledger — is returned as-is and fails the call CLOSED. A
 // tool that cannot be paid for is never served free.
 func (charger) Charge(ctx context.Context, tool string) error {
-	err := x402.Settle(ctx, plane.ToolResource(tool))
+	err := x402.Settle(ctx, client.ToolResource(tool))
 	if errors.Is(err, x402.ErrPaymentRequired) {
 		return fmt.Errorf("%w: %v", tools.ErrPaymentRequired, err)
 	}

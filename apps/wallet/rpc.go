@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -25,8 +25,8 @@ import (
 
 // exposePayee publishes payee resolution. Mount calls it.
 func exposePayee() {
-	zip.Post[plane.PayeeIn, plane.Payee](cloud.Plane(), "/wallets/payee", planePayee,
-		zip.WithOperationID(plane.WalletsPayee),
+	zip.Post[client.PayeeIn, client.Payee](cloud.Plane(), "/wallets/payee", planePayee,
+		zip.WithOperationID(client.WalletsPayee),
 		zip.WithSummary("Resolve a payout wallet to its address and ledger subject"))
 }
 
@@ -42,7 +42,7 @@ func exposePayee() {
 // against a fact that will not change.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planePayee(ctx context.Context, in *plane.PayeeIn) (*plane.Payee, error) {
+func planePayee(ctx context.Context, in *client.PayeeIn) (*client.Payee, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrForbidden("payee: no org on the call")
@@ -52,7 +52,7 @@ func planePayee(ctx context.Context, in *plane.PayeeIn) (*plane.Payee, error) {
 	}
 	target, ok := ResolvePaymentTarget(ctx, org, in.WalletID)
 	if !ok {
-		return &plane.Payee{}, nil
+		return &client.Payee{}, nil
 	}
-	return &plane.Payee{Found: true, Address: target.Address, Subject: target.Subject}, nil
+	return &client.Payee{Found: true, Address: target.Address, Subject: target.Subject}, nil
 }

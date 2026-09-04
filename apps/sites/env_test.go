@@ -86,10 +86,10 @@ func TestFirstPartyApexReachesThePublishedSet(t *testing.T) {
 	t.Cleanup(func() { SetSelfDomains(nil) })
 
 	srv := New(Config{
-		Apex:            "hanzo.app",
-		SelfDomains:     nil, // names the first-party apex NOWHERE but FirstPartyApex
-		FirstPartyApex:  "hanzo.ai",
-		FirstPartyOrg:   "hanzo",
+		Apex:           "hanzo.app",
+		SelfDomains:    nil, // names the first-party apex NOWHERE but FirstPartyApex
+		FirstPartyApex: "hanzo.ai",
+		FirstPartyOrg:  "hanzo",
 	}, luxlog.New("test"))
 
 	for _, h := range []string{"hanzo.ai", "api.hanzo.ai", "login.hanzo.ai"} {

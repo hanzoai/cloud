@@ -38,8 +38,8 @@ import (
 	"github.com/hanzoai/cloud/internal/planetest"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/k8s"
-	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -106,13 +106,13 @@ func planeProbe(t *testing.T, objs ...runtime.Object) *zip.App {
 	app.Get("/probe", func(c *zip.Ctx) error {
 		// As(c, "") delegates THIS request's principal unchanged — the same
 		// authority the handler was reached with, and nothing more.
-		fleet, err := cloud.Ask[struct{}, plane.Fleet](cloud.As(c, ""), "platform",
-			plane.PlatformFleet, &struct{}{})
+		fleet, err := cloud.Ask[struct{}, client.Fleet](cloud.As(c, ""), "platform",
+			client.PlatformFleet, &struct{}{})
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"err": err.Error()})
 		}
 		if fleet == nil {
-			return c.JSON(http.StatusOK, []plane.App{})
+			return c.JSON(http.StatusOK, []client.App{})
 		}
 		return c.JSON(http.StatusOK, fleet.Apps)
 	})
@@ -123,7 +123,7 @@ func planeProbe(t *testing.T, objs ...runtime.Object) *zip.App {
 // identity headers exactly as fleet_authz_test.go's fleetDoAs does — the headers
 // SanitizeIdentity mints from a signature-verified JWT and strips on ingress.
 // Returns the namespaces observed, or the refusal text.
-func observeAs(t *testing.T, app *zip.App, user, org string, orgAdmin, superAdmin bool) (rows []plane.App, refusal string) {
+func observeAs(t *testing.T, app *zip.App, user, org string, orgAdmin, superAdmin bool) (rows []client.App, refusal string) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
 	if user != "" {
@@ -160,7 +160,7 @@ func observeAs(t *testing.T, app *zip.App, user, org string, orgAdmin, superAdmi
 // namespacesOf is what the caller actually learned: the set of namespaces whose CRs
 // came back. The boundary is about which namespaces were SCANNED, so this is the
 // value every assertion below is written against.
-func namespacesOf(rows []plane.App) map[string]bool {
+func namespacesOf(rows []client.App) map[string]bool {
 	out := map[string]bool{}
 	for _, r := range rows {
 		out[r.Namespace] = true
@@ -300,7 +300,7 @@ func TestFleetPlane_UnreadyClusterIsAnErrorNotAnEmptyFleet(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	_, err = cloud.Ask[struct{}, plane.Fleet](adminCtx(), "platform", plane.PlatformFleet, &struct{}{})
+	_, err = cloud.Ask[struct{}, client.Fleet](adminCtx(), "platform", client.PlatformFleet, &struct{}{})
 	if err == nil {
 		t.Fatal("an unobservable fleet ANSWERED; it must report 503, not an empty fleet")
 	}
@@ -320,7 +320,7 @@ func TestFleetPlane_UnreadyClusterIsAnErrorNotAnEmptyFleet(t *testing.T) {
 func TestFleetPlane_NoSocketIsAnError(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	cloud.ResetPlane() // nothing listening
-	_, err := cloud.Ask[struct{}, plane.Fleet](adminCtx(), "platform", plane.PlatformFleet, &struct{}{})
+	_, err := cloud.Ask[struct{}, client.Fleet](adminCtx(), "platform", client.PlatformFleet, &struct{}{})
 	if err == nil {
 		t.Fatal("dialing an absent platform SUCCEEDED; a missing peer must never read as an empty fleet")
 	}
@@ -342,16 +342,16 @@ func TestFleetApp_CarriesNoScope(t *testing.T) {
 	}
 	// The reply's shape is checked by round-tripping it through the same encoder
 	// the plane uses, so a field that stops crossing shows up here.
-	want := plane.App{
+	want := client.App{
 		Org: "hanzoai", Name: "sql", Env: "main", Repo: "hanzoai/sql", Registry: "ghcr.io/hanzoai/sql",
 		Role: "sql", DeclaredTag: "v1.4.2", RunningTag: "v1.4.1", LatestTag: "v1.4.3",
 		Health: "yellow", Phase: "Running", Cluster: "hanzo-k8s", Namespace: "hanzo", DriftSeverity: "yellow",
 	}
-	b, err := json.Marshal(plane.Fleet{Apps: []plane.App{want}})
+	b, err := json.Marshal(client.Fleet{Apps: []client.App{want}})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	var got plane.Fleet
+	var got client.Fleet
 	if err := json.Unmarshal(b, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
