@@ -69,7 +69,7 @@ import (
 	// because the app package this file also imports is the SAME word: one is the
 	// index in this process, the other is how to reach it in another.
 	indexpeer "github.com/hanzoai/cloud/plane/index"
-	projectspeer "github.com/hanzoai/cloud/plane/projects"
+	projectspeer "github.com/hanzoai/cloud/plane/project"
 	"github.com/zap-proto/zip"
 )
 

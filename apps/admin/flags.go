@@ -21,7 +21,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/plane"
-	flagsplane "github.com/hanzoai/cloud/plane/flags"
+	flagsplane "github.com/hanzoai/cloud/plane/flag"
 )
 
 // flagsBoard reads the platform control-plane board: every runtime launch/release

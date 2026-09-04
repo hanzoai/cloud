@@ -30,6 +30,18 @@ type App struct {
 	// both its env overrides and its sibling binary.
 	Name string
 
+	// Pkg is the directory under apps/ holding the app's code, when that is not
+	// the Name. Empty — nearly every app — means apps/<Name>.
+	//
+	// The two are separable because a capability's ADDRESS and its package are
+	// different facts: `project` answers /v1/project and its code lives in
+	// apps/projects. Every generator that needs one from the other reads THIS
+	// field, so the pairing is stated once. It was stated nowhere, and the plane
+	// generator inferred an app's name from its directory instead — which is a
+	// second source for a name this file already owns, and it disagreed the day
+	// the two diverged: seven plane clients addressed a socket nothing bound.
+	Pkg string
+
 	// Prefixes are the absolute paths it answers. zip mounts each path AND its
 	// subtree, and the router takes the first match — so a shallower prefix
 	// registered earlier wins, exactly as it does when everything is linked into
@@ -321,4 +333,20 @@ func (a App) pluginIn(dir string) zip.Plugin {
 	// in the failure, because that is the binary a developer expects to have
 	// built (or the release ladder below fills in over the network).
 	return zip.Plugin{Name: a.Name, Path: filepath.Join(dir, a.Name), Lazy: !a.Eager, IdleAfter: idleAfter}
+}
+
+// NameFor is the app whose code lives in apps/<pkg> — the inverse of App.Pkg,
+// and the answer generators need when they are walking the tree rather than the
+// manifest. Returns "" for a directory no app claims.
+//
+// A name is a fact about the app, not about where its files sit, so it is read
+// from here rather than inferred from a path. Inferring it is what let seven
+// generated plane clients keep addressing a socket the fleet stopped binding.
+func NameFor(pkg string) string {
+	for _, a := range Apps {
+		if a.Pkg == pkg || (a.Pkg == "" && a.Name == pkg) {
+			return a.Name
+		}
+	}
+	return ""
 }

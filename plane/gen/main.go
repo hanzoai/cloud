@@ -46,6 +46,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/hanzoai/cloud/manifest"
 	"go/ast"
 	"go/format"
 	"go/types"
@@ -172,7 +173,10 @@ func appOf(p *packages.Package, root string) string {
 	if err != nil || strings.Contains(rel, string(filepath.Separator)) || rel == "." || rel == ".." {
 		return ""
 	}
-	return rel
+	// The DIRECTORY is not the name. A capability's address and its package are
+	// separate facts (manifest.App.Pkg), so the name comes from the manifest —
+	// the file that owns it — and a directory no app claims yields none.
+	return manifest.NameFor(rel)
 }
 
 // collect walks one file for typed registrations on cloud.Plane().

@@ -7,7 +7,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
-	toolspeer "github.com/hanzoai/cloud/plane/tools"
+	toolspeer "github.com/hanzoai/cloud/plane/tool"
 )
 
 // skills_on_push.go — a push to a repository's default branch replaces the

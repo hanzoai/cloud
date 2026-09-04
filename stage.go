@@ -35,7 +35,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
-	"github.com/hanzoai/cloud/plane/flags"
+	flags "github.com/hanzoai/cloud/plane/flag"
 	"github.com/zap-proto/zip"
 )
 

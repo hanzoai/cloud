@@ -34,7 +34,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/plane"
-	flagsplane "github.com/hanzoai/cloud/plane/flags"
+	flagsplane "github.com/hanzoai/cloud/plane/flag"
 )
 
 // registryState is admission's process-wide launch state: the platform-tenant

@@ -34,7 +34,7 @@ import (
 
 	"github.com/hanzoai/cloud/plane"
 	bookspeer "github.com/hanzoai/cloud/plane/books"
-	projectspeer "github.com/hanzoai/cloud/plane/projects"
+	projectspeer "github.com/hanzoai/cloud/plane/project"
 )
 
 // domain is one grounded peer behind the advisor: the name the answer is tagged
