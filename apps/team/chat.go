@@ -281,7 +281,7 @@ func (srv *transServer) replyAsBot(org, space string, m chatMsg, bot Bot) {
 		return
 	}
 	// A detached system session bound to (org, space) — the same shape the
-	// /v1/team/bots/sync reconcile uses to write into a space off the WS loop.
+	// /v1/bot/members/sync reconcile uses to write into a space off the WS loop.
 	sess := &session{server: srv, store: srv.store, hier: srv.hier, org: org, space: space, account: botUID}
 	if _, ap := sess.applyTx(raw); len(ap) > 0 {
 		srv.hub.broadcast(space, ap)

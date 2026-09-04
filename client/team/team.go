@@ -30,8 +30,24 @@ const App = "team"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	client.TeamBots,
+	client.TeamBotsSync,
 	client.TeamMember,
 	client.TeamSpaces,
+}
+
+// TeamBots this org's bots, as space members.
+//
+// Calls client.TeamBots on team over the peer plane.
+func TeamBots(ctx context.Context, in *client.BotsIn) (*client.BotRoster, error) {
+	return client.Call[client.BotsIn, client.BotRoster](ctx, App, client.TeamBots, in)
+}
+
+// TeamBotsSync re-project this org's bots into every space.
+//
+// Calls client.TeamBotsSync on team over the peer plane.
+func TeamBotsSync(ctx context.Context, in *client.BotsIn) (*client.BotSync, error) {
+	return client.Call[client.BotsIn, client.BotSync](ctx, App, client.TeamBotsSync, in)
 }
 
 // TeamMember this person's role in that space.

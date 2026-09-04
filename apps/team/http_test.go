@@ -357,39 +357,6 @@ func TestAccountRPCRequiresToken(t *testing.T) {
 	}
 }
 
-// TestBotsReadRouteTenantGate is the red bar for the bots surface: GET /v1/team/bots
-// requires a VALIDATED principal (X-User-Id set by the identity middleware) — a
-// bare X-Org-Id is refused, and with a validated org the list is org-scoped (empty
-// here since the agents subsystem is not mounted in this test).
-func TestBotsReadRouteTenantGate(t *testing.T) {
-	app := mountTeam(t)
-
-	// No principal at all → 403.
-	if code, _ := call(t, app, http.MethodGet, "/v1/team/bots", nil, nil); code != http.StatusForbidden {
-		t.Fatalf("no-principal GET /v1/team/bots = %d, want 403", code)
-	}
-	// A client-forged X-Org-Id with NO validated X-User-Id → still 403 (the exact
-	// off-gateway forge principal.Org refuses).
-	if code, _ := call(t, app, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "victim"}, nil); code != http.StatusForbidden {
-		t.Fatalf("forged-org GET /v1/team/bots = %d, want 403", code)
-	}
-	// A validated principal → 200 with an (empty) org-scoped list.
-	code, body := call(t, app, http.MethodGet, "/v1/team/bots",
-		map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil)
-	if code != http.StatusOK {
-		t.Fatalf("validated GET /v1/team/bots = %d: %s", code, body)
-	}
-	var lr struct {
-		Bots []botMember `json:"bots"`
-	}
-	if err := json.Unmarshal(body, &lr); err != nil {
-		t.Fatalf("bots list decode: %v (%s)", err, body)
-	}
-	if len(lr.Bots) != 0 {
-		t.Fatalf("bots = %d, want 0 (agents not mounted in test)", len(lr.Bots))
-	}
-}
-
 // TestDegradedWithoutSecret is the Red CRITICAL guard: with SERVER_SECRET unset
 // (and no dev escape hatch) Mount still SUCCEEDS (the cloud binary + all other
 // subsystems stay up), but every /v1/team route fails closed with 503 and NO token
@@ -407,10 +374,10 @@ func TestDegradedWithoutSecret(t *testing.T) {
 	t.Cleanup(func() { _ = Shutdown() })
 
 	// A validated principal that would otherwise 200 now gets 503 — fail closed.
-	code, body := call(t, app, http.MethodGet, "/v1/team/bots",
+	code, body := call(t, app, http.MethodGet, "/v1/team/account/providers",
 		map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil)
 	if code != http.StatusServiceUnavailable {
-		t.Fatalf("degraded /v1/team/bots = %d, want 503 (%s)", code, body)
+		t.Fatalf("degraded /v1/team/account/providers = %d, want 503 (%s)", code, body)
 	}
 	// The account RPC is 503 too (no token decoded/accepted while degraded).
 	if code, _ := call(t, app, http.MethodPost, "/v1/team/account", nil, rpcRequest{Method: "getUserWorkspaces"}); code != http.StatusServiceUnavailable {
@@ -425,8 +392,8 @@ func TestDegradedWithoutSecret(t *testing.T) {
 	if err := useWith(app2, cloud.Deps{KMS: teamKMS(t, "secret")}, newMemVFS()); err != nil {
 		t.Fatalf("Mount (default secret) must succeed degraded: %v", err)
 	}
-	if code, _ := call(t, app2, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusServiceUnavailable {
-		t.Fatalf("default-secret /v1/team/bots = %d, want 503 (public key must not sign)", code)
+	if code, _ := call(t, app2, http.MethodGet, "/v1/team/account/providers", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusServiceUnavailable {
+		t.Fatalf("default-secret /v1/team/account/providers = %d, want 503 (public key must not sign)", code)
 	}
 }
 
@@ -442,8 +409,8 @@ func TestInsecureHatchRemoved(t *testing.T) {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
-	if code, body := call(t, app, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusServiceUnavailable {
-		t.Fatalf("/v1/team/bots with dead hatch = %d, want 503 (%s)", code, body)
+	if code, body := call(t, app, http.MethodGet, "/v1/team/account/providers", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusServiceUnavailable {
+		t.Fatalf("/v1/team/account/providers with dead hatch = %d, want 503 (%s)", code, body)
 	}
 }
 
@@ -464,33 +431,6 @@ func TestSetCookieRejectsBadToken(t *testing.T) {
 	forged, _ := token.Generate("550e8400-e29b-41d4-a716-446655440000", "", map[string]any{"org": "acme"}, expUnix(sessionTokenTTL), "attacker-secret")
 	if code, _ := call(t, app, http.MethodPut, "/v1/team/account/cookie", nil, map[string]any{"token": forged}); code != http.StatusUnauthorized {
 		t.Fatalf("foreign-signed token PUT /cookie = %d, want 401", code)
-	}
-}
-
-// TestBotsSyncAdminGate proves POST /v1/team/bots/sync requires BOTH a validated
-// org AND the gateway-minted admin flag — a validated non-admin is refused, and an
-// admin gets a clean (0-projected, no agents) response.
-func TestBotsSyncAdminGate(t *testing.T) {
-	app := mountTeam(t)
-
-	// Validated but NOT admin → 403.
-	code, _ := call(t, app, http.MethodPost, "/v1/team/bots/sync",
-		map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil)
-	if code != http.StatusForbidden {
-		t.Fatalf("non-admin sync = %d, want 403", code)
-	}
-	// Validated admin → 200.
-	code, body := call(t, app, http.MethodPost, "/v1/team/bots/sync",
-		map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme", "X-User-IsAdmin": "true"}, nil)
-	if code != http.StatusOK {
-		t.Fatalf("admin sync = %d: %s", code, body)
-	}
-	var sr struct {
-		Synced    bool `json:"synced"`
-		Projected int  `json:"projected"`
-	}
-	if err := json.Unmarshal(body, &sr); err != nil || !sr.Synced {
-		t.Fatalf("admin sync body = %s (err %v)", body, err)
 	}
 }
 

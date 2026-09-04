@@ -199,11 +199,11 @@ func TestBotMachineSurfaceMovedToCompute(t *testing.T) {
 		paths[r.Method+" "+r.Path] = true
 	}
 	for _, want := range []string{
-		"GET /v1/compute/bots",
-		"POST /v1/compute/bots/launch",
-		"GET /v1/compute/bots/:id",
-		"DELETE /v1/compute/bots/:id",
-		"POST /v1/compute/bots/:id/:action",
+		"GET /v1/compute/machines",
+		"POST /v1/compute/machines",
+		"GET /v1/compute/machines/:id",
+		"DELETE /v1/compute/machines/:id",
+		"POST /v1/compute/machines/:id/:action",
 	} {
 		if !paths[want] {
 			t.Errorf("bot machine route %q is missing", want)

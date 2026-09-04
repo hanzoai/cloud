@@ -153,7 +153,7 @@ func useWith(app cloud.Router, deps cloud.Deps, s3 cloud.VFSClient) error {
 		log.Info("team: Chunter agent responder OFF (set TEAM_AGENTS_ENABLED=1 to enable)")
 	}
 	// Publish the singleton so the in-process projection path (Apply / ingest) and
-	// the /v1/team/bots/sync handler can write into the per-space store.
+	// the /v1/bot/members/sync handler can write into the per-space store.
 	live = trans
 
 	acct := &api{

@@ -1862,6 +1862,39 @@ components:
           description: ScanID echoes the scan that was booked.
           type: string
       type: object
+    BotMember:
+      properties:
+        active:
+          description: |-
+            Active is whether the agent projects as a LIVE space member, derived from
+            its registry status: empty, "active" and "ready" are live, anything else
+            (archived/retired) is not. An inactive bot drops out of the roster while its
+            past authorship survives.
+          type: boolean
+        id:
+          description: ID is the agent id.
+          type: string
+        name:
+          description: Name is the display name.
+          type: string
+        personRef:
+          description: PersonRef is the projected Person _id.
+          type: string
+        userId:
+          description: UserID is the derived member account uuid (personUuid).
+          type: string
+      type: object
+    BotRoster:
+      properties:
+        bots:
+          description: |-
+            Bots is one entry per bot, each carrying the member account uuid and the
+            Person reference the space roster addresses it by. Empty means the org has
+            no bots — not that the roster could not be read, which is an error.
+          items:
+            $ref: '#/components/schemas/BotMember'
+          type: array
+      type: object
     BotRun:
       properties:
         runId:
@@ -1907,6 +1940,16 @@ components:
         status:
           description: 'Status is the run''s terminal state: "stopped".'
           type: string
+      type: object
+    BotSync:
+      properties:
+        projected:
+          description: Projected is how many roster entries the reconcile touched.
+          format: int64
+          type: integer
+        synced:
+          description: Synced is true when the reconcile ran.
+          type: boolean
       type: object
     Breakdown:
       properties:
@@ -21013,47 +21056,6 @@ components:
           items:
             $ref: '#/components/schemas/readingView'
           type: array
-      type: object
-    botMember:
-      properties:
-        active:
-          description: |-
-            Active is whether the agent projects as a LIVE space member, derived
-            from its registry status: empty, "active" and "ready" are live, anything
-            else (archived/retired) is not. An inactive bot drops out of the Team list
-            while its past authorship survives.
-          type: boolean
-        id:
-          description: the agent id
-          type: string
-        name:
-          description: display name
-          type: string
-        personRef:
-          description: the projected Person _id
-          type: string
-        userId:
-          description: derived member account uuid (personUuid)
-          type: string
-      type: object
-    botRoster:
-      properties:
-        bots:
-          description: Bots is every agent of the caller's org, projected as a space
-            member.
-          items:
-            $ref: '#/components/schemas/botMember'
-          type: array
-      type: object
-    botSync:
-      properties:
-        projected:
-          description: Projected is how many roster entries the reconcile touched.
-          format: int64
-          type: integer
-        synced:
-          description: Synced is true when the reconcile ran.
-          type: boolean
       type: object
     browserTagOut:
       properties:
@@ -60621,7 +60623,7 @@ components:
           description: |-
             Members are the account uuids in the room, agents included: an agent
             projects as a space member under a uuid derived from its id, so a
-            caller comparing this against GET /v1/team/bots learns which rooms an
+            caller comparing this against GET /v1/bot/members learns which rooms an
             agent is in.
           items:
             type: string
@@ -81597,6 +81599,62 @@ paths:
       tags:
       - books
       x-app: books
+      x-public: true
+      x-tool: true
+  /v1/bot/members:
+    get:
+      description: |-
+        Returns the caller org's bots as space members — each with the member
+        account uuid and the Person reference the roster addresses it by.
+
+        A deployment that runs no team subsystem has no spaces and therefore no
+        roster, which is an empty list rather than an error: ErrNoPeer is the ONE
+        error that means "this deployment does not run that app", and every other
+        failure is an outage and says so.
+      operationId: get_bot_members
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                bots:
+                - active: true
+                  id: a1
+                  name: Concierge
+                  personRef: …
+                  userId: …
+              schema:
+                $ref: '#/components/schemas/BotRoster'
+          description: ok
+      summary: Returns the caller org's bots as space members — each with the member
+        account uuid and the Person reference the roster addresses it by.
+      tags:
+      - bot
+      x-app: bot
+      x-public: true
+      x-tool: true
+  /v1/bot/members/sync:
+    post:
+      description: |-
+        Re-projects the caller org's bots as members into every space of the org
+        and removes the ones whose agent is gone. Idempotent, and admin only — the
+        admin bit rides the caller to team, which is what decides it.
+      operationId: post_bot_members_sync
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                projected: 12
+                synced: true
+              schema:
+                $ref: '#/components/schemas/BotSync'
+          description: ok
+      summary: Re-projects the caller org's bots as members into every space of the
+        org and removes the ones whose agent is gone.
+      tags:
+      - bot
+      x-app: bot
       x-public: true
       x-tool: true
   /v1/bot/runs:
@@ -134877,52 +134935,6 @@ paths:
       tags:
       - team
       x-app: team
-  /v1/team/bots:
-    get:
-      description: |-
-        Returns the caller org's bot members — the org's agents projected as
-        the space Employees they become, each with the member account uuid and
-        Person reference the roster addresses it by. An agents subsystem that is not
-        mounted answers an empty list, never an error.
-      operationId: get_team_bots
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/botRoster'
-          description: ok
-      summary: Returns the caller org's bot members — the org's agents projected as
-        the space Employees they become, each with the member account uuid and Person
-        reference the roster addresses it by.
-      tags:
-      - team
-      x-app: team
-      x-public: true
-      x-tool: true
-  /v1/team/bots/sync:
-    post:
-      description: |-
-        SyncBots re-projects the caller org's agents as space members into EVERY
-        space of the org, and removes the ones whose agent is gone. It is
-        idempotent, and admin only: mutating a space's roster requires the
-        gateway-minted admin flag, which a client can never forge. It answers how many
-        roster entries the reconcile touched.
-      operationId: post_team_bots_sync
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/botSync'
-          description: ok
-      summary: SyncBots re-projects the caller org's agents as space members into
-        EVERY space of the org, and removes the ones whose agent is gone.
-      tags:
-      - team
-      x-app: team
-      x-public: true
-      x-tool: true
   /v1/team/collaborator:
     get:
       description: |-

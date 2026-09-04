@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 )
 
 // The defect these tests hold a line under, stated once.
@@ -20,7 +19,7 @@ import (
 // time. What made it invisible rather than loud was how the two readers handled
 // it: listBots turned any error into an EMPTY LIST, and the mention responder
 // dropped it with `if err != nil || len(bots) == 0 { return }`. So
-// GET /v1/team/bots answered [] for an org holding agents, no agent was ever
+// GET /v1/bot/members answered [] for an org holding agents, no agent was ever
 // projected as a member, no @mention could resolve one, and the boot log said
 // "Chunter agent responder ENABLED" the whole time.
 //
@@ -33,13 +32,13 @@ import (
 func TestListBotsReportsAFailedRosterRatherThanAnEmptyOne(t *testing.T) {
 	srv, _, _ := rosterServer(t, "acme", "u-1", "Human", nil)
 	b := &botsBridge{trans: srv, accounts: srv.accounts}
-	ctx := principal.WithActing(context.Background(), "acme")
+	ctx := cloud.For(context.Background(), "acme")
 
 	// A peer that is reachable and unwell.
 	srv.bots = func(context.Context, string) ([]Bot, error) {
 		return nil, errors.New("dial: connection refused")
 	}
-	if _, err := b.listBots(ctx, nil); err == nil {
+	if _, err := b.roster(ctx); err == nil {
 		t.Fatal("a failed roster read answered successfully — a caller cannot tell it from an org with no agents")
 	}
 
@@ -48,7 +47,7 @@ func TestListBotsReportsAFailedRosterRatherThanAnEmptyOne(t *testing.T) {
 	srv.bots = func(context.Context, string) ([]Bot, error) {
 		return nil, cloud.ErrNoPeer
 	}
-	got, err := b.listBots(ctx, nil)
+	got, err := b.roster(ctx)
 	if err != nil {
 		t.Fatalf("an absent agents subsystem must answer an empty roster, got: %v", err)
 	}
@@ -77,7 +76,7 @@ func TestListBotsAndTheResponderReadOneRoster(t *testing.T) {
 		return inner(ctx, org)
 	}
 
-	got, err := b.listBots(principal.WithActing(context.Background(), "acme"), nil)
+	got, err := b.roster(cloud.For(context.Background(), "acme"))
 	if err != nil {
 		t.Fatalf("listBots: %v", err)
 	}

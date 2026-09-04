@@ -56,17 +56,6 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/billing/ui/*", zip.Doc{
 		Description: "Serves the embedded wallet page: the exact asset when it exists, else\nindex.html (the SPA shell). Session-gated — an anonymous caller gets 401,\nnever the page. Fingerprinted assets/ cache hard; the shell never caches.",
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/bots", zip.Doc{
-		Description: "Returns the caller org's bot members — the org's agents projected as\nthe space Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
-		Fields: map[string]string{
-			"botMember.active":    "Active is whether the agent projects as a LIVE space member, derived\nfrom its registry status: empty, \"active\" and \"ready\" are live, anything\nelse (archived/retired) is not. An inactive bot drops out of the Team list\nwhile its past authorship survives.",
-			"botMember.id":        "the agent id",
-			"botMember.name":      "display name",
-			"botMember.personRef": "the projected Person _id",
-			"botMember.userId":    "derived member account uuid (personUuid)",
-			"botRoster.bots":      "Bots is every agent of the caller's org, projected as a space member.",
-		},
-	})
 	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/files/:space/:filename", zip.Doc{
 		Description: "Streams a blob by its client id (?file=). The served Content-Type is\nderived from the STORED BYTES via a strict image allow-list — NEVER from the\nclient :filename (Red F-B: a crafted .svg name would otherwise force\nimage/svg+xml → active XSS). Anything not a recognized raster image is served\ninert: application/octet-stream + attachment + nosniff.",
 	})
@@ -95,7 +84,7 @@ func init() {
 			"teamRoom.direct":   "Direct reports that this is a room between people rather than a named\nroom. It is derived from the document's class, so it cannot disagree\nwith what the client will render.",
 			"teamRoom.id":       "ID is the room document's own id, and the value the bind op addresses.\nIt is unique within a space, not across the org.",
 			"teamRoom.life":     "Life is the room's lifecycle INTENT — \"standing\" or \"bound\" (HIP-0523 §2).\nAbsent on the document it reads \"standing\": a room nobody classified is one\nthat persists.",
-			"teamRoom.members":  "Members are the account uuids in the room, agents included: an agent\nprojects as a space member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/team/bots learns which rooms an\nagent is in.",
+			"teamRoom.members":  "Members are the account uuids in the room, agents included: an agent\nprojects as a space member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/bot/members learns which rooms an\nagent is in.",
 			"teamRoom.name":     "Name is what a person sees in a sidebar. A direct message carries none, so\nthis is empty for one — the members are its name.",
 			"teamRoom.private":  "Private reports that the room is restricted to its members.",
 			"teamRoom.space":    "Space is the space uuid holding this room. It is part of the\nroom's address: two spaces of one org may each hold a room with\nthe same name, and only the pair identifies one.",
@@ -133,6 +122,21 @@ func init() {
 		},
 		Example: json.RawMessage(`{"token":"eyJhbGciOiJIUzI1NiJ9…"}`),
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/team POST /team/bots", zip.Doc{
+		Fields: map[string]string{
+			"BotMember.active":    "Active is whether the agent projects as a LIVE space member, derived from\nits registry status: empty, \"active\" and \"ready\" are live, anything else\n(archived/retired) is not. An inactive bot drops out of the roster while its\npast authorship survives.",
+			"BotMember.id":        "ID is the agent id.",
+			"BotMember.name":      "Name is the display name.",
+			"BotMember.personRef": "PersonRef is the projected Person _id.",
+			"BotMember.userId":    "UserID is the derived member account uuid (personUuid).",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/team POST /team/bots/sync", zip.Doc{
+		Fields: map[string]string{
+			"BotSync.projected": "Projected is how many roster entries the reconcile touched.",
+			"BotSync.synced":    "Synced is true when the reconcile ran.",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/team POST /team/member", zip.Doc{
 		Fields: map[string]string{
 			"Member.account":   "Account is the team AccountUuid the subject resolved to — the identity the\nasking process attributes the person by, so it never derives one itself.",
@@ -151,13 +155,6 @@ func init() {
 			"Spaces.items":     "Items is every space the person is in, newest membership first. Empty is\na real answer, not an error.",
 			"Spaces.name":      "Name is the display name on the caller's member rows, empty when they have\nnot set one. A DISPLAY name only: meet passes it as the LiveKit participant\nlabel, which is decoration, never identity.",
 			"SpacesIn.subject": "Subject is the IAM subject, NOT a team account id — team owns the join from\none to the other, exactly as in MemberIn.",
-		},
-	})
-	zip.Describe("github.com/hanzoai/cloud/apps/team POST /v1/team/bots/sync", zip.Doc{
-		Description: "SyncBots re-projects the caller org's agents as space members into EVERY\nspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a space's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched.",
-		Fields: map[string]string{
-			"botSync.projected": "Projected is how many roster entries the reconcile touched.",
-			"botSync.synced":    "Synced is true when the reconcile ran.",
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/team POST /v1/team/collaborator/rpc/:documentId", zip.Doc{
@@ -185,7 +182,7 @@ func init() {
 			"teamRoom.direct":      "Direct reports that this is a room between people rather than a named\nroom. It is derived from the document's class, so it cannot disagree\nwith what the client will render.",
 			"teamRoom.id":          "ID is the room document's own id, and the value the bind op addresses.\nIt is unique within a space, not across the org.",
 			"teamRoom.life":        "Life is the room's lifecycle INTENT — \"standing\" or \"bound\" (HIP-0523 §2).\nAbsent on the document it reads \"standing\": a room nobody classified is one\nthat persists.",
-			"teamRoom.members":     "Members are the account uuids in the room, agents included: an agent\nprojects as a space member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/team/bots learns which rooms an\nagent is in.",
+			"teamRoom.members":     "Members are the account uuids in the room, agents included: an agent\nprojects as a space member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/bot/members learns which rooms an\nagent is in.",
 			"teamRoom.name":        "Name is what a person sees in a sidebar. A direct message carries none, so\nthis is empty for one — the members are its name.",
 			"teamRoom.private":     "Private reports that the room is restricted to its members.",
 			"teamRoom.space":       "Space is the space uuid holding this room. It is part of the\nroom's address: two spaces of one org may each hold a room with\nthe same name, and only the pair identifies one.",
@@ -222,7 +219,7 @@ func init() {
 			"teamRoom.direct":       "Direct reports that this is a room between people rather than a named\nroom. It is derived from the document's class, so it cannot disagree\nwith what the client will render.",
 			"teamRoom.id":           "ID is the room document's own id, and the value the bind op addresses.\nIt is unique within a space, not across the org.",
 			"teamRoom.life":         "Life is the room's lifecycle INTENT — \"standing\" or \"bound\" (HIP-0523 §2).\nAbsent on the document it reads \"standing\": a room nobody classified is one\nthat persists.",
-			"teamRoom.members":      "Members are the account uuids in the room, agents included: an agent\nprojects as a space member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/team/bots learns which rooms an\nagent is in.",
+			"teamRoom.members":      "Members are the account uuids in the room, agents included: an agent\nprojects as a space member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/bot/members learns which rooms an\nagent is in.",
 			"teamRoom.name":         "Name is what a person sees in a sidebar. A direct message carries none, so\nthis is empty for one — the members are its name.",
 			"teamRoom.private":      "Private reports that the room is restricted to its members.",
 			"teamRoom.space":        "Space is the space uuid holding this room. It is part of the\nroom's address: two spaces of one org may each hold a room with\nthe same name, and only the pair identifies one.",
