@@ -1,4 +1,4 @@
-package visor
+package compute
 
 // The point of a typed op is that ONE registration feeds four surfaces. This
 // asserts the three derived ones actually carry this subsystem — a route that
@@ -82,7 +82,7 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 		t.Fatalf("openapi is not json: %v", err)
 	}
 
-	get, ok := doc.Paths["/v1/visor/machines/{id}"]["get"]
+	get, ok := doc.Paths["/v1/compute/machines/{id}"]["get"]
 	if !ok {
 		t.Fatalf("GET /v1/machines/{id} is not in the document")
 	}
@@ -111,7 +111,7 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 	}
 
 	// A delete states 204 and promises no body.
-	del := doc.Paths["/v1/visor/machines/{id}"]["delete"]
+	del := doc.Paths["/v1/compute/machines/{id}"]["delete"]
 	if _, ok := del.Responses["204"]; !ok {
 		t.Errorf("DELETE /v1/machines/{id} responses = %v, want a 204", del.Responses)
 	}
@@ -134,7 +134,7 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 	// bytes through. Modelling upstream's shape would have been the mistake; refusing
 	// to publish the ADDRESS because of it was a smaller one, and cost them a tool, a
 	// CLI command and an SDK method each.
-	for _, p := range []string{"/v1/visor/compute/bots/launch"} {
+	for _, p := range []string{"/v1/compute/bots/launch"} {
 		if _, ok := doc.Paths[p]; ok {
 			t.Errorf("%s is raw by design but appears in the document", p)
 		}
@@ -142,7 +142,7 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 	// And the catalog reads ARE in the document, with an open schema rather than an
 	// invented one — the assertion that keeps the fix above from being reverted into
 	// a modelled copy of somebody else's contract.
-	for _, p := range []string{"/v1/visor/compute/regions", "/v1/visor/compute/sizes"} {
+	for _, p := range []string{"/v1/compute/regions", "/v1/compute/sizes"} {
 		op, ok := doc.Paths[p]["get"]
 		if !ok {
 			t.Errorf("%s is a typed op and must appear in the document", p)
@@ -203,13 +203,13 @@ func TestMCPPublishesTheSurface(t *testing.T) {
 // "the shape is Visor's and not this package's", is a true fact that argues against
 // MODELLING upstream's shape and says nothing about publishing the address.
 var untypedByDesign = map[string]string{
-	"POST /v1/visor/machines": "TWO success shapes on one address: 201 with the machine, or — with " +
+	"POST /v1/compute/machines": "TWO success shapes on one address: 201 with the machine, or — with " +
 		"`dryRun: true` — 200 with the upstream PRICE QUOTE passed through verbatim, nothing launched " +
 		"and nothing spent. An op declares one Out, and this one SPENDS REAL MONEY, so collapsing the " +
 		"two would mean a caller could not tell a quote from a launch by its shape.",
-	"POST /v1/visor/compute/bots/launch": "the same dryRun quote-or-launch split as the machine " +
+	"POST /v1/compute/bots/launch": "the same dryRun quote-or-launch split as the machine " +
 		"launch, and the same money.",
-	"POST /v1/visor/compute/bots/{id}/{action}": "a verb dispatch that streams the agent's answer " +
+	"POST /v1/compute/bots/{id}/{action}": "a verb dispatch that streams the agent's answer " +
 		"back VERBATIM; a typed op answers one marshalled value.",
 }
 
@@ -227,7 +227,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 
 	served, typed := map[string]bool{}, map[string]bool{}
 	for path, item := range doc.Paths {
-		if !strings.HasPrefix(path, "/v1/visor") {
+		if !strings.HasPrefix(path, "/v1/compute") {
 			continue
 		}
 		for method := range item {
@@ -235,7 +235,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 		}
 	}
 	for key := range reg.Ops {
-		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/visor") {
+		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/compute") {
 			typed[key] = true
 		}
 	}

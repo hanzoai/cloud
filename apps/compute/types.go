@@ -11,7 +11,7 @@
 // not carry (GPU utilization/temperature/power) is left off the gpuView so the
 // UI shows "—", never a fabricated 0.
 
-package visor
+package compute
 
 import (
 	"cmp"
@@ -86,7 +86,7 @@ type visorNodePool struct {
 // the org-scoped machine NAME (the stable key the :id routes address), not the
 // ephemeral provider id.
 type machineView struct {
-	// ID addresses this machine on the /v1/visor/machines/:id routes: the
+	// ID addresses this machine on the /v1/compute/machines/:id routes: the
 	// org-scoped NAME Visor keys a machine by, falling back to the provider id for
 	// a machine that has no name. A BYO machine's is the id it dialed in under.
 	ID string `json:"id"`
@@ -124,12 +124,12 @@ type machineView struct {
 	// Vcpu is logical cores — the provider's own cpuSize when that is a clean
 	// integer, else the count read out of the size slug (4 from "s-4vcpu-8gb").
 	// ABSENT, never 0, when neither says. A BYO machine leaves it absent here; its
-	// real core count is on GET /v1/visor/fleet/workers.
+	// real core count is on GET /v1/compute/fleet/workers.
 	Vcpu *int `json:"vcpu,omitempty"`
 	// Mem is system RAM rendered for a human ("8 GB"), not a number to compute
 	// with. Empty when the provider's figure is ambiguous, or when the only figure
 	// available is a GPU slug's gb — that is VRAM, and reporting it as system RAM
-	// would be a fabrication. A BYO machine's RAM is on /v1/visor/fleet/workers.
+	// would be a fabrication. A BYO machine's RAM is on /v1/compute/fleet/workers.
 	Mem string `json:"mem,omitempty"`
 	// GPU names the accelerators this machine holds ("H100", or "2× NVIDIA GB10"
 	// for a BYO machine reporting a matched pair). Empty means the machine is not
@@ -168,7 +168,7 @@ type gpuView struct {
 	// the same value Region carries — the console renders it in its own column.
 	Location string `json:"location,omitempty"`
 	// Machine is the id of the machine holding this card, addressable as-is on
-	// /v1/visor/machines/:id.
+	// /v1/compute/machines/:id.
 	Machine string `json:"machine,omitempty"`
 	// Provider distinguishes a BYO accelerator ("byo") from a Visor-provisioned one
 	// (the host machine's real provider). It is what tells a card the org owns from
@@ -213,7 +213,7 @@ type nodePoolView struct {
 // the simple Clusters list uses (and the GPU derivation reads).
 type clusterView struct {
 	// DoksClusterID is the provider's own id for the cluster, and the value the
-	// /v1/visor/k8s/clusters/:id routes take. Empty for a BYO cluster: an attached
+	// /v1/compute/k8s/clusters/:id routes take. Empty for a BYO cluster: an attached
 	// kubeconfig was never provisioned, so there is no provider id to state.
 	DoksClusterID string `json:"doksClusterId,omitempty"`
 	// DoClusterID carries the SAME id as DoksClusterID. Both names exist because
@@ -234,7 +234,7 @@ type clusterView struct {
 	Status string `json:"status"`
 	// NodePools is the authoritative node inventory — every pool, each with its own
 	// size and count. It is empty in two cases that are not "no pools": a row from
-	// the /v1/visor/k8s/clusters LIST, which is deliberately lightweight and whose
+	// the /v1/compute/k8s/clusters LIST, which is deliberately lightweight and whose
 	// :id detail carries them, and a BYO cluster, whose pools were never read.
 	NodePools []nodePoolView `json:"nodePools"`
 	// NodeSize is a display convenience: the size slug of the FIRST pool. A cluster

@@ -3,7 +3,7 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 
-// k8s.go is the UNIFIED /v1/visor/k8s surface — the ONE Kubernetes noun on api.hanzo.ai:
+// k8s.go is the UNIFIED /v1/compute/k8s surface — the ONE Kubernetes noun on api.hanzo.ai:
 // list clusters, one cluster's detail (node pools + worker nodes), DEPLOY (create)
 // and delete DOKS clusters, and the fleet-wide worker NODES. Every route is a thin,
 // tenant-scoped proxy to Visor (which OWNS the DigitalOcean lifecycle); this client
@@ -13,18 +13,18 @@
 // Surface (org taken verbatim from the validated IAM owner claim, never a client
 // field, so a caller only ever sees or mutates its OWN tenant's clusters):
 //
-//	GET    /v1/visor/k8s/clusters        list the org's DOKS clusters (+ BYO fold-in) -> {clusters:[clusterView]}
-//	GET    /v1/visor/k8s/clusters/:id    one cluster's detail: pools + worker nodes   -> clusterDetailView (404 if absent)
-//	POST   /v1/visor/k8s/clusters        provision a DOKS cluster    (ADMIN-GATED)     -> clusterView (201)
-//	DELETE /v1/visor/k8s/clusters/:id    destroy a DOKS cluster      (ADMIN-GATED)     -> 204
-//	GET    /v1/visor/k8s/nodes           every DOKS worker node as a machine          -> {nodes:[machineView]}
+//	GET    /v1/compute/k8s/clusters        list the org's DOKS clusters (+ BYO fold-in) -> {clusters:[clusterView]}
+//	GET    /v1/compute/k8s/clusters/:id    one cluster's detail: pools + worker nodes   -> clusterDetailView (404 if absent)
+//	POST   /v1/compute/k8s/clusters        provision a DOKS cluster    (ADMIN-GATED)     -> clusterView (201)
+//	DELETE /v1/compute/k8s/clusters/:id    destroy a DOKS cluster      (ADMIN-GATED)     -> 204
+//	GET    /v1/compute/k8s/nodes           every DOKS worker node as a machine          -> {nodes:[machineView]}
 //
 // READS are org-scoped (any validated member of the org). MUTATIONS (create/delete)
 // are admin-gated — a SuperAdmin (platform sudo) OR an OrgAdmin of the owning org —
 // because provisioning spends real infrastructure on Hanzo's house account. The gate
 // is the SAME principal predicate the rest of the cloud mutating surface uses.
 
-package visor
+package compute
 
 import (
 	"cmp"
@@ -187,7 +187,7 @@ type createClusterReq struct {
 	Version string `json:"version,omitempty"`
 	// NodePool is the ONE pool the cluster is born with — a cluster with no nodes
 	// runs nothing, so it is not optional. More pools are added afterwards through
-	// POST /v1/visor/clusters/:clusterId/pools.
+	// POST /v1/compute/clusters/:clusterId/pools.
 	NodePool struct {
 		// Name is the seed pool's name; empty takes the provider default.
 		Name string `json:"name,omitempty"`

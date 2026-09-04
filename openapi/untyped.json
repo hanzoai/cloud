@@ -19,6 +19,7 @@
     "commerce": 176,
     "company": 1,
     "compliance": 1,
+    "compute": 3,
     "dataroom": 7,
     "deploy": 5,
     "destination": 1,
@@ -52,7 +53,6 @@
     "team": 10,
     "todo": 3,
     "translate": 1,
-    "visor": 3,
     "websearch": 6,
     "world": 1
   }

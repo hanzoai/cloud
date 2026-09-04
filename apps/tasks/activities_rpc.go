@@ -20,8 +20,8 @@ import (
 // for the BYO fleet: a worker registers its presence through THIS surface, and
 // visor renders the fleet from its OWN engine — where nothing ever wrote. The
 // result was silent and total: spark heartbeating every 30s, its presence row
-// sitting in this app's `fleet` namespace, and /v1/visor/machines,
-// /v1/visor/gpus, /v1/visor/fleet/workers and studio's node badges all
+// sitting in this app's `fleet` namespace, and /v1/compute/machines,
+// /v1/compute/gpus, /v1/compute/fleet/workers and studio's node badges all
 // answering "no GPUs" — so a
 // connected renderer could not be seen, targeted, or reasoned about.
 //

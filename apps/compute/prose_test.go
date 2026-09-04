@@ -1,4 +1,4 @@
-package visor
+package compute
 
 // prose_test.go gates the FIELD half of this surface. Typing a route documents its
 // ADDRESS and its SHAPE; the shape's FIELDS come from a different place — a doc

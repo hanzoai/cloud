@@ -1,18 +1,18 @@
-// board.go — GET /v1/visor/fleet: the org's compute, from every source, on ONE board,
+// board.go — GET /v1/compute/fleet: the org's compute, from every source, on ONE board,
 // each unit carrying its latest utilization.
 //
 // The fleet is already visible, just never in one place: Visor's machines
-// (/v1/visor/machines), the BYO workers that dialed in (/v1/visor/fleet/workers), the BYO
-// clusters (/v1/visor/clusters) and the agent run-targets (/v1/agent/targets) each
+// (/v1/compute/machines), the BYO workers that dialed in (/v1/compute/fleet/workers), the BYO
+// clusters (/v1/compute/clusters) and the agent run-targets (/v1/agent/targets) each
 // answer for their own plane. This unions them behind the tenant's ONE question —
 // "what compute do I have, and how hot is it?" — and overlays the utilization
 // series (clients/samples) that no source used to keep.
 //
-//	GET /v1/visor/fleet          the org's units + their latest sample  -> {units:[fleetUnit]}
-//	GET /v1/visor/fleet/samples  one unit's / the org's time series      -> {samples:[sampleView]}
-//	GET /v1/visor/fleet/workers  the raw BYO inventory (fleet.go)        -> unchanged
+//	GET /v1/compute/fleet          the org's units + their latest sample  -> {units:[fleetUnit]}
+//	GET /v1/compute/fleet/samples  one unit's / the org's time series      -> {samples:[sampleView]}
+//	GET /v1/compute/fleet/workers  the raw BYO inventory (fleet.go)        -> unchanged
 //
-// It lives in visor because visor already owns /v1/visor/fleet/workers and the compute
+// It lives in visor because visor already owns /v1/compute/fleet/workers and the compute
 // surface — this is that surface completed, not a rival face.
 //
 // FAIL-SOFT BY SOURCE. Every source is folded in independently and a broken one
@@ -25,7 +25,7 @@
 // ISOLATION: principal.Org is the ONLY tenant key, taken from the validated IAM
 // claim (never a client field) and passed to each source's own org-scoped read.
 
-package visor
+package compute
 
 import (
 	"context"
@@ -45,7 +45,7 @@ import (
 // COUNT plus the representative model — the same shape the sample row carries
 // (gpus UInt8 + gpu_model String), so the board and the series describe a machine
 // the same way. Full per-accelerator detail stays on each source's own face
-// (/v1/agent/targets, /v1/visor/fleet/workers); the board summarizes.
+// (/v1/agent/targets, /v1/compute/fleet/workers); the board summarizes.
 type fleetSpec struct {
 	// OS is the operating system the unit runs: linux, darwin or windows. Empty
 	// when the source does not report one — a cluster row does not.
@@ -96,7 +96,7 @@ type fleetUnit struct {
 	// Source is the plane this row came from: "agent" (a linked run-target), "byo"
 	// (a worker or cluster the org dialed in) or "visor" (a machine Hanzo
 	// provisioned). It is half the row's identity, and it says which face owns the
-	// unit — /v1/agent/targets, /v1/visor/fleet/workers, /v1/visor/machines.
+	// unit — /v1/agent/targets, /v1/compute/fleet/workers, /v1/compute/machines.
 	Source string `json:"source"`
 	// Unit is the SOURCE's own id for this unit — a run-target id, a BYO worker id,
 	// a Visor machine name — so a row links straight back to the face that owns it.
@@ -269,7 +269,7 @@ func workerUnits(ctx context.Context, org string) []fleetUnit {
 // byoUnit projects one dialed-in BYO worker onto the board, carrying the host's full
 // static spec — OS, CPU arch, logical cores, total RAM and the GPU summary — in the
 // SAME fleetSpec a code-linked run-target reports (agentUnits). This is what surfaces
-// a linked node's real arch (amd64/arm64) + memory on GET /v1/visor/fleet, not just
+// a linked node's real arch (amd64/arm64) + memory on GET /v1/compute/fleet, not just
 // its GPU. A field the worker did not report stays zero (omitempty), never invented.
 func byoUnit(w byoWorker) fleetUnit {
 	u := fleetUnit{
@@ -308,7 +308,7 @@ func clusterUnits(ctx context.Context, s *cloud.Service[state], org, proj string
 // machineUnits folds in the Visor-provisioned machines — the SAME managed-machine
 // union listMachines serves (registry + live DO droplets, deduped), so the board
 // and the Machines page can never disagree about which machines exist, not just how
-// they normalize. BYO workers are NOT folded in here (unlike /v1/visor/machines, which
+// they normalize. BYO workers are NOT folded in here (unlike /v1/compute/machines, which
 // merges them for the console's Machines page): on the board they are their own
 // source, so each row says where it really came from. Fail-soft: a wedged Visor
 // costs its rows, not the board (managedMachines logs and returns what it can).
@@ -320,7 +320,7 @@ func machineUnits(s *cloud.Service[state], c *zip.Ctx, org string) []fleetUnit {
 		// so the board and the Machines page can never disagree about a machine.
 		v := toMachineView(m)
 		u := fleetUnit{
-			Source: samples.SourceVisor, Unit: v.ID, Kind: samples.KindMachine,
+			Source: samples.SourceCompute, Unit: v.ID, Kind: samples.KindMachine,
 			Label: v.Name, Status: v.Status,
 		}
 		sp := fleetSpec{OS: v.Os}

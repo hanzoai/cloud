@@ -5,7 +5,7 @@
 // and can never drift between six hand-rolled fetches.
 //
 // AUTH (one rule): a request carries a Visor identity that is EITHER the service
-// credential (VISOR_CLIENT_ID + VISOR_CLIENT_SECRET, KMS-sourced, sent as Basic
+// credential (COMPUTE_CLIENT_ID + COMPUTE_CLIENT_SECRET, KMS-sourced, sent as Basic
 // auth so Visor's ApiFilter authorizes cloud as the `app/<visorApp>` subject) OR
 // the caller's forwarded Authorization bearer when no service credential is
 // configured. The tenant is ALWAYS pinned by ?owner=<org> (the validated
@@ -28,7 +28,7 @@
 // noun. Converting a visor route is a WIRE BREAK and lands with its caller here
 // in the same change.
 
-package visor
+package compute
 
 import (
 	"github.com/hanzoai/cloud/internal/environ"
@@ -56,8 +56,16 @@ import (
 // when no service credential is configured (see authorize).
 var identityHeaders = []string{"X-Org-Id", "X-User-Id", "X-User-Email", "X-Project-Id", "X-App-Id"}
 
-// defaultBase is the in-cluster Visor Service (Beego, httpport 19000). Overridable
-// by VISOR_URL for other environments and for tests (an httptest.Server URL).
+// defaultBase is the in-cluster Service this app calls, overridable by COMPUTE_URL
+// for other environments and for tests (an httptest.Server URL).
+//
+// THE ENV NAME IS OURS AND THE HOST IS THE CLUSTER'S, which is why they disagree.
+// hanzoai/visor was rebranded hanzoai/compute and this side now says so, but the
+// Service universe declares is still `visor` (charts/app/values/hanzo/cloud.yaml
+// sets VISOR_URL to it, and visor-config / visor-kms-sync / visor-db-bucket are
+// named for it). Pointing this at compute.hanzo.svc before universe renames the
+// Service would resolve to nothing. It moves in lockstep with that manifest, not
+// with this rename.
 const defaultBase = "http://visor.hanzo.svc:19000"
 
 // maxBody bounds an upstream response read — Visor compute payloads are small
@@ -65,15 +73,15 @@ const defaultBase = "http://visor.hanzo.svc:19000"
 // memory.
 const maxBody = 8 << 20
 
-func visorBase() string {
-	if v := environ.Or("VISOR_URL", ""); v != "" {
+func computeBase() string {
+	if v := environ.Or("COMPUTE_URL", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return defaultBase
 }
 
-func serviceClientID() string     { return environ.Or("VISOR_CLIENT_ID", "") }
-func serviceClientSecret() string { return environ.Or("VISOR_CLIENT_SECRET", "") }
+func serviceClientID() string     { return environ.Or("COMPUTE_CLIENT_ID", "") }
+func serviceClientSecret() string { return environ.Or("COMPUTE_CLIENT_SECRET", "") }
 
 // client is the tenant-scoped Visor HTTP client. target has no trailing slash.
 type client struct {
@@ -82,7 +90,7 @@ type client struct {
 }
 
 func newClient() *client {
-	return &client{target: visorBase(), cc: &http.Client{Timeout: 30 * time.Second}}
+	return &client{target: computeBase(), cc: &http.Client{Timeout: 30 * time.Second}}
 }
 
 // envelope is Visor's response wrapper. Data is deferred so call() can

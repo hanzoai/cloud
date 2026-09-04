@@ -1,4 +1,4 @@
-package visor
+package compute
 
 // An outage must not read as an empty estate.
 //
@@ -33,9 +33,9 @@ func downVisor(t *testing.T) *zip.App {
 		_, _ = w.Write([]byte("<!DOCTYPE html>\n<html lang=\"en\">\n\t<head>\n\t\t<title>Not Found</title>\n"))
 	}))
 	t.Cleanup(srv.Close)
-	t.Setenv("VISOR_URL", srv.URL)
-	t.Setenv("VISOR_CLIENT_ID", "")
-	t.Setenv("VISOR_CLIENT_SECRET", "")
+	t.Setenv("COMPUTE_URL", srv.URL)
+	t.Setenv("COMPUTE_CLIENT_ID", "")
+	t.Setenv("COMPUTE_CLIENT_SECRET", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
 	if err := Use(app, cloud.Deps{}); err != nil {
@@ -47,7 +47,7 @@ func downVisor(t *testing.T) *zip.App {
 // TestClusterListReportsDegradedSource pins that a Visor outage is REPORTED, on
 // both cluster surfaces, rather than folded into an empty success.
 func TestClusterListReportsDegradedSource(t *testing.T) {
-	for _, path := range []string{"/v1/visor/k8s/clusters", "/v1/visor/clusters"} {
+	for _, path := range []string{"/v1/compute/k8s/clusters", "/v1/compute/clusters"} {
 		t.Run(path, func(t *testing.T) {
 			app := downVisor(t)
 			status, body := reqK8s(t, app, http.MethodGet, path, "acme", false, nil)
@@ -90,7 +90,7 @@ func TestClusterListReportsDegradedSource(t *testing.T) {
 // consumer sees exactly the bytes it saw before.
 func TestHealthyClusterListIsUnchanged(t *testing.T) {
 	app := mountK8s(t, &k8sFake{})
-	status, body := reqK8s(t, app, http.MethodGet, "/v1/visor/k8s/clusters", "acme", false, nil)
+	status, body := reqK8s(t, app, http.MethodGet, "/v1/compute/k8s/clusters", "acme", false, nil)
 	if status != http.StatusOK {
 		t.Fatalf("status = %d; want 200: %s", status, body)
 	}

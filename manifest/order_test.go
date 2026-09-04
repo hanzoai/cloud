@@ -30,7 +30,7 @@ var frozen = []string{
 	"framework", "knowledge", "graph", "help", "content", "webhook",
 	"ml", "label", "reference", "risk", "dataset", "usage", "leaderboard", "marketing", "ad",
 	"campaign", "validator", "social", "standing", "event", "ci", "git", "sync",
-	"visor", "captable", "code", "lsp", "network", "share",
+	"compute", "captable", "code", "lsp", "network", "share",
 	"dataroom", "explorer", "market", "security", "integration", "destination", "cloudflare",
 	"sbom", "team", "meet", "settings", "pref", "notify",
 	"channel", "gateway", "entitlement", "exec", "sandbox", "websearch", "crawl", "seo",

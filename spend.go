@@ -307,7 +307,7 @@ var meteredApps = []string{
 	// app then called automations, and the entry priced no surface while still
 	// gating one — it cost nobody a charge and cost somebody a 402. The name is
 	// back and it is the app's now, so the entry gates exactly the tree it prices.
-	"agents",       // the per-run fee, and RUNTIME by the hour — an open session or a resident bot (apps/agents/meter.go).
+	"agent",       // the per-run fee, and RUNTIME by the hour — an open session or a resident bot (apps/agents/meter.go).
 	"ai",           // LLM token costs (ai self-meters).
 	"ask",          // the answer engine's per-question fee.
 	"auto",         // per-run automation fee.
@@ -321,13 +321,13 @@ var meteredApps = []string{
 	"domain",       // registrations, renewals and transfers, at the registrar's price.
 	"exec",         // one program run in a sandbox.
 	"flow",         // flow executions.
-	"functions",    // serverless invoke.
+	"function",    // serverless invoke.
 	"knowledge",    // a connector piece executed on the engine's pods; native-Go pulls are free.
 	"lsp",          // code intelligence: a cold checkout+index is billed, a warm query is not.
 	"meet",         // one seat on the media server; the lobby beside it is a free read.
 	"ml",           // predict + train (compute).
 	"platform",     // builds and runs (compute).
-	"projects",     // site hosting fee.
+	"project",     // site hosting fee.
 	"provisioning", // sql/kv/vector/docdb/s3/search/datastore creates.
 	"risk",         // per-screen fee inside each op.
 	"s3",           // object-storage data plane.
@@ -337,11 +337,11 @@ var meteredApps = []string{
 	"space",        // the drive and file plane over the same object store; one operation, one fee.
 	"seo",          // measurement resold at the vendor's own per-call price.
 	"tel",          // numbers, messages and calls, at the carrier's price.
-	"tools",        // per-tool dispatch.
+	"tool",        // per-tool dispatch.
 	"todo",         // per-project/issue fee.
 	"translate",    // per-character fee.
 	"validator",    // one validator node materialized on the cluster, 200Gi, until deleted.
-	"visor",        // GPU clusters (compute).
+	"compute",      // GPU clusters.
 	"wallet",       // ring keygen, threshold signing and Safe proposals; KMS custody is free.
 	"websearch",    // the bought engines (Brave, Mojeek API); the keyless ones are free.
 	"zen",          // zen SKU token costs (zen self-meters).

@@ -1,4 +1,4 @@
-package visor
+package compute
 
 // fleet_jobs_test.go — the gpu-jobs queue view + manage surface. The load-bearing
 // logic is pure (taskQueue→gpu parse, status normalize, filter, per-node counts, the
@@ -127,13 +127,13 @@ func TestSampleIngestBuild(t *testing.T) {
 
 func TestFleetJobsRequiresTenant(t *testing.T) {
 	app := mountApp(t, &fakeVisor{})
-	if code, _ := do(t, app, http.MethodGet, "/v1/visor/fleet/jobs", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/compute/fleet/jobs", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org /v1/fleet/jobs want 403, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/visor/fleet/samples", "", map[string]any{"unit": "spark"}); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/fleet/samples", "", map[string]any{"unit": "spark"}); code != http.StatusForbidden {
 		t.Fatalf("no-org POST /v1/fleet/samples want 403, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/visor/fleet/jobs/j1/cancel", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/fleet/jobs/j1/cancel", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org cancel want 403, got %d", code)
 	}
 }
@@ -143,7 +143,7 @@ func TestFleetJobsRequiresTenant(t *testing.T) {
 func TestFleetJobsFailSoftAndIngest(t *testing.T) {
 	app := mountApp(t, &fakeVisor{})
 
-	code, body := do(t, app, http.MethodGet, "/v1/visor/fleet/jobs", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/compute/fleet/jobs", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("GET /v1/fleet/jobs want 200, got %d: %s", code, body)
 	}
@@ -158,15 +158,15 @@ func TestFleetJobsFailSoftAndIngest(t *testing.T) {
 	}
 
 	// Sample ingest accepts a well-formed report (the warehouse write is detached).
-	if code, b := do(t, app, http.MethodPost, "/v1/visor/fleet/samples", "acme", map[string]any{"unit": "spark", "gpuUtil": 0.5}); code != http.StatusAccepted {
+	if code, b := do(t, app, http.MethodPost, "/v1/compute/fleet/samples", "acme", map[string]any{"unit": "spark", "gpuUtil": 0.5}); code != http.StatusAccepted {
 		t.Fatalf("POST /v1/fleet/samples want 202, got %d: %s", code, b)
 	}
 	// A report with no unit is a 400.
-	if code, _ := do(t, app, http.MethodPost, "/v1/visor/fleet/samples", "acme", map[string]any{"gpuUtil": 0.5}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/fleet/samples", "acme", map[string]any{"gpuUtil": 0.5}); code != http.StatusBadRequest {
 		t.Fatalf("unit-less sample want 400, got %d", code)
 	}
 	// Cancel with no engine wired is a clean 503, not a panic/500.
-	if code, _ := do(t, app, http.MethodPost, "/v1/visor/fleet/jobs/j1/cancel", "acme", nil); code != http.StatusServiceUnavailable {
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/fleet/jobs/j1/cancel", "acme", nil); code != http.StatusServiceUnavailable {
 		t.Fatalf("cancel with unwired engine want 503, got %d", code)
 	}
 }

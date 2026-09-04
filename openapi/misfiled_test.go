@@ -27,7 +27,7 @@ func filed(paths map[string]string) *openapi.Document {
 func TestMisfileReadsTheRuleOffTheAddress(t *testing.T) {
 	got := openapi.Misfile(filed(map[string]string{
 		"/v1/todo/projects":                 "todo",      // the owner's name: clean
-		"/v1/machines":                      "visor",     // another app's noun
+		"/v1/machines":                      "compute",   // another app's noun
 		"/v1/billing/invoices":              "commerce",  // a shared address
 		"/v1/{wildcard1}":                   "ai",        // the bare remainder
 		"/git/hanzoai/cloud":                "git",       // outside /v1 entirely
@@ -44,7 +44,7 @@ func TestMisfileReadsTheRuleOffTheAddress(t *testing.T) {
 		"/v1/admin referrals",
 		"/v1/billing commerce",
 		"/v1/chat exec",
-		"/v1/machines visor",
+		"/v1/machines compute",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Misfile =\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
@@ -52,12 +52,12 @@ func TestMisfileReadsTheRuleOffTheAddress(t *testing.T) {
 }
 
 func TestShrinkRefusesAPairTheFileDoesNotCarry(t *testing.T) {
-	was := openapi.Misfiled{"/v1/machines visor"}
-	_, err := was.Shrink(openapi.Misfiled{"/v1/machines visor", "/v1/gpus visor"})
+	was := openapi.Misfiled{"/v1/machines compute"}
+	_, err := was.Shrink(openapi.Misfiled{"/v1/machines compute", "/v1/gpus compute"})
 	if err == nil {
 		t.Fatal("Shrink accepted a new misfiled address — the file grew silently")
 	}
-	for _, want := range []string{"/v1/gpus visor", "misfiled.txt", "HIP-0139"} {
+	for _, want := range []string{"/v1/gpus compute", "misfiled.txt", "HIP-0139"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("message does not name %q:\n%s", want, err)
 		}
@@ -65,12 +65,12 @@ func TestShrinkRefusesAPairTheFileDoesNotCarry(t *testing.T) {
 }
 
 func TestShrinkKeepsOnlyWhatIsStillMeasured(t *testing.T) {
-	was := openapi.Misfiled{"/v1/gpus visor", "/v1/machines visor"}
-	kept, err := was.Shrink(openapi.Misfiled{"/v1/machines visor"})
+	was := openapi.Misfiled{"/v1/gpus compute", "/v1/machines compute"}
+	kept, err := was.Shrink(openapi.Misfiled{"/v1/machines compute"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(kept, openapi.Misfiled{"/v1/machines visor"}) {
+	if !reflect.DeepEqual(kept, openapi.Misfiled{"/v1/machines compute"}) {
 		t.Fatalf("kept = %v; a pair the document no longer has leaves the file", kept)
 	}
 }

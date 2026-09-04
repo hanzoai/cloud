@@ -229,7 +229,6 @@ func denyUnavailable(c *zip.Ctx) error {
 // the NewMeter(deps, "<provider>") calls.
 var serviceAliases = map[string]string{
 	"ml":       "compute",       // clients/ml    NewMeter(deps, "compute")
-	"visor":    "compute",       // clients/visor NewMeter(deps, "compute")
 	"agents":   "agent",         // clients/agents provider "agent"
 	"security": "security.scan", // clients/security provider "security.scan"
 }

@@ -11,7 +11,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 
-	"github.com/hanzoai/cloud/apps/visor"
+	"github.com/hanzoai/cloud/apps/compute"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -84,8 +84,8 @@ func mountFleet(t *testing.T, rt *stubRuntime) *zip.App {
 	compose(app)
 	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
 	deps := cloud.Deps{}
-	if err := visor.Use(app, deps); err != nil { // Wire order: visor first — the shadowing mount
-		t.Fatalf("visor.Use:  %v", err)
+	if err := compute.Use(app, deps); err != nil { // Wire order: visor first — the shadowing mount
+		t.Fatalf("compute.Use:  %v", err)
 	}
 	// Mount owns the relay (run.go mounts it last, so the native control
 	// planes cannot be shadowed) — the harness mounting it AGAIN declared
@@ -199,11 +199,11 @@ func TestBotMachineSurfaceMovedToCompute(t *testing.T) {
 		paths[r.Method+" "+r.Path] = true
 	}
 	for _, want := range []string{
-		"GET /v1/visor/compute/bots",
-		"POST /v1/visor/compute/bots/launch",
-		"GET /v1/visor/compute/bots/:id",
-		"DELETE /v1/visor/compute/bots/:id",
-		"POST /v1/visor/compute/bots/:id/:action",
+		"GET /v1/compute/bots",
+		"POST /v1/compute/bots/launch",
+		"GET /v1/compute/bots/:id",
+		"DELETE /v1/compute/bots/:id",
+		"POST /v1/compute/bots/:id/:action",
 	} {
 		if !paths[want] {
 			t.Errorf("bot machine route %q is missing", want)
@@ -218,7 +218,7 @@ func TestBotMachineSurfaceMovedToCompute(t *testing.T) {
 }
 
 // The three values keep three namespaces: runs at /v1/bot/runs, machines under
-// /v1/visor/compute/bots, and the runtime passthrough at /v1/bot/runtime/*. Nothing in the run
+// /v1/compute/bots, and the runtime passthrough at /v1/bot/runtime/*. Nothing in the run
 // namespace may be a wildcard, which would swallow every run id.
 func TestRunNamespaceHasNoWildcard(t *testing.T) {
 	app := mountFleet(t, &stubRuntime{})

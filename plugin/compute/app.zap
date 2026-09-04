@@ -2,7 +2,7 @@
 # Every struct and method below is derived from one op's In and Out, and
 # every offset from the layout the op-call plane encodes against.
 
-package visor
+package compute
 
 struct agentBinding {
     Owner       text @0
@@ -211,10 +211,10 @@ struct workerList {
     Workers list<bytes> @0
 }
 
-interface visor {
+interface compute {
     # Attaches a BYO cluster to the caller's org — the kubeconfig is
     # validated, KMS-sealed and added to the fleet — and answers 201 with the cluster
-    # as it now appears on GET /v1/visor/clusters. Billed the nominal management fee: the
+    # as it now appears on GET /v1/compute/clusters. Billed the nominal management fee: the
     # customer brings the compute, Hanzo meters the management plane.
     attachCluster(req: clusterAttach) returns (rep: clusterView)
     # Binds a cloud Agent to one of the caller org's machines: the
@@ -276,10 +276,10 @@ interface visor {
     # The catalog is GLOBAL — identical for every tenant — so no owner is forwarded
     # upstream. It is still org-gated, because a catalog is a map of what this
     # deployment can spend money in and an anonymous caller has no business reading it.
-    get_visor_compute_regions()
+    get_compute_regions()
     # Sizes lists the machine sizes available to launch, with their specifications.
     # Global and org-gated, exactly as the region catalog is, and for the same reasons.
-    get_visor_compute_sizes()
+    get_compute_sizes()
     # Returns the caller org's bot machines — the kind=bot machines — each
     # joined with the agent binding that says which cloud Agent it runs.
     # The bindings are read ONCE and joined by machine id, so the list is O(1) upstream
@@ -363,25 +363,25 @@ interface visor {
 # 30 op(s) here. What follows is what this schema does not carry.
 #
 # dropped (2) — the value does not cross, and nothing fails:
-#   botView.machineView  visor.machineView  (promoted, not carried)
-#   clusterDetailView.clusterView  visor.clusterView  (promoted, not carried)
+#   botView.machineView  compute.machineView  (promoted, not carried)
+#   clusterDetailView.clusterView  compute.clusterView  (promoted, not carried)
 #
 # blocked (1) — the op is absent; the field has no wire form:
 #   listGpuAlerts  gpuAlertList.Alerts  []interface {}  (no wire form)
 #
 # opaque (15) — crosses, arrives without its name:
-#   bindingList.AgentBindings  visor.agentBinding (list element)
-#   botList.Bots  visor.botView (list element)
-#   botView.Binding  visor.agentBinding
-#   clusterDetailView.Nodes  visor.machineView (list element)
-#   clusterList.Clusters  visor.clusterView (list element)
-#   clusterList.Degraded  visor.sourceFailure (list element)
-#   clusterView.NodePools  visor.nodePoolView (list element)
+#   bindingList.AgentBindings  compute.agentBinding (list element)
+#   botList.Bots  compute.botView (list element)
+#   botView.Binding  compute.agentBinding
+#   clusterDetailView.Nodes  compute.machineView (list element)
+#   clusterList.Clusters  compute.clusterView (list element)
+#   clusterList.Degraded  compute.sourceFailure (list element)
+#   clusterView.NodePools  compute.nodePoolView (list element)
 #   createClusterReq.NodePool  struct { Name string "json:\"name,omitempty\""; Size string "json:\"size\""; Count int "json:\"count\"" }
-#   fleetBoard.Units  visor.fleetUnit (list element)
-#   gpuList.GPUs  visor.gpuView (list element)
-#   jobList.Jobs  visor.gpuJob (list element)
-#   machineList.Machines  visor.machineView (list element)
-#   nodeList.Nodes  visor.machineView (list element)
-#   sampleList.Samples  visor.sampleView (list element)
-#   workerList.Workers  visor.byoWorker (list element)
+#   fleetBoard.Units  compute.fleetUnit (list element)
+#   gpuList.GPUs  compute.gpuView (list element)
+#   jobList.Jobs  compute.gpuJob (list element)
+#   machineList.Machines  compute.machineView (list element)
+#   nodeList.Nodes  compute.machineView (list element)
+#   sampleList.Samples  compute.sampleView (list element)
+#   workerList.Workers  compute.byoWorker (list element)

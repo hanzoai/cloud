@@ -297,7 +297,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 //
 // The collection and member routes used to be left out, on the reasoning that
 // they were "shared with the compute surface" — true while this served
-// /v1/visor/machines, which visor owns and where a second registration of one
+// /v1/compute/machines, which visor owns and where a second registration of one
 // resource is a conflict. It is /v1/sandbox now, owned outright, and leaving
 // them out meant Create, List, Get and Delete existed as exported functions
 // that no request could ever reach: a caller could exec in a sandbox it had no

@@ -1336,6 +1336,150 @@
    "doc": "Polls the wired provider for its current decision and\nrecords it, ATTRIBUTED to the provider — the internal PULL reconcile. For the\nManual provider the check stays pending; for a hosted provider it reflects the\nprovider's settled status. A poll error is a 502, never a verification."
   }
  ],
+ "compute": [
+  {
+   "id": "attachCluster",
+   "doc": "Attaches a BYO cluster to the caller's org — the kubeconfig is\nvalidated, KMS-sealed and added to the fleet — and answers 201 with the cluster\nas it now appears on GET /v1/compute/clusters. Billed the nominal management fee: the\ncustomer brings the compute, Hanzo meters the management plane."
+  },
+  {
+   "id": "bindMachineAgent",
+   "doc": "Binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime. The owning org is\nthe validated tenant, never a client field."
+  },
+  {
+   "id": "cancelFleetJob",
+   "doc": "Cancels a queued or running render in the caller's org. The engine\ncancel is org-scoped, so a tenant can only ever cancel its OWN job: a job in\nanother tenant's shard is 404, exactly like one that never existed. An\nalready-finished job is 409."
+  },
+  {
+   "id": "createKubernetesCluster",
+   "doc": "Provisions a DOKS cluster for the caller's org and answers 201.\nADMIN-GATED — a SuperAdmin, or an OrgAdmin of the caller's own org — because\nprovisioning spends real infrastructure on the house account. The request is\nvalidated at this boundary, then Visor owns provisioning and the hanzo-org\nownership tag."
+  },
+  {
+   "id": "createNodePool",
+   "doc": "Adds a node pool to one of the caller org's clusters and answers 201\nwith the created pool. Only the CreateNodePoolSpec fields are forwarded;\nowner/provider/clusterId ride in the query exactly as Visor expects them."
+  },
+  {
+   "id": "deleteBot",
+   "doc": "Tears down both halves of a bot: it unbinds the agent (best-effort — a\nbot with no binding still deletes), then terminates the machine. Answers 204."
+  },
+  {
+   "id": "deleteKubernetesCluster",
+   "doc": "Destroys a DOKS cluster by id and answers 204. ADMIN-GATED, like\ncreate. Visor scopes the delete to the org (refuses a foreign id), so this can\nonly ever remove the caller org's own cluster."
+  },
+  {
+   "id": "deleteMachine",
+   "doc": "Terminates one of the caller org's machines. Visor takes the\nmachine identity as owner+name, and the owner is the validated principal, so a\ncaller can only ever terminate its own tenant's machine. Answers 204."
+  },
+  {
+   "id": "deleteNodePool",
+   "doc": "Removes a node pool from one of the caller org's clusters. The owner\nscopes the delete to the caller's tenant; provider+clusterId drive the\nprovider-side removal. Answers 204."
+  },
+  {
+   "id": "detachCluster",
+   "doc": "Removes a BYO cluster from the caller org's fleet. It only ever\ntouches BYO clusters — a managed cluster's nodes are removed through the node-pool\nroutes — and answers 404 when the name is not in this org's fleet."
+  },
+  {
+   "id": "getBot",
+   "doc": "Returns one of the caller org's bot machines with its agent binding.\n\nA machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent\nbinding — either signal is authoritative, so a bot resolves even before its\ncloud-init has stamped every tag. A machine that is neither is 404: this route\nanswers for bots, not for machines.",
+   "read": true
+  },
+  {
+   "id": "getKubernetesCluster",
+   "doc": "Returns one cluster's detail: node pools + worker nodes. Visor scopes\nthe lookup to the org (a foreign or missing id resolves to not-found), so a tenant\ncan never read another tenant's cluster by guessing an id.",
+   "read": true
+  },
+  {
+   "id": "getMachine",
+   "doc": "Returns one of the caller org's machines by its org-scoped name.\nVisor keys the lookup by owner/name, so an id belonging to another tenant\nresolves to not-found rather than another org's machine.",
+   "read": true
+  },
+  {
+   "id": "getMachineAgent",
+   "doc": "Returns the agent binding of one of the caller org's\nmachines, or 404 when the machine runs no bot runtime.",
+   "read": true
+  },
+  {
+   "id": "get_compute_regions",
+   "doc": "Regions lists the regions a machine can be launched in.\n\nThe catalog is GLOBAL — identical for every tenant — so no owner is forwarded\nupstream. It is still org-gated, because a catalog is a map of what this\ndeployment can spend money in and an anonymous caller has no business reading it.",
+   "read": true
+  },
+  {
+   "id": "get_compute_sizes",
+   "doc": "Sizes lists the machine sizes available to launch, with their specifications.\n\nGlobal and org-gated, exactly as the region catalog is, and for the same reasons.",
+   "read": true
+  },
+  {
+   "id": "listBots",
+   "doc": "Returns the caller org's bot machines — the kind=bot machines — each\njoined with the agent binding that says which cloud Agent it runs.\n\nThe bindings are read ONCE and joined by machine id, so the list is O(1) upstream\ncalls, not N+1. A bindings read that fails only costs the reconciled status: a bot\nstill lists without it.",
+   "read": true
+  },
+  {
+   "id": "listClusters",
+   "doc": "Returns the caller org's clusters from both sources: the managed\nclusters projected from Visor's node pools, and the BYO clusters attached to the\ncaller's project. A Visor outage costs the managed half only — the BYO half\nstill lists, because a page that 502s on an optional provider is worse than a\npage that shows what it can.",
+   "read": true
+  },
+  {
+   "id": "listFleet",
+   "doc": "Returns every compute unit the caller's org has, from every source, each\ncarrying its latest utilization: agent run-targets, the BYO machines that dialed\nin, attached BYO clusters and Visor-provisioned machines.\n\nA unit with a live snapshot of its own keeps it; the rest are overlaid from the\nutilization series, and only when the sample agrees about the SOURCE — two planes\ncould mint the same unit id, and a board must never show one machine's load on\nanother's row. BYO GPU units also carry their gpu-jobs queue depth. Every source\nis folded in independently: a broken one costs its own rows and nothing else.",
+   "read": true
+  },
+  {
+   "id": "listFleetJobs",
+   "doc": "Returns the caller org's gpu-jobs render queue, each row tagged with\nthe GPU it targets (empty = the shared any-GPU lane) and the node claiming it,\noptionally narrowed to one GPU's queue and/or one status.\n\nA job whose worker died — STARTED with an elapsed lease and not yet reclaimed —\nreads \"stalled\", not \"running\". Fail-soft: an unavailable tasks engine yields an\nempty queue rather than an error.",
+   "read": true
+  },
+  {
+   "id": "listFleetSamples",
+   "doc": "Returns the caller org's utilization series, oldest first.\n\nA rejected narrower is a 400 carrying its own reason (the vocabulary is ours and\nsafe to echo); a warehouse failure is logged and answered 503 \"unavailable\",\nbecause a chart that silently reads \"no load\" when the truth is \"we cannot tell\"\nis worse than one that says so. An ABSENT warehouse is different again: it returns\nan empty series, which renders honestly as \"no samples yet\".",
+   "read": true
+  },
+  {
+   "id": "listFleetWorkers",
+   "doc": "Returns the caller org's BYO machines — the ones that dialed in\nvia `hanzo link` — with everything each host reported about itself. The Machines\nand GPUs pages fold the same data into their normalized shapes; this is the\ncanonical raw list a fleet view (or the CLI's `status`) reads.",
+   "read": true
+  },
+  {
+   "id": "listGpuAlerts",
+   "doc": "Is an HONEST empty surface: Visor exposes no GPU alert inventory, so\nthis returns [] rather than fabricating alerts. It stays a real, tenant-gated\nroute so the console's alerts fetch resolves (200 [], not a 404) — an honest\n\"no alerts\", the same discipline the rest of the surface follows.",
+   "read": true
+  },
+  {
+   "id": "listGpus",
+   "doc": "Returns one row per physical accelerator the caller's org has, derived\nfrom its real GPU machines (the size slug says how many cards a node holds) and\nfrom the accelerators BYO workers report through nvidia-smi.\n\nLive telemetry is absent on Visor rows because Visor's machine object carries\nnone — an honest omission the console renders as \"—\", never a fabricated 0.",
+   "read": true
+  },
+  {
+   "id": "listKubernetesClusters",
+   "doc": "Lists the org's DOKS clusters (Visor, house account) folded with\nthe org's BYO clusters — ONE fleet cluster view under the unified k8s noun. A Visor\noutage is logged and skipped so a down optional provider never hides the BYO list.",
+   "read": true
+  },
+  {
+   "id": "listKubernetesNodes",
+   "doc": "Returns every DOKS worker node in the org's clusters as a machine —\nthe SAME set the fleet folds in (managedMachines), exposed directly under the k8s\nnoun. House account (hanzo-org cluster tag) + BYOC, deduped by Visor.",
+   "read": true
+  },
+  {
+   "id": "listMachineAgents",
+   "doc": "Returns every agent↔machine binding in the caller's org — which\nmachines are running which cloud Agent, with vm's own reconciled status.",
+   "read": true
+  },
+  {
+   "id": "listMachines",
+   "doc": "Returns every machine the caller's org has — Visor's registry, the\nlive DigitalOcean droplets and the DOKS worker nodes (deduped into one union),\nplus the BYO machines that dialed in via `hanzo link` (provider \"byo\").\n\nA source Visor cannot answer for is logged and skipped, never an error: one\nwedged upstream must not hide the machines the other sources can see.",
+   "read": true
+  },
+  {
+   "id": "recordFleetSample",
+   "doc": "Records a BYO worker's live GPU utilization into the SAME series the\nfleet board overlays. The org is the validated principal and source/kind are fixed\nserver-side, so a worker names only its own metrics — never another tenant or\nanother source. Answers 202: the warehouse write is DETACHED (its own bounded\ncontext, never in the response path), so a slow or absent warehouse cannot stall a\nheartbeat."
+  },
+  {
+   "id": "scaleNodePool",
+   "doc": "Resizes a node pool to an absolute node count and returns the pool as\nVisor reports it after the change."
+  },
+  {
+   "id": "unbindMachineAgent",
+   "doc": "Detaches the agent runtime from one of the caller org's\nmachines. The machine stays — this halts the bot, it does not terminate the\ncompute. Answers 204."
+  }
+ ],
  "content": [
   {
    "id": "get_content_board",
@@ -6970,150 +7114,6 @@
   {
    "id": "post_validator",
    "doc": "Claims a validator slot and provisions its node, after proving the\ncaller's wallet owns the slot's NFT.\n\nThe pipeline, all server-enforced: burn the single-use challenge (so a replayed\nor forged nonce dies before any chain read), recover the signer from the message\nthis server rebuilds, require that wallet to hold Validator-tier GenesisNFT\n#tokenId on Ethereum mainnet, generate a fresh luxd staking identity and seal it\ninto KMS, write a LuxNetwork CR for a NEW node, and ENQUEUE an owner-gated\nregistration. The registration is never auto-submitted to any P-Chain — the\nowner co-signs it out of band — and the stake weight is set at co-sign time,\nnever derived from the NFT.\n\nIt fails CLOSED at every gate: a bad signature, a non-owner, a non-tier slot or\nan unavailable KMS all leave no claim persisted and no key material exposed.\nRe-claiming a slot this org already holds re-applies the node CR and returns 200\nwith the existing identity (keys and NodeID are stable); a slot held by another\norg is 409. A cluster-less deployment still claims the slot, seals the keys and\nqueues the registration, reporting the node as \"node_pending\"."
-  }
- ],
- "visor": [
-  {
-   "id": "attachCluster",
-   "doc": "Attaches a BYO cluster to the caller's org — the kubeconfig is\nvalidated, KMS-sealed and added to the fleet — and answers 201 with the cluster\nas it now appears on GET /v1/visor/clusters. Billed the nominal management fee: the\ncustomer brings the compute, Hanzo meters the management plane."
-  },
-  {
-   "id": "bindMachineAgent",
-   "doc": "Binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime. The owning org is\nthe validated tenant, never a client field."
-  },
-  {
-   "id": "cancelFleetJob",
-   "doc": "Cancels a queued or running render in the caller's org. The engine\ncancel is org-scoped, so a tenant can only ever cancel its OWN job: a job in\nanother tenant's shard is 404, exactly like one that never existed. An\nalready-finished job is 409."
-  },
-  {
-   "id": "createKubernetesCluster",
-   "doc": "Provisions a DOKS cluster for the caller's org and answers 201.\nADMIN-GATED — a SuperAdmin, or an OrgAdmin of the caller's own org — because\nprovisioning spends real infrastructure on the house account. The request is\nvalidated at this boundary, then Visor owns provisioning and the hanzo-org\nownership tag."
-  },
-  {
-   "id": "createNodePool",
-   "doc": "Adds a node pool to one of the caller org's clusters and answers 201\nwith the created pool. Only the CreateNodePoolSpec fields are forwarded;\nowner/provider/clusterId ride in the query exactly as Visor expects them."
-  },
-  {
-   "id": "deleteBot",
-   "doc": "Tears down both halves of a bot: it unbinds the agent (best-effort — a\nbot with no binding still deletes), then terminates the machine. Answers 204."
-  },
-  {
-   "id": "deleteKubernetesCluster",
-   "doc": "Destroys a DOKS cluster by id and answers 204. ADMIN-GATED, like\ncreate. Visor scopes the delete to the org (refuses a foreign id), so this can\nonly ever remove the caller org's own cluster."
-  },
-  {
-   "id": "deleteMachine",
-   "doc": "Terminates one of the caller org's machines. Visor takes the\nmachine identity as owner+name, and the owner is the validated principal, so a\ncaller can only ever terminate its own tenant's machine. Answers 204."
-  },
-  {
-   "id": "deleteNodePool",
-   "doc": "Removes a node pool from one of the caller org's clusters. The owner\nscopes the delete to the caller's tenant; provider+clusterId drive the\nprovider-side removal. Answers 204."
-  },
-  {
-   "id": "detachCluster",
-   "doc": "Removes a BYO cluster from the caller org's fleet. It only ever\ntouches BYO clusters — a managed cluster's nodes are removed through the node-pool\nroutes — and answers 404 when the name is not in this org's fleet."
-  },
-  {
-   "id": "getBot",
-   "doc": "Returns one of the caller org's bot machines with its agent binding.\n\nA machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent\nbinding — either signal is authoritative, so a bot resolves even before its\ncloud-init has stamped every tag. A machine that is neither is 404: this route\nanswers for bots, not for machines.",
-   "read": true
-  },
-  {
-   "id": "getKubernetesCluster",
-   "doc": "Returns one cluster's detail: node pools + worker nodes. Visor scopes\nthe lookup to the org (a foreign or missing id resolves to not-found), so a tenant\ncan never read another tenant's cluster by guessing an id.",
-   "read": true
-  },
-  {
-   "id": "getMachine",
-   "doc": "Returns one of the caller org's machines by its org-scoped name.\nVisor keys the lookup by owner/name, so an id belonging to another tenant\nresolves to not-found rather than another org's machine.",
-   "read": true
-  },
-  {
-   "id": "getMachineAgent",
-   "doc": "Returns the agent binding of one of the caller org's\nmachines, or 404 when the machine runs no bot runtime.",
-   "read": true
-  },
-  {
-   "id": "get_visor_compute_regions",
-   "doc": "Regions lists the regions a machine can be launched in.\n\nThe catalog is GLOBAL — identical for every tenant — so no owner is forwarded\nupstream. It is still org-gated, because a catalog is a map of what this\ndeployment can spend money in and an anonymous caller has no business reading it.",
-   "read": true
-  },
-  {
-   "id": "get_visor_compute_sizes",
-   "doc": "Sizes lists the machine sizes available to launch, with their specifications.\n\nGlobal and org-gated, exactly as the region catalog is, and for the same reasons.",
-   "read": true
-  },
-  {
-   "id": "listBots",
-   "doc": "Returns the caller org's bot machines — the kind=bot machines — each\njoined with the agent binding that says which cloud Agent it runs.\n\nThe bindings are read ONCE and joined by machine id, so the list is O(1) upstream\ncalls, not N+1. A bindings read that fails only costs the reconciled status: a bot\nstill lists without it.",
-   "read": true
-  },
-  {
-   "id": "listClusters",
-   "doc": "Returns the caller org's clusters from both sources: the managed\nclusters projected from Visor's node pools, and the BYO clusters attached to the\ncaller's project. A Visor outage costs the managed half only — the BYO half\nstill lists, because a page that 502s on an optional provider is worse than a\npage that shows what it can.",
-   "read": true
-  },
-  {
-   "id": "listFleet",
-   "doc": "Returns every compute unit the caller's org has, from every source, each\ncarrying its latest utilization: agent run-targets, the BYO machines that dialed\nin, attached BYO clusters and Visor-provisioned machines.\n\nA unit with a live snapshot of its own keeps it; the rest are overlaid from the\nutilization series, and only when the sample agrees about the SOURCE — two planes\ncould mint the same unit id, and a board must never show one machine's load on\nanother's row. BYO GPU units also carry their gpu-jobs queue depth. Every source\nis folded in independently: a broken one costs its own rows and nothing else.",
-   "read": true
-  },
-  {
-   "id": "listFleetJobs",
-   "doc": "Returns the caller org's gpu-jobs render queue, each row tagged with\nthe GPU it targets (empty = the shared any-GPU lane) and the node claiming it,\noptionally narrowed to one GPU's queue and/or one status.\n\nA job whose worker died — STARTED with an elapsed lease and not yet reclaimed —\nreads \"stalled\", not \"running\". Fail-soft: an unavailable tasks engine yields an\nempty queue rather than an error.",
-   "read": true
-  },
-  {
-   "id": "listFleetSamples",
-   "doc": "Returns the caller org's utilization series, oldest first.\n\nA rejected narrower is a 400 carrying its own reason (the vocabulary is ours and\nsafe to echo); a warehouse failure is logged and answered 503 \"unavailable\",\nbecause a chart that silently reads \"no load\" when the truth is \"we cannot tell\"\nis worse than one that says so. An ABSENT warehouse is different again: it returns\nan empty series, which renders honestly as \"no samples yet\".",
-   "read": true
-  },
-  {
-   "id": "listFleetWorkers",
-   "doc": "Returns the caller org's BYO machines — the ones that dialed in\nvia `hanzo link` — with everything each host reported about itself. The Machines\nand GPUs pages fold the same data into their normalized shapes; this is the\ncanonical raw list a fleet view (or the CLI's `status`) reads.",
-   "read": true
-  },
-  {
-   "id": "listGpuAlerts",
-   "doc": "Is an HONEST empty surface: Visor exposes no GPU alert inventory, so\nthis returns [] rather than fabricating alerts. It stays a real, tenant-gated\nroute so the console's alerts fetch resolves (200 [], not a 404) — an honest\n\"no alerts\", the same discipline the rest of the surface follows.",
-   "read": true
-  },
-  {
-   "id": "listGpus",
-   "doc": "Returns one row per physical accelerator the caller's org has, derived\nfrom its real GPU machines (the size slug says how many cards a node holds) and\nfrom the accelerators BYO workers report through nvidia-smi.\n\nLive telemetry is absent on Visor rows because Visor's machine object carries\nnone — an honest omission the console renders as \"—\", never a fabricated 0.",
-   "read": true
-  },
-  {
-   "id": "listKubernetesClusters",
-   "doc": "Lists the org's DOKS clusters (Visor, house account) folded with\nthe org's BYO clusters — ONE fleet cluster view under the unified k8s noun. A Visor\noutage is logged and skipped so a down optional provider never hides the BYO list.",
-   "read": true
-  },
-  {
-   "id": "listKubernetesNodes",
-   "doc": "Returns every DOKS worker node in the org's clusters as a machine —\nthe SAME set the fleet folds in (managedMachines), exposed directly under the k8s\nnoun. House account (hanzo-org cluster tag) + BYOC, deduped by Visor.",
-   "read": true
-  },
-  {
-   "id": "listMachineAgents",
-   "doc": "Returns every agent↔machine binding in the caller's org — which\nmachines are running which cloud Agent, with vm's own reconciled status.",
-   "read": true
-  },
-  {
-   "id": "listMachines",
-   "doc": "Returns every machine the caller's org has — Visor's registry, the\nlive DigitalOcean droplets and the DOKS worker nodes (deduped into one union),\nplus the BYO machines that dialed in via `hanzo link` (provider \"byo\").\n\nA source Visor cannot answer for is logged and skipped, never an error: one\nwedged upstream must not hide the machines the other sources can see.",
-   "read": true
-  },
-  {
-   "id": "recordFleetSample",
-   "doc": "Records a BYO worker's live GPU utilization into the SAME series the\nfleet board overlays. The org is the validated principal and source/kind are fixed\nserver-side, so a worker names only its own metrics — never another tenant or\nanother source. Answers 202: the warehouse write is DETACHED (its own bounded\ncontext, never in the response path), so a slow or absent warehouse cannot stall a\nheartbeat."
-  },
-  {
-   "id": "scaleNodePool",
-   "doc": "Resizes a node pool to an absolute node count and returns the pool as\nVisor reports it after the change."
-  },
-  {
-   "id": "unbindMachineAgent",
-   "doc": "Detaches the agent runtime from one of the caller org's\nmachines. The machine stays — this halts the bot, it does not terminate the\ncompute. Answers 204."
   }
  ],
  "wallet": [

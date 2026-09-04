@@ -1,7 +1,7 @@
 package cli
 
 // gpu_spec_test.go — the host static-spec a `hanzo link` node reports so
-// GET /v1/visor/fleet can show its CPU arch, core count and total RAM (the fields a
+// GET /v1/compute/fleet can show its CPU arch, core count and total RAM (the fields a
 // code-linked box already carries). Real telemetry only: arch is `uname -m`, cores
 // are runtime.NumCPU, RAM is parsed from the OS — never a hardcoded machine.
 

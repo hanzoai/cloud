@@ -3,10 +3,10 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 
-package visor
+package compute
 
 // BYO clusters on the ONE fleet surface. Attaching an existing cluster (kubeconfig)
-// and Visor-provisioned clusters both live under /v1/visor/clusters — a customer brings
+// and Visor-provisioned clusters both live under /v1/compute/clusters — a customer brings
 // their own compute (BYO GPU / bare metal / any k8s), sees it in their fleet, and
 // schedules work on it, exactly like a managed cluster. Tenant-scoped: the org is
 // the ZAP-propagated, gateway-validated owner (never a client field), so BYO clusters
@@ -53,7 +53,7 @@ type clusterDetached struct {
 
 // attachCluster attaches a BYO cluster to the caller's org — the kubeconfig is
 // validated, KMS-sealed and added to the fleet — and answers 201 with the cluster
-// as it now appears on GET /v1/visor/clusters. Billed the nominal management fee: the
+// as it now appears on GET /v1/compute/clusters. Billed the nominal management fee: the
 // customer brings the compute, Hanzo meters the management plane.
 //
 // Example: {"name":"lab","kubeconfig":"apiVersion: v1\nkind: Config\n...","provider":"on-prem","default":false}
