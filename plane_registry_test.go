@@ -30,7 +30,7 @@ import (
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	entitlementpeer "github.com/hanzoai/cloud/plane/entitlement"
 	eventpeer "github.com/hanzoai/cloud/plane/event"
-	flagspeer "github.com/hanzoai/cloud/plane/flags"
+	flagspeer "github.com/hanzoai/cloud/plane/flag"
 	riskpeer "github.com/hanzoai/cloud/plane/risk"
 	"github.com/zap-proto/zip"
 )
