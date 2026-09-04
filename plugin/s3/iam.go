@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 
 	"github.com/hanzoai/cloud"
@@ -97,10 +98,13 @@ func document(issuer string, key []byte) map[string]any {
 				"enabled": true,
 				"config": map[string]any{
 					"issuer": issuer,
-					// The audience this deployment's own tokens carry, stated rather
-					// than inferred: a provider that accepts any audience accepts a
-					// token minted for somebody else's service.
-					"clientIds": []string{environ.Or("IAM_AUDIENCE", "hanzo-cloud")},
+					// The audiences this deployment's own tokens carry, stated rather
+					// than inferred: a provider that accepts ANY audience accepts a
+					// token minted for somebody else's service. More than one because
+					// one IAM issues to several of our own clients — a console bearer
+					// and an app bearer name the same person and the same org, and
+					// both are ours.
+					"clientIds": audiences(),
 					"jwksUri":   environ.Or("CLOUD_JWKS_URL", issuer+"/v1/iam/.well-known/jwks"),
 				},
 			}},
@@ -110,6 +114,24 @@ func document(issuer string, key []byte) map[string]any {
 		// everything.
 		"policy": map[string]any{"defaultEffect": "Deny"},
 	}
+}
+
+// audiences is the allowlist an incoming token's `aud` or `azp` must match.
+//
+// A LIST, and never empty: the zero value of this setting is the one that
+// accepts everything, so an unset variable falls back to the clients this
+// deployment is known to issue for rather than to "any".
+func audiences() []string {
+	var out []string
+	for _, a := range strings.Split(environ.Or("IAM_AUDIENCE", "hanzo-cloud,hanzo-app"), ",") {
+		if a = strings.TrimSpace(a); a != "" {
+			out = append(out, a)
+		}
+	}
+	if len(out) == 0 {
+		return []string{"hanzo-cloud"}
+	}
+	return out
 }
 
 // write puts the document where the store's flag will point, readable only by

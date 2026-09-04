@@ -18,7 +18,7 @@ func TestConfigureNamesThisDeploymentsIAM(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLOUD_DATA_DIR", dir)
 	t.Setenv("CLOUD_IAM_ISSUER", "https://hanzo.id")
-	t.Setenv("IAM_AUDIENCE", "hanzo-cloud")
+	t.Setenv("IAM_AUDIENCE", "hanzo-cloud,hanzo-app")
 	t.Setenv("CLOUD_JWKS_URL", "https://hanzo.id/v1/iam/.well-known/jwks")
 
 	path, err := write(dir, document("https://hanzo.id", []byte("0123456789abcdef0123456789abcdef")))
@@ -72,7 +72,7 @@ func TestConfigureNamesThisDeploymentsIAM(t *testing.T) {
 	if p.Config.Issuer != "https://hanzo.id" {
 		t.Errorf("issuer = %q", p.Config.Issuer)
 	}
-	if len(p.Config.ClientIDs) != 1 || p.Config.ClientIDs[0] != "hanzo-cloud" {
+	if len(p.Config.ClientIDs) != 2 || p.Config.ClientIDs[0] != "hanzo-cloud" || p.Config.ClientIDs[1] != "hanzo-app" {
 		t.Errorf("audience = %v; a provider that accepts any audience accepts a token minted for someone else", p.Config.ClientIDs)
 	}
 	if p.Config.JWKSUri != "https://hanzo.id/v1/iam/.well-known/jwks" {
@@ -169,5 +169,22 @@ func TestEnrollIsQuietWithoutAManager(t *testing.T) {
 	held.Store(nil)
 	if err := enroll(context.Background(), "acme"); err != nil {
 		t.Errorf("enroll without IAM = %v, want nil", err)
+	}
+}
+
+// TestAudiencesNeverFallBackToAnything: the empty allowlist is the one that
+// accepts every token, so an unset or blank setting must not produce it.
+func TestAudiencesNeverFallBackToAnything(t *testing.T) {
+	t.Setenv("IAM_AUDIENCE", "")
+	if got := audiences(); len(got) != 2 {
+		t.Errorf("unset = %v, want this deployment's own clients", got)
+	}
+	t.Setenv("IAM_AUDIENCE", " , ,  ")
+	if got := audiences(); len(got) == 0 {
+		t.Error("a blank list would accept a token minted for anyone")
+	}
+	t.Setenv("IAM_AUDIENCE", "one, two ,three")
+	if got := audiences(); len(got) != 3 || got[1] != "two" {
+		t.Errorf("split = %v", got)
 	}
 }
