@@ -37,9 +37,11 @@ import (
 	"github.com/hanzoai/cloud/clients/gateway"
 	"github.com/hanzoai/cloud/clients/ingress"
 	"github.com/hanzoai/cloud/clients/kms"
+	"github.com/hanzoai/cloud/clients/kv"
 	"github.com/hanzoai/cloud/clients/platform"
 	"github.com/hanzoai/cloud/clients/plugin"
 	"github.com/hanzoai/cloud/clients/security"
+	"github.com/hanzoai/cloud/clients/session"
 	"github.com/hanzoai/cloud/clients/share"
 	"github.com/hanzoai/cloud/clients/storage"
 	"github.com/hanzoai/cloud/clients/tasks"
@@ -74,6 +76,7 @@ func Wire() []cloud.MountSpec {
 		// GDA/SDM validator onboarding /v1/validators/*. Owns a DB handle.
 		{Name: "validators", Mount: validators.Mount, Shutdown: ctxShutdown(validators.Shutdown)},
 		{Name: "code", Mount: code.Mount, Shutdown: code.Shutdown},
+		{Name: "session", Mount: session.Mount, Shutdown: ctxShutdown(session.Shutdown)},
 		{Name: "zero-trust", Mount: zt.Mount},
 		// ngrok-native public sharing: /v1/share/* provisions a per-org zrok account.
 		{Name: "share", Mount: share.Mount},
@@ -91,6 +94,7 @@ func Wire() []cloud.MountSpec {
 		// per-app integration work: one declaration is simultaneously the REST
 		// route, the OpenAPI schema, the MCP tool and the generated SDK method.
 		{Name: "base", Mount: base.Mount, Shutdown: base.Shutdown},
+		{Name: "kv", Mount: kv.Mount, Shutdown: kv.Shutdown},
 		{Name: "tasks", Mount: tasks.Mount, Shutdown: tasks.Shutdown},
 		// STAGED (see stagedSubsystems): functions RUNS CODE, so it is linked in
 		// every build but mounts only when an operator names it.

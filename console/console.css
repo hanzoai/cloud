@@ -2,55 +2,57 @@
    the light default, the system preference, and an explicit choice on <html>. */
 
 :root {
-  --bg: #faf9f7;
+  --font-sans: "Zen Sans", "Zen Kaku Gothic New", "Zen Maru Gothic", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Zen Mono", "Geist Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --bg: #fafafa;
   --panel: #ffffff;
-  --sunk: #f3f1ed;
-  --line: #e3e0d9;
-  --fg: #1c1a17;
-  --muted: #7c766c;
-  --accent: #a8480d;
+  --sunk: #f4f4f5;
+  --line: #e4e4e7;
+  --fg: #09090b;
+  --muted: #71717a;
+  --accent: #18181b;
   --accent-fg: #ffffff;
-  --ok: #2f7d4f;
-  --info: #2b6cb0;
-  --warn: #a86a00;
-  --down: #c0392b;
-  --purple: #6b46c1;
-  --shadow: 0 1px 0 rgba(0, 0, 0, .03);
+  --ok: #16a34a;
+  --info: #2563eb;
+  --warn: #d97706;
+  --down: #dc2626;
+  --purple: #7c3aed;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .04);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1012;
-    --panel: #17191d;
-    --sunk: #101216;
-    --line: #272b31;
-    --fg: #e7e5e1;
-    --muted: #8b8f96;
-    --accent: #e08a4c;
-    --accent-fg: #1a1207;
-    --ok: #56b87f;
-    --info: #6aa9e9;
-    --warn: #d9a441;
-    --down: #e8756a;
-    --purple: #a992e8;
+    --bg: #09090b;
+    --panel: #121215;
+    --sunk: #18181b;
+    --line: #27272a;
+    --fg: #f4f4f5;
+    --muted: #a1a1aa;
+    --accent: #ffffff;
+    --accent-fg: #09090b;
+    --ok: #22c55e;
+    --info: #3b82f6;
+    --warn: #f59e0b;
+    --down: #ef4444;
+    --purple: #a855f7;
     --shadow: none;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #0f1012;
-  --panel: #17191d;
-  --sunk: #101216;
-  --line: #272b31;
-  --fg: #e7e5e1;
-  --muted: #8b8f96;
-  --accent: #e08a4c;
-  --accent-fg: #1a1207;
-  --ok: #56b87f;
-  --info: #6aa9e9;
-  --warn: #d9a441;
-  --down: #e8756a;
-  --purple: #a992e8;
+  --bg: #09090b;
+  --panel: #121215;
+  --sunk: #18181b;
+  --line: #27272a;
+  --fg: #f4f4f5;
+  --muted: #a1a1aa;
+  --accent: #ffffff;
+  --accent-fg: #09090b;
+  --ok: #22c55e;
+  --info: #3b82f6;
+  --warn: #f59e0b;
+  --down: #ef4444;
+  --purple: #a855f7;
   --shadow: none;
 }
 
@@ -60,8 +62,12 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 13px/1.5 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font: 13px/1.5 var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+code, pre, input, textarea, select, .chip, .pill, .route, .out {
+  font-family: var(--font-mono);
 }
 
 /* ---- header ------------------------------------------------------------- */
@@ -202,6 +208,43 @@ details.group > summary .n { color: var(--muted); font-size: 11px; margin-left: 
 .m-PATCH { color: var(--purple); }
 .m-DELETE { color: var(--down); }
 
+/* ---- documentation card ------------------------------------------------ */
+
+.doc-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.doc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.doc-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--fg);
+}
+.doc-pkg {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--sunk);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.doc-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 0;
+}
 /* ---- controls ----------------------------------------------------------- */
 
 .line { display: flex; gap: 8px; align-items: center; }

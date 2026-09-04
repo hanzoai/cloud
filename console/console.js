@@ -28,10 +28,11 @@ function el(tag, attrs, ...kids) {
 // needs to know that a route of this shape exists.
 const key = (method, path) => method.toUpperCase() + ' ' + path.replace(/\{[^}]*\}/g, '{}');
 
+const pkg = (tag) => 'github.com/hanzoai/cloud/clients/' + tag;
 const argsOf = (path) => [...path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]);
 
 const state = {
-  routes: [],      // {method, path, tag, args}
+  routes: [],      // {method, path, tag, summary, description, args}
   have: new Set(), // key(method, path) for every live route
   tags: new Set(), // products this deployment actually mounted
   template: '/v1/openapi.json',
@@ -168,17 +169,23 @@ async function loadSpec() {
     for (const [method, op] of Object.entries(item)) {
       const m = method.toUpperCase();
       const tag = (op && op.tags && op.tags[0]) || 'other';
-      state.routes.push({ method: m, path, tag, args: argsOf(path) });
+      const summary = (op && op.summary) || '';
+      const description = (op && op.description) || '';
+      state.routes.push({ method: m, path, tag, summary, description, args: argsOf(path) });
       state.have.add(key(m, path));
       state.tags.add(tag);
     }
   }
   state.routes.sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method));
 
-  $('#title').textContent = (doc.info && doc.info.title) || 'cloud';
-  document.title = $('#title').textContent + ' console';
+  const rawTitle = (doc.info && doc.info.title) || 'cloud';
+  const brand = rawTitle.replace(/\s*cloud\s*API/i, '').replace(/\s*API/i, '').trim() || 'cloud';
+  $('#title').textContent = brand;
+  document.title = brand + ' console';
   const version = r.res.headers.get('x-api-version') || (doc.info && doc.info.version) || 'unknown';
   $('#version').textContent = 'version ' + version;
+
+  renderDocCard(state.routes.find((r) => r.path === state.template) || null);
 }
 
 // ---- header, health ---------------------------------------------------------
@@ -220,7 +227,7 @@ function routeButton(r) {
   const parts = r.path.split(/(\{[^}]*\})/).filter(Boolean).map((s) =>
     s.startsWith('{') ? el('span', { class: 'arg' }, s) : s);
   return el('button', {
-    class: 'route', 'data-key': key(r.method, r.path), title: r.method + ' ' + r.path,
+    class: 'route', 'data-key': key(r.method, r.path), title: (r.summary ? r.summary + ' — ' : '') + r.method + ' ' + r.path,
     onclick: () => select(r),
   }, el('span', { class: 'm m-' + r.method }, r.method), el('span', { class: 'p' }, parts));
 }
@@ -251,6 +258,26 @@ function markCurrent() {
   }
 }
 
+// ---- documentation card -----------------------------------------------------
+
+function renderDocCard(r) {
+  const card = $('#doc-card');
+  if (!card) return;
+  if (!r) {
+    card.replaceChildren(
+      el('div', { class: 'doc-head' },
+        el('span', { class: 'doc-title' }, 'routes'),
+        el('span', { class: 'doc-pkg' }, 'github.com/hanzoai/cloud')),
+      el('p', { class: 'doc-desc' }, 'Pick a route on the left to see what this deployment says it does.'));
+    return;
+  }
+  card.replaceChildren(
+    el('div', { class: 'doc-head' },
+      el('span', { class: 'doc-title' }, r.summary || (r.method + ' ' + r.path)),
+      el('span', { class: 'doc-pkg' }, pkg(r.tag))),
+    el('p', { class: 'doc-desc' }, r.description || r.summary || 'The document names this route but says nothing more about it.'));
+}
+
 // ---- the runner -------------------------------------------------------------
 
 function applyTemplate(t) {
@@ -270,6 +297,7 @@ function select(r) {
   const known = [...$('#method').options].some((o) => o.value === r.method);
   $('#method').value = known ? r.method : 'GET';
   setTemplate(r.path);
+  renderDocCard(r);
   show('api');
   $('#path').focus();
 }
@@ -309,6 +337,16 @@ function curl() {
   const done = () => { $('#curl').textContent = 'copied'; setTimeout(() => { $('#curl').textContent = 'copy curl'; }, 1200); };
   if (navigator.clipboard) navigator.clipboard.writeText(line).then(done, () => $('#out').replaceChildren(el('pre', {}, line)));
   else $('#out').replaceChildren(el('pre', {}, line));
+}
+
+function agent() {
+  const method = $('#method').value;
+  const path = resolve(state.template, $('#params')) || state.template;
+  const body = $('#body').value.trim();
+  const prompt = `${method} ${location.origin}${path}${body ? `\nbody: ${body}` : ''}\nmcp: ${location.origin}/mcp`;
+  const done = () => { $('#agent').textContent = 'copied prompt'; setTimeout(() => { $('#agent').textContent = 'use in agent'; }, 1200); };
+  if (navigator.clipboard) navigator.clipboard.writeText(prompt).then(done, () => $('#out').replaceChildren(el('pre', {}, prompt)));
+  else $('#out').replaceChildren(el('pre', {}, prompt));
 }
 
 // ---- primitive panels -------------------------------------------------------
@@ -425,6 +463,7 @@ function boot() {
   $('#send').addEventListener('click', send);
   $('#reload').addEventListener('click', refresh);
   $('#curl').addEventListener('click', curl);
+  $('#agent').addEventListener('click', agent);
   $('#format').addEventListener('click', () => {
     try { $('#body').value = JSON.stringify(JSON.parse($('#body').value), null, 2); } catch (e) {
       $('#out').replaceChildren(el('p', { class: 'note' }, 'body is not JSON: ' + e.message));
