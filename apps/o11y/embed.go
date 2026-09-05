@@ -16,6 +16,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	planeops "github.com/hanzoai/cloud/client"
+	projectpeer "github.com/hanzoai/cloud/client/project"
 	"github.com/hanzoai/o11y/pkg/community"
 	"github.com/hanzoai/o11y/pkg/modules/sentry/implsentry"
 	o11yrt "github.com/hanzoai/o11y/pkg/o11y"
@@ -163,8 +164,7 @@ func ingestKeyOrg(ctx context.Context, key string) (string, bool) {
 func projectKeyOrg(ctx context.Context, key string) (string, bool) {
 	// Org-less by construction: the KEY is the tenant key and the answer names the
 	// org, so passing one would let a caller file errors under someone else's.
-	out, err := cloud.Ask[planeops.KeyIn, planeops.Attribution](
-		cloud.For(ctx, ""), "projects", planeops.ProjectsResolveKey, &planeops.KeyIn{Key: key})
+	out, err := projectpeer.ProjectsResolveKey(cloud.For(ctx, ""), &planeops.KeyIn{Key: key})
 	if err != nil || out == nil || !out.Found {
 		return "", false
 	}

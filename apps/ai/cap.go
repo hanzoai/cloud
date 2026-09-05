@@ -24,6 +24,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 
 	flagsplane "github.com/hanzoai/cloud/client/flag"
 )
@@ -163,8 +164,7 @@ func capFor(ctx context.Context, subject, namespace string) (int, error) {
 // The sum leaves the ledger already at cent precision, so taking the floor of it
 // here restores the integer exactly; it is not a rounding.
 func spentSince(ctx context.Context, org string, since int64) (int64, error) {
-	out, err := cloud.Ask[client.SpendIn, client.Spend](
-		cloud.For(ctx, org), "commerce", client.FinanceSpend, &client.SpendIn{Since: since})
+	out, err := commercepeer.FinanceSpend(cloud.For(ctx, org), &client.SpendIn{Since: since})
 	if err != nil {
 		return 0, fmt.Errorf("plane spend read: %w", err)
 	}
