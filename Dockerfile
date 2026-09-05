@@ -369,7 +369,7 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     done; \
     coresident="$(sed -n '/Coresident: *true/{s/.*{Name: "\([^"]*\)".*/\1/p;}' manifest/apps.go)"; \
     spawned="$(sed -n '/Coresident: *true/d; s/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)"; \
-    echo "building $(echo "$spawned" | wc -w) of $(echo "$names" | wc -w) plugins, $(nproc) at a time (coresident, never spawned: ${coresident:-none})"; \
+    echo "building $(echo "$spawned" | wc -w) of $(echo "$names" | wc -w) plugins, ${PLUGIN_JOBS:-$(nproc)} at a time (coresident, never spawned: ${coresident:-none})"; \
     printf '%s\n' $spawned | xargs -P "${PLUGIN_JOBS:-$(nproc)}" -I{} sh -c \
       'CGO_ENABLED=1 go build -trimpath -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" -ldflags="$GO_LDFLAGS" -o "/plugins/$1" "./plugin/$1" || { echo "FATAL: plugin $1 failed to build" >&2; exit 255; }' _ {}
 # THE STAMP LANDED — asked of the ARTIFACT, not of the flag string.
