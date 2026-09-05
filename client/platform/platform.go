@@ -32,6 +32,7 @@ const App = "platform"
 var Ops = []string{
 	client.PlatformBuild,
 	client.PlatformFleet,
+	client.PlatformJob,
 	client.PlatformPush,
 	client.PlatformRelease,
 }
@@ -48,6 +49,13 @@ func PlatformBuild(ctx context.Context, in *client.BuildIn) (*client.Queued, err
 // Calls client.PlatformFleet on platform over the peer plane.
 func PlatformFleet(ctx context.Context) (*client.Fleet, error) {
 	return client.Call[struct{}, client.Fleet](ctx, App, client.PlatformFleet, &struct{}{})
+}
+
+// PlatformJob run one queued workflow job on a runner that lives for it.
+//
+// Calls client.PlatformJob on platform over the peer plane.
+func PlatformJob(ctx context.Context, in *client.JobIn) (*client.Launched, error) {
+	return client.Call[client.JobIn, client.Launched](ctx, App, client.PlatformJob, in)
 }
 
 // PlatformPush turn a landed push into a build for every app tracking it.

@@ -316,7 +316,8 @@ type state struct {
 	consoleURL string          // where the callback 302s the user back to
 	stateKey   []byte          // HMAC-SHA256 key for the CSRF/org-binding state
 	providers  map[string]*Provider
-	flight     *flight // keyed in-process mutex: refresh + device-poll serialization
+	flight     *flight  // keyed in-process mutex: refresh + device-poll serialization
+	forgeKey   forgeKey // the forge's webhook secret, held for a window (forge_webhook.go)
 }
 
 var mounted *cloud.Service[state]
@@ -961,6 +962,9 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// raw because it speaks GitHub's webhook protocol: the HMAC covers the raw body,
 	// which an op handed the decoded In could not re-verify.
 	app.Post("/v1/integration/github/webhook", cloud.Terminal(cloud.Handle(s, githubWebhook)))
+	// The forge delivers a queued workflow job here (forge_webhook.go). Raw and
+	// Terminal for the same reason as GitHub's: the HMAC covers the raw body.
+	app.Post(forgeWebhookPath, cloud.Terminal(cloud.Handle(s, forgeWebhook)))
 	// Linear delivers Issue and Comment events here (linear_webhook.go). Raw and
 	// Terminal for the same reason as GitHub's: the HMAC covers the raw body.
 	app.Post("/v1/integration/linear/webhook", cloud.Terminal(cloud.Handle(s, linearWebhook)))

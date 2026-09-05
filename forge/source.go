@@ -50,6 +50,12 @@ const TokenRef = "orgs/hanzo/deploy/FORGE_TRACKER_TOKEN@prod"
 // its own network.
 const HostKeyRef = "orgs/hanzo/deploy/FORGE_HOST_KEY@prod"
 
+// WebhookRef is the KMS coordinate of the secret the forge signs its
+// workflow_job deliveries with, and the one value the receiver verifies them
+// against. Rotating it is writing the new value here and on the forge's system
+// webhook; the receiver reads it again within its window.
+const WebhookRef = "orgs/hanzo/deploy/FORGE_WEBHOOK_SECRET@prod"
+
 // fresh bounds how long a resolved credential is reused. A rotated token is
 // therefore live within this window without a restart, and a revoked one stops
 // working. Short enough to make rotation real, long enough that a read is not a

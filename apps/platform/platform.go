@@ -213,6 +213,13 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	exposePush()
 	exposeBuild()
 
+	// A queued workflow job, delivered to integrations and verified there, becomes
+	// one runner Job here. Same inversion, same plane half.
+	cloud.RegisterRunner(func(ctx context.Context, ev cloud.JobEvent) (string, error) {
+		return launch(mounted, ctx, ev)
+	})
+	exposeJob()
+
 	// The same trigger from the FORGE reaches this builder through
 	// apps/integrations' receiver (forge_webhook.go), like every other provider's
 	// delivery: in-process when co-resident, over the plane when not. Platform

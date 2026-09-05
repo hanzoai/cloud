@@ -506,6 +506,38 @@
         "x-public": true
       }
     },
+    "/v1/integration/forge/webhook": {
+      "post": {
+        "operationId": "post_integration_forge_webhook",
+        "summary": "Forge workflow_job webhook",
+        "description": "Receives the forge's workflow_job delivery. The signature over the raw body is checked against the secret at KMS forge.WebhookRef before anything is decoded; a queued job becomes one ephemeral runner Job on the cluster, minted a registration token for exactly that job. Every other action is answered 200 and ignored.",
+        "tags": [
+          "integration"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/forgeJob"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/forgeLaunched"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
     "/v1/integration/github/claim": {
       "post": {
         "operationId": "post_integration_github_claim",
@@ -2007,6 +2039,70 @@
           }
         },
         "type": "object"
+      },
+      "forgeJob": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "owner": {
+                "type": "object",
+                "properties": {
+                  "login": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "workflow_job": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "name": {
+                "type": "string"
+              },
+              "run_id": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "forgeLaunched": {
+        "type": "object",
+        "properties": {
+          "job": {
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "runner": {
+            "type": "string"
+          }
+        }
       },
       "githubBackfillIn": {
         "properties": {

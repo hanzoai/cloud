@@ -275,6 +275,10 @@ const (
 	// shape as PlatformPush and the same former silence: a nil error meant "rolled
 	// out" to a caller whose CR was never touched.
 	PlatformRelease = "platform_release"
+	// PlatformJob turns a queued workflow job into a runner that lives for it. The
+	// delivery lands at integrations, which holds the provider's credential and
+	// mints the registration; the cluster belongs to platform.
+	PlatformJob = "platform_job"
 
 	// PlatformBuild builds one image from a repository at a commit — the native
 	// pipeline's per-image ask, from git to the builder over the plane. It
@@ -2609,6 +2613,25 @@ type PushIn struct {
 type Built struct {
 	Repo   string `json:"repo"`
 	Builds int    `json:"builds"`
+}
+
+// JobIn is one workflow job a provider has queued, with what the runner that
+// takes it registers with. The forge hands a registration token and the labels
+// the job asked for; GitHub hands a just-in-time configuration that already
+// carries both. No Org: the tenant is the caller's.
+type JobIn struct {
+	Provider string   `json:"provider"` // forge | github
+	Repo     string   `json:"repo"`     // owner/name
+	ID       int64    `json:"id"`       // the provider's job id
+	Labels   []string `json:"labels,omitempty"`
+	URL      string   `json:"url,omitempty"`   // the forge to register with
+	Token    string   `json:"token,omitempty"` // the registration token, or the JIT configuration
+}
+
+// Launched names the Job that will take the workflow job. A failure is an
+// error, never this shape.
+type Launched struct {
+	Job string `json:"job"`
 }
 
 // BuildIn is one image to build from a repository at a commit — what a native
