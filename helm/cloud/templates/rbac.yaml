@@ -33,4 +33,49 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "cloud.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
+---
+# The platform surface (/v1/platform/*) reads and writes a tenant's workloads: it puts each
+# app in its own namespace as an operator App CR, watches the Deployment the operator makes
+# from it, and gives it volumes. Those namespaces are created per tenant, so the grant has to
+# be cluster-wide — a namespaced Role could only see namespaces that already existed.
+#
+# Every verb below is one the code actually calls; nothing is granted "just in case". Apps are
+# replaced rather than edited, which is why there is no update or patch on them, and nothing
+# here watches. Without this the whole surface answers 503 and reports itself degraded
+# (`crd: false`) while Kubernetes itself is reachable.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "cloud.fullname" . }}-platform
+  labels: {{- include "cloud.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["hanzo.ai"]
+    resources: ["apps"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "create"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch"]
+  - apiGroups: ["apps.hanzo.ai"]
+    resources: ["applications"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "cloud.fullname" . }}-platform
+  labels: {{- include "cloud.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "cloud.fullname" . }}-platform
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "cloud.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
 {{- end }}
