@@ -86,6 +86,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
+	integrationpeer "github.com/hanzoai/cloud/client/integration"
 	"github.com/hanzoai/cloud/openapi"
 )
 
@@ -257,7 +258,6 @@ const (
 	// those are the problem.
 	alertsWebhookEnv = "CLOUD_ALERTS_WEBHOOK_URL"
 	defaultAlertsOrg = "hanzo"
-	peerIntegrations = "integrations" // the plugin that holds the bot token
 	// egressBudget bounds the whole chain, not one hop. Alertmanager is waiting
 	// on this request; a page that has not left in eight seconds is better
 	// reported as undelivered (and retried) than waited on.
@@ -354,8 +354,8 @@ func reason(failures []failure) string {
 // cloud.For stamps the org so integrations' handler reads it as the caller's,
 // never an argument.
 func slackSend(ctx context.Context, org, channel, text string) error {
-	_, err := cloud.Ask[client.SlackSendIn, client.SlackSent](cloud.For(ctx, org), peerIntegrations,
-		client.IntegrationsSlackSend, &client.SlackSendIn{Channel: channel, Text: text})
+	_, err := integrationpeer.IntegrationsSlackSend(cloud.For(ctx, org),
+		&client.SlackSendIn{Channel: channel, Text: text})
 	return err
 }
 
