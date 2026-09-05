@@ -11,6 +11,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/client"
+	marketplacepeer "github.com/hanzoai/cloud/client/marketplace"
+	x402peer "github.com/hanzoai/cloud/client/x402"
 )
 
 // The payment rail reached from a process that does not contain it.
@@ -33,13 +35,6 @@ import (
 // unchanged here; only the wire is new.
 
 const (
-	peerX402 = "x402"
-
-	// peerMarketplace owns the price table, which is a DIFFERENT fact from the rail
-	// and is asked for separately — see railless, the one place it is reached from
-	// here, and the only thing this process ever learns about money.
-	peerMarketplace = "marketplace"
-
 	// settleTimeout bounds the hop a CLIENT is holding open, and it is derived
 	// rather than picked: the rail's own hops — price, payee, debit, credit — are
 	// 10s each (apps/x402/peer.go), so 60s leaves every one of them room to answer
@@ -102,7 +97,7 @@ func chargePeer(ctx context.Context, tool string) error {
 	call, cancel := context.WithTimeout(call, settleTimeout)
 	defer cancel()
 
-	out, err := cloud.Ask[client.SettleIn, client.Settled](call, peerX402, client.X402Settle, &in)
+	out, err := x402peer.X402Settle(call, &in)
 	switch {
 	case errors.Is(err, cloud.ErrNoPeer):
 		return railless(call, in.Resource)
@@ -165,8 +160,7 @@ func chargePeer(ctx context.Context, tool string) error {
 // made, so there is no settlement for a gate to disagree with — only "is there money
 // here I cannot collect", which nothing else in this process can answer.
 func railless(ctx context.Context, resource string) error {
-	out, err := cloud.Ask[client.PriceIn, client.Priced](ctx, peerMarketplace, client.MarketPrice,
-		&client.PriceIn{Resource: resource})
+	out, err := marketplacepeer.MarketPrice(ctx, &client.PriceIn{Resource: resource})
 	switch {
 	case errors.Is(err, cloud.ErrNoPeer):
 		return ErrChargerUnset

@@ -91,6 +91,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	planeops "github.com/hanzoai/cloud/client"
+	o11ypeer "github.com/hanzoai/cloud/client/o11y"
 	"github.com/hanzoai/cloud/datastore"
 	"github.com/hanzoai/types"
 	luxlog "github.com/luxfi/log"
@@ -281,7 +282,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 		})
 		ctx, cancel := context.WithTimeout(c.Context(), obsErrorTimeout)
 		defer cancel()
-		out, err := cloud.Ask[planeops.ObsErrorIn, planeops.ObsErrorOut](ctx, peerO11y, planeops.ObsErrorPost,
+		out, err := o11ypeer.ObsErrorPost(ctx,
 			&planeops.ObsErrorIn{
 				Path:    c.Path(),
 				Query:   string(fc.Request().URI().QueryString()),

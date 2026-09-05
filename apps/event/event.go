@@ -744,12 +744,6 @@ func decodeEvent(body []byte) ([]CaptureEvent, error) {
 	return decodeIngest(body)
 }
 
-// peerO11y is the observability peer this package asks over the plane socket.
-// The ONE thing it is asked for is the Sentry relay (obs_error_post, whose
-// budget is obsErrorTimeout in event.go): the Sentry wire's project segment
-// is variable, so analytics has to own the route while o11y owns the runtime.
-const peerO11y = "o11y"
-
 var endpoints = []endpoint{
 	{
 		path: "/v1/event", decode: decodeEvent, wire: canonicalWire, source: sourceEvent,

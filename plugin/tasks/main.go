@@ -21,7 +21,7 @@ import (
 // add a Shutdown/OwnsHealth/metered Price here if the app grows to need one.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "task",
+		Name:  "tasks",
 		Price: cloud.Free,
 		Use:   tasks.Use,
 	}}, []string{"task"}); err != nil {

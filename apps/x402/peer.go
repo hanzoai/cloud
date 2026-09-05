@@ -8,6 +8,9 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/wallet"
 	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
+	marketplacepeer "github.com/hanzoai/cloud/client/marketplace"
+	walletpeer "github.com/hanzoai/cloud/client/wallet"
 	"github.com/hanzoai/cloud/money"
 )
 
@@ -45,15 +48,9 @@ import (
 // misconfiguration, and one that refuses loudly costs less than one that quietly
 // sells the shop for nothing.
 
-const (
-	peerMarketplace = "marketplace"
-	peerWallets     = "wallets"
-	peerCommerce    = "commerce"
-
-	// peerCallTimeout bounds one hop. A settlement is on the caller's request path,
-	// so a peer that hangs must become a refusal rather than a held connection.
-	peerCallTimeout = 10 * time.Second
-)
+// peerCallTimeout bounds one hop. A settlement is on the caller's request path,
+// so a peer that hangs must become a refusal rather than a held connection.
+const peerCallTimeout = 10 * time.Second
 
 // peerCtx states the tenant ONE hop acts for, on a context with no request behind
 // it — the one place zip reads a stated caller.
@@ -77,8 +74,7 @@ func pricePeer(ctx context.Context, resource string) (Terms, bool, error) {
 	cctx, cancel := context.WithTimeout(ctx, peerCallTimeout)
 	defer cancel()
 
-	out, err := cloud.Ask[client.PriceIn, client.Priced](cctx, peerMarketplace, client.MarketPrice,
-		&client.PriceIn{Resource: resource})
+	out, err := marketplacepeer.MarketPrice(cctx, &client.PriceIn{Resource: resource})
 	switch {
 	case err != nil:
 		// Unreached is UNKNOWN, and an unknown price is never zero.
@@ -128,8 +124,7 @@ func payeePeer(org, walletID string) (wallet.PaymentTarget, bool) {
 	cctx, cancel := peerCtx(org)
 	defer cancel()
 
-	out, err := cloud.Ask[client.PayeeIn, client.Payee](cctx, peerWallets, client.WalletsPayee,
-		&client.PayeeIn{WalletID: walletID})
+	out, err := walletpeer.WalletsPayee(cctx, &client.PayeeIn{WalletID: walletID})
 	if err != nil || out == nil || !out.Found {
 		return wallet.PaymentTarget{}, false
 	}
@@ -144,7 +139,7 @@ func debitPeer(st *Settlement, amount money.Amount) error {
 	cctx, cancel := peerCtx(st.PayerOrg)
 	defer cancel()
 
-	_, err := cloud.Ask[client.RecordIn, client.Recorded](cctx, peerCommerce, client.FinanceRecord,
+	_, err := commercepeer.FinanceRecord(cctx,
 		&client.RecordIn{
 			Subject: st.PayerOrg,
 			Amount:  client.Amount(amount.Unwrap()),
@@ -167,7 +162,7 @@ func creditPeer(org, subject string, amount money.Amount, ref, notes string) err
 	cctx, cancel := peerCtx(org)
 	defer cancel()
 
-	_, err := cloud.Ask[client.CreditIn, client.Credited](cctx, peerCommerce, client.FinanceCredit,
+	_, err := commercepeer.FinanceCredit(cctx,
 		&client.CreditIn{
 			Subject: subject,
 			Amount:  client.Amount(amount.Unwrap()),

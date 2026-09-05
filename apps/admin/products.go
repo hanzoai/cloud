@@ -21,6 +21,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/client"
+	platformpeer "github.com/hanzoai/cloud/client/platform"
 	"github.com/hanzoai/cloud/internal/cluster"
 	"github.com/zap-proto/zip"
 )
@@ -86,8 +87,7 @@ type productRollup struct{ Total, Active, Drift int }
 // side where the observer lives. A platform that cannot be REACHED is an error,
 // because an unreachable estate and an empty estate must never look alike.
 func fleetProducts(ctx context.Context, c *zip.Ctx) ([]productRow, productRollup, error) {
-	fleet, err := cloud.Ask[struct{}, client.Fleet](cloud.As(c, ""), "platform",
-		client.PlatformFleet, &struct{}{})
+	fleet, err := platformpeer.PlatformFleet(cloud.As(c, ""))
 	if err != nil {
 		return nil, productRollup{}, err
 	}

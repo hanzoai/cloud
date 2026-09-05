@@ -8,6 +8,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/finance"
 	"github.com/zap-proto/zip"
 )
@@ -71,8 +72,7 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 	// For(org) names the tenant whose books to read; the callee takes the org from
 	// that capability and the payload cannot name one, so the subject is all that
 	// travels.
-	out, err := cloud.Ask[client.BalanceIn, client.Balance](cloud.For(ctx, org), "commerce",
-		client.FinanceBalance, &client.BalanceIn{Subject: subject, Currency: "usd"})
+	out, err := commercepeer.FinanceBalance(cloud.For(ctx, org), &client.BalanceIn{Subject: subject, Currency: "usd"})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
 			// The router ANSWERED, from the manifest it owns: this deployment runs
