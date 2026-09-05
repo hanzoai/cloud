@@ -153,8 +153,11 @@ COPY go.mod go.sum ./
 # unchanged and still authoritative: the forge mirrors the same objects, so the
 # zip hashes to the committed h1: line, and a forge serving different bytes fails
 # the build rather than shipping them. Both secrets are optional; absent either,
-# this falls back to exactly the previous behaviour.
-RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
+# this falls back to exactly the previous behaviour. GITHUB_TOKEN is the
+# GitHub credential for modules the forge does not mirror; GIT_AUTH_TOKEN is
+# BuildKit's own name for the CONTEXT credential and is a forge token when the
+# context is the forge, so the two are not one secret.
+RUN --mount=type=secret,id=GITHUB_TOKEN \
     --mount=type=secret,id=FORGE_TOKEN \
     --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     if [ -s /run/secrets/FORGE_TOKEN ]; then \
@@ -162,8 +165,8 @@ RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
         git config --global url."https://x:$(cat /run/secrets/FORGE_TOKEN)@git.hanzo.ai/$org/".insteadOf "https://github.com/$org/"; \
       done; \
     fi && \
-    if [ -s /run/secrets/GIT_AUTH_TOKEN ]; then \
-      git config --global url."https://x-access-token:$(cat /run/secrets/GIT_AUTH_TOKEN)@github.com/".insteadOf "https://github.com/"; \
+    if [ -s /run/secrets/GITHUB_TOKEN ]; then \
+      git config --global url."https://x-access-token:$(cat /run/secrets/GITHUB_TOKEN)@github.com/".insteadOf "https://github.com/"; \
     fi && \
     go mod download
 COPY . .
