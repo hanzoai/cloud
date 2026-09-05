@@ -46,8 +46,8 @@ var baseReserved = func() map[string]bool {
 		// this router, so a project slugged `edge` would be addressed by the edge
 		// route instead of by itself; reserving the label means no such row can be
 		// created and the ambiguity has no way to arise.
-		"api", "app", "apps", "admin", "administrator", "root", "console", "dashboard",
-		"portal", "sites", "site", "edge", "tags", "host", "hosting", "internal",
+		"api", "app", "apps", "admin", "administrator", "root", "console", "console2", "dashboard",
+		"platform", "platform2", "portal", "sites", "site", "edge", "tags", "host", "hosting", "internal",
 		"gateway", "proxy", "router", "ingress", "cdn", "static", "assets", "mail",
 		"smtp", "imap", "ftp",
 		"ns", "ns1", "ns2", "dns", "status", "health", "healthz", "metrics", "grafana",
