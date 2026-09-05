@@ -356,6 +356,9 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 # no-ops PRAGMA key), so they are built uniformly — one contract for all, the
 # non-sqlite apps merely carrying a libc dep they do not use. The modernc gate above
 # already proved none of them double-registers "sqlite" under this tag.
+# PLUGIN_JOBS caps how many plugins compile at once; the default is every
+# core the builder can see, and a builder with fewer bytes than cores says so here.
+ARG PLUGIN_JOBS
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     set -eu; mkdir -p /plugins; \
@@ -367,7 +370,7 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     coresident="$(sed -n '/Coresident: *true/{s/.*{Name: "\([^"]*\)".*/\1/p;}' manifest/apps.go)"; \
     spawned="$(sed -n '/Coresident: *true/d; s/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)"; \
     echo "building $(echo "$spawned" | wc -w) of $(echo "$names" | wc -w) plugins, $(nproc) at a time (coresident, never spawned: ${coresident:-none})"; \
-    printf '%s\n' $spawned | xargs -P "$(nproc)" -I{} sh -c \
+    printf '%s\n' $spawned | xargs -P "${PLUGIN_JOBS:-$(nproc)}" -I{} sh -c \
       'CGO_ENABLED=1 go build -trimpath -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" -ldflags="$GO_LDFLAGS" -o "/plugins/$1" "./plugin/$1" || { echo "FATAL: plugin $1 failed to build" >&2; exit 255; }' _ {}
 # THE STAMP LANDED — asked of the ARTIFACT, not of the flag string.
 #
