@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sock"
 	"github.com/hanzoai/cloud/money"
 	"github.com/zap-proto/zip"
 )
@@ -123,11 +124,10 @@ func runtimeDir(t *testing.T) string {
 			return cur
 		}
 	}
-	dir, err := os.MkdirTemp("", "planetest")
-	if err != nil {
-		t.Fatalf("planetest: temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	// sock.Dir is the ONE way to make a directory a socket can bind in — it owns
+	// the short prefix the 104-byte Darwin sockaddr limit needs. This adds only
+	// the reuse policy above, which is planetest's own contribution.
+	dir := sock.Dir(t)
 	t.Setenv("ZIP_RUNTIME_DIR", dir)
 	client.Unbind()
 	t.Cleanup(client.Unbind)
