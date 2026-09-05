@@ -863,6 +863,7 @@ jobs:
           # behaviour to fall back to, and the build cannot resolve it at all.
           secrets: |
             GIT_AUTH_TOKEN=${{ secrets.GH_PAT }}
+            GITHUB_TOKEN=${{ secrets.GH_PAT }}
             GIT_TOKEN=${{ github.token }}
             FORGE_TOKEN=${{ secrets.FORGE_TOKEN }}
 
