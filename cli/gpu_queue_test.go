@@ -357,8 +357,19 @@ func TestStudioReadyGatesCapability(t *testing.T) {
 
 	// Once the studio answers, readiness flips and the capability is advertised —
 	// the same recovery path a studio that died and came back travels.
-	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, `{"queue_running":[],"queue_pending":[]}`)
+	//
+	// The stub answers ONE route, the way a real Studio does: /prompt reports the
+	// single render slot and /queue is gone. A stub that answered every path let
+	// the probe ask for a route the engine had removed and still pass here, while
+	// in production every claim was declined "studio not ready" against a 404.
+	var probed string
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		probed = r.URL.Path
+		if r.URL.Path != "/prompt" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = io.WriteString(w, `{"exec_info":{"rendering":0}}`)
 	})}
 	up, err := net.Listen("tcp", strings.TrimPrefix(localComfyUI, "http://"))
 	if err != nil {
@@ -375,6 +386,9 @@ func TestStudioReadyGatesCapability(t *testing.T) {
 	}
 	if w.studioBlockReason() != "" {
 		t.Fatalf("a ready node must give no block reason: %q", w.studioBlockReason())
+	}
+	if probed != "/prompt" {
+		t.Fatalf("readiness must probe the route a Studio serves; asked %q", probed)
 	}
 }
 

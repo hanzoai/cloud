@@ -164,9 +164,15 @@ func requestStudioRecycle() {
 	}
 }
 
-// studioBusy reports whether the engine holds queued or running prompts.
+// studioBusy reports whether the engine is rendering right now.
 // A generous timeout: a saturated GB10 answers slowly mid-render — slow is
 // alive, and killing a live render costs 8-70 minutes of GPU work.
+//
+// There is no queue to measure. A box renders one prompt at a time and nothing
+// waits behind it, so /prompt answers the one slot — {"exec_info":{"rendering":N}}
+// — and /queue is gone. Decoding the old shape from a 404 body failed, and a
+// failed decode reads as "not ok", which the supervisor cannot tell from a dead
+// engine: it recycled a box that was mid-render.
 func studioBusy(ctx context.Context) (busy, ok bool) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
