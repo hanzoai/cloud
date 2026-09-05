@@ -30,3 +30,31 @@ func TestForward_OnlyNonEmptyFlagsOverrideEnv(t *testing.T) {
 		t.Fatalf("CLOUD_IAM_ISSUER = %q, want it untouched — an empty --iam-issuer must not blank a pinned issuer", got)
 	}
 }
+
+func TestServesConsole(t *testing.T) {
+	for _, tc := range []struct {
+		host string
+		want bool
+	}{
+		{"", false},
+		{"localhost", true},
+		{"127.0.0.1", true},
+		{"[::1]", true},
+		{"app.local", true},
+		{"app.localhost", true},
+		{"console.hanzo.ai", true},
+		{"cloud.hanzo.ai", true},
+		{"platform.hanzo.ai", true},
+		{"platform2.hanzo.ai", true},
+		{"console2.hanzo.ai", true},
+		{"platform.lux.network", true},
+		{"oci.hanzo.ai", false},
+		{"pkg.hanzo.ai", false},
+		{"ci.hanzo.ai", false},
+		{"example.com", false},
+	} {
+		if got := servesConsole(tc.host); got != tc.want {
+			t.Errorf("servesConsole(%q) = %v, want %v", tc.host, got, tc.want)
+		}
+	}
+}

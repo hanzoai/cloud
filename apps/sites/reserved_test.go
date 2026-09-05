@@ -152,3 +152,11 @@ func TestReservedStgIsTheClosedGap(t *testing.T) {
 		t.Fatal("reserved check must be case-insensitive for stg")
 	}
 }
+
+func TestReservedPlatform(t *testing.T) {
+	for _, label := range []string{"platform", "platform2", "console2", "PLATFORM"} {
+		if !IsReserved(label) {
+			t.Errorf("label %q must be reserved", label)
+		}
+	}
+}

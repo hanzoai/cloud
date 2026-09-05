@@ -975,5 +975,5 @@ func servesConsole(host string) bool {
 		return true
 	}
 	label, _, ok := strings.Cut(host, ".")
-	return ok && (label == "console" || label == "cloud")
+	return ok && (label == "console" || label == "cloud" || label == "platform" || label == "platform2" || label == "console2")
 }

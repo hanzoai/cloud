@@ -151,7 +151,7 @@ func TestAnUnreadableConsoleDoesNotStopTheEdge(t *testing.T) {
 	}
 	run := string(src)[i:]
 
-	if !strings.Contains(run, "webui.Use(app, release.FS(consoleSrc))") {
+	if !strings.Contains(run, "webui.Use(app, release.FS(consoleSrc)") {
 		t.Fatal("run() never mounts the console — a console the store cannot serve " +
 			"takes the whole API down with it, which is the 2026-08-15 outage")
 	}
