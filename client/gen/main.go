@@ -280,7 +280,7 @@ func isPlane(p *packages.Package, e ast.Expr) bool {
 			return false
 		}
 		pn, ok := p.TypesInfo.Uses[id].(*types.PkgName)
-		return ok && pn.Imported().Path() == "github.com/hanzoai/cloud"
+		return ok && pn.Imported().Path() == cloudPkg
 	case *ast.Ident:
 		// `p := cloud.Plane()` then `zip.Post[...](p, ...)` — meter_rpc.go does
 		// exactly this, and reading only the direct call would miss both its ops.
@@ -375,6 +375,12 @@ func (c *client) qualify(ref string) string {
 }
 
 // use records an import and returns its local name.
+// The two package paths the leaf rule is stated in terms of.
+const (
+	cloudPkg    = "github.com/hanzoai/cloud"
+	contractPkg = "github.com/hanzoai/cloud/client"
+)
+
 func (c *client) use(path string) string {
 	if n, ok := c.Imports[path]; ok {
 		return n
@@ -385,8 +391,30 @@ func (c *client) use(path string) string {
 }
 
 // spell writes a type as generated source, recording whatever imports it needs.
+//
+// A GENERATED CLIENT IS A LEAF, and this is what holds it there. cloud imports
+// these packages, so a client that named cloud back could never be imported by
+// the thing that imports it — the cycle is the reason client/call.go exists at
+// all. An op's signature is written by the app, and an app naturally spells the
+// unit type it already has in scope as cloud.Unit, which would drag that import
+// in. cloud.Unit and client.Unit are the SAME alias (both `= struct{}`), so the
+// contract package the client already imports supplies the name, and the leaf
+// property survives whatever the app happened to write.
+//
+// Any OTHER cloud type reaching a plane signature is a genuine layering fault
+// rather than a spelling one, so it fails the generation loudly instead of
+// emitting a client nothing can import.
 func (c *client) spell(t types.Type) string {
-	return types.TypeString(t, func(p *types.Package) string { return c.use(p.Path()) })
+	if a, ok := t.(*types.Alias); ok && a.Obj().Pkg() != nil && a.Obj().Pkg().Path() == cloudPkg {
+		return c.use(contractPkg) + "." + a.Obj().Name()
+	}
+	return types.TypeString(t, func(p *types.Package) string {
+		if p.Path() == cloudPkg {
+			panic("client/gen: a generated client may not import " + cloudPkg +
+				" — it is a leaf, and cloud imports it. Name the type from " + contractPkg + " instead.")
+		}
+		return c.use(p.Path())
+	})
 }
 
 func (c *client) render() ([]byte, error) {
