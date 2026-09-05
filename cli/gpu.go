@@ -1191,8 +1191,16 @@ func (w *worker) hasNonRenderLane() bool {
 	return false
 }
 
-// studioReachable probes the local studio's /queue (bounded), authenticated. A node
-// that can answer it is up enough to accept a render.
+// studioReachable probes the local studio's /prompt (bounded), authenticated. A
+// node that can answer it is up enough to accept a render.
+//
+// /prompt, NOT /queue. A Studio holds no queue — a box renders one prompt at a
+// time and nothing waits behind it — so the queue route was removed and GET
+// /prompt reports the one slot instead ({"exec_info":{"rendering":N}}). Probing
+// the route that no longer exists answered 404 on every pass, which pinned
+// studioReady false forever: the node claimed jobs off gpu-jobs and then
+// declined every one of them as "studio not ready", and the work sat until its
+// lease lapsed. Measured on the GB10: /queue 404, /prompt 200.
 func (w *worker) studioReachable(ctx context.Context) bool {
 	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -2153,7 +2161,7 @@ func (w *worker) materializeInputs(ctx context.Context, cl *http.Client, inputs 
 	return nil
 }
 
-// waitEngine blocks until the local engine answers its /queue — up to 90s, which
+// waitEngine blocks until the local engine answers its /prompt — up to 90s, which
 // outlasts any supervisor recycle (engine restart is seconds, model reload longer).
 func waitEngine(ctx context.Context, cl *http.Client) error {
 	deadline := time.Now().Add(90 * time.Second)
