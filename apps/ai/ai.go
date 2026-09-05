@@ -31,6 +31,8 @@ import (
 	"github.com/hanzoai/cloud/apps/crawl"
 	"github.com/hanzoai/cloud/apps/websearch"
 	"github.com/hanzoai/cloud/client"
+	allowancepeer "github.com/hanzoai/cloud/client/allowance"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/metering"
 	"github.com/hanzoai/cloud/money"
@@ -266,9 +268,7 @@ func countFree(ctx context.Context, u aiobject.UsageEvent) error {
 	if u.Allowance == "" {
 		return nil
 	}
-	if _, err := cloud.Ask[client.AllowanceIn, client.Allowance](
-		cloud.For(ctx, u.Namespace), "allowance", client.AllowanceTake,
-		&client.AllowanceIn{Subject: u.Allowance}); err != nil {
+	if _, err := allowancepeer.AllowanceTake(cloud.For(ctx, u.Namespace), &client.AllowanceIn{Subject: u.Allowance}); err != nil {
 		return fmt.Errorf("plane allowance count: %w", err)
 	}
 	return nil
@@ -407,9 +407,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 			if currency == "" {
 				currency = "usd"
 			}
-			bal, err := cloud.Ask[client.BalanceIn, client.Balance](
-				cloud.For(ctx, namespace), "commerce", client.FinanceBalance,
-				&client.BalanceIn{Subject: subject, Currency: currency})
+			bal, err := commercepeer.FinanceBalance(cloud.For(ctx, namespace), &client.BalanceIn{Subject: subject, Currency: currency})
 			if err != nil {
 				return 0, fmt.Errorf("plane balance read: %w", err)
 			}
@@ -481,9 +479,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// bills us either way — so "we could not ask" must never become "a stranger may
 	// have as much as they want". An unanswerable ask in that lane is refused.
 	aiobject.SetSpent(func(ctx context.Context, subject, namespace string) (bool, error) {
-		out, err := cloud.Ask[client.AllowanceIn, client.Allowance](
-			cloud.For(ctx, namespace), "allowance", client.AllowanceRead,
-			&client.AllowanceIn{Subject: subject})
+		out, err := allowancepeer.AllowanceRead(cloud.For(ctx, namespace), &client.AllowanceIn{Subject: subject})
 		switch {
 		case err != nil && namespace == tenant.Public:
 			return true, nil // spent: an unnamed caller gets no benefit of the doubt

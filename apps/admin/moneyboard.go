@@ -49,7 +49,7 @@ import (
 	"github.com/hanzoai/cloud/apps/admin/customer"
 	"github.com/hanzoai/cloud/apps/admin/finance"
 	"github.com/hanzoai/cloud/apps/admin/revenue"
-	"github.com/hanzoai/cloud/client"
+	treasurypeer "github.com/hanzoai/cloud/client/treasury"
 	"github.com/hanzoai/cloud/money"
 	"github.com/zap-proto/zip"
 )
@@ -287,8 +287,7 @@ func (o ops) Money(ctx context.Context, _ *core.None) (*MoneyOut, error) {
 // the envelope's capability slot and treasury re-checks it on its side —
 // delegation, never escalation.
 func reserve(ctx context.Context, c *zip.Ctx) (money.Cents, error) {
-	out, err := cloud.Ask[struct{}, client.Reserved](cloud.As(c, ""), "treasury",
-		client.TreasuryReserve, &struct{}{})
+	out, err := treasurypeer.TreasuryReserve(cloud.As(c, ""), &cloud.Unit{})
 	if err != nil {
 		return 0, err
 	}

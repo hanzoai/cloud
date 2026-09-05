@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
 	"github.com/hanzoai/cloud/finance"
 	"github.com/hanzoai/cloud/money"
 )
@@ -49,8 +49,7 @@ func coResidentUsage(ctx context.Context, org, product, groupBy string) ([]byte,
 		// became their own binaries.
 		ctx, cancel := context.WithTimeout(ctx, usagePeerTimeout)
 		defer cancel()
-		reply, err := cloud.Ask[struct{}, client.UsageRows](cloud.For(ctx, org), "commerce",
-			client.FinanceUsage, &struct{}{})
+		reply, err := commercepeer.FinanceUsage(cloud.For(ctx, org))
 		if err != nil {
 			if errors.Is(err, cloud.ErrNoPeer) {
 				return nil, false, nil // no commerce in this fleet → the configured S2S read

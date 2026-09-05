@@ -8,6 +8,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
+	frameworkpeer "github.com/hanzoai/cloud/client/framework"
 )
 
 // remote.go — the exported reads and the one write reach the framework wherever
@@ -16,15 +17,14 @@ import (
 // An org's DocType store is single-open: exactly one process holds it. When THIS
 // process is that one (mounted != nil), the exported functions above call the
 // engine directly. When it is not — a lane in its own plugin, split from the
-// framework — they ask the framework peer by name (client.Framework*), which
+// framework — they ask the framework peer by name (client/framework), which
 // answers from the process that holds the store. The plane handlers (lane_rpc.go)
 // call the same exported functions, and never recurse: the process that serves
 // them is by definition the one that mounted the store, so its mounted is set and
 // the direct branch is taken. Co-resident tests never leave the direct branch.
 
 func remoteInstalled(ctx context.Context, org string, id ID) bool {
-	out, err := cloud.Ask[client.FwRef, client.FwInstalled](cloud.For(ctx, org), "framework",
-		client.FrameworkInstalled, &client.FwRef{Doctype: id.String()})
+	out, err := frameworkpeer.FrameworkInstalled(cloud.For(ctx, org), &client.FwRef{Doctype: id.String()})
 	return err == nil && out != nil && out.Installed
 }
 
@@ -33,8 +33,7 @@ func remoteSearch(ctx context.Context, org string, id ID, filters map[string]str
 	for k, v := range filters {
 		fs = append(fs, client.FwFilter{Field: k, Value: v})
 	}
-	out, err := cloud.Ask[client.FwDocsIn, client.FwDocs](cloud.For(ctx, org), "framework",
-		client.FrameworkDocs, &client.FwDocsIn{Doctype: id.String(), Filters: fs, Limit: limit})
+	out, err := frameworkpeer.FrameworkDocs(cloud.For(ctx, org), &client.FwDocsIn{Doctype: id.String(), Filters: fs, Limit: limit})
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +49,7 @@ func remoteSearch(ctx context.Context, org string, id ID, filters map[string]str
 }
 
 func remoteGet(ctx context.Context, org string, id ID, name string) (Document, error) {
-	out, err := cloud.Ask[client.FwDocIn, client.FwDoc](cloud.For(ctx, org), "framework",
-		client.FrameworkDoc, &client.FwDocIn{Doctype: id.String(), Name: name})
+	out, err := frameworkpeer.FrameworkDoc(cloud.For(ctx, org), &client.FwDocIn{Doctype: id.String(), Name: name})
 	if err != nil {
 		return Document{}, err
 	}
@@ -67,8 +65,7 @@ func remoteIngest(ctx context.Context, org string, id ID, data map[string]any, r
 	if err != nil {
 		return Ingested{}, err
 	}
-	out, err := cloud.Ask[client.FwIngestIn, client.FwIngested](cloud.For(ctx, org), "framework",
-		client.FrameworkIngest, &client.FwIngestIn{Doctype: id.String(), Data: raw, Name: requestedName})
+	out, err := frameworkpeer.FrameworkIngest(cloud.For(ctx, org), &client.FwIngestIn{Doctype: id.String(), Data: raw, Name: requestedName})
 	if err != nil {
 		return Ingested{}, err
 	}
@@ -76,8 +73,7 @@ func remoteIngest(ctx context.Context, org string, id ID, data map[string]any, r
 }
 
 func remoteFind(ctx context.Context, org string, id ID, field, value string) (string, error) {
-	out, err := cloud.Ask[client.FwFindIn, client.FwFound](cloud.For(ctx, org), "framework",
-		client.FrameworkFind, &client.FwFindIn{Doctype: id.String(), Field: field, Value: value})
+	out, err := frameworkpeer.FrameworkFind(cloud.For(ctx, org), &client.FwFindIn{Doctype: id.String(), Field: field, Value: value})
 	if err != nil {
 		return "", err
 	}

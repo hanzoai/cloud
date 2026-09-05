@@ -32,6 +32,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/client"
+	taskspeer "github.com/hanzoai/cloud/client/tasks"
 	"github.com/hanzoai/cloud/samples"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
 	"github.com/zap-proto/zip"
@@ -487,8 +488,7 @@ func allActivitiesForOrg(ctx context.Context, org, ns string) []tasks.Standalone
 	var out []tasks.StandaloneActivity
 	cursor := ""
 	for range maxActivityPages {
-		page, err := cloud.Ask[client.ActivitiesIn, client.Activities](
-			cloud.For(ctx, org), "tasks", client.TasksActivities,
+		page, err := taskspeer.TasksActivities(cloud.For(ctx, org),
 			&client.ActivitiesIn{Namespace: ns, Cursor: cursor, Size: activityPageSize})
 		if err != nil || page == nil {
 			return out

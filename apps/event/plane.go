@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	planeops "github.com/hanzoai/cloud/client"
+	projectpeer "github.com/hanzoai/cloud/client/project"
 )
 
 // planeKeys resolves a beacon's publishable ingest key by asking the app that
@@ -28,8 +29,7 @@ type planeKeys struct{}
 func (planeKeys) Resolve(ctx context.Context, key string) (Attribution, bool, error) {
 	// Org-less by construction: the KEY is the tenant key, and the answer names
 	// the org. Passing one would let a caller file a beacon under someone else's.
-	out, err := cloud.Ask[planeops.KeyIn, planeops.Attribution](
-		cloud.For(ctx, ""), "project", planeops.ProjectsResolveKey, &planeops.KeyIn{Key: key})
+	out, err := projectpeer.ProjectsResolveKey(cloud.For(ctx, ""), &planeops.KeyIn{Key: key})
 	if err != nil {
 		return Attribution{}, false, fmt.Errorf("analytics: ask projects: %w", err)
 	}
