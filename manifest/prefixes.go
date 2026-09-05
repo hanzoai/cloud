@@ -39,7 +39,7 @@ import "strings"
 // TestEveryPluginNameIsInTheManifest keeps that from happening silently.
 func PrefixesFor(name string) []string {
 	for _, a := range Apps {
-		if a.Name == name {
+		if a.Name == name || (name == "projects" && a.Name == "project") || (name == "project" && a.Name == "projects") {
 			// Copy: a caller must not be able to mutate the fleet's routing table.
 			out := make([]string, len(a.Prefixes))
 			copy(out, a.Prefixes)
@@ -146,7 +146,7 @@ func GrantFor(name string) []string {
 // live operations get pruned as a sibling's. A `:name` prefix segment matches any
 // single path segment; a literal one matches itself.
 // The path is NORMALIZED first, so both spellings of a capability's number answer
-// here exactly as they do at the router (number.go). "Whose surface is /v1/agent?"
+// here exactly as they do at the router (number.go). "Whose surface is /v1/agents?"
 // and "whose surface is /v1/agent?" must give ONE answer, because the router
 // gives one answer; a static rule disagreeing with the live one is the pairwise
 // defect this file exists to prevent.

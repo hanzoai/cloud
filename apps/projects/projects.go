@@ -503,9 +503,11 @@ func init() {
 	// Register states the two facts the router cannot: the body is BYTES
 	// (openapi.Binary — the declaration no Go struct can make) and the answer is a
 	// deployment.
-	openapi.Register("/v1/project/:slug/deploy", http.MethodPost, openapi.Binary{}, projectsDeployment{})
-	openapi.Describe("/v1/project/:slug/deploy", http.MethodPost,
-		"Upload a built site as one archive and serve it", archiveProse)
+	for _, p := range []string{"/v1/projects/:slug/deploy", "/v1/project/:slug/deploy", "/v1/sites/:slug/deploy", "/v1/site/:slug/deploy"} {
+		openapi.Register(p, http.MethodPost, openapi.Binary{}, projectsDeployment{})
+		openapi.Describe(p, http.MethodPost,
+			"Upload a built site as one archive and serve it", archiveProse)
+	}
 
 	// The shot is untyped for the same reason deploy is — it answers image bytes
 	// — so its sentence comes from here rather than from a typed op.
@@ -650,6 +652,68 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Post(r, "/v1/project/:slug/releases", o.createRelease, zip.WithStatus(http.StatusCreated))
 	zip.Get(r, "/v1/project/:slug/releases", o.listReleases)
 	zip.Post(r, "/v1/project/:slug/releases/:release/activate", o.activateRelease)
+
+	for _, pfx := range []string{"/v1/projects"} {
+		zip.Post(r, pfx, o.create, zip.WithStatus(http.StatusCreated))
+		zip.Post(r, pfx+"/fork", o.fork, zip.WithStatus(http.StatusCreated))
+		zip.Get(r, pfx, o.list)
+		zip.Post(r, pfx+"/sites", o.buildSite)
+		zip.Post(r, pfx+"/sites/deploy", o.deploySite)
+		zip.Get(r, pfx+"/sites", o.listSites)
+		zip.Get(r, pfx+"/sites/:slug", o.getSite)
+		zip.Get(r, pfx+"/edge", o.edge, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
+		zip.Get(r, pfx+"/:slug", o.get)
+		zip.Patch(r, pfx+"/:slug", o.update)
+		zip.Delete(r, pfx+"/:slug", o.del, zip.WithStatus(http.StatusNoContent))
+		app.Post(pfx+"/:slug/deploy", cloud.Handle(s, deploy))
+		app.Get(pfx+"/:slug/shot", cloud.Handle(s, shotOf))
+		zip.Put(r, pfx+"/:slug/star", o.star)
+		zip.Delete(r, pfx+"/:slug/star", o.unstar)
+		zip.Post(r, pfx+"/:slug/purge", o.purge)
+		zip.Post(r, pfx+"/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
+		zip.Get(r, pfx+"/:slug/deployments", o.listDeployments)
+		zip.Get(r, pfx+"/:slug/deployments/:id", o.getDeployment)
+		zip.Post(r, pfx+"/:slug/deployments/:id/complete", o.completeDeployment)
+		zip.Get(r, pfx+"/:slug/domains", o.listDomains)
+		zip.Post(r, pfx+"/:slug/domains", o.bindDomains)
+		zip.Post(r, pfx+"/:slug/domains/:host/verify", o.verifyDomain)
+		zip.Delete(r, pfx+"/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
+		zip.Post(r, pfx+"/:slug/publish", o.publishSiteRelease)
+		zip.Post(r, pfx+"/:slug/releases", o.createRelease, zip.WithStatus(http.StatusCreated))
+		zip.Get(r, pfx+"/:slug/releases", o.listReleases)
+		zip.Post(r, pfx+"/:slug/releases/:release/activate", o.activateRelease)
+	}
+
+	// NATIVE STATIC SITE /v1/site and /v1/sites API
+	for _, pfx := range []string{"/v1/sites", "/v1/site"} {
+		zip.Get(r, pfx, o.listSites)
+		zip.Post(r, pfx, o.buildSite)
+		zip.Post(r, pfx+"/deploy", o.deploySite)
+		zip.Get(r, pfx+"/edge", o.edge, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
+		zip.Get(r, pfx+"/:slug", o.getSite)
+		zip.Patch(r, pfx+"/:slug", o.update)
+		zip.Delete(r, pfx+"/:slug", o.del, zip.WithStatus(http.StatusNoContent))
+
+		app.Post(pfx+"/:slug/deploy", cloud.Handle(s, deploy))
+		app.Get(pfx+"/:slug/shot", cloud.Handle(s, shotOf))
+
+		zip.Post(r, pfx+"/:slug/purge", o.purge)
+		zip.Post(r, pfx+"/:slug/publish", o.publishSiteRelease)
+
+		zip.Post(r, pfx+"/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
+		zip.Get(r, pfx+"/:slug/deployments", o.listDeployments)
+		zip.Get(r, pfx+"/:slug/deployments/:id", o.getDeployment)
+		zip.Post(r, pfx+"/:slug/deployments/:id/complete", o.completeDeployment)
+
+		zip.Get(r, pfx+"/:slug/releases", o.listReleases)
+		zip.Post(r, pfx+"/:slug/releases", o.createRelease, zip.WithStatus(http.StatusCreated))
+		zip.Post(r, pfx+"/:slug/releases/:release/activate", o.activateRelease)
+
+		zip.Get(r, pfx+"/:slug/domains", o.listDomains)
+		zip.Post(r, pfx+"/:slug/domains", o.bindDomains)
+		zip.Post(r, pfx+"/:slug/domains/:host/verify", o.verifyDomain)
+		zip.Delete(r, pfx+"/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
+	}
 }
 
 // ---- handlers ----

@@ -170,7 +170,7 @@ func requestStudioRecycle() {
 func studioBusy(ctx context.Context) (busy, ok bool) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+studioAddr+"/queue", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+studioAddr+"/prompt", nil)
 	if err != nil {
 		return false, false
 	}
@@ -180,13 +180,14 @@ func studioBusy(ctx context.Context) (busy, ok bool) {
 	}
 	defer resp.Body.Close()
 	var q struct {
-		Running []json.RawMessage `json:"queue_running"`
-		Pending []json.RawMessage `json:"queue_pending"`
+		ExecInfo struct {
+			Rendering int `json:"rendering"`
+		} `json:"exec_info"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 32<<20)).Decode(&q); err != nil {
 		return false, false
 	}
-	return len(q.Running)+len(q.Pending) > 0, true
+	return q.ExecInfo.Rendering > 0, true
 }
 
 // superviseStudio keeps the local render backend on :8188 alive until ctx
