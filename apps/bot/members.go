@@ -18,11 +18,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	peer "github.com/hanzoai/cloud/client"
+	teampeer "github.com/hanzoai/cloud/client/team"
 )
-
-// peerTeam is the app that holds the rows. Named once so the two ops cannot
-// disagree about who to ask.
-const peerTeam = "team"
 
 type memberOps struct{}
 
@@ -36,7 +33,7 @@ type memberOps struct{}
 //
 // Response: {"bots":[{"id":"a1","name":"Concierge","userId":"…","personRef":"…","active":true}]}
 func (memberOps) list(ctx context.Context, _ *cloud.Unit) (*peer.BotRoster, error) {
-	out, err := cloud.Ask[peer.BotsIn, peer.BotRoster](ctx, peerTeam, peer.TeamBots, &peer.BotsIn{})
+	out, err := teampeer.TeamBots(ctx, &peer.BotsIn{})
 	if err == cloud.ErrNoPeer {
 		return &peer.BotRoster{Bots: []peer.BotMember{}}, nil
 	}
@@ -52,7 +49,7 @@ func (memberOps) list(ctx context.Context, _ *cloud.Unit) (*peer.BotRoster, erro
 //
 // Response: {"synced":true,"projected":12}
 func (memberOps) sync(ctx context.Context, _ *cloud.Unit) (*peer.BotSync, error) {
-	out, err := cloud.Ask[peer.BotsIn, peer.BotSync](ctx, peerTeam, peer.TeamBotsSync, &peer.BotsIn{})
+	out, err := teampeer.TeamBotsSync(ctx, &peer.BotsIn{})
 	if err == cloud.ErrNoPeer {
 		// Nothing to project into. Saying so is honest; a fabricated success is not.
 		return nil, zip.ErrNotFound("no team subsystem in this deployment")

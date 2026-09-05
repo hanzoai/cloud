@@ -64,6 +64,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/client"
+	teampeer "github.com/hanzoai/cloud/client/team"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 	"gopkg.in/yaml.v3"
@@ -142,12 +143,12 @@ type roster interface {
 type peer struct{}
 
 func (peer) member(ctx context.Context, space, subject string) (*client.Member, error) {
-	return cloud.Ask[client.MemberIn, client.Member](ctx, "team", client.TeamMember,
+	return teampeer.TeamMember(ctx,
 		&client.MemberIn{Space: space, Subject: subject})
 }
 
 func (peer) spaces(ctx context.Context, subject string) (*client.Spaces, error) {
-	return cloud.Ask[client.SpacesIn, client.Spaces](ctx, "team", client.TeamSpaces,
+	return teampeer.TeamSpaces(ctx,
 		&client.SpacesIn{Subject: subject})
 }
 
