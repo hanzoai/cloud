@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -63,6 +65,15 @@ func Listen(plugins []Plugin, enable []string) error {
 		}
 	}
 	if enable != nil {
+		// A forced set names subsystems this process links, by their spec Name.
+		// A name that matches nothing would disable every subsystem silently
+		// (UseAll logs the skip at debug level and the routes answer 404), so
+		// refuse to boot instead.
+		for _, name := range enable {
+			if !slices.ContainsFunc(plugins, func(p Plugin) bool { return p.Name == name }) {
+				return fmt.Errorf("enable %q: no linked subsystem has that name (linked: %s)", name, pluginNames(plugins))
+			}
+		}
 		cfg.Enable = enable
 	}
 	if err := cfg.Validate(); err != nil {
@@ -754,4 +765,13 @@ func healthMux() *http.ServeMux {
 		_, _ = w.Write([]byte("# HELP cloud_up 1 if the process is serving.\n# TYPE cloud_up gauge\ncloud_up 1\n"))
 	})
 	return mux
+}
+
+// pluginNames lists the spec names a process links, for the boot refusal above.
+func pluginNames(plugins []Plugin) string {
+	names := make([]string, 0, len(plugins))
+	for _, p := range plugins {
+		names = append(names, p.Name)
+	}
+	return strings.Join(names, ", ")
 }
