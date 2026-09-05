@@ -147,8 +147,9 @@ COPY go.mod go.sum ./
 # module cache the next time a phantom pin poisons it.
 # FORGE_TOKEN, when supplied, points our OWN modules at git.hanzo.ai. The module
 # path stays github.com/hanzoai/* — a name, not an address — and git dials the
-# canonical forge instead. The longer prefix wins in git, so only hanzoai/* is
-# redirected and every other github.com module still goes to GitHub. go.sum is
+# canonical forge instead. The longer prefix wins in git, so only the orgs the
+# forge mirrors — hanzoai and hanzozt — are redirected and every other
+# github.com module still goes to GitHub. go.sum is
 # unchanged and still authoritative: the forge mirrors the same objects, so the
 # zip hashes to the committed h1: line, and a forge serving different bytes fails
 # the build rather than shipping them. Both secrets are optional; absent either,
@@ -157,7 +158,9 @@ RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
     --mount=type=secret,id=FORGE_TOKEN \
     --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     if [ -s /run/secrets/FORGE_TOKEN ]; then \
-      git config --global url."https://x:$(cat /run/secrets/FORGE_TOKEN)@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"; \
+      for org in hanzoai hanzozt; do \
+        git config --global url."https://x:$(cat /run/secrets/FORGE_TOKEN)@git.hanzo.ai/$org/".insteadOf "https://github.com/$org/"; \
+      done; \
     fi && \
     if [ -s /run/secrets/GIT_AUTH_TOKEN ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/GIT_AUTH_TOKEN)@github.com/".insteadOf "https://github.com/"; \
