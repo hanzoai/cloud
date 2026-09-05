@@ -84,7 +84,7 @@ func TestOneRecordSettlesMoneyOrACount(t *testing.T) {
 // this file is inside the function the usage recorder calls.
 //
 // A future edit that moves the count back in front of the answer has to move
-// client.AllowanceTake to do it, and that is what fails here.
+// allowancepeer.AllowanceTake to do it, and that is what fails here.
 func TestOnlyTheRecordOfAServedCallCounts(t *testing.T) {
 	src, err := os.ReadFile("ai.go")
 	if err != nil {
@@ -102,15 +102,15 @@ func TestOnlyTheRecordOfAServedCallCounts(t *testing.T) {
 	}
 	body := strings.Join(code, "\n")
 
-	if n := strings.Count(body, "client.AllowanceTake"); n != 1 {
-		t.Fatalf("client.AllowanceTake is called %d times; exactly one call site — the record of a served call — may count", n)
+	if n := strings.Count(body, "allowancepeer.AllowanceTake"); n != 1 {
+		t.Fatalf("allowancepeer.AllowanceTake is called %d times; exactly one call site — the record of a served call — may count", n)
 	}
 	if !strings.Contains(body, "func countFree(") || !strings.Contains(
-		body[strings.Index(body, "func countFree("):], "client.AllowanceTake") {
+		body[strings.Index(body, "func countFree("):], "allowancepeer.AllowanceTake") {
 		t.Error("the one take must live in countFree, which only the usage recorder reaches")
 	}
 	if !strings.Contains(body, "aiobject.SetSpent(func(") || !strings.Contains(
-		body[strings.Index(body, "aiobject.SetSpent(func("):], "client.AllowanceRead") {
+		body[strings.Index(body, "aiobject.SetSpent(func("):], "allowancepeer.AllowanceRead") {
 		t.Error("the gate hook must ask client.AllowanceRead — admission reads, it never counts")
 	}
 	if !strings.Contains(body, "aiobject.SetUsageRecorder(record(") {

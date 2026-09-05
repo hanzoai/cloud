@@ -115,9 +115,7 @@ var crossAppGlobals = map[string]string{
 	"flags.Assign":                   "called by experiment — assigns an experiment variant; falls back to the definition's own rollout, so an operator's setting is unobservable.",
 	"flags.GetDef":                   "called by experiment — reads a flag definition; yields none.",
 	"flags.PutDef":                   "called by experiment — writes one; refused.",
-	"index.Query":                    "called by catalog, search — the lexical leg for search and catalog; returns nothing, so both silently lose a corpus.",
 	"index.Ready":                    "called by catalog, search — whether that index is up; false, so the leg reads as unprovisioned.",
-	"index.Reconcile":                "called by catalog — rebuilds the cross-org corpus; writes nothing.",
 	"integrations.InstallationToken": "called by git, sync — mints a GitHub App installation token; refused, so no push reaches the forge from these binaries.",
 	"integrations.TokenFor":          "called by content, destination, projects — fetches a customer's connector credential; refused with 'integrations: not mounted' — every feature spending a customer's OAuth token from another app.",
 	"link.RoutedBreakdown":           "called by billing — routed usage for a bill; empty, so the bill omits it.",
@@ -206,6 +204,12 @@ func exportedReaders(t *testing.T, files []string, globals map[string]bool) map[
 			if !ast.IsExported(name) || name == "Use" || name == "Shutdown" {
 				continue
 			}
+			// A function that SHORT-CIRCUITS on the nil global has already taken the
+			// cure this gate prescribes, so it is not a reader in the sense that
+			// matters: it never answers a stranger with a zero.
+			if guardsNilGlobal(fd, globals) != "" {
+				continue
+			}
 			// Every file of the app is parsed separately, so an identifier
 			// resolved WITHIN its own file carries an Obj and one resolved across
 			// files does not. Filtering on that told the two apart backwards and
@@ -259,6 +263,83 @@ func exportedReaders(t *testing.T, files []string, globals map[string]bool) map[
 		}
 	}
 	return out
+}
+
+// guardsNilGlobal reports the global a function ASKS ITS OWNER for rather than
+// reading uninitialised — the shape
+//
+//	if mounted == nil { return remoteFind(ctx, org, id, field, value) }
+//
+// as the FIRST statement of the body, whose branch calls out and leaves. That is
+// the cure this gate asks for, written where the state lives: in a binary that
+// never mounted the app, the call goes over the peer socket to the one that did,
+// so the caller gets the real answer and never a zero dressed as one.
+//
+// REFUSING IS NOT CURING, and telling the two apart is the whole job here. Every
+// entry in crossAppGlobals guards its global too — `return nil, ErrNotMounted`,
+// `return nil, fmt.Errorf("integrations: not mounted")` — and those are the named
+// defects: a caller in another binary gets nothing back, which is precisely what
+// the ledger records. So the branch must ask SOMEBODY, and an error constructor
+// is not somebody: a call that is only fmt.Errorf or errors.New does not reach
+// the owning app.
+//
+// The position is load-bearing too. Later than the first statement and the global
+// has already been read above it; a branch that falls through reaches the read
+// below. A bare `return mounted != nil` is a liveness answer that IS false in a
+// stranger, and stays a finding.
+func guardsNilGlobal(fd *ast.FuncDecl, globals map[string]bool) string {
+	if fd.Body == nil || len(fd.Body.List) == 0 {
+		return ""
+	}
+	is, ok := fd.Body.List[0].(*ast.IfStmt)
+	if !ok || is.Init != nil {
+		return ""
+	}
+	cond, ok := is.Cond.(*ast.BinaryExpr)
+	if !ok || cond.Op != token.EQL {
+		return ""
+	}
+	name, ok := cond.X.(*ast.Ident)
+	if !ok || !globals[name.Name] {
+		return ""
+	}
+	if null, ok := cond.Y.(*ast.Ident); !ok || null.Name != "nil" {
+		return ""
+	}
+	leaves, asks := false, false
+	for _, st := range is.Body.List {
+		if _, ok := st.(*ast.ReturnStmt); ok {
+			leaves = true
+		}
+	}
+	ast.Inspect(is.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || isErrorConstructor(call.Fun) {
+			return true
+		}
+		asks = true
+		return true
+	})
+	if leaves && asks {
+		return name.Name
+	}
+	return ""
+}
+
+// isErrorConstructor reports whether a call only builds an error — fmt.Errorf,
+// errors.New. Saying "not mounted" in a new error value is the refusal this gate
+// exists to find, not a call to the app that holds the state.
+func isErrorConstructor(fun ast.Expr) bool {
+	sel, ok := fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	return (pkg.Name == "fmt" && sel.Sel.Name == "Errorf") ||
+		(pkg.Name == "errors" && sel.Sel.Name == "New")
 }
 
 // callsQualified reports whether any file calls pkg.fn(...).

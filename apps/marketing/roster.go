@@ -9,7 +9,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	iamclient "github.com/hanzoai/cloud/apps/iam"
-	"github.com/hanzoai/cloud/client"
+	iampeer "github.com/hanzoai/cloud/client/iam"
 	model "github.com/hanzoai/iam/pkg/model"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 )
@@ -58,8 +58,7 @@ func iamRoster(org string) ([]*model.User, error) {
 	// failure this file exists to refuse.
 	ctx, cancel := context.WithTimeout(context.Background(), rosterTimeout)
 	defer cancel()
-	roster, err := cloud.Ask[struct{}, client.Roster](cloud.For(ctx, org), "iam",
-		client.IAMMailable, &struct{}{})
+	roster, err := iampeer.IAMMailable(cloud.For(ctx, org))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errIAMUnavailable, err)
 	}
