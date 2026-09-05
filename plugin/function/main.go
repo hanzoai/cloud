@@ -21,7 +21,7 @@ func main() {
 		Price:    cloud.Metered,
 		Use:      functions.Use,
 		Shutdown: cloud.CtxShutdown(functions.Shutdown),
-	}}, []string{"functions"}); err != nil {
+	}}, []string{"function"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

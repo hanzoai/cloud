@@ -27,7 +27,7 @@ func main() {
 		Price:    cloud.Metered,
 		Use:      mountAgents,
 		Shutdown: shutdownAgents,
-	}}, []string{"agents"}); err != nil {
+	}}, []string{"agent"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

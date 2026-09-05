@@ -21,7 +21,7 @@ func main() {
 		Price:    cloud.Free,
 		Use:      channels.Use,
 		Shutdown: channels.Shutdown,
-	}}, []string{"channels"}); err != nil {
+	}}, []string{"channel"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

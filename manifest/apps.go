@@ -199,7 +199,7 @@ var Apps = []App{
 	// canonical home is GitHub is delivered by the Hanzo Platform GitHub App to
 	// /v1/integration/github/webhook. platform holds the builder and receives nothing.
 	{Name: "platform", Prefixes: []string{"/v1/platform"}},
-	{Name: "project", Pkg: "projects", Prefixes: []string{"/v1/project"}},
+	{Name: "project", Pkg: "projects", Prefixes: []string{"/v1/project", "/v1/projects", "/v1/sites", "/v1/site"}},
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
 	{Name: "domain", Prefixes: []string{"/v1/domain"}},
 	{Name: "prompt", Prefixes: []string{"/v1/prompt"}},

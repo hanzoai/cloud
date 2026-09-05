@@ -1196,7 +1196,7 @@ func (w *worker) hasNonRenderLane() bool {
 func (w *worker) studioReachable(ctx context.Context) bool {
 	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(rctx, http.MethodGet, localComfyUI+"/queue", nil)
+	req, err := http.NewRequestWithContext(rctx, http.MethodGet, localComfyUI+"/prompt", nil)
 	if err != nil {
 		return false
 	}
@@ -2158,7 +2158,7 @@ func (w *worker) materializeInputs(ctx context.Context, cl *http.Client, inputs 
 func waitEngine(ctx context.Context, cl *http.Client) error {
 	deadline := time.Now().Add(90 * time.Second)
 	for {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, localComfyUI+"/queue", nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, localComfyUI+"/prompt", nil)
 		if err != nil {
 			return err
 		}
