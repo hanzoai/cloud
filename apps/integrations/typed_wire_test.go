@@ -55,6 +55,7 @@ var untypedByDesign = map[string]string{
 	"POST /v1/integration/slack/events":         "Slack's HMAC covers the RAW received bytes, which a re-encoded In is not.",
 	"POST /v1/integration/slack/commands":       "Slack's slash-command wire: form-encoded, HMAC over the raw bytes.",
 	"POST /v1/integration/github/webhook":       "GitHub's HMAC covers the RAW received bytes.",
+	"POST /v1/integration/forge/webhook":        "the forge's HMAC covers the RAW received bytes.",
 	"POST /v1/integration/linear/webhook":       "Linear's HMAC covers the RAW received bytes.",
 	"POST /v1/integration/discord/interactions": "Discord's Ed25519 signature covers the RAW received bytes.",
 	"POST /v1/integration/teams/events": "header-authed, and answers an EMPTY 200 to a body it cannot parse; zip " +

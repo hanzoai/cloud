@@ -557,6 +557,46 @@ func OnServiceRelease(ctx context.Context, ev ServiceReleaseEvent) error {
 	return err
 }
 
+// ---- workflow job → runner ----
+
+// JobEvent is one workflow job a provider queued, with what a runner needs to
+// register for it. Provider is forge or github; Token is the forge's registration
+// token or GitHub's just-in-time configuration; URL is the forge, when it is one.
+type JobEvent struct {
+	Org      string
+	Provider string
+	Repo     string // owner/name
+	ID       int64
+	Labels   []string
+	URL      string
+	Token    string
+}
+
+// runner is the registered launcher: platform installs it in Use when
+// co-resident. Same inversion as pushBuilder, and exactly one registration.
+var runner func(ctx context.Context, ev JobEvent) (string, error)
+
+// RegisterRunner installs the launcher that turns a queued job into a runner.
+func RegisterRunner(f func(ctx context.Context, ev JobEvent) (string, error)) {
+	runner = f
+}
+
+// OnWorkflowJob launches one runner for a queued job: the registered launcher
+// when platform is co-resident, the platform app over the plane when it is not.
+// It answers the Job's name, so a caller can tell "launched" from "did nothing".
+func OnWorkflowJob(ctx context.Context, ev JobEvent) (string, error) {
+	if runner != nil {
+		return runner(ctx, ev)
+	}
+	out, err := Ask[client.JobIn, client.Launched](For(ctx, ev.Org), "platform", client.PlatformJob, &client.JobIn{
+		Provider: ev.Provider, Repo: ev.Repo, ID: ev.ID, Labels: ev.Labels, URL: ev.URL, Token: ev.Token,
+	})
+	if err != nil {
+		return "", err
+	}
+	return out.Job, nil
+}
+
 // ---- git lifecycle event stream ----
 //
 // One event, many subscribers. push-to-deploy (OnGitPush) is the deploy

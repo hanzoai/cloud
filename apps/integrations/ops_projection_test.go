@@ -87,6 +87,7 @@ var rawRoutes = map[string]string{
 	"GET /v1/integration/telegram/link/auth":     "302",
 	"GET /v1/integration/telegram/link/callback": "302",
 	"POST /v1/integration/github/webhook":        "HMAC over the raw body",
+	"POST /v1/integration/forge/webhook":         "HMAC over the raw body",
 	"POST /v1/integration/linear/webhook":        "HMAC over the raw body, with the organization's own secret",
 	"POST /v1/integration/discord/interactions":  "Ed25519 over the raw body",
 	"POST /v1/integration/openrouter/webhook":    "OTLP body, decoded as a subset",

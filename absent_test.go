@@ -55,6 +55,7 @@ var kinds = map[string]struct {
 	"RegisterSync":                {remote, "integrations and the webhook endpoint trigger; sync holds the engine"},
 	"RegisterPushBuilder":         {remote, "git takes the push; platform holds the builder"},
 	"RegisterServiceReleaser":     {remote, "a build releases; platform holds the CR control plane"},
+	"RegisterRunner":              {remote, "integrations takes the queued job; platform holds the cluster"},
 	"RegisterOrgScopeResolver":    {remote, "the identity check asks; projects holds the registry"},
 
 	"RegisterLifecycleSubscriber": {local,
@@ -112,6 +113,10 @@ var probes = []struct {
 	}},
 	{"RegisterServiceReleaser", "OnServiceRelease", func(ctx context.Context) error {
 		return OnServiceRelease(ctx, ServiceReleaseEvent{Service: "cloud", Image: "ghcr.io/hanzoai/cloud:v1.0.0"})
+	}},
+	{"RegisterRunner", "OnWorkflowJob", func(ctx context.Context) error {
+		_, err := OnWorkflowJob(ctx, JobEvent{Org: "acme", Provider: "forge", Repo: "acme/r", ID: 1, Labels: []string{"l"}, URL: "https://git", Token: "t"})
+		return err
 	}},
 	{"RegisterOrgScopeResolver", "ProjectOwnership", func(ctx context.Context) error {
 		_, _, err := ProjectOwnership(ctx, "acme", "some-project")
