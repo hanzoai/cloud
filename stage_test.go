@@ -36,7 +36,7 @@ func serveFlags(t *testing.T, held map[string][]string) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 
-	app := zip.New(zip.Config{AppName: "flags"})
+	app := zip.New(zip.Config{AppName: "flag"})
 	zip.Post[client.FlagIn, client.Flag](app, "/flags/hold",
 		func(ctx context.Context, in *client.FlagIn) (*client.Flag, error) {
 			// The same refusal apps/flags makes: no caller, no answer.
@@ -47,9 +47,9 @@ func serveFlags(t *testing.T, held map[string][]string) {
 			return &client.Flag{On: slices.Contains(held[org], in.Key)}, nil
 		}, zip.WithOperationID(client.FlagsHold))
 
-	go func() { _ = app.Listen(zip.SocketPath("flags")) }()
+	go func() { _ = app.Listen(zip.SocketPath("flag")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
-	waitFor(t, "flags")
+	waitFor(t, "flag")
 }
 
 // staged is one capability's surface behind its own refusal, plus an address
