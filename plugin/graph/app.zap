@@ -15,6 +15,10 @@ struct graphAssertOut {
     Reasons   list<text> @24
 }
 
+struct graphExtractOut {
+    Triples list<bytes> @0
+}
+
 struct graphNeighborsIn {
     Seeds     list<text> @0
     Relation  text       @8
@@ -66,6 +70,13 @@ struct graphSearchIn {
     Limit    i64  @24
 }
 
+struct graphSourceIn {
+    Source  text @0
+    Text    text @8
+    At      text @16
+    Subject text @24
+}
+
 struct graphVocabularyOut {
     Relations list<text> @0
     Rule      list<text> @8
@@ -74,6 +85,25 @@ struct graphVocabularyOut {
 
 interface graph {
     graphAssert(req: graphAssertIn) returns (rep: graphAssertOut)
+    # Reads a source and returns the relations it states, recording
+    # nothing. It is how a caller sees what a document would file before the plane —
+    # which has no update and no delete — has anything filed into it.
+    # A relation is stated as `relation:: value` on its own line; prose states none. A
+    # value written `[[key]]` names another entity, which makes the assertion an edge.
+    # The subject is the nearest heading above the line, or the request's `subject`
+    # until a heading names one.
+    graphExtract(req: graphSourceIn) returns (rep: graphExtractOut)
+    # Reads a source and records what it states into the calling
+    # organization's graph — the same store, the same admission and the same content
+    # address as POST /v1/graph, because this operation ends by calling that one.
+    # Every assertion carries the source it came from and, as its evidence, the
+    # section that stated it: `<source>#<section>`. Delivering the same source at the
+    # same `at` twice therefore records one set of rows and reports the rest as
+    # duplicates, which is the property a retrying importer depends on.
+    # A source that states no relation is refused rather than recorded as an empty
+    # success: a caller that wrote its document in prose has been told nothing by a
+    # 200 that filed nothing.
+    graphIngest(req: graphSourceIn) returns (rep: graphAssertOut)
     graphNeighbors(req: graphNeighborsIn) returns (rep: graphNeighborsOut)
     graphRead(req: graphReadIn) returns (rep: graphReadOut)
     graphResolve(req: graphResolveIn) returns (rep: graphResolveOut)
@@ -89,10 +119,11 @@ interface graph {
 }
 
 # ---------------------------------------------------------------------
-# 6 op(s) here. What follows is what this schema does not carry.
+# 8 op(s) here. What follows is what this schema does not carry.
 #
-# opaque (4) — crosses, arrives without its name:
+# opaque (5) — crosses, arrives without its name:
 #   graphAssertIn.Assertions  graph.graphFact (list element)
+#   graphExtractOut.Triples  graph.graphTriple (list element)
 #   graphReadOut.Assertions  graph.wireFact (list element)
 #   graphResolveOut.Conflicts  graph.wireFact (list element)
 #   graphResolveOut.Winner  graph.wireFact

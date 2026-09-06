@@ -30,6 +30,7 @@ require (
 	github.com/hanzoai/plans v1.8.1
 	github.com/hanzoai/pricing v1.4.10
 	github.com/hanzoai/pubsub v1.4.6
+	github.com/hanzoai/semantic v0.1.0
 	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.5.10
 	github.com/hanzoai/trust v0.2.4
