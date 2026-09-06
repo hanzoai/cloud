@@ -3,6 +3,8 @@
 package graph
 
 import (
+	"encoding/json"
+
 	"github.com/zap-proto/zip"
 )
 
@@ -76,8 +78,38 @@ func init() {
 			"graphFact.value":          "Value is what the relation points at. When Names is true it is another\nentity's key and the assertion is an EDGE; otherwise it is a scalar and\nthe assertion is a property. 2048 bytes at most, or 512 when it names an\nentity.",
 		},
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/graph POST /v1/graph/extract", zip.Doc{
+		Description: "Reads a source and returns the relations it states, recording\nnothing. It is how a caller sees what a document would file before the plane —\nwhich has no update and no delete — has anything filed into it.\n\nA relation is stated as `relation:: value` on its own line; prose states none. A\nvalue written `[[key]]` names another entity, which makes the assertion an edge.\nThe subject is the nearest heading above the line, or the request's `subject`\nuntil a heading names one.",
+		Fields: map[string]string{
+			"graphExtractOut.triples": "Triples are the relations found, in the order the document states them.",
+			"graphSourceIn.at":        "At is when what the source says was so, RFC 3339. Required by ingest — which\nrecords — and read by nothing in extract, which records nothing. Required for\nthe same reason /v1/graph requires it: it is part of the assertion's content\naddress, so re-reading one source at one instant records one set of rows\nhowever many times it is delivered. A clock read here instead would append\nthe whole document again on every re-read.",
+			"graphSourceIn.source":    "Source names where the text came from — a URL, a document id, a page title.\nIt is stamped on every assertion as its source, and with the section number\nas its evidence, so a claim can be traced back to the passage that made it.\nRequired.",
+			"graphSourceIn.subject":   "Subject is the entity the text is about before any heading names one. A\ndocument that states relations above its first heading needs it; one whose\nevery section is headed does not.",
+			"graphSourceIn.text":      "Text is the document. Relations are read from it and from nothing else: a\nline written `relation:: value` states one, and prose states none. Required.",
+			"graphTriple.names":       "Names is the author's declaration that Object is an entity and the assertion\nis an EDGE, written `[[key]]`. Absent, the relation is a property of Subject.\nIt is read from the notation and never guessed from the value's shape.",
+			"graphTriple.object":      "Object is what the relation points at. When Names is true it has been\nunwrapped from its `[[…]]` and is another entity's key.",
+			"graphTriple.predicate":   "Predicate is the relation, exactly as the line spells it before the `::`.\nThis surface holds no vocabulary, so it renames nothing.",
+			"graphTriple.section":     "Section is which section of the source stated it, counting from zero. It is\nthe second half of every resulting assertion's evidence, `<source>#<section>`.",
+			"graphTriple.subject":     "Subject is the entity the statement is about: the nearest heading above the\nline, or the request's own subject where no heading has appeared yet.",
+		},
+		Example: json.RawMessage(`{"source":"wiki/api","at":"2026-09-01T00:00:00Z","text":"# acme/svc/api\nowner:: [[acme/team/core]]\ntier:: 1"}`),
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/graph POST /v1/graph/graphql", zip.Doc{
 		Description: "Is the endpoint. It answers 200 with a GraphQL error list for a query\nthat cannot run, which is the wire every GraphQL client parses — a transport\nerror would be read as the server being down rather than the query being\nwrong.",
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/graph POST /v1/graph/ingest", zip.Doc{
+		Description: "Reads a source and records what it states into the calling\norganization's graph — the same store, the same admission and the same content\naddress as POST /v1/graph, because this operation ends by calling that one.\n\nEvery assertion carries the source it came from and, as its evidence, the\nsection that stated it: `<source>#<section>`. Delivering the same source at the\nsame `at` twice therefore records one set of rows and reports the rest as\nduplicates, which is the property a retrying importer depends on.\n\nA source that states no relation is refused rather than recorded as an empty\nsuccess: a caller that wrote its document in prose has been told nothing by a\n200 that filed nothing.",
+		Fields: map[string]string{
+			"graphAssertOut.duplicate": "Duplicate is how many members this plane already held. A redelivery\ncollides on its content address and is counted here, not refused: it is\nthe success a retrying caller depends on.",
+			"graphAssertOut.reasons":   "Reasons names why each refused member was refused, in the order sent.",
+			"graphAssertOut.recorded":  "Recorded is how many members became new rows.",
+			"graphAssertOut.refused":   "Refused is how many members were turned away on arrival, before the store\nwas touched — a missing entity, a timestamp that is not RFC 3339, a\nconfidence outside [0,1]. The rest of the batch was still recorded.",
+			"graphSourceIn.at":         "At is when what the source says was so, RFC 3339. Required by ingest — which\nrecords — and read by nothing in extract, which records nothing. Required for\nthe same reason /v1/graph requires it: it is part of the assertion's content\naddress, so re-reading one source at one instant records one set of rows\nhowever many times it is delivered. A clock read here instead would append\nthe whole document again on every re-read.",
+			"graphSourceIn.source":     "Source names where the text came from — a URL, a document id, a page title.\nIt is stamped on every assertion as its source, and with the section number\nas its evidence, so a claim can be traced back to the passage that made it.\nRequired.",
+			"graphSourceIn.subject":    "Subject is the entity the text is about before any heading names one. A\ndocument that states relations above its first heading needs it; one whose\nevery section is headed does not.",
+			"graphSourceIn.text":       "Text is the document. Relations are read from it and from nothing else: a\nline written `relation:: value` states one, and prose states none. Required.",
+		},
+		Example: json.RawMessage(`{"source":"wiki/api","at":"2026-09-01T00:00:00Z","text":"# acme/svc/api\nowner:: [[acme/team/core]]\ntier:: 1"}`),
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/graph POST /v1/graph/neighbors", zip.Doc{
 		Fields: map[string]string{
