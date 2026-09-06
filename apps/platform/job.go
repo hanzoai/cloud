@@ -44,6 +44,11 @@ const (
 	runnerDeadline = int64(4 * 60 * 60)
 	// runnerTTL keeps a finished Job for its log, then lets it go.
 	runnerTTL = int64(600)
+	// runnerTries is how many pods a Job may spend before it is failed. A runner
+	// that dies before it takes a job holds nothing, and the forge refuses a
+	// registration outright while its database is busy, so the whole pod is
+	// the right unit to retry.
+	runnerTries = int64(3)
 )
 
 // safeLabel is what a runner label or a repository segment may be: the same
@@ -151,7 +156,7 @@ func launch(s *cloud.Service[state], ctx context.Context, ev cloud.JobEvent) (st
 			},
 		},
 		"spec": map[string]any{
-			"backoffLimit":            int64(0),
+			"backoffLimit":            runnerTries,
 			"activeDeadlineSeconds":   runnerDeadline,
 			"ttlSecondsAfterFinished": runnerTTL,
 			"template": map[string]any{
