@@ -1,6 +1,6 @@
 {
-  "paths": 1742,
-  "operations": 2411,
+  "paths": 1743,
+  "operations": 2412,
   "products": {
     "account": 10,
     "ad": 7,
@@ -60,7 +60,7 @@
     "iam": 159,
     "index": 17,
     "ingress": 18,
-    "integration": 55,
+    "integration": 56,
     "kms": 7,
     "knowledge": 10,
     "kv": 6,

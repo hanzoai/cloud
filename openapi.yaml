@@ -23222,6 +23222,47 @@ components:
             $ref: '#/components/schemas/functionView'
           type: array
       type: object
+    forgeJob:
+      properties:
+        action:
+          type: string
+        repository:
+          properties:
+            name:
+              type: string
+            owner:
+              properties:
+                login:
+                  type: string
+                username:
+                  type: string
+              type: object
+          type: object
+        workflow_job:
+          properties:
+            id:
+              type: integer
+            labels:
+              items:
+                type: string
+              type: array
+            name:
+              type: string
+            run_id:
+              type: integer
+          type: object
+      type: object
+    forgeLaunched:
+      properties:
+        job:
+          type: integer
+        org:
+          type: string
+        repo:
+          type: string
+        runner:
+          type: string
+      type: object
     formationView:
       properties:
         formation:
@@ -94949,6 +94990,31 @@ paths:
         This is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.
       operationId: get_integration_discord_link_discord
       summary: Discord sign-in return leg
+      tags:
+      - integration
+      x-app: integration
+      x-public: true
+  /v1/integration/forge/webhook:
+    post:
+      description: Receives the forge's workflow_job delivery. The signature over
+        the raw body is checked against the secret at KMS forge.WebhookRef before
+        anything is decoded; a queued job becomes one ephemeral runner Job on the
+        cluster, minted a registration token for exactly that job. Every other action
+        is answered 200 and ignored.
+      operationId: post_integration_forge_webhook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/forgeJob'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/forgeLaunched'
+          description: Success
+      summary: Forge workflow_job webhook
       tags:
       - integration
       x-app: integration
