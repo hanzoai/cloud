@@ -554,9 +554,10 @@ func TestOrg_IsClosedSoAnUnmappedNamespaceIsRefused(t *testing.T) {
 	if got, err := Org("  HANZOAI "); err != nil || got != "hanzo" {
 		t.Fatalf("Org is not normalising: %q, %v", got, err)
 	}
-	// The IAM names themselves, an ordinary tenant, and the shapes an attacker
-	// would reach for. NONE of them may resolve.
-	for _, owner := range []string{"hanzo", "acme", "luxfi", "zooai", "admin", "", "HANZO"} {
+	// An ordinary tenant, the reserved org, and the shapes an attacker would
+	// reach for. NONE of them may resolve. The estate's own namespaces (hanzo,
+	// hanzo-inc, hanzozt) are declared in [estate] and are not in this list.
+	for _, owner := range []string{"acme", "luxfi", "zooai", "admin", "", "HANZOAI-"} {
 		if got, err := Org(owner); err == nil {
 			t.Fatalf("Org(%q) = %q with no error — an unmapped namespace became a tenant", owner, got)
 		} else if !errors.Is(err, ErrNoOrg) {
@@ -569,8 +570,16 @@ func TestOrg_IsClosedSoAnUnmappedNamespaceIsRefused(t *testing.T) {
 // pair — a second declared table is what lets a push be attributed to one tenant
 // while that tenant's work is written to another's namespace.
 func TestOwnerAndOrgAreTheSameTable(t *testing.T) {
-	if len(orgs) != len(owners) {
-		t.Fatalf("the inverse has %d entries against %d — a namespace was dropped or doubled", len(orgs), len(owners))
+	if len(orgs) != len(owners)+len(estate) {
+		t.Fatalf("the inverse has %d entries against %d owners and %d estate namespaces — a namespace was dropped or doubled", len(orgs), len(owners), len(estate))
+	}
+	for owner, org := range estate {
+		if got, err := Org(owner); err != nil || got != org {
+			t.Fatalf("Org(%q) = %q, %v; the estate's namespace names its org", owner, got, err)
+		}
+		if there, err := Owner(org); err != nil || there == owner {
+			t.Fatalf("Owner(%q) = %q, %v; an estate namespace is never the one an org writes to", org, there, err)
+		}
 	}
 	for iam, forgeOrg := range owners {
 		back, err := Org(forgeOrg)
