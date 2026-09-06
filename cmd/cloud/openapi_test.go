@@ -145,7 +145,7 @@ func TestTheSpecEndpointIsTheHostsNotACatchAlls(t *testing.T) {
 // compose.
 func TestTheCommandEndpointIsTheHostsOwnApp(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	spec(app, []string{"kms", "flags"})
+	spec(app, []string{"kms", "flag"})
 
 	code, ctype, body := do(t, app, openapi.CommandPath)
 	if code != 200 {
@@ -245,7 +245,7 @@ func TestTheServedDocumentIsTheArtifact(t *testing.T) {
 // is the whole fleet.
 func TestTheDocumentIsScopedToWhatTheDeploymentRuns(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	spec(app, []string{"kms", "flags"})
+	spec(app, []string{"kms", "flag"})
 
 	_, _, body := do(t, app, openapi.Path)
 	served := paths(t, "a two-app deployment", []byte(body))
