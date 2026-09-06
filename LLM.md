@@ -7760,6 +7760,20 @@ binary and fails if the staged rootfs is missing one, because a scratch image
 cannot borrow a library from the build stage and the symptom otherwise is a
 plugin that fork/execs and dies at the first request to its prefix.
 
+**The image is still scannable, and that took one more package than it looks.**
+`apk add --root` writes `/lib/apk/db/installed`, which is the file trivy and grype
+read — but they only read it after deciding the image HAS an OS, and they decide
+that from `/etc/os-release`, which a closure of six packages does not contain.
+Measured before `alpine-release` was added: trivy reported `OS: {Family: none}`
+and 129 `gobinary` results and NOT ONE `os-pkgs` result, so git, libcurl, OpenSSL
+and sqlcipher — the whole of what CVEs are published against in this image — were
+invisible. `alpine-release` owns that file and depends only on `alpine-keys`
+(public signing keys, no program): +78,133 B of files and +11,163 B of what a pull
+moves, executables still 56. With it, trivy reports `alpine 3.22.5` and an
+`os-pkgs` result beside the 129 `gobinary` ones. `alpine-baselayout` is the wrong
+package for this and would fail `DISTROLESS-GATE` — it depends on `/bin/sh`, so it
+drags busybox back, and it does not carry `/etc/os-release` anyway.
+
 **Do not reach for this to make the image smaller.** Both images were built from
 one commit and one build stage, so the 129 binaries in them are byte-identical and
 only the runtime differs:

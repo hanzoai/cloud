@@ -333,8 +333,9 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 # because both lists read the same source the host does.
 #
 # Each link is the ONE app's own graph (~600–2200 packages), NEVER the ~3040-pkg
-# fleet union the fused binary was. 112 lean links, sequential, none of them mega —
-# which is the whole point of this change.
+# fleet union the fused binary was. 126 lean links, none of them mega — which is
+# the whole point of this change. The step prints the count it actually derived,
+# so a number here that has drifted is visible in the same build log.
 #
 # CGO_ENABLED=1 + libsqlite3 + sqlite_fts5 + sqlite_math_functions, exactly as the
 # fused binary was built:
@@ -418,17 +419,18 @@ RUN set -eu; \
 # `apk add --root` installs a package closure into a DIRECTORY instead of into
 # this stage, which is what lets the final image be `scratch` while the cgo
 # plugins still find the libc and the codec they link. Dependency resolution is
-# the same one an install into the image would do, and the apk database is
-# written alongside the files, so trivy/grype still enumerate the packages and
-# their CVEs from /lib/apk/db/installed — a scratch image assembled by hand from
-# `ldd` output is opaque to every scanner, and this one is not.
+# the same one an install into the image would do, and the apk database is written
+# alongside the files, so trivy and grype enumerate the packages and their CVEs
+# from /lib/apk/db/installed — a scratch image assembled by hand from `ldd` output
+# is opaque to every scanner, and this one is not. That takes /etc/os-release as
+# well as the database; see alpine-release below, which is why.
 #
 # What it leaves behind is everything the alpine BASE carried for its own sake:
-# busybox + busybox-binsh (a shell and ~190 applets), apk-tools + libapk2 +
-# alpine-keys (a package manager that can fetch and install signed code at run
-# time), ssl_client, musl-utils, scanelf. Measured on this package list:
-# 36 packages / 932 files / 72 executables become 24 / 739 / 56, and the programs
-# on PATH are exactly git, git-shell, sqlcipher and tini.
+# busybox + busybox-binsh (a shell and ~190 applets), apk-tools + libapk2 (a
+# package manager that can fetch and install signed code at run time), ssl_client,
+# musl-utils, scanelf. Measured on this package list: 36 packages / 932 files /
+# 72 executables become 26 / 766 / 56, and the programs on PATH are exactly git,
+# git-shell, sqlcipher and tini.
 #
 # git-shell is the one that reads like an exception and is not: it is a RESTRICTED
 # login shell that dispatches git-upload-pack / git-receive-pack /
@@ -455,6 +457,22 @@ RUN set -eu; \
 # update-ca-certificates SHELL SCRIPT and depends on busybox — asking for it puts
 # the shell straight back, silently, and the image still works. That is the one
 # trap in this stage and the gate below is what catches it.
+#
+# alpine-release is here for the SCANNERS, and it was added after one of them said
+# no. The apk database lands in /lib/apk/db/installed with a record per package —
+# name, version, arch, checksum — which is the file trivy and grype read. They only
+# read it after they decide the image HAS an OS, and they decide that from
+# /etc/os-release. A closure of six packages does not contain it. Measured on the
+# image before this line: trivy reported `OS: {Family: none}` and 129 gobinary
+# results and NOT ONE os-pkgs result, so git, libcurl, OpenSSL and sqlcipher — the
+# whole of what CVEs are published against here — were invisible to it.
+#
+# alpine-release is the package that owns /etc/os-release, and it is NOT
+# alpine-baselayout: baselayout DEPENDS ON /bin/sh, so asking for it drags busybox,
+# busybox-binsh and ssl_client back and fails the gate below (measured — 29 packages
+# and /bin/sh -> /bin/busybox), and it does not even carry the file. alpine-release
+# depends on alpine-keys alone, which is public signing keys and no program: five
+# data files, +78 KB, and the executable count stays at 56.
 FROM ghcr.io/hanzoai/mirror/alpine:3.22@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6 AS rootfs
 # Runtime needs libsqlcipher (the codec the plugins link). It must NOT also carry
 # a plaintext libsqlite3 — the binary's -lsqlite3 DT_NEEDED would then bind to
@@ -498,12 +516,14 @@ FROM ghcr.io/hanzoai/mirror/alpine:3.22@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2
 RUN set -eu; \
     apk add --no-cache --root /rootfs --initdb \
       --keys-dir /etc/apk/keys --repositories-file /etc/apk/repositories \
-      ca-certificates-bundle tzdata sqlcipher sqlcipher-libs git tini; \
+      ca-certificates-bundle tzdata sqlcipher sqlcipher-libs git tini alpine-release; \
     ln -sf libsqlcipher.so.0 /rootfs/usr/lib/libsqlite3.so.0; \
     ln -sf sqlcipher /rootfs/usr/bin/sqlite3; \
     test -e /rootfs/usr/lib/libsqlcipher.so.0; \
     test -x /rootfs/sbin/tini; \
-    test -x /rootfs/usr/bin/git
+    test -x /rootfs/usr/bin/git; \
+    test -s /rootfs/etc/os-release; \
+    test -s /rootfs/lib/apk/db/installed
 # RED gate — the shell and the package manager are OUT, and they come back by
 # DEPENDENCY, never by anyone typing them. Asked of apk's own database rather
 # than of a file listing, because that is the record of what was actually
@@ -519,9 +539,11 @@ RUN set -eu; \
 # present at run time, and the loader's complaint arrives as a plugin that dies on
 # the first request to its prefix rather than as a failed build. /needed.txt is
 # the union over every binary this image ships — /cloud, /kmsfetch, /smoke and all
-# ~112 plugins — so a new one cannot be added without its libraries being asked
-# for. The three static ones contribute nothing and are listed anyway: the day one
-# of them stops being CGO_ENABLED=0 is the day this needs to know.
+# 126 plugins — so a new one cannot be added without its libraries being asked for.
+# The three static ones contribute nothing and are listed anyway: the day one of
+# them stops being CGO_ENABLED=0 is the day this needs to know. Measured over the
+# 129 binaries of this build, the union is two names: libc.musl-x86_64.so.1 and
+# libsqlcipher.so.0.
 COPY --from=build /needed.txt /needed.txt
 RUN set -eu; \
     find /rootfs/lib /rootfs/usr/lib -name '*.so*' -exec basename {} \; | sort -u > /have.txt; \
