@@ -345,15 +345,33 @@ var ErrNoOrg = errors.New("forge: this forge namespace belongs to no org")
 // decide tenancy by process start. It is refused here instead, at init, where a
 // declared table's contradiction belongs.
 var orgs = func() map[string]string {
-	m := make(map[string]string, len(owners))
+	m := make(map[string]string, len(owners)+len(estate))
 	for org, owner := range owners {
 		if prior, dup := m[owner]; dup {
 			panic(fmt.Sprintf("forge: namespace %q is claimed by both %q and %q — a push delivered from it names no one org", owner, prior, org))
 		}
 		m[owner] = org
 	}
+	for owner, org := range estate {
+		if prior, dup := m[owner]; dup && prior != org {
+			panic(fmt.Sprintf("forge: namespace %q is claimed by both %q and %q — a delivery from it names no one org", owner, prior, org))
+		}
+		m[owner] = org
+	}
 	return m
 }()
+
+// estate names the forge namespaces the estate itself created beside its
+// tenants' — the universe, the private source, the zero-trust modules — and the
+// org whose compute a delivery from them spends. They are read in the delivery
+// direction only: [Owner] still answers one namespace per org, so nothing this
+// table names becomes a place a tenant writes to. Closed for the same reason
+// [owners] is; adding one is a deliberate edit, never a side effect of a name.
+var estate = map[string]string{
+	"hanzo":     "hanzo",
+	"hanzo-inc": "hanzo",
+	"hanzozt":   "hanzo",
+}
 
 // Org is the IAM org that owns a forge namespace, or [ErrNoOrg].
 //
