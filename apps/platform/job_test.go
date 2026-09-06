@@ -59,6 +59,9 @@ func TestLaunchRendersAForgeRunner(t *testing.T) {
 	if env["RUNNER_JITCONFIG"] != "" {
 		t.Fatalf("a forge runner carries no JIT configuration")
 	}
+	if env["GIT_TERMINAL_PROMPT"] != "0" {
+		t.Fatalf("GIT_TERMINAL_PROMPT %q, want 0", env["GIT_TERMINAL_PROMPT"])
+	}
 }
 
 // A GitHub job carries only its just-in-time configuration.
@@ -79,7 +82,7 @@ func TestLaunchRendersAGitHubRunner(t *testing.T) {
 	for _, e := range c["env"].([]any) {
 		names = append(names, e.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "RUNNER_JITCONFIG,RUNNER_NAME" {
+	if strings.Join(names, ",") != "RUNNER_JITCONFIG,GIT_TERMINAL_PROMPT,RUNNER_NAME" {
 		t.Fatalf("env %v", names)
 	}
 }

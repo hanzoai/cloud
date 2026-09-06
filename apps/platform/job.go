@@ -155,9 +155,13 @@ func launch(s *cloud.Service[state], ctx context.Context, ev cloud.JobEvent) (st
 			map[string]any{"name": "GITEA_INSTANCE_URL", "value": ev.URL},
 			map[string]any{"name": "GITEA_RUNNER_REGISTRATION_TOKEN", "value": ev.Token},
 			map[string]any{"name": "RUNNER_LABELS", "value": strings.Join(labels, ",")},
+			map[string]any{"name": "GIT_TERMINAL_PROMPT", "value": "0"},
 		}
 	case "github":
-		env = []any{map[string]any{"name": "RUNNER_JITCONFIG", "value": ev.Token}}
+		env = []any{
+			map[string]any{"name": "RUNNER_JITCONFIG", "value": ev.Token},
+			map[string]any{"name": "GIT_TERMINAL_PROMPT", "value": "0"},
+		}
 	default:
 		return "", fmt.Errorf("runner: unknown provider %q", ev.Provider)
 	}
