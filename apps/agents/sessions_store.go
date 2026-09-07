@@ -378,7 +378,11 @@ type SessionFilter struct {
 	Published bool
 	// Room narrows to the sessions started in one collaborative room, which is what
 	// makes "the runs of #bugfix-1010" a query rather than a scan.
-	Room  string
+	Room string
+	// Actor narrows the list to the sessions one principal opened. A session is
+	// a person's conversation even inside a shared org, so the door sets this to
+	// the caller for everyone who is not an org admin; empty lists the org.
+	Actor string
 	Limit int
 }
 
@@ -390,6 +394,10 @@ func (s *Store) ListSessions(ctx context.Context, org string, f SessionFilter) (
 	}
 	where := "org=?"
 	args := []any{org}
+	if f.Actor != "" {
+		where += " AND (actor=? OR actor='')"
+		args = append(args, f.Actor)
+	}
 	switch {
 	case f.Root != "":
 		where += " AND root_id=?"
