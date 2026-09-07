@@ -111,7 +111,7 @@ func TestHTTPGateIsolationAndRun(t *testing.T) {
 
 	// maxpower creates an agent (model required).
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "maxpower",
-		map[string]any{"name": "helper", "model": "gpt-4o-mini", "instructions": "be terse"}); code != http.StatusCreated {
+		map[string]any{"name": "helper", "model": "gpt-4o-mini", "instructions": "be terse", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
 	// Creating without a model is a 201 on cloud.DefaultModel. This asserted 400
@@ -120,7 +120,7 @@ func TestHTTPGateIsolationAndRun(t *testing.T) {
 	// reachable only from a fixture and NEVER from a deployment. The test pinned a
 	// state production could not be in; with the field gone there is one behaviour.
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "maxpower",
-		map[string]any{"name": "nomodel"}); code != http.StatusCreated {
+		map[string]any{"name": "nomodel", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("create without model want 201 on the default model, got %d", code)
 	}
 
@@ -181,7 +181,7 @@ func TestHTTPCreateThenGetRunByReturnedID(t *testing.T) {
 
 	// Create — capture the id the API returns (exactly what a client keeps).
 	code, body := do(t, app, http.MethodPost, "/v1/agent", "maxpower",
-		map[string]any{"name": "verify-run", "model": "gpt-4o-mini", "instructions": "be terse"})
+		map[string]any{"name": "verify-run", "model": "gpt-4o-mini", "instructions": "be terse", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
@@ -300,7 +300,7 @@ func TestHTTPMetricsAndActivityNotShadowed(t *testing.T) {
 
 	// Seed a real agent + a real run, then the surfaces must reflect exactly it.
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "maxpower",
-		map[string]any{"name": "helper", "model": "gpt-4o-mini"}); code != http.StatusCreated {
+		map[string]any{"name": "helper", "model": "gpt-4o-mini", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent/helper/run", "maxpower", map[string]any{"input": "hi"}); code != http.StatusOK {
@@ -361,7 +361,7 @@ func TestHTTPMetricsAndActivityNotShadowed(t *testing.T) {
 func TestHTTPRunWithoutAIFailsClosed(t *testing.T) {
 	app := mountApp(t, nil)
 	do(t, app, http.MethodPost, "/v1/agent", "maxpower",
-		map[string]any{"name": "a", "model": "m", "instructions": "x"})
+		map[string]any{"name": "a", "model": "m", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent/a/run", "maxpower", map[string]any{"input": "hi"}); code != http.StatusServiceUnavailable {
 		t.Fatalf("run without AI want 503, got %d", code)
 	}

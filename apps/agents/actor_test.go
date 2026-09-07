@@ -21,7 +21,7 @@ func TestOnBehalfNamesThePersonOnTheModelCall(t *testing.T) {
 	ai := &fakeAI{content: "answered"}
 	app := mountApp(t, ai)
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "hanzo", "model": "gpt-4o-mini", "instructions": "x"}); code != http.StatusCreated {
+		map[string]any{"name": "hanzo", "model": "gpt-4o-mini", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
 
@@ -42,7 +42,7 @@ func TestRunNamesTheCaller(t *testing.T) {
 	ai := &fakeAI{content: "answered"}
 	app := mountApp(t, ai)
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "hanzo", "model": "gpt-4o-mini", "instructions": "x"}); code != http.StatusCreated {
+		map[string]any{"name": "hanzo", "model": "gpt-4o-mini", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent/hanzo/run", "acme",

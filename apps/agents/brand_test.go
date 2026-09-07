@@ -48,7 +48,7 @@ func TestNoUpstreamNameOnTheWire(t *testing.T) {
 	// 1. An agent created with NO model. The configured default is an upstream
 	//    name; normalization must still store and answer the Hanzo name.
 	code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "defaulted", "instructions": "be terse"})
+		map[string]any{"name": "defaulted", "instructions": "be terse", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	if code != http.StatusCreated {
 		t.Fatalf("create defaulted: want 201, got %d (%s)", code, body)
 	}
@@ -65,7 +65,7 @@ func TestNoUpstreamNameOnTheWire(t *testing.T) {
 	//    serve. It is accepted (not a 400 — the name was ours to leak, not theirs
 	//    to be punished for) but normalized, so it never enters the registry.
 	code, body = do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "pinned", "model": "deepseek-v4-flash"})
+		map[string]any{"name": "pinned", "model": "deepseek-v4-flash", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	if code != http.StatusCreated {
 		t.Fatalf("create pinned: want 201, got %d (%s)", code, body)
 	}

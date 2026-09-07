@@ -445,6 +445,13 @@ func dispatchOne(ctx context.Context, org, actor string, tc types.ToolCall, runI
 		span.SetStatus(codes.Error, "arguments too large")
 		return "error: the arguments for this call were too large to run"
 	}
+	if b := budgetFrom(ctx); b != nil {
+		if err := b.affordTool(ctx, tc.Name); err != nil {
+			outcome = "refused"
+			span.SetStatus(codes.Error, "budget refused")
+			return "error: " + err.Error()
+		}
+	}
 	ctx, cancel := context.WithTimeout(deeper(ctx), toolCallTimeout)
 	defer cancel()
 

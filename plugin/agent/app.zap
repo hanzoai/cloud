@@ -60,6 +60,10 @@ struct agentView {
     Runs             i64        @96
     CreatedAt        text       @104
     UpdatedAt        text       @112
+    CapMicroUSD      i64        @120
+    MaxTaskMicroUSD  i64        @128
+    Period           text       @136
+    ConsumedMicroUSD i64        @144
 }
 
 struct buildList {
@@ -129,6 +133,9 @@ struct createAgentIn {
     ServiceAccountID text       @64
     Avatar           text       @72
     Emoji            text       @80
+    CapMicroUSD      i64        @88
+    MaxTaskMicroUSD  i64        @96
+    Period           text       @104
 }
 
 struct eventIn {
@@ -203,6 +210,7 @@ struct registerReq {
     Room            text @112
     Project         text @120
     Published       bool @128
+    BudgetMicroUSD  i64  @136
 }
 
 struct reportOut {
@@ -238,6 +246,19 @@ struct runList {
 struct runsQuery {
     Ref   text @0
     Limit i64  @8
+}
+
+struct sessionBudgetIn {
+    ID             text @0
+    BudgetMicroUSD i64  @8
+}
+
+struct sessionBudgetView {
+    ID               text @0
+    Status           text @8
+    BudgetMicroUSD   i64  @16
+    BudgetRemoved    bool @24
+    ConsumedMicroUSD i64  @32
 }
 
 struct sessionDetail {
@@ -301,6 +322,11 @@ struct sessionView {
     Progress        bytes @216
 }
 
+struct spendQuery {
+    Ref text @0
+    By  text @8
+}
+
 struct targetDeleted {
     Deleted bool @0
     ID      text @8
@@ -352,6 +378,9 @@ struct updateAgentIn {
     ServiceAccountID text       @64
     Avatar           text       @72
     Emoji            text       @80
+    CapMicroUSD      i64        @88
+    MaxTaskMicroUSD  i64        @96
+    Period           text       @104
 }
 
 interface agent {
@@ -479,6 +508,12 @@ interface agent {
     # itself a root. Registering with a terminal status records a session that has
     # already finished.
     post_agent_sessions(req: registerReq) returns (rep: sessionView)
+    # Sets, raises, or removes a session's cap.
+    # - a replacement must be strictly greater than what the session has consumed
+    # - removal is one-way: a session whose cap was removed cannot take one again,
+    # and a session created without one cannot be given one
+    # - raising or removing the cap resumes work that paused at it
+    post_agent_sessions_by_id_budget(req: sessionBudgetIn) returns (rep: sessionBudgetView)
     # Records one turn of a session's transcript and answers 201 with it.
     # A `progress` turn additionally MOVES THE SESSION'S PROGRESS, marked as the run's
     # own word rather than an estimate, and pushes the updated session onto the live
@@ -536,13 +571,14 @@ interface agent {
 }
 
 # ---------------------------------------------------------------------
-# 31 op(s) here. What follows is what this schema does not carry.
+# 32 op(s) here. What follows is what this schema does not carry.
 #
 # dropped (2) — the value does not cross, and nothing fails:
 #   agentDetail.agentView  agents.agentView  (promoted, not carried)
 #   sessionDetail.sessionView  agents.sessionView  (promoted, not carried)
 #
-# blocked (1) — the op is absent; the field has no wire form:
+# blocked (2) — the op is absent; the field has no wire form:
+#   get_agent_by_ref_spend  spendView.ByComponent  map[string]int64  (map)
 #   get_agent_sessions_by_id_tree  treeNode.Children  []agents.treeNode  (no wire form)
 #
 # opaque (22) — crosses, arrives without its name:

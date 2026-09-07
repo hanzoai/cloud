@@ -191,6 +191,28 @@ func (a Amount) CentsUp() int64 {
 	return q.Int64()
 }
 
+// Micros rounds the value to whole micro-USD (1e6 = $1), half-away-from-zero — the
+// unit agent budgets and the metering ledger's AmountMicros speak.
+func (a Amount) Micros() int64 { return a.a.Decimal().Round(6).Coef().Int64() }
+
+// MicrosUp rounds AWAY from zero to whole micro-USD: the amount as a cap must see
+// it, never understated. Use Micros for display and this for limits.
+func (a Amount) MicrosUp() int64 {
+	atto := a.Atto()
+	if atto.Sign() == 0 {
+		return 0
+	}
+	unit := new(big.Int).Exp(big.NewInt(10), big.NewInt(Decimals-6), nil)
+	q, r := new(big.Int).QuoRem(new(big.Int).Abs(atto), unit, new(big.Int))
+	if r.Sign() != 0 {
+		q.Add(q, big.NewInt(1))
+	}
+	if atto.Sign() < 0 {
+		q.Neg(q)
+	}
+	return q.Int64()
+}
+
 // CentsDown rounds TOWARD NEGATIVE INFINITY to whole cents: a BALANCE read into a
 // cents-only comparison without ever reading as more than it is.
 //

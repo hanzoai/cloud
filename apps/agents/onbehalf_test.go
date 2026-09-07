@@ -18,7 +18,7 @@ func TestRunOnBehalfBillsActor(t *testing.T) {
 
 	// Create the agent the bridge will address by ref (name "hanzo").
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "hanzo", "model": "gpt-4o-mini", "instructions": "x"}); code != http.StatusCreated {
+		map[string]any{"name": "hanzo", "model": "gpt-4o-mini", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
 
@@ -60,7 +60,7 @@ func TestRunOnBehalfOrgScoped(t *testing.T) {
 
 	// "secret" exists only in globex.
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "globex",
-		map[string]any{"name": "secret", "model": "m", "instructions": "y"}); code != http.StatusCreated {
+		map[string]any{"name": "secret", "model": "m", "instructions": "y", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
 	// acme attempts to run globex's agent by ref.
@@ -82,7 +82,7 @@ func TestRunOnBehalfGatesUnfunded(t *testing.T) {
 	app := mountBilled(t, bs.start(t), ai)
 	_ = app
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "a", "model": "m", "instructions": "x"}); code != http.StatusCreated {
+		map[string]any{"name": "a", "model": "m", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
 	if _, err := RunOnBehalf(context.Background(), "acme", "u", "a", "hi"); err == nil {

@@ -122,6 +122,12 @@ type Session struct {
 	ProgressActivity  string
 	ProgressAt        int64
 	ProgressEstimated bool
+
+	// The session's own budget, integer micro-USD. Zero means none was set;
+	// BudgetRemoved records a one-way removal, after which none can be set again.
+	BudgetMicroUSD   int64
+	BudgetRemoved    bool
+	ConsumedMicroUSD int64
 }
 
 // Event is one entry in a session's ordered log: a model message, a tool call, a
@@ -244,6 +250,9 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 		"progress_activity":  "TEXT NOT NULL DEFAULT ''",
 		"progress_at":        "INTEGER NOT NULL DEFAULT 0",
 		"progress_estimated": "INTEGER NOT NULL DEFAULT 1",
+		"budget_micro_usd":   "INTEGER NOT NULL DEFAULT 0",
+		"budget_removed":     "INTEGER NOT NULL DEFAULT 0",
+		"consumed_micro_usd": "INTEGER NOT NULL DEFAULT 0",
 	}); err != nil {
 		return err
 	}
@@ -268,7 +277,7 @@ CREATE INDEX IF NOT EXISTS ix_sessions_meter ON agent_sessions(org, ended_at, me
 // is: four statements read or write it and a fifth (the legacy fan-out) copies it.
 const eventCols = `id,session_id,org,seq,kind,actor,payload,created_at`
 
-const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,terminal,target,provider,account,project,published,room,payer,metered_at,progress_pct,progress_phase,progress_activity,progress_at,progress_estimated`
+const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,terminal,target,provider,account,project,published,room,payer,metered_at,progress_pct,progress_phase,progress_activity,progress_at,progress_estimated,budget_micro_usd,budget_removed,consumed_micro_usd`
 
 // sessionVals is sessionCols' placeholder list, DERIVED from it rather than
 // written out beside it. Every INSERT over a named column list now does the same
@@ -294,7 +303,8 @@ func scanSession(sc interface{ Scan(...any) error }) (Session, error) {
 		&x.Title, &x.StartedAt, &x.EndedAt, &x.CreatedAt, &x.UpdatedAt,
 		&x.TaskWorkflowID, &x.TaskRunID, &x.Host, &x.Cwd, &x.Repo, &x.Terminal, &x.Target,
 		&x.Provider, &x.Account, &x.Project, &x.Published, &x.Room, &x.Payer, &x.MeteredAt,
-		&x.ProgressPct, &x.ProgressPhase, &x.ProgressActivity, &x.ProgressAt, &x.ProgressEstimated)
+		&x.ProgressPct, &x.ProgressPhase, &x.ProgressActivity, &x.ProgressAt, &x.ProgressEstimated,
+		&x.BudgetMicroUSD, &x.BudgetRemoved, &x.ConsumedMicroUSD)
 	return x, err
 }
 
@@ -337,7 +347,8 @@ func (s *Store) CreateSession(ctx context.Context, x Session) error {
 		x.StartedAt, x.EndedAt, x.CreatedAt, x.UpdatedAt, x.TaskWorkflowID, x.TaskRunID,
 		x.Host, x.Cwd, x.Repo, x.Terminal, x.Target, x.Provider, x.Account, x.Project, x.Published,
 		x.Room, x.Payer, x.MeteredAt,
-		x.ProgressPct, x.ProgressPhase, x.ProgressActivity, x.ProgressAt, x.ProgressEstimated)
+		x.ProgressPct, x.ProgressPhase, x.ProgressActivity, x.ProgressAt, x.ProgressEstimated,
+		x.BudgetMicroUSD, x.BudgetRemoved, x.ConsumedMicroUSD)
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
 	}
@@ -828,4 +839,17 @@ func (s *Store) Unbilled(ctx context.Context, org string) ([]Session, error) {
 		out = append(out, x)
 	}
 	return out, rows.Err()
+}
+
+// SetSessionBudget writes a session's cap, or its one-way removal.
+func (s *Store) SetSessionBudget(ctx context.Context, org, id string, budget int64, removed bool) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE agent_sessions SET budget_micro_usd=?, budget_removed=? WHERE org=? AND id=?`, budget, removed, org, id)
+	if err != nil {
+		return fmt.Errorf("set session budget: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errSessionNotFound
+	}
+	return nil
 }

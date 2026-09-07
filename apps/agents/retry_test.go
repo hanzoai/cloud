@@ -74,7 +74,7 @@ func TestRunRetriesTransientThenSucceedsBillsOnce(t *testing.T) {
 	app := mountBilled(t, bs.start(t), ai)
 
 	do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"})
+		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("run that recovers after 2 retries want 200, got %d (%s)", code, body)
@@ -115,7 +115,7 @@ func TestRunFailsOverToReliableModelAndBillsIt(t *testing.T) {
 	app := mountBilled(t, bs.start(t), ai)
 
 	do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"})
+		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("failover run want 200, got %d (%s)", code, body)
@@ -156,7 +156,7 @@ func TestRunAllAttemptsBusyExhaustedNoDebit(t *testing.T) {
 	app := mountBilled(t, bs.start(t), ai)
 
 	do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"})
+		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	code, _ := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusBadGateway {
 		t.Fatalf("exhausted run want 502, got %d", code)

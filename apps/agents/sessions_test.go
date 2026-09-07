@@ -462,7 +462,7 @@ func TestSessionsControlAuthzAndForward(t *testing.T) {
 func TestRunOpensRootSession(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "the answer"})
 	do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "helper", "model": "m", "instructions": "x"})
+		map[string]any{"name": "helper", "model": "m", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent/helper/run", "acme", map[string]any{"input": "hi"}); code != http.StatusOK {
 		t.Fatalf("run want 200")
 	}

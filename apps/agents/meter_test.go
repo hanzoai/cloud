@@ -370,7 +370,7 @@ func TestLeavingResidencyBillsTheTail(t *testing.T) {
 
 	if code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "watcher", "model": "m", "executionMode": "long-running",
-			"schedule": "*/5 * * * *"}); code != http.StatusCreated {
+			"schedule": "*/5 * * * *", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("create long-running: %d (%s)", code, body)
 	}
 	sto := storeOf(t, &mounted.State, "acme")
@@ -414,7 +414,7 @@ func TestCloseResidencyTakesTheTailOnceAndOnlyOnce(t *testing.T) {
 
 	if code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "watcher", "model": "m", "executionMode": "long-running",
-			"schedule": "*/5 * * * *"}); code != http.StatusCreated {
+			"schedule": "*/5 * * * *", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("create long-running: %d (%s)", code, body)
 	}
 	sto := storeOf(t, &mounted.State, "acme")
