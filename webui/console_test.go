@@ -389,3 +389,55 @@ func TestNoBundle_ARegisteredRouteStillAnswers(t *testing.T) {
 		t.Fatalf("GET /v1/models = %d, want 200 — a missing console must not cost the API", code)
 	}
 }
+
+// namedBundle is a console bundle that knows which release it is, the shape
+// webui/release.Source has in production.
+type namedBundle struct {
+	fstest.MapFS
+	id string
+}
+
+func (b namedBundle) Release() string { return b.id }
+
+// TestReleaseHeader_NamesTheMountedRelease pins the one fact about a console
+// response that a split fleet cannot fake.
+//
+// Every app child mounts the release on its own, and a child whose read failed
+// keeps the one it already had — so a hostname fronted by several children can
+// answer a shell from one release and a chunk from another, both 200. Nothing
+// else in the response distinguishes them: not the status, not the length, and
+// not a content-hashed chunk name, which is byte-identical across every release
+// that happens to contain it. An acceptance check samples a host and requires
+// exactly one release id; that is only possible if the id is on the wire.
+func TestReleaseHeader_NamesTheMountedRelease(t *testing.T) {
+	const id = "hanzo/hanzo-console/rel_01HZQ"
+	app := zip.New(zip.Config{})
+	if err := Use(app, namedBundle{MapFS: testBundle(), id: id}); err != nil {
+		t.Fatalf("Use: %v", err)
+	}
+
+	// The shell and an immutable asset must agree — that pair is exactly what
+	// goes wrong when two children serve one host.
+	for _, target := range []string{"/", "/_next/static/css/bdec3a94ead6ad5f.css"} {
+		status, _, hdr := do(t, app, http.MethodGet, target, nil)
+		if status != http.StatusOK {
+			t.Fatalf("GET %s status = %d, want 200", target, status)
+		}
+		if got := hdr.Get("X-Hanzo-Console-Release"); got != id {
+			t.Errorf("GET %s %s = %q, want %q", target, "X-Hanzo-Console-Release", got, id)
+		}
+	}
+}
+
+// TestReleaseHeader_AbsentWhenTheSourceCannotName pins the other half: a bundle
+// that cannot say which release it is goes UNSTAMPED rather than stamped
+// "unknown". An absent header reads as "this deployment does not report"; a
+// present one is then always a real release, so a checker never has to decide
+// whether a value it got is meaningful.
+func TestReleaseHeader_AbsentWhenTheSourceCannotName(t *testing.T) {
+	app := newConsoleApp(t) // plain fstest.MapFS — no Release method
+	_, _, hdr := do(t, app, http.MethodGet, "/", nil)
+	if got := hdr.Get("X-Hanzo-Console-Release"); got != "" {
+		t.Errorf("unnamed bundle stamped %s = %q, want no header", "X-Hanzo-Console-Release", got)
+	}
+}

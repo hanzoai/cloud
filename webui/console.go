@@ -236,6 +236,29 @@ type consoleHandler struct {
 	allow Allow
 }
 
+// namedRelease is an fs.FS that knows which immutable release it is serving.
+// webui stays a leaf: it names the capability rather than importing the package
+// that has it (webui/release), exactly as it does for MCP and for Allow.
+type namedRelease interface{ Release() string }
+
+// releaseHeader carries that identity to the caller. It is the only fact about a
+// console response that a mixed fleet cannot fake.
+const releaseHeader = "X-Hanzo-Console-Release"
+
+// setReleaseHeader stamps the mounted release when the source can name one. A
+// source that cannot is left alone rather than stamped "unknown": an absent
+// header is an honest "this deployment does not report", and a present one is
+// always a real release.
+func setReleaseHeader(w http.ResponseWriter, fsys fs.FS) {
+	n, ok := fsys.(namedRelease)
+	if !ok {
+		return
+	}
+	if id := n.Release(); id != "" {
+		w.Header().Set(releaseHeader, id)
+	}
+}
+
 // newConsoleHandler proves the source is a console before anything serves from
 // it: a bundle with no index.html has no shell to fall back to, so every
 // client-side route would 404 and the failure would surface as a broken product
@@ -368,6 +391,19 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "console unavailable: this process serves no console bundle", http.StatusServiceUnavailable)
 		return
 	}
+
+	// WHICH release these bytes came from, on the bytes themselves.
+	//
+	// The bundle pointer swaps atomically inside ONE process, so a shell and its
+	// chunks always agree here. That says nothing about the fleet: every app child
+	// mounts the release independently, and a child whose read failed keeps the one
+	// it already had. So a hostname fronted by several children can answer a shell
+	// from one release and a chunk from another, each with a 200, and no property
+	// of a single response reveals it — not the status, not the length, not even a
+	// content-hashed chunk name, which is byte-identical across releases that share
+	// it. This header is the missing identity: sample a host repeatedly and the
+	// answers must name exactly ONE release. More than one names a split fleet.
+	setReleaseHeader(w, h.fsys)
 
 	name := path.Clean(strings.TrimPrefix(upath, "/"))
 	if name == "" || name == "." {
