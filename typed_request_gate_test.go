@@ -246,6 +246,12 @@ var allowedRequestUses = map[string]string{
 		"plane. Ownership needs X-User-Id and org-admin-ness (X-User-IsOrgAdmin), neither of which " +
 		"principal.OrgFrom carries. Both fail closed off the HTTP path: no request, no attested caller, " +
 		"no management rights.",
+	"apps/agents/sessions.go": "list and get — a member sees the sessions they opened, an org " +
+		"admin or a SuperAdmin sees the org's. That decision needs the caller's own sub AND whether " +
+		"they are an org admin or a SuperAdmin, and principal carries neither across this client; " +
+		"the org alone cannot tell one member's session from another's. It fails closed for reads " +
+		"off the HTTP path: no request, no attested caller, so the list is not narrowed and a " +
+		"foreign session still answers as absent.",
 	"apps/agents/sessions_typed.go": "callerUser — the validated USER a session write is " +
 		"attributed to, which is not the tenant and not merely whether the caller is signed " +
 		"in. apps/principal carries org, validated, brand, ledger, project and payer across " +

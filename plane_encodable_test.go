@@ -126,10 +126,15 @@ func TestNoPlaneTypeCarriesAnUnencodableKind(t *testing.T) {
 func TestThePlaneCannotNameTheMetersUsage(t *testing.T) {
 	const forbidden = `"github.com/hanzoai/cloud/metering"`
 	fset := token.NewFileSet()
-	err := filepath.WalkDir("plane", func(path string, d fs.DirEntry, err error) error {
+	// Counted, because a gate that reads nothing reads as a gate that passed. This
+	// walk named "plane" for a while after the package moved into client/, and a
+	// missing directory is the one failure a reviewer reads as "no violations".
+	read := 0
+	err := filepath.WalkDir("client", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
 			return err
 		}
+		read++
 		f, perr := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 		if perr != nil {
 			t.Errorf("parse %s: %v", path, perr)
@@ -145,7 +150,10 @@ func TestThePlaneCannotNameTheMetersUsage(t *testing.T) {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("walk plane/: %v", err)
+		t.Fatalf("walk client/: %v", err)
+	}
+	if read == 0 {
+		t.Fatal("read no Go files under client/ — the plane moved again and this gate is blind")
 	}
 }
 

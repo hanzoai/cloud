@@ -105,7 +105,7 @@ func document(issuer string, key []byte) map[string]any {
 					// and an app bearer name the same person and the same org, and
 					// both are ours.
 					"clientIds": audiences(),
-					"jwksUri":   environ.Or("CLOUD_JWKS_URL", issuer+"/v1/iam/.well-known/jwks"),
+					"jwksUri":   cloud.JWKSURLFor(issuer),
 				},
 			}},
 		},
