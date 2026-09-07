@@ -236,25 +236,18 @@ type consoleHandler struct {
 	allow Allow
 }
 
-// namedRelease is an fs.FS that knows which immutable release it is serving, and
-// whether that is still the published one. webui stays a leaf: it names the
-// capability rather than importing the package that has it (webui/release),
-// exactly as it does for MCP and for Allow.
+// namedRelease is an fs.FS that knows which release it serves and whether that
+// is still the published one. webui names the capability rather than importing
+// webui/release, as it does for MCP and Allow.
 type namedRelease interface {
 	Release() string
-	// Stale reports that a newer release is published and this process has not
-	// mounted it — see the refusal in ServeHTTP for why that must not be served.
 	Stale() bool
 }
 
-// releaseHeader carries that identity to the caller. It is the only fact about a
-// console response that a mixed fleet cannot fake.
 const releaseHeader = "X-Hanzo-Console-Release"
 
-// setReleaseHeader stamps the mounted release when the source can name one. A
-// source that cannot is left alone rather than stamped "unknown": an absent
-// header is an honest "this deployment does not report", and a present one is
-// always a real release.
+// setReleaseHeader stamps the mounted release. A source that cannot name one is
+// left unstamped, so a present header is always a real release.
 func setReleaseHeader(w http.ResponseWriter, fsys fs.FS) {
 	n, ok := fsys.(namedRelease)
 	if !ok {
@@ -398,31 +391,17 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A PROCESS THAT HAS FALLEN BEHIND SERVES NOTHING.
-	//
-	// Its bundle is internally coherent, so on its own it looks fine — and that is
-	// exactly the danger. Siblings that did mount the new release are serving it,
-	// and a hostname in front of both answers a shell from one and a chunk from
-	// another. Neither response can be told from the other: same 200, and a
-	// content-hashed chunk name is byte-identical across every release that
-	// contains it. Refusing is louder and cheaper than a deploy that looks
-	// finished and is not; the request goes to a sibling that is current.
+	// A process that missed the newest release holds bytes that are coherent with
+	// themselves and not with what its siblings serve — one host would answer a
+	// shell from one release and a chunk from another, both 200. Refuse instead.
 	if n, ok := h.fsys.(namedRelease); ok && n.Stale() {
 		http.Error(w, "console stale: this process has not mounted the published release", http.StatusServiceUnavailable)
 		return
 	}
 
-	// WHICH release these bytes came from, on the bytes themselves.
-	//
-	// The bundle pointer swaps atomically inside ONE process, so a shell and its
-	// chunks always agree here. That says nothing about the fleet: every app child
-	// mounts the release independently, and a child whose read failed keeps the one
-	// it already had. So a hostname fronted by several children can answer a shell
-	// from one release and a chunk from another, each with a 200, and no property
-	// of a single response reveals it — not the status, not the length, not even a
-	// content-hashed chunk name, which is byte-identical across releases that share
-	// it. This header is the missing identity: sample a host repeatedly and the
-	// answers must name exactly ONE release. More than one names a split fleet.
+	// The release id, on the bytes. Sampling a host must name exactly one release;
+	// nothing else in a response distinguishes two — not status, not length, not a
+	// content-hashed chunk name, which is identical across releases that share it.
 	setReleaseHeader(w, h.fsys)
 
 	name := path.Clean(strings.TrimPrefix(upath, "/"))

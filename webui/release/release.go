@@ -42,24 +42,18 @@ import (
 // one gets the new. Within this process there is no window in which a shell from
 // one release is served beside chunks from another.
 //
-// THAT GUARANTEE IS PER-PROCESS, AND THE FLEET IS NOT ONE PROCESS. Every app
-// child mounts the release on its own. When a child's read failed it used to keep
-// the bundle it already had and go on serving it, so a hostname fronted by
-// several children could answer a shell from one release and a chunk from
-// another — both 200, and nothing in either response able to tell them apart.
-// Composing one hostname out of several historical releases is the failure this
-// type now refuses: `want` records the release the resolver last named, and a
-// process whose mounted release is not that one is STALE and serves nothing at
-// all. A stale child is loud and routes elsewhere; a stale child that answers is
-// a deploy that looks finished and is not.
+// That guarantee is per-process, and the fleet is not one process: every app
+// child mounts the release itself, and one whose read failed used to keep the
+// bundle it had and go on serving it — so a host fronted by several could answer
+// a shell from one release and a chunk from another. `want` is what the resolver
+// last named; a process not on it is Stale and serves nothing.
 type Source struct {
 	cfg   Config
 	admin s3admin.Admin
 	log   luxlog.Logger
 	cur   atomic.Pointer[bundle]
-	// want is the prefix the resolver last named. It is set BEFORE the read that
-	// would mount it, so a read that fails still leaves the process knowing it has
-	// fallen behind — which is the whole point: the stale one must know.
+	// want is set BEFORE the read that would mount it, so a failed read still
+	// leaves the process knowing it has fallen behind.
 	want atomic.Pointer[string]
 }
 
@@ -147,13 +141,9 @@ func (s *Source) Wanted() string {
 	return ""
 }
 
-// Stale reports that this process knows a newer release is published and has not
-// mounted it. The caller must refuse to serve: the bytes it holds are coherent
-// with each other but not with what its siblings are serving, and a host fronted
-// by both would answer out of two releases at once.
-//
-// Before the first resolve nothing is known, and not-knowing is not staleness —
-// a process that cannot reach the resolver at boot fails loudly elsewhere.
+// Stale reports a newer release is published and not mounted. The caller must
+// refuse: these bytes are coherent with themselves but not with what siblings
+// serve. Before the first resolve nothing is known, and that is not staleness.
 func (s *Source) Stale() bool {
 	want := s.Wanted()
 	return want != "" && want != s.Release()
@@ -202,8 +192,6 @@ func (s *Source) refresh(ctx context.Context) (bool, error) {
 	if cur := s.cur.Load(); cur != nil && cur.prefix == site.Prefix {
 		return false, nil
 	}
-	// Recorded before the read, not after it. A read that fails must still leave
-	// this process able to say it has fallen behind.
 	want := site.Prefix
 	s.want.Store(&want)
 	if !s.admin.Configured() {
