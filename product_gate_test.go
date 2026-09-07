@@ -207,11 +207,23 @@ func mountsProduct(imports map[string]bool, product string) bool {
 		return true
 	}
 	for imp := range imports {
-		if strings.HasPrefix(imp, root+"/") {
+		if strings.HasPrefix(imp, root+"/") && !shared[imp] {
 			return true
 		}
 	}
 	return false
+}
+
+// shared are modules that live inside a product's repository and are not the
+// product: a protocol's own type definitions, imported by both ends so there is
+// one definition rather than a server copy and a client copy that drift.
+// Importing one says the app SPEAKS the protocol, which is the opposite of
+// mounting the implementation behind it.
+var shared = map[string]bool{
+	// The runner protocol: the values a runner daemon and a control plane
+	// exchange. A stdlib-only leaf with its own go.mod, imported by the runner
+	// client and by both servers that answer it.
+	"github.com/hanzoai/git/modules/actions/runner": true,
 }
 
 // appFiles maps each app (immediate directory of apps/) to its non-test Go

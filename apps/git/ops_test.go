@@ -18,7 +18,13 @@ import (
 // merge. It is the last thing an agent could not do on the native plane — a run
 // could push its branch and had no way to propose it — so the four are the
 // surface that used to require mirroring the repository to GitHub to have one.
-const typedOpCount = 28
+// 40 since git took the workflow: seven under /v1/git (declare a pool, list
+// pools, list runners, list workflows, start a run, list runs, read one) and the
+// five the runner daemon calls at git's OTHER root, /v1/runner. Both roots are
+// git's — the manifest row says so — which is why the loop below accepts them:
+// the check asks whether a FOREIGN app leaked into this document, and an app
+// that answers two addresses answers two.
+const typedOpCount = 40
 
 // TestTypedOpsProject pins the payoff of registering ops instead of handlers:
 // zip's registry — the single value REST, OpenAPI, MCP and the CLI are each
@@ -40,7 +46,7 @@ func TestTypedOpsProject(t *testing.T) {
 	verbs := map[string]bool{"get": true, "post": true, "put": true, "patch": true, "delete": true}
 	got := 0
 	for p, item := range doc.Paths {
-		if !strings.HasPrefix(p, "/v1/git/") {
+		if !strings.HasPrefix(p, "/v1/git/") && !strings.HasPrefix(p, RunnerRoute+"/") {
 			t.Errorf("non-git operation in the document: %s", p)
 		}
 		for m := range item {

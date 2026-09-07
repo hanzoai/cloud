@@ -151,14 +151,21 @@ type repoList struct {
 // the middle segment, because `git clone` sends no headers and the URL is the
 // only place the scope can travel.
 func cloneURL(s *cloud.Service[state], org, project, name string) string {
+	if project == "" {
+		return fmt.Sprintf("%s/v1/git/%s/%s.git", origin(s), org, name)
+	}
+	return fmt.Sprintf("%s/v1/git/%s/%s/%s.git", origin(s), org, project, name)
+}
+
+// origin is this host as a caller reaches it, scheme and all. One derivation,
+// used by every address this plugin hands out — a clone URL, and the server and
+// api addresses a running job is told (runner.go).
+func origin(s *cloud.Service[state]) string {
 	host := s.Domain
 	if host == "" { // only a hand-built Deps; Config.Validate requires a domain
 		host = brand.APIHost(brand.Default)
 	}
-	if project == "" {
-		return fmt.Sprintf("https://%s/v1/git/%s/%s.git", host, org, name)
-	}
-	return fmt.Sprintf("https://%s/v1/git/%s/%s/%s.git", host, org, project, name)
+	return "https://" + host
 }
 
 // sshURL is the scp-style Git SSH remote: git@<sshHost>:<org>/<repo>.git. The
@@ -225,6 +232,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	mounted.Store(s)
 
 	routes(app, s)
+	// Deliver what pushes have already recorded. It sweeps every org on this
+	// host, because after a restart the process knows of no push and the journal
+	// rows are the only record that a run is owed (journal.go).
+	dispatch(s)
 	registerLifecycleReactors()
 	// Install the git object-plane importer so the integrations plane (GitHub App)
 	// can create + mirror-in + fast-forward-sync repos with no integrations⇄git cycle.
@@ -379,6 +390,22 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/repos/:name/commits", o.browseCommits)
 	zip.Get(g, "/repos/:name/readme", o.browseReadme)
 
+	// Workflow orchestration (run.go). What a repository runs, which capacity is
+	// declared to run it, what has run, and how to run one now. These are Git
+	// questions asked by a person or an agent, so they answer at the Git address
+	// behind the Git principal. The five machine operations a runner daemon calls
+	// are a different surface with a different credential (runner.go).
+	//
+	// Static leaves, registered ahead of the :org/:repo pack routes below so a
+	// real org can never shadow them — the same rule /repos and /usage follow.
+	zip.Post(g, "/pools", o.declarePool, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/pools", o.listPools)
+	zip.Get(g, "/runners", o.listRunners)
+	zip.Get(g, "/workflows", o.listWorkflows)
+	zip.Post(g, "/runs", o.startRun, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/runs", o.listRuns)
+	zip.Get(g, "/runs/:id", o.getRun)
+
 	// Smart-HTTP git protocol. These live under /v1/git/:org/:repo/* so
 	// `git clone https://<host>/v1/git/<org>/<repo>.git` works natively. They
 	// stay raw because they speak git's own pack protocol — pkt-line
@@ -409,6 +436,17 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// /v1/git, beside the JSON ops it renders (ui.go). Registered after them, so
 	// the literal leaves are matched ahead of :org/:repo.
 	uiRoutes(app, s)
+
+	// The runner daemon's five operations, at their own root. Registered on the
+	// app and not on g, because /v1/runner is not under /v1/git and must not meet
+	// the principal middleware installed there: a runner presents its own
+	// credential and belongs to no session (runner.go).
+	if err := runnerOps(app, s); err != nil {
+		// Only a program that does not compose reaches here — two operations
+		// claiming one address — which is a mistake in the five registrations
+		// and cannot be recovered from at run time.
+		panic(err)
+	}
 }
 
 // lifecycleOnce guards the ONE registration of git's lifecycle reactors into the

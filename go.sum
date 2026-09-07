@@ -1092,6 +1092,10 @@ github.com/hanzoai/flags/go v0.1.1 h1:WgooJT1Ucz3+kkegHuODcc2S9kAIC14h1cah/r+nbB
 github.com/hanzoai/flags/go v0.1.1/go.mod h1:Lsw7fsdbEcgOmymLbmvCX/f9jr9+Kg0pTae45CydxE0=
 github.com/hanzoai/framework v0.1.3 h1:WvR3EIhc3xZFIw7aEtOOPfYS0DRi8miXT9lno185IZg=
 github.com/hanzoai/framework v0.1.3/go.mod h1:nGpud6WBYN1VKiLSpMogrInHIXCkBMBlff0bl5Cfpz0=
+github.com/hanzoai/git/modules/actions/runner v0.0.0-20260906204557-92b2e84dba28 h1:C/KoWtwNHcmXwGCE0QlKiqoynmD83EQLK0HFAYSVwBo=
+github.com/hanzoai/git/modules/actions/runner v0.0.0-20260906204557-92b2e84dba28/go.mod h1:c3eLNJLhdHZJdJG3W+1RIcACatV1LfCMgld16k7roWs=
+github.com/hanzoai/git/modules/actions/runner v0.0.0-20260907014409-964ba924a04f h1:8Ch4jbeh6kV7qlmyXtOzOE4pKN0r0zm8zXUUd6KtpiY=
+github.com/hanzoai/git/modules/actions/runner v0.0.0-20260907014409-964ba924a04f/go.mod h1:c3eLNJLhdHZJdJG3W+1RIcACatV1LfCMgld16k7roWs=
 github.com/hanzoai/go-cosyvoice v1.0.0 h1:XS68KB2VMCmHdAMpcdbkZhK20ZOTPAYm2N1Gx67yJpE=
 github.com/hanzoai/go-cosyvoice v1.0.0/go.mod h1:uKPJVkJDE8+/j5+HebHrnh/VZ7skUvtJfQrqTJfY6IA=
 github.com/hanzoai/go-fuse/v2 v2.9.4 h1:YXaupO/1B7fALRkg6pDWmHum+8a+ifle5h7c6oKGjwE=
