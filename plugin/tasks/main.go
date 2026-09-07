@@ -24,7 +24,7 @@ func main() {
 		Name:  "tasks",
 		Price: cloud.Free,
 		Use:   tasks.Use,
-	}}, []string{"task"}); err != nil {
+	}}, []string{"tasks"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
