@@ -7719,6 +7719,113 @@ via cgo. And a backup must copy the `{db, -wal, -shm}` triple together — the
 `.db` alone is missing whatever the WAL holds. Waiting for the WALs to empty is
 not a step; they do not empty.
 
+## The runtime image has no shell
+
+The final stage is `scratch`. Everything in it is put there by two COPYs: a
+package closure that the `rootfs` stage stages with `apk add --root /rootfs`, and
+the binaries the `build` stage produced. There is no busybox, no `/bin/sh` and no
+`apk`. Four distinct programs are on PATH under eight names: `git` (with
+`git-receive-pack`, `git-upload-pack` and `git-upload-archive` as symlinks to it),
+the restricted `git-shell`, `sqlcipher` (also named `sqlite3`, by symlink), and
+`tini`. Nothing in the rootfs is setuid, setgid or world-writable, and no
+interpreter is installed — the shell scripts inside git's own libexec carry a
+`#!/bin/sh` that resolves to nothing, so they are files.
+
+**Reaching into a running pod.** `kubectl exec deploy/cloud -- sh` does not work
+and will not be made to. Exec a BINARY: `/smoke` (the read-only prober, which also
+reads `/v1/health`'s degraded list and `/readyz`), `/usr/bin/sqlite3` (it is
+sqlcipher — see the section above for why nothing else opens these files), `git`.
+From outside a cluster the same move is `docker run --entrypoint /smoke <image>`.
+
+**The three runtime packages are load-bearing**, which is why the image is
+assembled from alpine packages rather than based on `gcr.io/distroless/*`: those
+bases carry glibc and a cert store and no `git`, and `apps/git`+`apps/sync` shell
+out to the streaming git CLI for every clone, fetch and push (`exec.LookPath`,
+fail-closed). `sqlcipher` is the CLI half of the codec the plugins link, and
+`tini` reaps the git grandchildren that reparent to PID 1.
+
+**Two traps, both now gated in the Dockerfile.**
+
+- `ca-certificates` depends on busybox — it is the update-ca-certificates shell
+  script. `ca-certificates-bundle` is the same `.crt` file with no script and no
+  shell. Ask for the wrong one and the image still works, with a shell back in
+  it. `DISTROLESS-GATE` reads apk's own database and fails the build.
+- `scratch` inherits no image config, so `ENV PATH` is declared explicitly. The
+  alpine base had been supplying it, and without it `exec.LookPath("git")` fails
+  under the CRI (which, unlike the docker daemon, injects no default) while every
+  probe stays green.
+
+`RUNTIME-GATE` is the third: it takes the union of `DT_NEEDED` over every shipped
+binary and fails if the staged rootfs is missing one, because a scratch image
+cannot borrow a library from the build stage and the symptom otherwise is a
+plugin that fork/execs and dies at the first request to its prefix.
+
+**The image is still scannable, and that took one more package than it looks.**
+`apk add --root` writes `/lib/apk/db/installed`, which is the file trivy and grype
+read — but they only read it after deciding the image HAS an OS, and they decide
+that from `/etc/os-release`, which a closure of six packages does not contain.
+Measured before `alpine-release` was added: trivy reported `OS: {Family: none}`
+and 129 `gobinary` results and NOT ONE `os-pkgs` result, so git, libcurl, OpenSSL
+and sqlcipher — the whole of what CVEs are published against in this image — were
+invisible. `alpine-release` owns that file and depends only on `alpine-keys`
+(public signing keys, no program): +78,133 B of files and +11,163 B of what a pull
+moves, executables still 56. With it, trivy reports `alpine 3.22.5` and an
+`os-pkgs` result beside the 129 `gobinary` ones. `alpine-baselayout` is the wrong
+package for this and would fail `DISTROLESS-GATE` — it depends on `/bin/sh`, so it
+drags busybox back, and it does not carry `/etc/os-release` anyway.
+
+**Do not reach for this to make the image smaller.** Both images were built from
+one commit and one build stage, so the 129 binaries in them are byte-identical and
+only the runtime differs:
+
+| | alpine | scratch |
+|---|---|---|
+| runtime layers, unpacked | 29.51 MB (8.96 base + 18.8 apk + 1.55 zoneinfo + 0.197 certs) | 24.7 MB (one `COPY /rootfs/ /`) |
+| whole image, content | 1,876,323,984 B | 1,875,100,368 B |
+
+−4.81 MB of runtime, −1.22 MB of what a pull moves, **−0.065%**. The `/plugins`
+layer is 5.19 GB unpacked — 126 per-app binaries carrying ~35 MB of shared core
+each, the deliberate price of never linking the fleet union again (see the
+host/plugin section). Any real size or pull-time work is in that layer and nowhere
+else. What this change buys is the post-exploitation surface, and nothing else.
+
+Building it costs ~38 minutes of step time on 32 cores from a cold module and
+build cache; 1372.9s of that is the 126-plugin link and 232.3s the export.
+
+`/smoke -class health` is the narrow question — `/v1/base/health`, `/v1/health`
+and `/readyz` 200, and `/v1/health`'s `degraded` list empty. It exists because a
+container healthcheck is not a release gate: the full matrix asks whether a BUILD
+routes every surface a release must route, and a deployment that enables fewer
+products answers 404 on the rest, which is its shape and not its health (measured:
+7 failures against a single-node cloud that was serving). deploy/compose.yml uses
+the narrow one; the release train runs the whole matrix.
+
+**Two processes answer the health question and they know different things**, which
+is why that class has three routes rather than one. `/v1/*` is a PLUGIN's route
+(serve.go), and `degraded` is what a plugin can say about its OWN planes mounting
+fail-closed. `/readyz`, `/healthz` and `/health` are the HOST's (cmd/cloud), and
+`absent` is the only place a SIBLING that never started appears at all — the host
+fork/execs each app, so a child that dies before listening is a fact only the
+parent holds. Measured on a booted image: `/v1/health` answered
+`{"revision":…,"status":"ok"}` while `/readyz` answered
+`{"absent":{"s3":"zip: Load(s3): exited before listening: exit status 1"},"status":"ok"}`.
+Both are 200 there because `s3` is not Vital; `/readyz` turns 503 when the absent
+app IS Vital, and exactly one is — `ai`, the owner of `/v1`. All three are on
+:8080; the host does not bind the :9090 ops port.
+
+**The deploy side of the same fact lives in hanzoai/universe** (commit
+576803b3a), because this repo's `helm/cloud` chart is not what production
+renders. `charts/app` handed every service a preStop of
+`exec: ["/bin/sh","-c","sleep 5"]` — now a kubelet `sleep` — and, for cloud alone,
+a prepull DaemonSet that held the image on the node with
+`/bin/sh -c "exec sleep 2147483647"` in sync-wave -1. The preStop would have
+failed quietly; the DaemonSet would have stopped every cloud deploy, since
+cd.hanzo.ai does not open wave 0 while wave -1 is Progressing and a container that
+cannot exec never leaves Progressing. Nothing in the image can hold a prepull
+open — none of the four programs blocks forever without opening a store or binding
+a socket — so it is off, and getting its 87 seconds back is a change to the
+prepull template, not to this image.
+
 ## Linear: one connector, and the org half built on it
 
 The Linear provider is the user-scoped API-key connector in

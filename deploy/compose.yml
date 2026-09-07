@@ -34,12 +34,28 @@ services:
       - "--iam-issuer=${HANZO_IAM_ISSUER:-https://iam.hanzo.id}"
     volumes:
       - cloud-data:/var/lib/cloud
+    # /smoke, not `wget /health`. The image is distroless: there is no shell for
+    # CMD-SHELL and no busybox wget to run in it. /smoke is the prober this repo
+    # already ships beside /cloud (plugin/smoke), and `-class health` is the narrow
+    # question a healthcheck asks — /v1/base/health, /v1/health and /readyz 200,
+    # and /v1/health's `degraded` list empty.
+    #
+    # The last two are what a status code alone cannot reach. `degraded` names a
+    # plane that mounted fail-closed: it answers an honest 503 on its own routes
+    # while the front door stays 200. /readyz is the HOST's answer rather than a
+    # plugin's, and it is the only one that can see a sibling that never started —
+    # 503 when the absent app is Vital, which `ai`, the owner of /v1, is.
+    #
+    # NOT the whole matrix. The release gate runs every class because a release
+    # must route every surface; a deployment need not, and a 404 on a prefix this
+    # deployment does not enable is its shape, not its health. Measured: the full
+    # matrix reports 7 failures against a single-node cloud that is serving.
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/health || exit 1"]
+      test: ["CMD", "/smoke", "-class", "health", "-base", "http://127.0.0.1:8080", "-timeout", "5"]
       interval: 30s
-      timeout: 5s
+      timeout: 20s
       retries: 3
-      start_period: 30s
+      start_period: 60s
 
 volumes:
   cloud-data:

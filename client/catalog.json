@@ -2381,6 +2381,14 @@
    "doc": "Assert what is true of an entity"
   },
   {
+   "id": "graphExtract",
+   "doc": "Reads a source and returns the relations it states, recording\nnothing. It is how a caller sees what a document would file before the plane —\nwhich has no update and no delete — has anything filed into it.\n\nA relation is stated as `relation:: value` on its own line; prose states none. A\nvalue written `[[key]]` names another entity, which makes the assertion an edge.\nThe subject is the nearest heading above the line, or the request's `subject`\nuntil a heading names one."
+  },
+  {
+   "id": "graphIngest",
+   "doc": "Reads a source and records what it states into the calling\norganization's graph — the same store, the same admission and the same content\naddress as POST /v1/graph, because this operation ends by calling that one.\n\nEvery assertion carries the source it came from and, as its evidence, the\nsection that stated it: `\u003csource\u003e#\u003csection\u003e`. Delivering the same source at the\nsame `at` twice therefore records one set of rows and reports the rest as\nduplicates, which is the property a retrying importer depends on.\n\nA source that states no relation is refused rather than recorded as an empty\nsuccess: a caller that wrote its document in prose has been told nothing by a\n200 that filed nothing."
+  },
+  {
    "id": "graphNeighbors",
    "doc": "Walk the edges from a seed set, bounded"
   },

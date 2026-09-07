@@ -26,9 +26,9 @@ import (
 // codingEndpoint, so it is downstream of the one registration this program makes rather
 // than beside a copy of it.
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
-	app := zip.New(zip.Config{AppName: "agents", DisableStartupMessage: true})
+	app := zip.New(zip.Config{AppName: "agent", DisableStartupMessage: true})
 	codingEndpoint(app)
-	doc, err := openapi.Spec(app, openapi.Info{Title: "agents", Version: "v1"})
+	doc, err := openapi.Spec(app, openapi.Info{Title: "agent", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}

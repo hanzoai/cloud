@@ -196,7 +196,7 @@ func TestLiveSitesCrossToTheProjectsProcess(t *testing.T) {
 	}
 	runDir(t)
 
-	app := zip.New(zip.Config{AppName: "projects", DisableStartupMessage: true})
+	app := zip.New(zip.Config{AppName: "project", DisableStartupMessage: true})
 	zip.Post[client.LiveSitesIn, client.LiveSitesOut](app, "/sites/live",
 		func(context.Context, *client.LiveSitesIn) (*client.LiveSitesOut, error) {
 			return &client.LiveSitesOut{Sites: []client.LiveSite{
@@ -205,10 +205,10 @@ func TestLiveSitesCrossToTheProjectsProcess(t *testing.T) {
 				{Org: "maxpower", Slug: "dave", URL: "https://dave.hanzo.app", ForkedFrom: "hanzo/folio"},
 			}}, nil
 		}, zip.WithOperationID(client.SitesLive))
-	go func() { _ = app.Listen(zip.SocketPath("projects")) }()
+	go func() { _ = app.Listen(zip.SocketPath("project")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	for range 200 {
-		if c, err := net.Dial("unix", zip.SocketPath("projects")); err == nil {
+		if c, err := net.Dial("unix", zip.SocketPath("project")); err == nil {
 			_ = c.Close()
 			break
 		}
