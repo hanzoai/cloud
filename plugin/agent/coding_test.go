@@ -61,7 +61,7 @@ func agentsChild(t *testing.T) string {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	sock := dir + "/agents.sock"
 
-	app := zip.New(zip.Config{AppName: "agents", DisableStartupMessage: true})
+	app := zip.New(zip.Config{AppName: "agent", DisableStartupMessage: true})
 	codingEndpoint(app)
 	go func() { _ = app.Listen(sock) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
@@ -84,8 +84,8 @@ func endpoint(t *testing.T) *zip.App {
 	t.Helper()
 	sock := agentsChild(t)
 	h := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
-	client.Use(h, manifest.MCPPath, []string{"agents"}, func(app string) (addr, path string, err error) {
-		if app != "agents" {
+	client.Use(h, manifest.MCPPath, []string{"agent"}, func(app string) (addr, path string, err error) {
+		if app != "agent" {
 			return "", "", &net.AddrError{Err: "no instance running", Addr: app}
 		}
 		return sock, manifest.FrameworkMCPPath, nil
@@ -163,7 +163,7 @@ func ops(t *testing.T, res map[string]any, subsystem string) []string {
 // absence.
 func TestTheCodingToolIsOfferedToAnAgent(t *testing.T) {
 	res := rpc(t, endpoint(t), `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
-	got := ops(t, res, "agents")
+	got := ops(t, res, "agent")
 	for _, op := range got {
 		if op == tool {
 			return

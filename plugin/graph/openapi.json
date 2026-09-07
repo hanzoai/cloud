@@ -123,6 +123,45 @@
         "x-tool": true
       }
     },
+    "/v1/graph/extract": {
+      "post": {
+        "operationId": "graphExtract",
+        "summary": "Read the relations a source states, without recording them",
+        "description": "Reads a source and returns the relations it states, recording\nnothing. It is how a caller sees what a document would file before the plane —\nwhich has no update and no delete — has anything filed into it.\n\nA relation is stated as `relation:: value` on its own line; prose states none. A\nvalue written `[[key]]` names another entity, which makes the assertion an edge.\nThe subject is the nearest heading above the line, or the request's `subject`\nuntil a heading names one.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "at": "2026-09-01T00:00:00Z",
+                "source": "wiki/api",
+                "text": "# acme/svc/api\nowner:: [[acme/team/core]]\ntier:: 1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graphSourceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graphExtractOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/graph/graphql": {
       "post": {
         "operationId": "post_graph_graphql",
@@ -153,6 +192,45 @@
           }
         },
         "x-public": true
+      }
+    },
+    "/v1/graph/ingest": {
+      "post": {
+        "operationId": "graphIngest",
+        "summary": "Read a source and record what it states as assertions",
+        "description": "Reads a source and records what it states into the calling\norganization's graph — the same store, the same admission and the same content\naddress as POST /v1/graph, because this operation ends by calling that one.\n\nEvery assertion carries the source it came from and, as its evidence, the\nsection that stated it: `\u003csource\u003e#\u003csection\u003e`. Delivering the same source at the\nsame `at` twice therefore records one set of rows and reports the rest as\nduplicates, which is the property a retrying importer depends on.\n\nA source that states no relation is refused rather than recorded as an empty\nsuccess: a caller that wrote its document in prose has been told nothing by a\n200 that filed nothing.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "at": "2026-09-01T00:00:00Z",
+                "source": "wiki/api",
+                "text": "# acme/svc/api\nowner:: [[acme/team/core]]\ntier:: 1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graphSourceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graphAssertOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/graph/neighbors": {
@@ -345,6 +423,18 @@
             "description": "Refused is how many members were turned away on arrival, before the store\nwas touched — a missing entity, a timestamp that is not RFC 3339, a\nconfidence outside [0,1]. The rest of the batch was still recorded.",
             "format": "int64",
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "graphExtractOut": {
+        "properties": {
+          "triples": {
+            "description": "Triples are the relations found, in the order the document states them.",
+            "items": {
+              "$ref": "#/components/schemas/graphTriple"
+            },
+            "type": "array"
           }
         },
         "type": "object"
@@ -549,6 +639,53 @@
           "winner": {
             "$ref": "#/components/schemas/wireFact",
             "description": "Winner is the assertion in force — the strongest of those knowable at AsOf\nunder the order `rule` names. Absent exactly when Known is false."
+          }
+        },
+        "type": "object"
+      },
+      "graphSourceIn": {
+        "properties": {
+          "at": {
+            "description": "At is when what the source says was so, RFC 3339. Required by ingest — which\nrecords — and read by nothing in extract, which records nothing. Required for\nthe same reason /v1/graph requires it: it is part of the assertion's content\naddress, so re-reading one source at one instant records one set of rows\nhowever many times it is delivered. A clock read here instead would append\nthe whole document again on every re-read.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source names where the text came from — a URL, a document id, a page title.\nIt is stamped on every assertion as its source, and with the section number\nas its evidence, so a claim can be traced back to the passage that made it.\nRequired.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the entity the text is about before any heading names one. A\ndocument that states relations above its first heading needs it; one whose\nevery section is headed does not.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is the document. Relations are read from it and from nothing else: a\nline written `relation:: value` states one, and prose states none. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graphTriple": {
+        "properties": {
+          "names": {
+            "description": "Names is the author's declaration that Object is an entity and the assertion\nis an EDGE, written `[[key]]`. Absent, the relation is a property of Subject.\nIt is read from the notation and never guessed from the value's shape.",
+            "type": "boolean"
+          },
+          "object": {
+            "description": "Object is what the relation points at. When Names is true it has been\nunwrapped from its `[[…]]` and is another entity's key.",
+            "type": "string"
+          },
+          "predicate": {
+            "description": "Predicate is the relation, exactly as the line spells it before the `::`.\nThis surface holds no vocabulary, so it renames nothing.",
+            "type": "string"
+          },
+          "section": {
+            "description": "Section is which section of the source stated it, counting from zero. It is\nthe second half of every resulting assertion's evidence, `\u003csource\u003e#\u003csection\u003e`.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "subject": {
+            "description": "Subject is the entity the statement is about: the nearest heading above the\nline, or the request's own subject where no heading has appeared yet.",
+            "type": "string"
           }
         },
         "type": "object"

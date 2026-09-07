@@ -65,6 +65,20 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 		zip.WithSummary("The relations in use, and the rule that resolves a conflict"),
 		zip.WithTags("graph"))
 
+	// The two that take a DOCUMENT rather than an assertion (semantic.go). They
+	// are under this app's own name because the address is the owner's name
+	// (HIP-0139 §3) and the pipeline owns no store: what it finds is only ever
+	// holdable here, and ingest ends by calling the assert declared above rather
+	// than writing beside it.
+	zip.Post(zapp, "/v1/graph/extract", o.extract,
+		zip.WithOperationID("graphExtract"),
+		zip.WithSummary("Read the relations a source states, without recording them"),
+		zip.WithTags("graph"))
+	zip.Post(zapp, "/v1/graph/ingest", o.ingest,
+		zip.WithOperationID("graphIngest"),
+		zip.WithSummary("Read a source and record what it states as assertions"),
+		zip.WithTags("graph"))
+
 	// The GraphQL endpoint, at the address apps/explorer already established for one
 	// (/v1/<product>/graphql). It is UNTYPED by construction rather than by
 	// omission: a typed op declares one In and one Out, and this route's input is

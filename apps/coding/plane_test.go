@@ -110,7 +110,7 @@ func servePeers(t *testing.T, p *peers) {
 	serveForge(t, p)
 	t.Setenv("ZIP_RUNTIME_DIR", sock.Dir(t))
 
-	agentsApp := zip.New(zip.Config{AppName: "agents", DisableStartupMessage: true})
+	agentsApp := zip.New(zip.Config{AppName: "agent", DisableStartupMessage: true})
 	zip.Post[client.SessionOpenIn, client.SessionOpened](agentsApp, "/agents/session/open",
 		func(ctx context.Context, in *client.SessionOpenIn) (*client.SessionOpened, error) {
 			id, err := p.sessions.OpenOn(ctx, in.Org, in.Actor, in.Agent, in.Title, in.Target)

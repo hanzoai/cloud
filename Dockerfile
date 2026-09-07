@@ -333,8 +333,9 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 # because both lists read the same source the host does.
 #
 # Each link is the ONE app's own graph (~600–2200 packages), NEVER the ~3040-pkg
-# fleet union the fused binary was. 112 lean links, sequential, none of them mega —
-# which is the whole point of this change.
+# fleet union the fused binary was. 126 lean links, none of them mega — which is
+# the whole point of this change. The step prints the count it actually derived,
+# so a number here that has drifted is visible in the same build log.
 #
 # CGO_ENABLED=1 + libsqlite3 + sqlite_fts5 + sqlite_math_functions, exactly as the
 # fused binary was built:
@@ -403,13 +404,77 @@ RUN set -eu; \
 # libsqlite3 build every plugin above got, so it is a real witness for the set.
 RUN readelf -d /plugins/base | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /plugins/base links no sqlite/sqlcipher .so"; exit 1; }; \
     ! ldd /plugins/base 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /plugins/base resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
+# The shared-library names EVERY shipped binary asks the loader for, as a sorted
+# list. It is read by the rootfs stage, which is the only place that can answer
+# whether the runtime carries them: the final image is `scratch`, so nothing lands
+# there that this file did not put there, and a missing .so is not a build error —
+# it is a plugin that fork/execs and dies with "Error loading shared library" on
+# the first request that reaches its prefix.
+RUN set -eu; \
+    for b in /cloud /kmsfetch /smoke /plugins/*; do readelf -d "$b" 2>/dev/null || true; done \
+      | sed -n 's/.*NEEDED.*\[\(.*\)\]/\1/p' | sort -u > /needed.txt; \
+    echo ">> the shipped binaries need: $(tr '\n' ' ' < /needed.txt)"
 
-# ── final image (alpine, NOT scratch — CGO needs libc + libsqlcipher) ─────────
-FROM ghcr.io/hanzoai/mirror/alpine:3.22@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6
-ARG REVISION=unknown
-LABEL org.opencontainers.image.revision="${REVISION}" \
-      org.opencontainers.image.source="https://github.com/hanzoai/cloud"
-# Runtime needs libsqlcipher (the codec the binary links). It must NOT also carry
+# ── the runtime rootfs: alpine's PACKAGES, none of alpine's TOOLS ─────────────
+# `apk add --root` installs a package closure into a DIRECTORY instead of into
+# this stage, which is what lets the final image be `scratch` while the cgo
+# plugins still find the libc and the codec they link. Dependency resolution is
+# the same one an install into the image would do, and the apk database is written
+# alongside the files, so trivy and grype enumerate the packages and their CVEs
+# from /lib/apk/db/installed — a scratch image assembled by hand from `ldd` output
+# is opaque to every scanner, and this one is not. That takes /etc/os-release as
+# well as the database; see alpine-release below, which is why.
+#
+# What it leaves behind is everything the alpine BASE carried for its own sake:
+# busybox + busybox-binsh (a shell and ~190 applets), apk-tools + libapk2 (a
+# package manager that can fetch and install signed code at run time), ssl_client,
+# musl-utils, scanelf. Measured on this package list: 36 packages / 932 files /
+# 72 executables become 26 / 766 / 56, and the programs on PATH are exactly git,
+# git-shell, sqlcipher and tini.
+#
+# git-shell is the one that reads like an exception and is not: it is a RESTRICTED
+# login shell that dispatches git-upload-pack / git-receive-pack /
+# git-upload-archive and refuses everything else — measured, `git-shell -c "echo
+# pwned"` answers `fatal: unrecognized command`. Nothing in this image interprets
+# a script: the shell scripts inside git's own libexec (git-submodule,
+# git-filter-branch, …) carry a `#!/bin/sh` that resolves to nothing, so they are
+# files, and no other interpreter — no perl, no python — is installed.
+#
+# THE SIZE IS NOT THE REASON, and claiming it would be dishonest. Both images
+# built from one commit and one build stage, so their 129 binaries are identical
+# and only the runtime differs: 29.51 MB of runtime layers (8.96 base + 18.8 apk +
+# 1.55 zoneinfo + 0.197 certs) become one 24.7 MB COPY, and the whole image goes
+# 1,876,323,984 B → 1,875,100,368 B — 1.22 MB, 0.065% of what a pull moves. The
+# /plugins layer is 5.19 GB unpacked of that image, so nothing here touches pull
+# time; that is a question about 126 per-app binaries carrying ~35 MB of shared
+# core each, and it is answered somewhere else or not at all. What this buys is
+# the post-exploitation surface — a Go handler turned into arbitrary execution
+# lands in a filesystem with no interpreter to pivot into and no package manager
+# to fetch one, which is what `distroless` names.
+#
+# ca-certificates-bundle, NOT ca-certificates: the bundle package is the .crt file
+# plus the /etc/ssl/cert.pem symlink, while `ca-certificates` is the
+# update-ca-certificates SHELL SCRIPT and depends on busybox — asking for it puts
+# the shell straight back, silently, and the image still works. That is the one
+# trap in this stage and the gate below is what catches it.
+#
+# alpine-release is here for the SCANNERS, and it was added after one of them said
+# no. The apk database lands in /lib/apk/db/installed with a record per package —
+# name, version, arch, checksum — which is the file trivy and grype read. They only
+# read it after they decide the image HAS an OS, and they decide that from
+# /etc/os-release. A closure of six packages does not contain it. Measured on the
+# image before this line: trivy reported `OS: {Family: none}` and 129 gobinary
+# results and NOT ONE os-pkgs result, so git, libcurl, OpenSSL and sqlcipher — the
+# whole of what CVEs are published against here — were invisible to it.
+#
+# alpine-release is the package that owns /etc/os-release, and it is NOT
+# alpine-baselayout: baselayout DEPENDS ON /bin/sh, so asking for it drags busybox,
+# busybox-binsh and ssl_client back and fails the gate below (measured — 29 packages
+# and /bin/sh -> /bin/busybox), and it does not even carry the file. alpine-release
+# depends on alpine-keys alone, which is public signing keys and no program: five
+# data files, +78 KB, and the executable count stays at 56.
+FROM ghcr.io/hanzoai/mirror/alpine:3.22@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6 AS rootfs
+# Runtime needs libsqlcipher (the codec the plugins link). It must NOT also carry
 # a plaintext libsqlite3 — the binary's -lsqlite3 DT_NEEDED would then bind to
 # plaintext sqlite and silently no-op PRAGMA key. sqlcipher-libs ships
 # libsqlcipher.so.0; alias libsqlite3.so.0 to it so sqlite3_* binds there.
@@ -419,6 +484,9 @@ LABEL org.opencontainers.image.revision="${REVISION}" \
 # (upload-pack / receive-pack --stateless-rpc / fetch) so multi-GB packs stream
 # to and from disk with bounded memory instead of buffering whole packs in RAM.
 # The `git` apk package carries upload-pack/receive-pack/http-backend/git-remote-https.
+# It is also the reason this image is assembled rather than based on
+# gcr.io/distroless/*: those bases ship glibc and a cert store and NO git, so the
+# object plane would fail at exec.LookPath("git") on the first clone.
 # tini: /cloud runs as PID 1, and PID 1 inherits every orphaned descendant in the
 # container. git is not a single process — fetch/clone fan out to git-upload-pack,
 # git-index-pack, git-rev-list and git-pack-objects. When cloud Kill()s a wedged
@@ -438,18 +506,80 @@ LABEL org.opencontainers.image.revision="${REVISION}" \
 # stream out of a running pod broke twice mid-transfer and left a torn archive.
 #
 # It answers to `sqlite3` too, because that is what every runbook and every hand
-# types, and on this image the engine behind that name IS sqlcipher. The line
-# below already tells the same lie at the library level for the same reason
+# types, and on this image the engine behind that name IS sqlcipher. The symlink
+# beside it tells the same lie at the library level for the same reason
 # (libsqlcipher linked as libsqlite3.so.0); one name, one engine, both layers.
-RUN apk add --no-cache ca-certificates tzdata sqlcipher sqlcipher-libs git tini \
-    && SC="$(find /usr/lib /lib -name 'libsqlcipher.so*' 2>/dev/null | sort | head -1)" \
-    && test -n "$SC" \
-    && ln -sf "$SC" /usr/lib/libsqlite3.so.0 \
-    && ln -sf "$(command -v sqlcipher)" /usr/bin/sqlite3 \
-    && test -x /sbin/tini \
-    && test -x /usr/bin/sqlite3
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
+#
+# The two symlinks are RELATIVE, unlike the absolute ones they replace: they are
+# written into a staging directory and read after it has been copied to /, so a
+# link naming /rootfs/usr/lib/... would dangle in the image that ships.
+RUN set -eu; \
+    apk add --no-cache --root /rootfs --initdb \
+      --keys-dir /etc/apk/keys --repositories-file /etc/apk/repositories \
+      ca-certificates-bundle tzdata sqlcipher sqlcipher-libs git tini alpine-release; \
+    ln -sf libsqlcipher.so.0 /rootfs/usr/lib/libsqlite3.so.0; \
+    ln -sf sqlcipher /rootfs/usr/bin/sqlite3; \
+    test -e /rootfs/usr/lib/libsqlcipher.so.0; \
+    test -x /rootfs/sbin/tini; \
+    test -x /rootfs/usr/bin/git; \
+    test -s /rootfs/etc/os-release; \
+    test -s /rootfs/lib/apk/db/installed
+# RED gate — the shell and the package manager are OUT, and they come back by
+# DEPENDENCY, never by anyone typing them. Asked of apk's own database rather
+# than of a file listing, because that is the record of what was actually
+# resolved: a package added six months from now that happens to depend on busybox
+# fails here instead of quietly restoring /bin/sh to a fleet-wide image.
+RUN set -eu; \
+    back="$(apk info --root /rootfs | grep -xE 'busybox|busybox-binsh|apk-tools|libapk2|ssl_client' || true)"; \
+    [ -z "$back" ] || { echo "DISTROLESS-GATE FAIL: the runtime rootfs pulled back $(echo $back | tr '\n' ' ')— a package depends on the shell or the package manager. ca-certificates does exactly this; ca-certificates-bundle is the same file without the update script."; exit 1; }; \
+    [ ! -e /rootfs/bin/sh ] || { echo "DISTROLESS-GATE FAIL: /bin/sh is in the runtime rootfs"; exit 1; }; \
+    echo ">> runtime: $(apk info --root /rootfs | wc -l) packages, no shell, no apk"
+# RED gate — every .so the shipped binaries ask the loader for is HERE. The final
+# stage is scratch, so a library that is merely present in the build stage is not
+# present at run time, and the loader's complaint arrives as a plugin that dies on
+# the first request to its prefix rather than as a failed build. /needed.txt is
+# the union over every binary this image ships — /cloud, /kmsfetch, /smoke and all
+# 126 plugins — so a new one cannot be added without its libraries being asked for.
+# The three static ones contribute nothing and are listed anyway: the day one of
+# them stops being CGO_ENABLED=0 is the day this needs to know. Measured over the
+# 129 binaries of this build, the union is two names: libc.musl-x86_64.so.1 and
+# libsqlcipher.so.0.
+COPY --from=build /needed.txt /needed.txt
+RUN set -eu; \
+    find /rootfs/lib /rootfs/usr/lib -name '*.so*' -exec basename {} \; | sort -u > /have.txt; \
+    missing="$(comm -23 /needed.txt /have.txt | tr '\n' ' ')"; \
+    [ -z "$missing" ] || { echo "RUNTIME-GATE FAIL: the runtime rootfs carries no $missing— a shipped binary names it in DT_NEEDED. Add the package that provides it to the apk line above."; exit 1; }; \
+    echo ">> runtime carries every DT_NEEDED library the image ships"
+
+# ── final image (scratch: the runtime above, and the binaries, and nothing) ────
+FROM scratch
+ARG REVISION=unknown
+LABEL org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.source="https://github.com/hanzoai/cloud" \
+      org.opencontainers.image.base.name="scratch"
+# PATH, because scratch has no config to inherit one from and the git object
+# plane resolves its binary by name. The alpine base supplied exactly this string
+# (`crane config` on the published image reads it back), so nothing about the
+# image's environment changes — but it was the BASE's, and a scratch image whose
+# config carries no Env at all gets PATH only from whatever runs it. Docker's
+# daemon injects a default; the CRI does not, so under Kubernetes — the only place
+# this image actually runs — os.Getenv("PATH") would come back empty,
+# exec.LookPath("git") would answer "executable file not found in $PATH", and
+# clone/fetch/push would fail closed on every repository while every probe stayed
+# green. The one line that is NOT optional in this stage.
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+COPY --from=rootfs /rootfs/ /
+# The certificate bundle and the zone database come from the rootfs stage's
+# packages, not from a second COPY out of the build stage. They used to come from
+# both — ca-certificates was installed here AND the .crt copied over it, and the
+# same for zoneinfo — which is two sources for one file and a way for an image to
+# carry a bundle nobody chose.
+#
+# /etc/passwd and /etc/group stay a copy, because they are the only files here no
+# package owns: `adduser -u 65532 -S nonroot` runs in the build stage, and this
+# pair is what gives the numeric USER below a name. A scratch container without
+# them has a uid that resolves to nothing — measured, os/user.Current() fails —
+# and it is the same pair the alpine-based image carried.
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud

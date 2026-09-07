@@ -82,10 +82,19 @@ spec:
           # preStop belt-and-suspenders: give the endpoint controller a moment to remove
           # this pod before SIGTERM so no request is dialed to a tearing-down pod. The
           # in-process drain (drain.go) is the primary mechanism; this only sharpens it.
+          #
+          # The kubelet sleeps, rather than the container running `/bin/sh -c "sleep 3"`.
+          # The image is distroless — there is no shell in it to run, and no sleep — so
+          # the exec form would fail on every pod deletion, and a failed preStop is only
+          # an event: the pod is deleted anyway and the delay this asked for silently
+          # stops happening. SleepAction says the same thing to the component that was
+          # doing the waiting all along. It needs kube >= 1.29 (beta, on by default;
+          # GA 1.33), which Chart.yaml's kubeVersion states, because an older API server
+          # PRUNES the unknown field and leaves no preStop at all.
           lifecycle:
             preStop:
-              exec:
-                command: ["/bin/sh", "-c", "sleep 3"]
+              sleep:
+                seconds: 3
           env:
             # The tag actually deployed, surfaced as X-Api-Version so a running pod
             # says which build it is. Read at config.go's getenv("CLOUD_VERSION", …);
