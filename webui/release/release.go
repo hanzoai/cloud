@@ -25,6 +25,7 @@ import (
 	"io"
 	"io/fs"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -55,6 +56,10 @@ type Source struct {
 	// want is set BEFORE the read that would mount it, so a failed read still
 	// leaves the process knowing it has fallen behind.
 	want atomic.Pointer[string]
+	// checked is when the resolver was last asked (unix nano), and one is asked at
+	// a time. A read refreshes; nothing is on a timer.
+	checked atomic.Int64
+	asking  sync.Mutex
 }
 
 // bundle is one complete, immutable release in memory. prefix is its identity —
@@ -114,7 +119,54 @@ func Load(ctx context.Context, cfg Config, log luxlog.Logger) (*Source, error) {
 }
 
 // Open implements fs.FS against the currently mounted release.
+// freshness coalesces the resolves a single page load would otherwise cause —
+// one document plus its thirty chunks is one question, not thirty-one.
+const freshness = time.Second
+
+// resolveTimeout bounds the check on the read path. The cached bundle is what a
+// cache is for: a resolver that is slow must not make the console slow.
+const resolveTimeout = 2 * time.Second
+
+// ensure asks what is published if nobody has asked recently, and mounts it if it
+// moved. This is why nothing polls: a console nobody opens costs nothing, and a
+// console somebody opens is current when they open it.
+//
+// Failure is not fatal here. It leaves `want` set, so a process that fell behind
+// reports Stale and refuses rather than serving bytes its siblings are not.
+func (s *Source) ensure() {
+	// Nothing configured to resolve — a Source assembled directly (tests, and the
+	// nil-bundle case) has no site to ask about.
+	if s.cfg.Slug == "" || s.log == nil {
+		return
+	}
+	now := time.Now().UnixNano()
+	if last := s.checked.Load(); now-last < int64(freshness) {
+		return
+	}
+	if !s.asking.TryLock() {
+		return // another request is already asking; serve what we have
+	}
+	defer s.asking.Unlock()
+	if now := time.Now().UnixNano(); now-s.checked.Load() < int64(freshness) {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), resolveTimeout)
+	defer cancel()
+	changed, err := s.refresh(ctx)
+	s.checked.Store(time.Now().UnixNano())
+	switch {
+	case err != nil:
+		s.log.Warn("console release check failed — serving the release already in use",
+			"release", s.Release(), "err", err)
+	case changed:
+		b := s.cur.Load()
+		s.log.Info("console release swapped", "release", b.prefix, "files", b.files, "bytes", b.bytes)
+	}
+}
+
 func (s *Source) Open(name string) (fs.File, error) {
+	s.ensure()
 	b := s.cur.Load()
 	if b == nil { // Load failed and handed the caller this Source anyway, to poll
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
@@ -149,35 +201,15 @@ func (s *Source) Stale() bool {
 	return want != "" && want != s.Release()
 }
 
-// Watch keeps the console current with what was published, and is the whole
-// reason this indirection exists: a `hanzo sites publish` reaches users through
-// THIS loop, in one poll interval, instead of through a cloud build and a
-// rollout.
+// Watch is retained for the composition roots that start it, and no longer polls.
 //
-// The steady state costs one resolver call per interval and nothing else — the
-// bytes are re-read only when the active-release pointer actually moves. A failed
-// poll is logged and the mounted release keeps serving: the bundle in memory is
-// already complete, so there is nothing to fall back to and nothing to gain by
-// tearing it down.
+// It used to tick every 30s, which made staleness a function of the clock: between
+// two ticks a process served bytes the publisher had already replaced, at 200. The
+// refresh happens on read now (see ensure), so a console nobody opens costs
+// nothing and a console somebody opens is current when they open it. This blocks
+// until the context ends so callers that `go Watch(ctx)` keep their shape.
 func (s *Source) Watch(ctx context.Context) {
-	t := time.NewTicker(s.cfg.Poll)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			changed, err := s.refresh(ctx)
-			switch {
-			case err != nil:
-				s.log.Warn("console release poll failed — serving the release already in use",
-					"release", s.Release(), "err", err)
-			case changed:
-				b := s.cur.Load()
-				s.log.Info("console release swapped", "release", b.prefix, "files", b.files, "bytes", b.bytes)
-			}
-		}
-	}
+	<-ctx.Done()
 }
 
 // refresh resolves the site's active release and mounts it if it moved. It

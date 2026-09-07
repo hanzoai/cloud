@@ -3,6 +3,7 @@ package release
 import (
 	"context"
 	"errors"
+	luxlog "github.com/luxfi/log"
 	"io"
 	"io/fs"
 	"net/http"
@@ -280,5 +281,44 @@ func TestStaleIsWhatTheResolverSaidMinusWhatMounted(t *testing.T) {
 	s.cur.Store(nb)
 	if s.Stale() {
 		t.Error("Stale() after mounting the wanted release")
+	}
+}
+
+// TestEnsureIsSkippedWhenNothingIsConfigured pins the guard a bare Source needs:
+// a fixture (or the nil-bundle case) has no site to ask about, and asking would
+// dereference a logger it never had. Open must stay usable either way.
+func TestEnsureIsSkippedWhenNothingIsConfigured(t *testing.T) {
+	s := &Source{}
+	s.cur.Store(bundleOf(map[string]string{"index.html": "A"}))
+
+	f, err := s.Open("index.html")
+	if err != nil {
+		t.Fatalf("Open on an unconfigured Source: %v", err)
+	}
+	_ = f.Close()
+	if s.checked.Load() != 0 {
+		t.Error("an unconfigured Source asked the resolver")
+	}
+}
+
+// TestEnsureCoalescesWithinTheFreshnessWindow is what makes reading cheap enough
+// to replace the timer: one document plus its thirty chunks is thirty-one Opens
+// and must be one question, not thirty-one.
+func TestEnsureCoalescesWithinTheFreshnessWindow(t *testing.T) {
+	s := &Source{}
+	s.cur.Store(bundleOf(map[string]string{"index.html": "A"}))
+	// Configured enough to pass the guard, and just-checked so no resolve is due.
+	s.cfg.Slug = "hanzo-console"
+	s.log = luxlog.New("test")
+	s.checked.Store(time.Now().UnixNano())
+
+	before := s.checked.Load()
+	for range 31 {
+		if f, err := s.Open("index.html"); err == nil {
+			_ = f.Close()
+		}
+	}
+	if s.checked.Load() != before {
+		t.Error("a burst of reads inside the freshness window asked the resolver again")
 	}
 }
