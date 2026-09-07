@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
@@ -772,6 +773,12 @@ func (o sessionOps) list(ctx context.Context, in *sessionQuery) (*sessionList, e
 	if f.Status != "" && !validStatus(f.Status) {
 		return nil, zip.ErrBadRequest("status must be running|paused|done|error")
 	}
+	// A member sees the sessions they opened; an org admin or a SuperAdmin sees
+	// the org's. The actor is the validated principal on the request, never a
+	// field a client can set.
+	if c, ok := cloud.Request(ctx); ok && !principal.IsSuperAdmin(c) && !principal.IsOrgAdmin(c) {
+		f.Actor = billingActor(org, caller(c))
+	}
 	rows, err := sto.ListSessions(ctx, org, f)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
@@ -812,6 +819,12 @@ func (o sessionOps) get(ctx context.Context, in *sessionRef) (*sessionDetail, er
 	}
 	x, err := sto.GetSession(ctx, org, id)
 	if err == errSessionNotFound {
+		return nil, zip.ErrNotFound("session not found")
+	}
+	// Another member's session answers exactly as an absent one does, so a
+	// session id says nothing about whose it is.
+	if c, ok := cloud.Request(ctx); ok && err == nil && x.Actor != "" && x.Actor != billingActor(org, caller(c)) &&
+		!principal.IsSuperAdmin(c) && !principal.IsOrgAdmin(c) {
 		return nil, zip.ErrNotFound("session not found")
 	}
 	if err != nil {

@@ -27,7 +27,7 @@ func seedLegacy(t *testing.T, dir string, orgs ...string) {
 			t.Fatalf("%s run: %v", org, err)
 		}
 		if err := st.CreateSession(ctx, Session{
-			ID: "sess_" + org, Org: org, Agent: "hanzo", Actor: org + "/u1", Status: StatusRunning,
+			ID: "sess_" + org, Org: org, Agent: "hanzo", Actor: org + "/u-" + org, Status: StatusRunning,
 			RootID: "sess_" + org, Title: "t", Terminal: "https://" + org + ".share.hanzo.ai",
 			Project: "site", Published: true, StartedAt: 3, CreatedAt: 3, UpdatedAt: 3,
 		}); err != nil {
@@ -36,7 +36,7 @@ func seedLegacy(t *testing.T, dir string, orgs ...string) {
 		for i := range 3 {
 			if _, err := st.AppendEvent(ctx, Event{
 				ID: "evt_" + org + string(rune('a'+i)), SessionID: "sess_" + org, Org: org,
-				Kind: KindLog, Actor: org + "/u1", Payload: `{"n":1}`, CreatedAt: int64(4 + i),
+				Kind: KindLog, Actor: org + "/u-" + org, Payload: `{"n":1}`, CreatedAt: int64(4 + i),
 			}); err != nil {
 				t.Fatalf("%s event %d: %v", org, i, err)
 			}
