@@ -401,6 +401,17 @@ func (m *meteredAI) record(payer account.Account, project, model string, u meter
 	m.meter.record(payer, AIMeterProvider, u, h.release)
 }
 
+// InferenceMicros prices tokens in micro-USD at the platform's inference rate —
+// the SAME rate the metered client debits by, exported so an agent's budget can
+// quote a call before it is made and settle it after by one rule.
+func InferenceMicros(tokens int) int64 {
+	rate := aiPriceUUSDPer1kTokens()
+	if tokens <= 0 || rate <= 0 {
+		return 0
+	}
+	return int64(tokens) * rate / 1000
+}
+
 // micros converts a token count to the debit in micro-USD at the configured rate.
 func (m *meteredAI) micros(tokens int) int64 {
 	if tokens <= 0 || m.rate <= 0 {

@@ -361,6 +361,7 @@ func mountSessions(s *cloud.Service[state], app cloud.Router) {
 	zip.Get(g, "/sessions/:id/control", o.drain)
 	zip.Post(g, "/sessions/:id/pause", o.pause)
 	zip.Post(g, "/sessions/:id/resume", o.resume)
+	zip.Post(g, "/sessions/:id/budget", o.budget)
 	zip.Post(g, "/sessions/:id/stop", o.stop)
 	zip.Post(g, "/sessions/:id/message", o.message)
 
@@ -576,6 +577,10 @@ type registerReq struct {
 	// without a Project, because that route is keyed on (org, project) — a build
 	// with no product is not a story anyone can open. False keeps it org-only.
 	Published bool `json:"published"`
+
+	// BudgetMicroUSD caps what this session may spend, integer micro-USD. Zero
+	// means no cap; a cap can be raised or removed later, never added.
+	BudgetMicroUSD int64 `json:"budget_micro_usd"`
 }
 
 // RegisterSession opens a live agent session in the caller's org — the row every
@@ -663,6 +668,7 @@ func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView
 		// The runtime meter's two facts, settled at the act that opened the
 		// session: whose wallet pays, and the instant its clock starts.
 		Payer: payerOf(ctx, org).Subject(), MeteredAt: now,
+		BudgetMicroUSD: body.BudgetMicroUSD,
 	}
 	if isTerminalStatus(status) {
 		x.EndedAt = now

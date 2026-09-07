@@ -41,14 +41,14 @@ func TestHTTPCreateModelValidation(t *testing.T) {
 
 	// A model this gateway never serves → a clean 400 at create (was a run-time 502).
 	code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "bad", "model": "claude-sonnet-4-5"})
+		map[string]any{"name": "bad", "model": "claude-sonnet-4-5", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	if code != http.StatusBadRequest {
 		t.Fatalf("non-catalog model want 400, got %d (%s)", code, body)
 	}
 
 	// A catalog model is accepted.
 	if code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "good", "model": "zen-flash"}); code != http.StatusCreated {
+		map[string]any{"name": "good", "model": "zen-flash", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("catalog model want 201, got %d (%s)", code, body)
 	}
 
@@ -58,7 +58,7 @@ func TestHTTPCreateModelValidation(t *testing.T) {
 	// "the default is an upstream name" is now unrepresentable rather than merely
 	// defended against.
 	code, body = do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "defaulted", "instructions": "be terse"})
+		map[string]any{"name": "defaulted", "instructions": "be terse", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	if code != http.StatusCreated {
 		t.Fatalf("omitted model want 201 (defaulted), got %d (%s)", code, body)
 	}
@@ -92,7 +92,7 @@ func TestCreateModelValidationFailsOpen(t *testing.T) {
 	// fakeAI (from agents_test.go) implements ChatCompletion only — NOT ModelLister.
 	app := mountApp(t, &fakeAI{content: "ok"})
 	if code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "any", "model": "some-unlisted-model"}); code != http.StatusCreated {
+		map[string]any{"name": "any", "model": "some-unlisted-model", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("non-lister AI must skip validation (fail-open), want 201, got %d (%s)", code, body)
 	}
 }

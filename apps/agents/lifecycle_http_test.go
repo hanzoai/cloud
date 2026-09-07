@@ -13,11 +13,11 @@ func TestCreateRejectsOversizedRefs(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
 	huge := strings.Repeat("a", maxRef+1)
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "big", "model": "m", "computeRef": huge}); code != http.StatusBadRequest {
+		map[string]any{"name": "big", "model": "m", "computeRef": huge, "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusBadRequest {
 		t.Fatalf("oversized computeRef want 400, got %d", code)
 	}
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "big2", "model": "m", "serviceAccountId": huge}); code != http.StatusBadRequest {
+		map[string]any{"name": "big2", "model": "m", "serviceAccountId": huge, "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusBadRequest {
 		t.Fatalf("oversized serviceAccountId want 400, got %d", code)
 	}
 }
@@ -30,23 +30,23 @@ func TestCreateLongRunningValidation(t *testing.T) {
 
 	// long-running without a schedule -> 400.
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "a", "model": "m", "executionMode": "long-running"}); code != http.StatusBadRequest {
+		map[string]any{"name": "a", "model": "m", "executionMode": "long-running", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusBadRequest {
 		t.Fatalf("long-running w/o schedule want 400, got %d", code)
 	}
 	// long-running with a bad cron -> 400.
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "b", "model": "m", "executionMode": "long-running", "schedule": "not a cron"}); code != http.StatusBadRequest {
+		map[string]any{"name": "b", "model": "m", "executionMode": "long-running", "schedule": "not a cron", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusBadRequest {
 		t.Fatalf("long-running w/ bad cron want 400, got %d", code)
 	}
 	// unknown mode -> 400.
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "c", "model": "m", "executionMode": "daemon"}); code != http.StatusBadRequest {
+		map[string]any{"name": "c", "model": "m", "executionMode": "daemon", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusBadRequest {
 		t.Fatalf("unknown mode want 400, got %d", code)
 	}
 	// valid long-running -> 201, fields echoed.
 	code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
 		map[string]any{"name": "cron", "model": "m", "executionMode": "long-running",
-			"schedule": "*/5 * * * *", "computeRef": "vm-1", "serviceAccountId": "acme-cron"})
+			"schedule": "*/5 * * * *", "computeRef": "vm-1", "serviceAccountId": "acme-cron", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	if code != http.StatusCreated {
 		t.Fatalf("valid long-running want 201, got %d (%s)", code, body)
 	}
@@ -63,7 +63,7 @@ func TestCreateLongRunningValidation(t *testing.T) {
 func TestCreateOneShotDropsSchedule(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
 	code, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "one", "model": "m", "schedule": "* * * * *"})
+		map[string]any{"name": "one", "model": "m", "schedule": "* * * * *", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
@@ -80,7 +80,7 @@ func TestLongRunningPerOrgCap(t *testing.T) {
 	t.Setenv(longRunningCapEnv, "2")
 	app := mountApp(t, &fakeAI{content: "x"})
 	mk := func(name string) map[string]any {
-		return map[string]any{"name": name, "model": "m", "executionMode": "long-running", "schedule": "* * * * *"}
+		return map[string]any{"name": name, "model": "m", "executionMode": "long-running", "schedule": "* * * * *", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}
 	}
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme", mk("a")); code != http.StatusCreated {
 		t.Fatalf("1st long-running want 201, got %d", code)
@@ -94,7 +94,7 @@ func TestLongRunningPerOrgCap(t *testing.T) {
 	}
 	// A one-shot agent is unaffected by the cap.
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "one", "model": "m"}); code != http.StatusCreated {
+		map[string]any{"name": "one", "model": "m", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("one-shot must not be capped, got %d", code)
 	}
 	// A DIFFERENT org has its own budget.
@@ -112,11 +112,11 @@ func TestLongRunningCapNotBypassedByPatch(t *testing.T) {
 
 	// Fill the cap with one long-running agent.
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "lr", "model": "m", "executionMode": "long-running", "schedule": "* * * * *"}); code != http.StatusCreated {
+		map[string]any{"name": "lr", "model": "m", "executionMode": "long-running", "schedule": "* * * * *", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("seed long-running want 201, got %d", code)
 	}
 	// Create a one-shot agent (uncapped), then try to PATCH it to long-running.
-	do(t, app, http.MethodPost, "/v1/agent", "acme", map[string]any{"name": "sneaky", "model": "m"})
+	do(t, app, http.MethodPost, "/v1/agent", "acme", map[string]any{"name": "sneaky", "model": "m", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	if code, _ := do(t, app, http.MethodPatch, "/v1/agent/sneaky", "acme",
 		map[string]any{"executionMode": "long-running", "schedule": "* * * * *"}); code != http.StatusConflict {
 		t.Fatalf("PATCH one-shot->long-running over cap want 409, got %d", code)
@@ -132,7 +132,7 @@ func TestLongRunningCapNotBypassedByPatch(t *testing.T) {
 // schedule is rejected; supplying a valid schedule in the same PATCH succeeds.
 func TestPatchToLongRunningValidates(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
-	do(t, app, http.MethodPost, "/v1/agent", "acme", map[string]any{"name": "a", "model": "m"})
+	do(t, app, http.MethodPost, "/v1/agent", "acme", map[string]any{"name": "a", "model": "m", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 
 	// flip to long-running with no schedule -> 400.
 	if code, _ := do(t, app, http.MethodPatch, "/v1/agent/a", "acme",

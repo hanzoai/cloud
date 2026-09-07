@@ -94,7 +94,7 @@ func TestRunGatesUnfundedOrg(t *testing.T) {
 	app := mountBilled(t, bs.start(t), &fakeAI{content: "should not run"})
 
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"}); code != http.StatusCreated {
+		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
 	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
@@ -115,7 +115,7 @@ func TestRunGatesUnderfundedOrg(t *testing.T) {
 	app := mountBilled(t, bs.start(t), &fakeAI{content: "should not run"})
 
 	do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "a", "model": "m", "instructions": "x"})
+		map[string]any{"name": "a", "model": "m", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusPaymentRequired {
 		t.Fatalf("underfunded (1c < 100c fee) run want 402, got %d (%s)", code, body)
@@ -133,7 +133,7 @@ func TestRunDebitsCallerOrg(t *testing.T) {
 	app := mountBilled(t, bs.start(t), &fakeAI{content: "the answer"})
 
 	do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"})
+		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("funded run want 200, got %d (%s)", code, body)
@@ -178,7 +178,7 @@ func TestRunByReturnedIDMetersOnce(t *testing.T) {
 	app := mountBilled(t, bs.start(t), &fakeAI{content: "the answer"})
 
 	_, body := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"})
+		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	var created agentView
 	if err := json.Unmarshal(body, &created); err != nil || created.ID == "" {
 		t.Fatalf("create must return an id, got %s (err %v)", body, err)
@@ -212,7 +212,7 @@ func TestFailedRunNotBilled(t *testing.T) {
 	app := mountBilled(t, bs.start(t), &fakeAI{err: errTest})
 
 	do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "a", "model": "m", "instructions": "x"})
+		map[string]any{"name": "a", "model": "m", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	code, _ := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusBadGateway {
 		t.Fatalf("errored run want 502, got %d", code)
@@ -233,7 +233,7 @@ func TestRunRequiresValidatedPrincipal(t *testing.T) {
 
 	// create is allowed with X-User-Id (via do()).
 	if code, _ := do(t, app, http.MethodPost, "/v1/agent", "acme",
-		map[string]any{"name": "a", "model": "m", "instructions": "x"}); code != http.StatusCreated {
+		map[string]any{"name": "a", "model": "m", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d", code)
 	}
 	// A raw run request carrying ONLY X-Org-Id (no X-User-Id) must be 403.

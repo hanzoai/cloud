@@ -174,6 +174,9 @@ type state struct {
 	// a unit test, or a deployment with no AI plane, leaves every run reading
 	// "unknown", which is the honest answer rather than a fabricated zero.
 	prog *estimator
+	// svc is the service this state belongs to, for the paths that publish or log
+	// from below an op — the budget refuses from inside a run.
+	svc *cloud.Service[state]
 }
 
 var mounted *cloud.Service[state]
@@ -264,6 +267,20 @@ type agentView struct {
 	// on an update to the DEFINITION and never on a run, so a busy agent nobody has
 	// edited keeps an old one.
 	UpdatedAt string `json:"updatedAt"`
+
+	// CapMicroUSD is the total this agent may spend within one Period, as an
+	// integer number of micro-USD (1,000,000 = $1). It is required at creation: a
+	// cap of zero would mean no limit and no per-agent spend record at all.
+	CapMicroUSD      int64  `json:"cap_micro_usd"`
+	// MaxTaskMicroUSD is the ceiling for a single run, in micro-USD. A session
+	// cannot exceed it even when the period cap still has room, so one runaway
+	// task cannot consume a month.
+	MaxTaskMicroUSD  int64  `json:"max_task_micro_usd"`
+	// Period is the window the cap resets on: day, week or month.
+	Period           string `json:"period,omitempty"`
+	// ConsumedMicroUSD is what has been spent in the current period, in micro-USD.
+	// It is settled from what the gateway reported, not from the quote.
+	ConsumedMicroUSD int64  `json:"consumed_micro_usd"`
 }
 
 // agentDetail is one agent plus what only the detail read carries: the system
@@ -350,6 +367,8 @@ type agentRunView struct {
 	// is a different measurement from the token counts above and from the turns a
 	// build reports. Zero is a run that answered straight from the model.
 	ToolCalls int `json:"toolCalls,omitempty"`
+	// MicroUSD is what the run spent, integer micro-USD. Absent when nothing was metered.
+	MicroUSD int64 `json:"micro_usd,omitempty"`
 }
 
 // ---- overview shapes (console Agents dashboard: metrics + activity) ----
@@ -432,6 +451,8 @@ func toView(a Agent, runs int) agentView {
 		Avatar: a.Avatar, Emoji: a.Emoji,
 		Runs:      runs,
 		CreatedAt: stamp.Unix(a.CreatedAt), UpdatedAt: stamp.Unix(a.UpdatedAt),
+		CapMicroUSD: a.CapMicroUSD, MaxTaskMicroUSD: a.MaxTaskMicroUSD, Period: a.Period,
+		ConsumedMicroUSD: a.ConsumedMicroUSD,
 	}
 }
 
@@ -444,6 +465,7 @@ func toRunView(r Run) agentRunView {
 		Error: r.Error, DurationMs: r.DurationMs, CreatedAt: stamp.Unix(r.CreatedAt),
 		Agent: r.AgentName, Actor: r.Actor, TraceID: r.TraceID,
 		PromptTokens: r.PromptTokens, CompletionTokens: r.CompletionTokens, ToolCalls: r.ToolCalls,
+		MicroUSD: r.MicroUSD,
 	}
 }
 
@@ -516,6 +538,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	exposeRunOnBehalf()
 	exposeRoster()
 
+	s.State.svc = s
 	o := agentOps{s: s}
 	// Bridge FIRST, and at the entry point this SUBSYSTEM is, not on one node inside
 	// it: a typed op receives only a context, so the validated org reaches it by being
@@ -543,6 +566,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// a different path from the one these two have always served.
 	zip.Get(zapp, "/v1/agent", o.list)
 	zip.Post(zapp, "/v1/agent", o.create, zip.WithStatus(http.StatusCreated))
+	zip.Get(zapp, "/v1/agent/:ref/spend", o.spend)
 	// The static org-wide surfaces are listed before the :ref wildcard for reading
 	// order, not for matching: the router resolves by SPECIFICITY, so a literal
 	// beats a param whatever order they register in ("metrics" is never captured as
@@ -707,6 +731,17 @@ type createAgentIn struct {
 	// both are given — it is the thing somebody made — and both empty leaves the
 	// agent drawn as its initial.
 	Emoji string `json:"emoji"`
+
+	// The budget, required. An agent is not creatable without one: a zero cap
+	// would mean no limit and no record of its spend, which is what a budget
+	// exists to remove. Integer micro-USD; the CLI converts dollars before sending.
+	CapMicroUSD     int64  `json:"cap_micro_usd"`
+	// MaxTaskMicroUSD is the ceiling for a single run, in micro-USD. A session
+	// cannot exceed it even when the period cap still has room, so one runaway
+	// task cannot consume a month.
+	MaxTaskMicroUSD int64  `json:"max_task_micro_usd"`
+	// Period is the window the cap resets on: day, week or month.
+	Period          string `json:"period"`
 }
 
 // CreateAgent defines an agent in the caller's org: a model, a system prompt
@@ -770,6 +805,9 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 	if err != nil {
 		return nil, zip.ErrBadRequest(err.Error())
 	}
+	if err := validateBudget(body.CapMicroUSD, body.MaxTaskMicroUSD, body.Period); err != nil {
+		return nil, err
+	}
 	// Cap the org's scheduler footprint (Red LOW-1): a tenant cannot create an
 	// unbounded number of scheduled agents that each add recurring load to the
 	// shared store. Only counts when this create is itself long-running.
@@ -797,6 +835,8 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 		// while it sits in the roster — so its watermark stays zero and the sweep
 		// never sees it.
 		Payer: payerOf(ctx, org).Subject(),
+		CapMicroUSD: body.CapMicroUSD, MaxTaskMicroUSD: body.MaxTaskMicroUSD, Period: body.Period,
+		PeriodStartedAt: periodStart(time.Now(), body.Period),
 	}
 	if mode == ModeLongRunning {
 		a.MeteredAt = now
@@ -909,6 +949,15 @@ type updateAgentIn struct {
 	// BOTH, so setting a glyph clears an image and "" for both goes back to the
 	// initial — there is no state where a row holds two answers.
 	Emoji *string `json:"emoji"`
+
+	// The budget, any part of it. Changing the period opens a new window.
+	CapMicroUSD     *int64  `json:"cap_micro_usd"`
+	// MaxTaskMicroUSD is the ceiling for a single run, in micro-USD. A session
+	// cannot exceed it even when the period cap still has room, so one runaway
+	// task cannot consume a month.
+	MaxTaskMicroUSD *int64  `json:"max_task_micro_usd"`
+	// Period is the window the cap resets on: day, week or month.
+	Period          *string `json:"period"`
 }
 
 // UpdateAgent changes an agent in place. Every field is optional; a field the
@@ -963,6 +1012,29 @@ func (o agentOps) update(ctx context.Context, in *updateAgentIn) (*agentView, er
 		if a.ServiceAccountID, err = validateRef("serviceAccountId", *body.ServiceAccountID); err != nil {
 			return nil, err
 		}
+	}
+	if body.CapMicroUSD != nil || body.MaxTaskMicroUSD != nil || body.Period != nil {
+		cap, task, period := a.CapMicroUSD, a.MaxTaskMicroUSD, a.Period
+		if body.CapMicroUSD != nil {
+			cap = *body.CapMicroUSD
+		}
+		if body.MaxTaskMicroUSD != nil {
+			task = *body.MaxTaskMicroUSD
+		}
+		if body.Period != nil {
+			period = strings.TrimSpace(*body.Period)
+		}
+		if err := validateBudget(cap, task, period); err != nil {
+			return nil, err
+		}
+		if period != a.Period {
+			// A new window: the old period's spend does not carry into it.
+			if err := sto.ResetPeriod(ctx, org, a.Name, periodStart(time.Now(), period)); err != nil {
+				return nil, zip.Errorf(http.StatusInternalServerError, "reset period: %v", err)
+			}
+			a.ConsumedMicroUSD = 0
+		}
+		a.CapMicroUSD, a.MaxTaskMicroUSD, a.Period = cap, task, period
 	}
 	if body.Avatar != nil || body.Emoji != nil {
 		// The pair moves together. Reading the unsent half off the stored row is
@@ -1082,13 +1154,12 @@ type runReq struct {
 	Input string `json:"input"`
 }
 
-// The run's prose, declared beside the wire fact that keeps it untyped (the
-// registration above says why it cannot be a typed op: a 502 answers with the
-// RECORDED RUN as its body and a balance denial answers the fleet-wide
-// cloud.DenyResource envelope, and zip's error type can express neither). zipdoc
-// lifts a typed op's prose from its doc comment; there is no typed op here, so
-// without this the one operation that spends money publishes an operationId and
-// nothing else.
+// The run's prose, declared beside the wire fact that keeps it untyped: a 502
+// answers with the RECORDED RUN as its body and a balance denial answers the
+// fleet-wide cloud.DenyResource envelope, and zip's error type can express
+// neither, so this route cannot be a typed op. zipdoc lifts a typed op's prose
+// from its doc comment, which is where every other operation here states itself
+// — /v1/agent/:ref/spend included. Only the untyped ones need this.
 func init() {
 	openapi.Describe("/v1/agent/:ref/run", http.MethodPost,
 		"Run one of your org's agents and get the recorded run back.",
@@ -1244,7 +1315,25 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input strin
 		return Run{}, err
 	}
 
-	r := executeRun(ctx, s.State.ai, a.Org, actor, a, input, history, s.State.failoverModel, id)
+	// The client this run is handed asks the budget before every completion —
+	// and a tool call, dispatched below the completion loop, finds the same gate
+	// on the context. See budget.go: this is the one place a run reaches the
+	// model, so it is the one place the gate has to be.
+	sto, err := s.State.storeFor(a.Org)
+	if err != nil {
+		return Run{}, zip.Errorf(http.StatusInternalServerError, "store: %v", err)
+	}
+	tally := &runTally{ID: id}
+	b := &budgeted{inner: s.State.ai, st: &s.State, sto: sto, a: &a, run: tally, sess: sessionFrom(ctx)}
+	ctx = withBudget(ctx, b)
+	r := executeRun(ctx, b, a.Org, actor, a, input, history, s.State.failoverModel, id)
+	if b.refused != nil {
+		// A refused run is not a failed run: nothing was bought, so nothing is
+		// recorded, and the caller gets the refusal rather than an error row.
+		span.SetStatus(codes.Error, "budget refused")
+		return Run{}, b.refused
+	}
+	r.MicroUSD = tally.Micros
 	// The trace this run IS, written onto the run itself. Without it the console
 	// has a run with no way to reach its spans and a trace with no way to name its
 	// run: two records of one event that cannot be joined. It is read off the live

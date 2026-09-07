@@ -225,7 +225,7 @@ func TestOneRunIsObservableEndToEnd(t *testing.T) {
 
 	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", clients.FixedModel("gpt-4o-mini")))
 	do(t, app, http.MethodPost, "/v1/agent", "acme", map[string]any{
-		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_search_query"}})
+		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_search_query"}, "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("run want 200, got %d (%s)", code, body)
@@ -341,7 +341,7 @@ func TestFailedToolIsReadableAsSuchOnItsRun(t *testing.T) {
 
 	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", clients.FixedModel("gpt-4o-mini")))
 	do(t, app, http.MethodPost, "/v1/agent", "acme", map[string]any{
-		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": names})
+		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": names, "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "go"})
 	if code != http.StatusOK {
 		t.Fatalf("a run whose tool failed still answers 200, got %d (%s)", code, body)
@@ -411,7 +411,7 @@ func TestRunIDReachesTheModelCall(t *testing.T) {
 
 	app := mountApp(t, rec)
 	do(t, app, http.MethodPost, "/v1/agent", "acme", map[string]any{
-		"name": "a", "model": "m", "instructions": "x", "tools": []string{"post_search_query"}})
+		"name": "a", "model": "m", "instructions": "x", "tools": []string{"post_search_query"}, "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("run want 200, got %d (%s)", code, body)
@@ -520,7 +520,7 @@ func TestToolCallRecordsWhatItDidWithoutItsCredential(t *testing.T) {
 
 	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", clients.FixedModel("gpt-4o-mini")))
 	do(t, app, http.MethodPost, "/v1/agent", "acme", map[string]any{
-		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_exec_run"}})
+		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_exec_run"}, "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	if code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "go"}); code != http.StatusOK {
 		t.Fatalf("run want 200, got %d (%s)", code, body)
 	}
@@ -610,7 +610,7 @@ func TestEverySpanOfARunIsFiledUnderItsTenant(t *testing.T) {
 
 	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", clients.FixedModel("gpt-4o-mini")))
 	do(t, app, http.MethodPost, "/v1/agent", "acme", map[string]any{
-		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_search_query"}})
+		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_search_query"}, "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 	if code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"}); code != http.StatusOK {
 		t.Fatalf("run want 200, got %d (%s)", code, body)
 	}
@@ -655,7 +655,7 @@ func TestOneOrgsRunNeverCarriesAnothersTenant(t *testing.T) {
 	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", clients.FixedModel("gpt-4o-mini")))
 	for _, org := range []string{"acme", "globex"} {
 		do(t, app, http.MethodPost, "/v1/agent", org, map[string]any{
-			"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_search_query"}})
+			"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_search_query"}, "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
 		if code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", org, map[string]any{"input": "hi"}); code != http.StatusOK {
 			t.Fatalf("%s run want 200, got %d (%s)", org, code, body)
 		}

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/mint"
+
 	"github.com/hanzoai/cloud"
 )
 
@@ -74,6 +76,16 @@ type Agent struct {
 	// charges for, and accrues nothing here.
 	Payer     string
 	MeteredAt int64
+
+	// The budget: what this agent may spend. Integer micro-USD. Required at
+	// creation; a row from before budgets existed carries zero and is uncapped
+	// until an update gives it a cap.
+	CapMicroUSD     int64  // per period
+	MaxTaskMicroUSD int64  // per run
+	Period          string // day|week|month
+	// What this period has spent, and when it began (UTC, calendar-aligned).
+	ConsumedMicroUSD int64
+	PeriodStartedAt  int64
 }
 
 // Execution modes. One-shot agents run only on an explicit POST; long-running
@@ -120,6 +132,8 @@ type Run struct {
 	// Empty when the process had no tracer installed — an honest "not recorded",
 	// never a fabricated id.
 	TraceID string
+	// MicroUSD is what the run spent, in integer micro-USD.
+	MicroUSD int64
 
 	// PromptTokens/CompletionTokens are what the gateway reported for the run's
 	// FINAL completion, and ToolCalls is how many tool dispatches it made. They
@@ -229,6 +243,12 @@ CREATE INDEX IF NOT EXISTS ix_runs_org_created ON agent_runs(org, created_at);
 		// row written before this column existed correctly means.
 		"avatar": "TEXT NOT NULL DEFAULT ''",
 		"emoji":  "TEXT NOT NULL DEFAULT ''",
+		// The budget. Zero cap on a row from before budgets = uncapped, see budget.go.
+		"cap_micro_usd":      "INTEGER NOT NULL DEFAULT 0",
+		"max_task_micro_usd": "INTEGER NOT NULL DEFAULT 0",
+		"period":             "TEXT NOT NULL DEFAULT ''",
+		"consumed_micro_usd": "INTEGER NOT NULL DEFAULT 0",
+		"period_started_at":  "INTEGER NOT NULL DEFAULT 0",
 	}); err != nil {
 		return err
 	}
@@ -241,8 +261,24 @@ CREATE INDEX IF NOT EXISTS ix_runs_org_created ON agent_runs(org, created_at);
 		"prompt_tokens":     "INTEGER NOT NULL DEFAULT 0",
 		"completion_tokens": "INTEGER NOT NULL DEFAULT 0",
 		"tool_calls":        "INTEGER NOT NULL DEFAULT 0",
+		"micro_usd":         "INTEGER NOT NULL DEFAULT 0",
 	}); err != nil {
 		return err
+	}
+	// Every act an agent is charged for, by component, so spend can be read per
+	// agent without re-deriving it from runs and residency.
+	if _, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS agent_spend (
+		id         TEXT PRIMARY KEY,
+		org        TEXT NOT NULL,
+		agent_name TEXT NOT NULL,
+		run_id     TEXT NOT NULL DEFAULT '',
+		session_id TEXT NOT NULL DEFAULT '',
+		component  TEXT NOT NULL,
+		micro_usd  INTEGER NOT NULL,
+		created_at INTEGER NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS ix_spend_org_agent ON agent_spend(org, agent_name, created_at);`); err != nil {
+		return fmt.Errorf("migrate: spend: %w", err)
 	}
 	// The org-wide recency index, created AFTER the columns above for the same
 	// reason the scheduler's partial index is: a legacy DB gains them just now.
@@ -408,11 +444,11 @@ func decodeList(s string) []string {
 	return xs
 }
 
-const agentCols = `id,org,name,model,instructions,description,tools,status,execution_mode,schedule,compute_ref,service_account_id,avatar,emoji,created_at,updated_at,payer,metered_at`
+const agentCols = `id,org,name,model,instructions,description,tools,status,execution_mode,schedule,compute_ref,service_account_id,avatar,emoji,created_at,updated_at,payer,metered_at,cap_micro_usd,max_task_micro_usd,period,consumed_micro_usd,period_started_at`
 
 // runCols is the run projection, named ONCE so the insert, the two reads and the
 // legacy fan-out cannot drift apart on a column added to only some of them.
-const runCols = `id,org,agent_name,status,model,input,output,error,duration_ms,created_at,actor,trace_id,prompt_tokens,completion_tokens,tool_calls`
+const runCols = `id,org,agent_name,status,model,input,output,error,duration_ms,created_at,actor,trace_id,prompt_tokens,completion_tokens,tool_calls,micro_usd`
 
 func scanAgent(sc interface{ Scan(...any) error }) (Agent, error) {
 	var a Agent
@@ -420,7 +456,8 @@ func scanAgent(sc interface{ Scan(...any) error }) (Agent, error) {
 	err := sc.Scan(&a.ID, &a.Org, &a.Name, &a.Model, &a.Instructions, &a.Description,
 		&tools, &a.Status, &a.ExecutionMode, &a.Schedule, &a.ComputeRef, &a.ServiceAccountID,
 		&a.Avatar, &a.Emoji,
-		&a.CreatedAt, &a.UpdatedAt, &a.Payer, &a.MeteredAt)
+		&a.CreatedAt, &a.UpdatedAt, &a.Payer, &a.MeteredAt,
+		&a.CapMicroUSD, &a.MaxTaskMicroUSD, &a.Period, &a.ConsumedMicroUSD, &a.PeriodStartedAt)
 	a.Tools = decodeList(tools)
 	return a, err
 }
@@ -440,11 +477,12 @@ func normalizeMode(m string) string {
 func (s *Store) Create(ctx context.Context, a Agent) error {
 	a.ExecutionMode = normalizeMode(a.ExecutionMode)
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Org, a.Name, a.Model, a.Instructions, a.Description,
 		encodeList(a.Tools), a.Status, a.ExecutionMode, a.Schedule, a.ComputeRef,
 		a.ServiceAccountID, a.Avatar, a.Emoji,
-		a.CreatedAt, a.UpdatedAt, a.Payer, a.MeteredAt)
+		a.CreatedAt, a.UpdatedAt, a.Payer, a.MeteredAt,
+		a.CapMicroUSD, a.MaxTaskMicroUSD, a.Period, a.ConsumedMicroUSD, a.PeriodStartedAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -514,11 +552,12 @@ func (s *Store) Update(ctx context.Context, a Agent) error {
 	a.ExecutionMode = normalizeMode(a.ExecutionMode)
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE agents SET model=?,instructions=?,description=?,tools=?,status=?,
-		 execution_mode=?,schedule=?,compute_ref=?,service_account_id=?,avatar=?,emoji=?,updated_at=?
+		 execution_mode=?,schedule=?,compute_ref=?,service_account_id=?,avatar=?,emoji=?,updated_at=?,
+		 cap_micro_usd=?,max_task_micro_usd=?,period=?
 		 WHERE org=? AND name=?`,
 		a.Model, a.Instructions, a.Description, encodeList(a.Tools), a.Status,
 		a.ExecutionMode, a.Schedule, a.ComputeRef, a.ServiceAccountID,
-		a.Avatar, a.Emoji, a.UpdatedAt, a.Org, a.Name)
+		a.Avatar, a.Emoji, a.UpdatedAt, a.CapMicroUSD, a.MaxTaskMicroUSD, a.Period, a.Org, a.Name)
 	if err != nil {
 		return fmt.Errorf("update agent: %w", err)
 	}
@@ -591,9 +630,9 @@ func (s *Store) Delete(ctx context.Context, org, name string) (bool, error) {
 // InsertRun records one agent execution.
 func (s *Store) InsertRun(ctx context.Context, r Run) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agent_runs (`+runCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agent_runs (`+runCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		r.ID, r.Org, r.AgentName, r.Status, r.Model, r.Input, r.Output, r.Error, r.DurationMs, r.CreatedAt,
-		r.Actor, r.TraceID, r.PromptTokens, r.CompletionTokens, r.ToolCalls)
+		r.Actor, r.TraceID, r.PromptTokens, r.CompletionTokens, r.ToolCalls, r.MicroUSD)
 	if err != nil {
 		return fmt.Errorf("insert run: %w", err)
 	}
@@ -609,7 +648,7 @@ func scanRun(sc interface{ Scan(...any) error }) (Run, error) {
 	var r Run
 	if err := sc.Scan(&r.ID, &r.Org, &r.AgentName, &r.Status, &r.Model, &r.Input,
 		&r.Output, &r.Error, &r.DurationMs, &r.CreatedAt,
-		&r.Actor, &r.TraceID, &r.PromptTokens, &r.CompletionTokens, &r.ToolCalls); err != nil {
+		&r.Actor, &r.TraceID, &r.PromptTokens, &r.CompletionTokens, &r.ToolCalls, &r.MicroUSD); err != nil {
 		return Run{}, fmt.Errorf("scan run: %w", err)
 	}
 	return r, nil
@@ -730,6 +769,73 @@ func (s *Store) Resident(ctx context.Context, org string) ([]Agent, error) {
 			return nil, fmt.Errorf("scan resident agent: %w", err)
 		}
 		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// ── The budget's tallies ──────────────────────────────────────────────────────
+
+// ResetPeriod opens a new window for the agent if the stored one began before
+// `start`, zeroing what it spent. A window that already began at `start` is
+// left alone, so two callers racing on the same boundary reset once.
+func (s *Store) ResetPeriod(ctx context.Context, org, name string, start int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE agents SET consumed_micro_usd=0, period_started_at=? WHERE org=? AND name=? AND period_started_at<?`,
+		start, org, name, start)
+	if err != nil {
+		return fmt.Errorf("reset period: %w", err)
+	}
+	return nil
+}
+
+// Consume records `micros` spent by the agent, on the run and the session it
+// ran under when it had them, and as one row of spend by component.
+func (s *Store) Consume(ctx context.Context, org, name, runID, sessionID, component string, micros int64) error {
+	if micros <= 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("consume: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE agents SET consumed_micro_usd=consumed_micro_usd+? WHERE org=? AND name=?`, micros, org, name); err != nil {
+		return fmt.Errorf("consume agent: %w", err)
+	}
+	if sessionID != "" {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE agent_sessions SET consumed_micro_usd=consumed_micro_usd+? WHERE org=? AND id=?`, micros, org, sessionID); err != nil {
+			return fmt.Errorf("consume session: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO agent_spend (id,org,agent_name,run_id,session_id,component,micro_usd,created_at) VALUES (?,?,?,?,?,?,?,?)`,
+		mint.ID("spend"), org, name, runID, sessionID, component, micros, time.Now().Unix()); err != nil {
+		return fmt.Errorf("record spend: %w", err)
+	}
+	return tx.Commit()
+}
+
+// SpendByComponent sums what the agent has ever spent, per component. A
+// component with no spend is absent from the map.
+func (s *Store) SpendByComponent(ctx context.Context, org, name string) (map[string]int64, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT component, SUM(micro_usd) FROM agent_spend WHERE org=? AND agent_name=? GROUP BY component`, org, name)
+	if err != nil {
+		return nil, fmt.Errorf("spend: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]int64{}
+	for rows.Next() {
+		var c string
+		var m int64
+		if err := rows.Scan(&c, &m); err != nil {
+			return nil, fmt.Errorf("spend: %w", err)
+		}
+		if m > 0 {
+			out[c] = m
+		}
 	}
 	return out, rows.Err()
 }

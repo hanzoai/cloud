@@ -219,7 +219,14 @@ func meterRuntime(ctx context.Context, st *state, log logger, now int64, emit fu
 			named[a.ID] = a.Name
 		}
 		advanceBot := func(ctx context.Context, id string, was, at int64) (bool, error) {
-			return sto.Advance(ctx, org, named[id], was, at)
+			ok, err := sto.Advance(ctx, org, named[id], was, at)
+			if ok && err == nil && rate > 0 && at > was {
+				// The same span the org is billed for, on the bot's own tally.
+				if cerr := sto.Consume(ctx, org, named[id], "", "", ComponentComputer, (at-was)*rate/3600); cerr != nil {
+					log.Warn("runtime meter: bot spend not recorded", "org", org, "agent", named[id], "err", cerr)
+				}
+			}
+			return ok, err
 		}
 		if _, err := cloud.RuntimeSweep(ctx, residents, now, advanceBot, ship, emit); err != nil {
 			log.Warn("runtime meter: bot spans not billed", "org", org, "err", err)
