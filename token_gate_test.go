@@ -103,16 +103,12 @@ var allowedTokenPrimitives = map[string]string{
 
 	"idv/webhook.go": "provider webhook verification — HMAC-SHA256 over the raw body under the " +
 		"provider's signing secret (sha256= scheme). Verifies THEIR signature; grants nothing here.",
-	"apps/integrations/github_webhook.go": "GitHub webhook verification — X-Hub-Signature-256 over " +
-		"the raw body, GitHub's contract.",
-	"apps/integrations/linear_webhook.go": "Linear webhook verification — Linear-Signature is " +
-		"hex(HMAC_SHA256(secret, raw body)), Linear's own contract. It verifies THEIR signature " +
-		"and mints nothing: the delivery names an issue and an actor, and no Hanzo surface accepts " +
-		"anything this file produces.",
-	"apps/platform/hook.go": "forge webhook verification — the same shape one host over, under the " +
-		"secret configured on git.hanzo.ai's system webhook (X-Git-/X-Gitea-/X-Hub-Signature-256 over " +
-		"the raw body). It verifies THEIR signature and mints nothing: the delivery names a repository " +
-		"and a ref, and no Hanzo surface accepts anything this file produces.",
+	"apps/integrations/signed.go": "webhook verification, for every provider that signs a delivery " +
+		"the same way — GitHub's X-Hub-Signature-256, Linear-Signature, and the forge's X-Git- and " +
+		"X-Gitea- spellings all being hex(HMAC_SHA256(secret, raw body)). One constant-time verifier " +
+		"where there were three; each receiver now hands over the headers it reads and nothing else " +
+		"about the wire. It verifies THEIR signature and mints nothing: a delivery names a repository, " +
+		"an issue or a ref, and no Hanzo surface accepts anything this file produces.",
 	"apps/integrations/slack_verify.go": "Slack request verification — the v0 signing scheme over " +
 		"timestamp+body, Slack's contract.",
 	"apps/integrations/whatsapp_events.go": "WhatsApp webhook verification — Meta's " +
