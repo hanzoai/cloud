@@ -236,10 +236,16 @@ type consoleHandler struct {
 	allow Allow
 }
 
-// namedRelease is an fs.FS that knows which immutable release it is serving.
-// webui stays a leaf: it names the capability rather than importing the package
-// that has it (webui/release), exactly as it does for MCP and for Allow.
-type namedRelease interface{ Release() string }
+// namedRelease is an fs.FS that knows which immutable release it is serving, and
+// whether that is still the published one. webui stays a leaf: it names the
+// capability rather than importing the package that has it (webui/release),
+// exactly as it does for MCP and for Allow.
+type namedRelease interface {
+	Release() string
+	// Stale reports that a newer release is published and this process has not
+	// mounted it — see the refusal in ServeHTTP for why that must not be served.
+	Stale() bool
+}
 
 // releaseHeader carries that identity to the caller. It is the only fact about a
 // console response that a mixed fleet cannot fake.
@@ -389,6 +395,20 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// probe the truth: this address is meant to serve a console and cannot.
 	if h.fsys == nil {
 		http.Error(w, "console unavailable: this process serves no console bundle", http.StatusServiceUnavailable)
+		return
+	}
+
+	// A PROCESS THAT HAS FALLEN BEHIND SERVES NOTHING.
+	//
+	// Its bundle is internally coherent, so on its own it looks fine — and that is
+	// exactly the danger. Siblings that did mount the new release are serving it,
+	// and a hostname in front of both answers a shell from one and a chunk from
+	// another. Neither response can be told from the other: same 200, and a
+	// content-hashed chunk name is byte-identical across every release that
+	// contains it. Refusing is louder and cheaper than a deploy that looks
+	// finished and is not; the request goes to a sibling that is current.
+	if n, ok := h.fsys.(namedRelease); ok && n.Stale() {
+		http.Error(w, "console stale: this process has not mounted the published release", http.StatusServiceUnavailable)
 		return
 	}
 

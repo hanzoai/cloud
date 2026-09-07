@@ -230,3 +230,55 @@ func TestResolveIsOrgPinnedAndNamesEveryFailure(t *testing.T) {
 		t.Errorf("error = %v, want it to name the missing resolver", err)
 	}
 }
+
+// TestStaleIsWhatTheResolverSaidMinusWhatMounted is the fleet invariant, at the
+// level that decides it.
+//
+// The old behaviour on a failed read was to keep the mounted bundle and go on
+// serving it. That is what let one hostname answer out of two releases: children
+// that read successfully moved on, children that did not stayed behind, and every
+// response from either looked identical. So `want` is recorded from the resolver
+// BEFORE the read that would mount it — a read that fails still leaves this
+// process able to say it has fallen behind, which is the only way the caller can
+// refuse.
+func TestStaleIsWhatTheResolverSaidMinusWhatMounted(t *testing.T) {
+	s := &Source{}
+
+	// Nothing resolved yet. Not-knowing is not staleness: a process that cannot
+	// reach the resolver at boot fails loudly elsewhere, and must not be reported
+	// here as serving the wrong thing.
+	if s.Stale() {
+		t.Error("Stale() before any resolve — not-knowing is not staleness")
+	}
+
+	// Mounted and current.
+	b := bundleOf(map[string]string{"index.html": "A"})
+	s.cur.Store(b)
+	cur := b.prefix
+	s.want.Store(&cur)
+	if s.Stale() {
+		t.Errorf("Stale() with want == mounted (%q)", cur)
+	}
+
+	// The resolver names a newer release and the read fails: the process keeps
+	// coherent bytes it is no longer entitled to serve.
+	next := cur + "-next"
+	s.want.Store(&next)
+	if !s.Stale() {
+		t.Error("a process whose mounted release is not the published one must report Stale")
+	}
+	if s.Release() != cur {
+		t.Errorf("Release() = %q — a stale process still names what it actually holds", s.Release())
+	}
+	if s.Wanted() != next {
+		t.Errorf("Wanted() = %q, want %q", s.Wanted(), next)
+	}
+
+	// It catches up.
+	nb := bundleOf(map[string]string{"index.html": "B"})
+	nb.prefix = next
+	s.cur.Store(nb)
+	if s.Stale() {
+		t.Error("Stale() after mounting the wanted release")
+	}
+}
