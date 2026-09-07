@@ -390,14 +390,16 @@ func TestNoBundle_ARegisteredRouteStillAnswers(t *testing.T) {
 	}
 }
 
-// namedBundle is a console bundle that knows which release it is, the shape
-// webui/release.Source has in production.
+// namedBundle is a console bundle that knows which release it is and whether it
+// has fallen behind — the shape webui/release.Source has in production.
 type namedBundle struct {
 	fstest.MapFS
-	id string
+	id    string
+	stale bool
 }
 
 func (b namedBundle) Release() string { return b.id }
+func (b namedBundle) Stale() bool     { return b.stale }
 
 // TestReleaseHeader_NamesTheMountedRelease pins the one fact about a console
 // response that a split fleet cannot fake.
@@ -439,5 +441,50 @@ func TestReleaseHeader_AbsentWhenTheSourceCannotName(t *testing.T) {
 	_, _, hdr := do(t, app, http.MethodGet, "/", nil)
 	if got := hdr.Get("X-Hanzo-Console-Release"); got != "" {
 		t.Errorf("unnamed bundle stamped %s = %q, want no header", "X-Hanzo-Console-Release", got)
+	}
+}
+
+// TestStaleProcess_RefusesRatherThanServesAnOlderRelease is the fleet invariant.
+//
+// A process that missed the newest release still holds a bundle that is coherent
+// with itself, which is precisely why serving it is the dangerous option: a
+// sibling that DID mount the new release is serving that, and one hostname in
+// front of both answers a shell from one release and a chunk from another. Both
+// are 200; a content-hashed chunk name is byte-identical across every release
+// that contains it; no property of either response distinguishes them. So a
+// process that knows it is behind answers nothing and the request goes to a
+// sibling that is current.
+func TestStaleProcess_RefusesRatherThanServesAnOlderRelease(t *testing.T) {
+	app := zip.New(zip.Config{})
+	if err := Use(app, namedBundle{MapFS: testBundle(), id: "old", stale: true}); err != nil {
+		t.Fatalf("Use: %v", err)
+	}
+	// The shell AND an asset — serving either from a behind process is what
+	// composes one host out of two releases.
+	for _, target := range []string{"/", "/_next/static/css/bdec3a94ead6ad5f.css"} {
+		status, _, hdr := do(t, app, http.MethodGet, target, nil)
+		if status != http.StatusServiceUnavailable {
+			t.Errorf("stale process GET %s status = %d, want 503", target, status)
+		}
+		// It must not claim a release it is not entitled to serve.
+		if got := hdr.Get("X-Hanzo-Console-Release"); got != "" {
+			t.Errorf("stale process stamped a release = %q, want none", got)
+		}
+	}
+}
+
+// TestCurrentProcess_ServesAndNamesItsRelease is the other half: not-stale is the
+// ordinary case and must be untouched by the refusal above.
+func TestCurrentProcess_ServesAndNamesItsRelease(t *testing.T) {
+	app := zip.New(zip.Config{})
+	if err := Use(app, namedBundle{MapFS: testBundle(), id: "current", stale: false}); err != nil {
+		t.Fatalf("Use: %v", err)
+	}
+	status, _, hdr := do(t, app, http.MethodGet, "/", nil)
+	if status != http.StatusOK {
+		t.Fatalf("current process GET / status = %d, want 200", status)
+	}
+	if got := hdr.Get("X-Hanzo-Console-Release"); got != "current" {
+		t.Errorf("X-Hanzo-Console-Release = %q, want %q", got, "current")
 	}
 }

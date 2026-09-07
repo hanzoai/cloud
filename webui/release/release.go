@@ -39,13 +39,28 @@ import (
 //
 // The pointer to the loaded bundle is swapped ATOMICALLY, never mutated: a
 // request that started against the old release finishes against it, and the next
-// one gets the new. There is no window in which a shell from one release is
-// served beside chunks from another.
+// one gets the new. Within this process there is no window in which a shell from
+// one release is served beside chunks from another.
+//
+// THAT GUARANTEE IS PER-PROCESS, AND THE FLEET IS NOT ONE PROCESS. Every app
+// child mounts the release on its own. When a child's read failed it used to keep
+// the bundle it already had and go on serving it, so a hostname fronted by
+// several children could answer a shell from one release and a chunk from
+// another — both 200, and nothing in either response able to tell them apart.
+// Composing one hostname out of several historical releases is the failure this
+// type now refuses: `want` records the release the resolver last named, and a
+// process whose mounted release is not that one is STALE and serves nothing at
+// all. A stale child is loud and routes elsewhere; a stale child that answers is
+// a deploy that looks finished and is not.
 type Source struct {
 	cfg   Config
 	admin s3admin.Admin
 	log   luxlog.Logger
 	cur   atomic.Pointer[bundle]
+	// want is the prefix the resolver last named. It is set BEFORE the read that
+	// would mount it, so a read that fails still leaves the process knowing it has
+	// fallen behind — which is the whole point: the stale one must know.
+	want atomic.Pointer[string]
 }
 
 // bundle is one complete, immutable release in memory. prefix is its identity —
@@ -123,6 +138,27 @@ func (s *Source) Release() string {
 	return ""
 }
 
+// Wanted is the release the resolver last named — what this process SHOULD be
+// serving. Empty before the first successful resolve.
+func (s *Source) Wanted() string {
+	if p := s.want.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// Stale reports that this process knows a newer release is published and has not
+// mounted it. The caller must refuse to serve: the bytes it holds are coherent
+// with each other but not with what its siblings are serving, and a host fronted
+// by both would answer out of two releases at once.
+//
+// Before the first resolve nothing is known, and not-knowing is not staleness —
+// a process that cannot reach the resolver at boot fails loudly elsewhere.
+func (s *Source) Stale() bool {
+	want := s.Wanted()
+	return want != "" && want != s.Release()
+}
+
 // Watch keeps the console current with what was published, and is the whole
 // reason this indirection exists: a `hanzo sites publish` reaches users through
 // THIS loop, in one poll interval, instead of through a cloud build and a
@@ -166,6 +202,10 @@ func (s *Source) refresh(ctx context.Context) (bool, error) {
 	if cur := s.cur.Load(); cur != nil && cur.prefix == site.Prefix {
 		return false, nil
 	}
+	// Recorded before the read, not after it. A read that fails must still leave
+	// this process able to say it has fallen behind.
+	want := site.Prefix
+	s.want.Store(&want)
 	if !s.admin.Configured() {
 		return false, fmt.Errorf("console release %s: S3_ADMIN_ACCESS_KEY/S3_ADMIN_SECRET_KEY are not set", site.Prefix)
 	}
