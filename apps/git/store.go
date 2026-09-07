@@ -164,6 +164,13 @@ CREATE INDEX IF NOT EXISTS ix_pulls_repo ON pulls(org, project, repo, state);
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+	// The CI half of the same file: the pools an org declares, the runs a commit
+	// opens, the tasks a runner leases (run.go), and the journal a push is
+	// recorded in before it is answered (journal.go). One org, one database —
+	// a run belongs to a repository and a repository is already stored here.
+	if _, err := s.db.Exec(runDDL + journalDDL); err != nil {
+		return fmt.Errorf("migrate runs: %w", err)
+	}
 	// public: visibility bit added after the initial schema. Fresh DBs get it
 	// from the CREATE TABLE above; pre-existing DBs gain it here. The duplicate-
 	// column error on fresh DBs is the expected no-op.

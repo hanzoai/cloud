@@ -4,6 +4,64 @@
 
 package git
 
+struct DeclareIn {
+    Credential   bytes      @0
+    Version      text       @8
+    Labels       list<text> @16
+    Capabilities list<text> @24
+}
+
+struct DeclareOut {
+    Runner       bytes      @0
+    Capabilities list<text> @8
+}
+
+struct LogIn {
+    Credential bytes       @0
+    Task       i64         @8
+    Index      i64         @16
+    Lines      list<bytes> @24
+    Last       bool        @32
+}
+
+struct LogOut {
+    Ack i64 @0
+}
+
+struct RegisterIn {
+    Name         text       @0
+    Token        text       @8
+    Version      text       @16
+    Labels       list<text> @24
+    Ephemeral    bool       @32
+    Capabilities list<text> @40
+}
+
+struct RegisterOut {
+    Runner bytes @0
+}
+
+struct StateIn {
+    Credential bytes       @0
+    State      bytes       @8
+    Outputs    list<bytes> @16
+}
+
+struct StateOut {
+    State  bytes      @0
+    Stored list<text> @8
+}
+
+struct TaskIn {
+    Credential bytes @0
+    Queue      i64   @8
+}
+
+struct TaskOut {
+    Task  bytes @0
+    Queue i64   @8
+}
+
 struct blobJSON {
     Path      text @0
     Size      i64  @8
@@ -112,6 +170,20 @@ struct pathRef {
     Path text @16
 }
 
+struct poolDeclare {
+    Name   text       @0
+    Labels list<text> @8
+}
+
+struct poolDeclared {
+    Pool   bytes @0
+    Secret text  @8
+}
+
+struct poolList {
+    Data list<bytes> @0
+}
+
 struct pullFilter {
     Name  text @0
     State text @8
@@ -201,6 +273,24 @@ struct revRef {
     Ref  text @8
 }
 
+struct runQuery {
+    Repo  text @0
+    Limit i64  @8
+}
+
+struct runRef {
+    ID text @0
+}
+
+struct runStart {
+    Repo text @0
+    Ref  text @8
+}
+
+struct runnerList {
+    Data list<bytes> @0
+}
+
 struct subscribeReq {
     Name    text       @0
     Channel text       @8
@@ -229,6 +319,33 @@ struct usageView {
     Repos      list<bytes> @16
 }
 
+struct workflowList {
+    Data list<bytes> @0
+}
+
+struct workflowQuery {
+    Repo text @0
+    Ref  text @8
+}
+
+struct workflowRun {
+    ID        text @0
+    Number    i64  @8
+    Repo      text @16
+    Ref       text @24
+    Commit    text @32
+    Event     text @40
+    Workflow  text @48
+    Actor     text @56
+    Status    text @64
+    CreatedAt i64  @72
+    UpdatedAt i64  @80
+}
+
+struct workflowRuns {
+    Data list<bytes> @0
+}
+
 interface git {
     # Removes a registered SSH key, scoped to the caller's org: an org can
     # only delete its own, and a key id it does not own is not found. Answers 204
@@ -252,6 +369,9 @@ interface git {
     # on read even though the fingerprint index is global, so one org never sees
     # another's.
     get_git_keys() returns (rep: keyList)
+    # Returns the capacity this org has declared and how many daemons have
+    # entered each pool.
+    get_git_pools() returns (rep: poolList)
     # Returns the repos in the caller's scope, most recently updated
     # first. The scope is the request principal's — the gateway-minted org and its
     # optional project — never anything off the wire, so a caller only ever sees its
@@ -305,12 +425,23 @@ interface git {
     # Lists the immediate children of one directory at one revision,
     # directories before files. It does not recurse — walk down a level at a time.
     get_git_repos_by_name_tree(req: pathRef) returns (rep: treeJSON)
+    # Returns the daemons registered into this org's pools, newest
+    # first, with when each was last heard from.
+    get_git_runners() returns (rep: runnerList)
+    # Returns this org's runs, newest first.
+    get_git_runs(req: runQuery) returns (rep: workflowRuns)
+    # Returns one run.
+    get_git_runs_by_id(req: runRef) returns (rep: workflowRun)
     # Returns per-repo and total storage bytes for the caller's org — the
     # queryable, per-tenant number commerce and o11y meter on. It spans EVERY
     # project sub-scope, unlike the repo list, so a billing consumer sees the whole
     # tenant footprint in one call. Sizes are last-measured values (create, push,
     # mirror and gc each re-measure), not a live walk of the disk.
     get_git_usage() returns (rep: usageView)
+    # Reports the workflows a repository declares at a ref and which
+    # declared pool would execute each job — the answer to "would a push here run,
+    # and where".
+    get_git_workflows(req: workflowQuery) returns (rep: workflowList)
     # Flips a repo's public bit, the one mutable repo setting today.
     # Public grants ANONYMOUS fetch only; push and the whole control plane stay
     # org-authed. Returns the updated repo.
@@ -322,6 +453,13 @@ interface git {
     # Fingerprints are globally unique, so a key already registered — to this org or
     # any other — is a 409: one key belongs to exactly one org.
     post_git_keys(req: registerKeyReq) returns (rep: keyView)
+    # Records the capacity an org has, and answers with the secret a
+    # runner daemon presents to enter it.
+    # Declaring is the ONLY way capacity comes to exist: a daemon cannot register
+    # against a pool nobody declared, because the secret it would have to present
+    # does not exist until this runs. Re-declaring an existing pool replaces its
+    # labels and mints a fresh secret; runners already inside it keep working.
+    post_git_pools(req: poolDeclare) returns (rep: poolDeclared)
     # Provisions an empty bare repository in the caller's scope and
     # returns it with its clone URLs. Answers 201. The name must be unique within
     # the scope — a repeat is a 409, never a silent overwrite of an existing repo.
@@ -380,21 +518,64 @@ interface git {
     # env-only at push time and never enter the stored URL. One mirror per host per
     # repo; a second is a 409.
     post_git_repos_by_name_targets(req: mirrorTargetReq) returns (rep: mirrorTargetView)
+    # Runs a repository's workflows at a ref, on demand.
+    # It takes the SAME path a push takes: the request is recorded in the journal
+    # and delivered from there, so an explicit run and a pushed one are one
+    # mechanism with one idempotency rule and not two that can disagree. Asking
+    # twice for the same commit yields the same run.
+    post_git_runs(req: runStart) returns (rep: workflowRuns)
+    # Republishes what a registered runner can do, and answers with what
+    # this side understands, so the two learn about each other from one exchange.
+    post_runner_declare(req: DeclareIn) returns (rep: DeclareOut)
+    # Adds console output to a task's log and answers with how far that log is
+    # durable, so the runner knows where to resend from.
+    post_runner_log(req: LogIn) returns (rep: LogOut)
+    # Trades a pool's join secret for a runner identity and the token that
+    # authenticates every later call. It is the one operation with no credential to
+    # check, because a runner has none until this answers.
+    # The secret names the pool it opens, and a pool exists only because somebody
+    # declared it. A daemon that starts against capacity nobody declared is refused
+    # here, which is where the rule that pools are declared state actually holds.
+    post_runner_register(req: RegisterIn) returns (rep: RegisterOut)
+    # Records a task's progress and that of its steps, and answers with the
+    # result this side now holds — which is how a runner learns its task was stopped
+    # from somewhere else.
+    post_runner_state(req: StateIn) returns (rep: StateOut)
+    # Hands the runner a job to execute, if its pool has one, and answers
+    # immediately either way. A runner sends the queue version it last saw; when it
+    # matches, nothing has been queued since and no lease transaction is opened.
+    post_runner_task(req: TaskIn) returns (rep: TaskOut)
 }
 
 # ---------------------------------------------------------------------
-# 28 op(s) here. What follows is what this schema does not carry.
+# 40 op(s) here. What follows is what this schema does not carry.
 #
-# opaque (12) — crosses, arrives without its name:
+# opaque (28) — crosses, arrives without its name:
+#   DeclareIn.Credential  runner.Credential
+#   DeclareOut.Runner  runner.Identity
+#   LogIn.Credential  runner.Credential
+#   LogIn.Lines  runner.Line (list element)
+#   RegisterOut.Runner  runner.Identity
+#   StateIn.Credential  runner.Credential
+#   StateIn.Outputs  runner.Pair (list element)
+#   StateIn.State  runner.State
+#   StateOut.State  runner.State
+#   TaskIn.Credential  runner.Credential
+#   TaskOut.Task  runner.Task
 #   commitsJSON.Commits  git.commitJSON (list element)
 #   filesJSON.Files  git.fileJSON (list element)
 #   keyList.Data  git.keyView (list element)
 #   mirrorList.Data  git.mirrorTargetView (list element)
+#   poolDeclared.Pool  git.poolView
+#   poolList.Data  git.poolView (list element)
 #   pullList.Data  git.pullView (list element)
 #   pushReq.Files  git.pushFile (list element)
 #   refsJSON.Branches  git.refJSON (list element)
 #   refsJSON.Tags  git.refJSON (list element)
 #   repoList.Data  git.repoView (list element)
+#   runnerList.Data  git.runnerView (list element)
 #   subscriptionList.Data  git.subscriptionView (list element)
 #   treeJSON.Entries  git.treeEntryJSON (list element)
 #   usageView.Repos  git.usageRepo (list element)
+#   workflowList.Data  git.workflowView (list element)
+#   workflowRuns.Data  git.workflowRun (list element)

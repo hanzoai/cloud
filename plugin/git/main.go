@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/git"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the git app.
@@ -17,7 +18,12 @@ import (
 // `git openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:     "git",
+		Name: "git",
+		// git answers TWO roots — the control surface at /v1/git and the runner
+		// daemon's wire at /v1/runner — so it states them rather than taking the
+		// one the default derives from its name. Read from the manifest, which is
+		// the fleet's source for the same fact.
+		Prefixes: manifest.PrefixesFor("git"),
 		Price:    cloud.Free,
 		Use:      git.Use,
 		Shutdown: cloud.CtxShutdown(git.Shutdown),

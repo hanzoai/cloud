@@ -58,6 +58,16 @@ func init() {
 		Example:  json.RawMessage(`{}`),
 		Response: json.RawMessage(`{"data":[{"id":"gitkey_4a1b","title":"laptop","publicKey":"ssh-ed25519 AAAAC3Nz…","fingerprint":"SHA256:9pQ…","createdAt":"2026-07-01T10:00:00Z"}]}`),
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/pools", zip.Doc{
+		Description: "Returns the capacity this org has declared and how many daemons have\nentered each pool.",
+		Fields: map[string]string{
+			"poolList.data":      "Data is the org's declared pools, by name.",
+			"poolView.createdAt": "CreatedAt is when the pool was declared, in unix seconds.",
+			"poolView.labels":    "Labels are what a workflow's `runs-on:` selects this pool by.",
+			"poolView.name":      "Name is the pool's handle in this org.",
+			"poolView.runners":   "Runners is how many daemons have entered the pool. Zero means the\ncapacity is declared and nothing has turned up to provide it.",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos", zip.Doc{
 		Description: "Returns the repos in the caller's scope, most recently updated\nfirst. The scope is the request principal's — the gateway-minted org and its\noptional project — never anything off the wire, so a caller only ever sees its\nown. Rows carry no branches or HEAD; read one repo for those.",
 		Fields: map[string]string{
@@ -260,6 +270,55 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets","ref":"main","path":"cmd"}`),
 		Response: json.RawMessage(`{"entries":[{"name":"server","path":"cmd/server","type":"tree","size":0,"mode":"040000"}]}`),
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/runners", zip.Doc{
+		Description: "Returns the daemons registered into this org's pools, newest\nfirst, with when each was last heard from.",
+		Fields: map[string]string{
+			"runnerList.data":       "Data is the daemons registered into this org's pools, newest first.",
+			"runnerView.ephemeral":  "Ephemeral means the daemon takes ONE job and exits, so it is not expected\nback and its absence is not a fault.",
+			"runnerView.labels":     "Labels are what the daemon last said it can do.",
+			"runnerView.lastActive": "LastActive is when it was last EXECUTING a job, in unix seconds. It lags\nLastOnline on an idle daemon, which is how the two differ.",
+			"runnerView.lastOnline": "LastOnline is when it last called at all, in unix seconds.",
+			"runnerView.name":       "Name is what the daemon called itself when it registered.",
+			"runnerView.pool":       "Pool is the declared capacity it entered.",
+			"runnerView.version":    "Version is the runner build the daemon last reported.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/runs", zip.Doc{
+		Description: "Returns this org's runs, newest first.",
+		Fields: map[string]string{
+			"runQuery.limit":        "Limit caps the answer; 0 means the default of 50, and 200 is the ceiling.",
+			"runQuery.repo":         "Repo restricts the listing to one repository. Empty lists the whole org.",
+			"workflowRun.actor":     "Actor is who caused it.",
+			"workflowRun.commit":    "Commit is the commit being run, in full.",
+			"workflowRun.createdAt": "CreatedAt is when the run was opened, in unix seconds.",
+			"workflowRun.event":     "Event is what caused the run, e.g. \"push\".",
+			"workflowRun.id":        "ID addresses this run.",
+			"workflowRun.number":    "Number is the run's position in its repository, counting from 1 — the\nhandle a person uses (\"#4\").",
+			"workflowRun.ref":       "Ref is the full ref, e.g. \"refs/heads/main\".",
+			"workflowRun.repo":      "Repo is the repository the run is for.",
+			"workflowRun.status":    "Status is waiting, running, success, failure, cancelled or skipped.",
+			"workflowRun.updatedAt": "UpdatedAt is when its status last changed, in unix seconds.",
+			"workflowRun.workflow":  "Workflow is the path of the document being run, e.g.\n\".hanzo/workflows/ci.yml\".",
+			"workflowRuns.data":     "Data is the runs in scope, newest first.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/runs/:id", zip.Doc{
+		Description: "Returns one run.",
+		Fields: map[string]string{
+			"runRef.id":             "ID is the run to read, from the :id path segment.",
+			"workflowRun.actor":     "Actor is who caused it.",
+			"workflowRun.commit":    "Commit is the commit being run, in full.",
+			"workflowRun.createdAt": "CreatedAt is when the run was opened, in unix seconds.",
+			"workflowRun.event":     "Event is what caused the run, e.g. \"push\".",
+			"workflowRun.id":        "ID addresses this run.",
+			"workflowRun.number":    "Number is the run's position in its repository, counting from 1 — the\nhandle a person uses (\"#4\").",
+			"workflowRun.ref":       "Ref is the full ref, e.g. \"refs/heads/main\".",
+			"workflowRun.repo":      "Repo is the repository the run is for.",
+			"workflowRun.status":    "Status is waiting, running, success, failure, cancelled or skipped.",
+			"workflowRun.updatedAt": "UpdatedAt is when its status last changed, in unix seconds.",
+			"workflowRun.workflow":  "Workflow is the path of the document being run, e.g.\n\".hanzo/workflows/ci.yml\".",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/usage", zip.Doc{
 		Description: "Returns per-repo and total storage bytes for the caller's org — the\nqueryable, per-tenant number commerce and o11y meter on. It spans EVERY\nproject sub-scope, unlike the repo list, so a billing consumer sees the whole\ntenant footprint in one call. Sizes are last-measured values (create, push,\nmirror and gc each re-measure), not a live walk of the disk.",
 		Fields: map[string]string{
@@ -272,6 +331,20 @@ func init() {
 		},
 		Example:  json.RawMessage(`{}`),
 		Response: json.RawMessage(`{"org":"acme","totalBytes":12288,"repos":[{"name":"widgets","sizeBytes":4096},{"name":"site","project":"web","sizeBytes":8192}]}`),
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/workflows", zip.Doc{
+		Description: "Reports the workflows a repository declares at a ref and which\ndeclared pool would execute each job — the answer to \"would a push here run,\nand where\".",
+		Fields: map[string]string{
+			"jobView.name":       "Name is the job's id in the workflow document.",
+			"jobView.pool":       "Pool is the declared pool carrying every one of those labels, or empty\nwhen no pool does — which is the answer to \"why is nothing running\".",
+			"jobView.runsOn":     "RunsOn is the labels the job asked for.",
+			"workflowList.data":  "Data is the workflows the repository declares at the ref.",
+			"workflowQuery.ref":  "Ref is the branch to read them at; empty means the default.",
+			"workflowQuery.repo": "Repo is the repository whose workflows to read.",
+			"workflowView.fault": "Fault is why this document cannot run at all, when it cannot be read.",
+			"workflowView.jobs":  "Jobs is what it declares, and where each would run.",
+			"workflowView.name":  "Name is the document's path in the repository.",
+		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/git PATCH /v1/git/repos/:name", zip.Doc{
 		Description: "Flips a repo's public bit, the one mutable repo setting today.\nPublic grants ANONYMOUS fetch only; push and the whole control plane stay\norg-authed. Returns the updated repo.",
@@ -375,6 +448,20 @@ func init() {
 			"registerKeyReq.title":     "Title labels the key in the console. Max 256 chars; when omitted the\ncomment on the key line is used.",
 		},
 		Example: json.RawMessage(`{"title":"laptop","publicKey":"ssh-ed25519 AAAAC3Nz… z@hanzo.ai"}`),
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/pools", zip.Doc{
+		Description: "Records the capacity an org has, and answers with the secret a\nrunner daemon presents to enter it.\n\nDeclaring is the ONLY way capacity comes to exist: a daemon cannot register\nagainst a pool nobody declared, because the secret it would have to present\ndoes not exist until this runs. Re-declaring an existing pool replaces its\nlabels and mints a fresh secret; runners already inside it keep working.",
+		Fields: map[string]string{
+			"poolDeclare.labels":  "Labels are what a workflow's `runs-on:` selects this pool by. A job is\nassigned to a pool that carries EVERY label it asked for.",
+			"poolDeclare.name":    "Name is the pool's handle in this org, e.g. \"evo\" or \"spark\".",
+			"poolDeclared.pool":   "Pool is the capacity that now exists.",
+			"poolDeclared.secret": "Secret is what a runner daemon presents to enter the pool. It is answered\nHERE AND NOWHERE ELSE — only a digest is stored — so a lost one is\nreplaced by declaring the pool again.",
+			"poolView.createdAt":  "CreatedAt is when the pool was declared, in unix seconds.",
+			"poolView.labels":     "Labels are what a workflow's `runs-on:` selects this pool by.",
+			"poolView.name":       "Name is the pool's handle in this org.",
+			"poolView.runners":    "Runners is how many daemons have entered the pool. Zero means the\ncapacity is declared and nothing has turned up to provide it.",
+		},
+		Example: json.RawMessage(`{"name":"evo","labels":["ubuntu-latest","linux/amd64"]}`),
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/repos", zip.Doc{
 		Description: "Provisions an empty bare repository in the caller's scope and\nreturns it with its clone URLs. Answers 201. The name must be unique within\nthe scope — a repeat is a 409, never a silent overwrite of an existing repo.\nThe org comes from the validated principal, so a repo is always born owned by\nthe caller's own tenant.",
@@ -521,7 +608,137 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","url":"https://github.com/acme/widgets.git"}`),
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/runs", zip.Doc{
+		Description: "Runs a repository's workflows at a ref, on demand.\n\nIt takes the SAME path a push takes: the request is recorded in the journal\nand delivered from there, so an explicit run and a pushed one are one\nmechanism with one idempotency rule and not two that can disagree. Asking\ntwice for the same commit yields the same run.",
+		Fields: map[string]string{
+			"runStart.ref":          "Ref is the branch to run; empty means the repository's default.",
+			"runStart.repo":         "Repo is the repository to run.",
+			"workflowRun.actor":     "Actor is who caused it.",
+			"workflowRun.commit":    "Commit is the commit being run, in full.",
+			"workflowRun.createdAt": "CreatedAt is when the run was opened, in unix seconds.",
+			"workflowRun.event":     "Event is what caused the run, e.g. \"push\".",
+			"workflowRun.id":        "ID addresses this run.",
+			"workflowRun.number":    "Number is the run's position in its repository, counting from 1 — the\nhandle a person uses (\"#4\").",
+			"workflowRun.ref":       "Ref is the full ref, e.g. \"refs/heads/main\".",
+			"workflowRun.repo":      "Repo is the repository the run is for.",
+			"workflowRun.status":    "Status is waiting, running, success, failure, cancelled or skipped.",
+			"workflowRun.updatedAt": "UpdatedAt is when its status last changed, in unix seconds.",
+			"workflowRun.workflow":  "Workflow is the path of the document being run, e.g.\n\".hanzo/workflows/ci.yml\".",
+			"workflowRuns.data":     "Data is the runs in scope, newest first.",
+		},
+		Example: json.RawMessage(`{"repo":"widgets","ref":"main"}`),
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/webhook", zip.Doc{
-		Description: "Answers every delivery 410 Gone, naming the endpoint that builds. It\nreads no body: there is nothing here to authenticate and nothing to parse.\n\n410, not 404: the address was real and its meaning moved, which is exactly the\ndistinction 410 carries. 404 would say \"no such route\" about a route this\nbinary still serves, and is indistinguishable here from the /api/v1 prefix\nmistake, since Hanzo Git serves /v1.",
+		Description: "Answers every delivery 410 Gone, saying where push-to-deploy lives. It\nreads no body: there is nothing here to authenticate and nothing to parse.\n\n410, not 404: the address was real and its meaning moved, which is exactly the\ndistinction 410 carries. 404 would say \"no such route\" about a route this\nbinary still serves, and is indistinguishable here from the /api/v1 prefix\nmistake, since Hanzo Git serves /v1.",
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/runner/declare", zip.Doc{
+		Description: "Republishes what a registered runner can do, and answers with what\nthis side understands, so the two learn about each other from one exchange.",
+		Fields: map[string]string{
+			"DeclareIn.capabilities":  "Capabilities are the optional protocol behaviours this runner\nunderstands, e.g. \"cancelling\".",
+			"DeclareIn.labels":        "Labels replace what the forge holds, so a relabelled runner follows its\nconfiguration without re-registering.",
+			"DeclareIn.version":       "Version is the runner build now running.",
+			"DeclareOut.capabilities": "Capabilities are what THIS FORGE understands, so a runner learns what the\nother side supports from the reply body rather than from a header.",
+			"DeclareOut.runner":       "Runner is the stored identity as the forge now holds it. Its Token is\nempty: the credential is minted once, by register.",
+			"Identity.ephemeral":      "Ephemeral means the runner takes ONE job and exits, so the forge must not\nexpect it back.",
+			"Identity.id":             "ID is the forge's own row id for this runner.",
+			"Identity.labels":         "Labels are what a workflow's `runs-on:` selects this runner by.",
+			"Identity.name":           "Name is what a person calls this runner in the forge's UI.",
+			"Identity.token":          "Token is the secret that authenticates that handle. It is in cleartext\nhere and nowhere else; the forge stores only a digest of it.",
+			"Identity.uuid":           "UUID is the handle the runner presents on every later op.",
+			"Identity.version":        "Version is the runner build the forge last heard from.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/runner/log", zip.Doc{
+		Description: "Adds console output to a task's log and answers with how far that log is\ndurable, so the runner knows where to resend from.",
+		Fields: map[string]string{
+			"Line.content": "Content is the line itself, without its terminator.",
+			"Line.time":    "Time is when the line was written, in unix nanoseconds.",
+			"LogIn.index":  "Index is the position of the first line in that log, so a resent batch\noverlaps rather than duplicates.",
+			"LogIn.last":   "Last seals the log and moves it to storage. Appending past a seal is an\nerror; resending one is acknowledged.",
+			"LogIn.lines":  "Lines is the batch itself.",
+			"LogIn.task":   "Task is whose log this is.",
+			"LogOut.ack":   "Ack is how far the log is durable — index plus lines accepted — and where\nthe runner resends from.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/runner/register", zip.Doc{
+		Description: "Trades a pool's join secret for a runner identity and the token that\nauthenticates every later call. It is the one operation with no credential to\ncheck, because a runner has none until this answers.\n\nThe secret names the pool it opens, and a pool exists only because somebody\ndeclared it. A daemon that starts against capacity nobody declared is refused\nhere, which is where the rule that pools are declared state actually holds.",
+		Fields: map[string]string{
+			"Identity.ephemeral":      "Ephemeral means the runner takes ONE job and exits, so the forge must not\nexpect it back.",
+			"Identity.id":             "ID is the forge's own row id for this runner.",
+			"Identity.labels":         "Labels are what a workflow's `runs-on:` selects this runner by.",
+			"Identity.name":           "Name is what a person calls this runner in the forge's UI.",
+			"Identity.token":          "Token is the secret that authenticates that handle. It is in cleartext\nhere and nowhere else; the forge stores only a digest of it.",
+			"Identity.uuid":           "UUID is the handle the runner presents on every later op.",
+			"Identity.version":        "Version is the runner build the forge last heard from.",
+			"RegisterIn.capabilities": "Capabilities are the optional protocol behaviours this runner\nunderstands, e.g. \"cancelling\".",
+			"RegisterIn.ephemeral":    "Ephemeral declares that this runner takes ONE job and exits.",
+			"RegisterIn.labels":       "Labels are what a workflow's `runs-on:` will select this runner by.",
+			"RegisterIn.name":         "Name is what to call this runner. Required.",
+			"RegisterIn.token":        "Token is the REGISTRATION secret, a different secret from the runner\ntoken the reply carries. Required.",
+			"RegisterIn.version":      "Version is the runner build asking to register.",
+			"RegisterOut.runner":      "Runner is the minted identity, carrying the token in cleartext once.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/runner/state", zip.Doc{
+		Description: "Records a task's progress and that of its steps, and answers with the\nresult this side now holds — which is how a runner learns its task was stopped\nfrom somewhere else.",
+		Fields: map[string]string{
+			"Pair.name":       "Name is what the value is filed under.",
+			"Pair.value":      "Value is the value itself, always a string on this wire.",
+			"State.id":        "ID is the task this is about.",
+			"State.result":    "Result is how it finished; empty means it has not.",
+			"State.started":   "Started is when it began, in unix nanoseconds; 0 is unset.",
+			"State.steps":     "Steps is each step's own progress, in the order the workflow declares.",
+			"State.stopped":   "Stopped is when it finished, in unix nanoseconds; 0 is unset.",
+			"StateIn.outputs": "Outputs are values the job has published since the last report.",
+			"StateIn.state":   "State is the task's progress and that of each of its steps.",
+			"StateOut.state":  "State is the task's result AS THE FORGE HOLDS IT, which may differ from\nwhat was reported: that is how a runner learns it was cancelled.",
+			"StateOut.stored": "Stored names the outputs the forge has written down, so the runner stops\nresending them.",
+			"Step.id":         "ID is the step's position in the job, counting from 0.",
+			"Step.log_index":  "LogIndex is the first line of the task log this step wrote.",
+			"Step.log_length": "LogLength is how many lines it wrote from there.",
+			"Step.result":     "Result is how the step finished; empty means it has not.",
+			"Step.started":    "Started is when it began, in unix nanoseconds; 0 is unset.",
+			"Step.stopped":    "Stopped is when it finished, in unix nanoseconds; 0 is unset.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/runner/task", zip.Doc{
+		Description: "Hands the runner a job to execute, if its pool has one, and answers\nimmediately either way. A runner sends the queue version it last saw; when it\nmatches, nothing has been queued since and no lease transaction is opened.",
+		Fields: map[string]string{
+			"Context.actions_url":      "ActionsURL is where act fetches an action repository from when a step\nnames one. A runner that receives nothing here composes an unusable URL\nand every job dies before its first step, so the runner supplies its own\nfallback rather than trusting this to be set.",
+			"Context.actor":            "Actor is who caused the run.",
+			"Context.api_url":          "APIURL is where the job reaches the forge's API.",
+			"Context.base_ref":         "BaseRef is the target branch of a pull request, empty otherwise.",
+			"Context.event":            "Event is the webhook payload that triggered the run, as opaque JSON. It\nstays bytes because its shape belongs to the event and not to us: the\nrunner hands it to act, which evaluates github.event.* against it.",
+			"Context.event_name":       "EventName is what triggered the run, e.g. \"push\".",
+			"Context.head_ref":         "HeadRef is the source branch of a pull request, empty otherwise.",
+			"Context.job":              "Job is which job of the workflow document this task is.",
+			"Context.ref":              "Ref is the full ref the run is for, e.g. \"refs/heads/main\".",
+			"Context.ref_name":         "RefName is that ref without its refs/heads/ or refs/tags/ prefix.",
+			"Context.ref_type":         "RefType is \"branch\" or \"tag\".",
+			"Context.repository":       "Repository is \"<owner>/<name>\".",
+			"Context.repository_owner": "RepositoryOwner is the owner half of it.",
+			"Context.retention_days":   "RetentionDays is how long the run's artifacts are kept, as a number in a\nstring because that is what an expression reads.",
+			"Context.run_attempt":      "RunAttempt is which attempt of that run this is, counting from 1.",
+			"Context.run_id":           "RunID identifies the run this task belongs to.",
+			"Context.run_number":       "RunNumber is the run's position in its repository, counting from 1.",
+			"Context.runtime_token":    "RuntimeToken authorizes the job against the actions runtime: artifacts,\nthe cache. The runner passes it as ACTIONS_RUNTIME_TOKEN and masks it out\nof the log.",
+			"Context.server_url":       "ServerURL is the forge's own origin, as a link in a log points at it.",
+			"Context.sha":              "Sha is the commit being run, in full.",
+			"Context.token":            "Token is the job's credential against the forge's own API — github.token\nin an expression.",
+			"Need.job":                 "Job is the depended-on job's id in the workflow.",
+			"Need.outputs":             "Outputs are the values it published.",
+			"Need.result":              "Result is how it finished.",
+			"Pair.name":                "Name is what the value is filed under.",
+			"Pair.value":               "Value is the value itself, always a string on this wire.",
+			"Task.context":             "Context is what the job evaluates github.* against.",
+			"Task.id":                  "ID identifies this task on every later state and log report.",
+			"Task.needs":               "Needs is what the jobs this one depends on produced.",
+			"Task.secrets":             "Secrets are the values masked out of the log and exposed as secrets.*.",
+			"Task.vars":                "Vars are the values exposed as vars.*.",
+			"Task.workflow":            "Workflow is the workflow document verbatim. The forge decides THAT a job\nruns; act, on the runner, decides what the document means.",
+			"TaskIn.queue":             "Queue is the queue version the runner last saw. When it equals the\nforge's, nothing has been queued since.",
+			"TaskOut.queue":            "Queue is the forge's current queue version, to ask against next time.",
+			"TaskOut.task":             "Task is the assigned job, or nil for \"no work\".",
+		},
 	})
 }

@@ -429,6 +429,17 @@ func fireBranchBuilds(s *cloud.Service[state], ctx context.Context, org, project
 func fireBranchBuild(s *cloud.Service[state], ctx context.Context, org, project, name, branch, before, after, pusher string) {
 	org, project, name = strings.Clone(org), strings.Clone(project), strings.Clone(name)
 	branch, before, pusher = strings.Clone(branch), strings.Clone(before), strings.Clone(pusher)
+	// THE CI TRIGGER IS RECORDED FIRST, AND IT IS THE ONLY CI WORK THIS PUSH DOES.
+	//
+	// The refs have landed; one row in the org's own database now says a run is
+	// owed for this commit, and it is on disk before the client is answered. What
+	// that row becomes — reading the workflows, resolving a pool, opening the run
+	// — happens off the push, so CI being slow, wedged or absent cannot fail a
+	// push, and a process that dies here still owes the run (journal.go).
+	//
+	// The row's id is the fact and not the moment, so a redelivered push writes
+	// the id it already wrote and creates nothing twice.
+	note(s, ctx, org, project, name, branch, after, pusher)
 	// A LANDED LOCAL WRITE ENDS THE COPY. The repo now holds a commit its origin
 	// does not, so the origin can no longer reproduce it and reclaim.go must stop
 	// treating it as releasable — this is the one place a local ref advance is
@@ -464,4 +475,9 @@ func fireBranchBuild(s *cloud.Service[state], ctx context.Context, org, project,
 		Org:  org, Project: project, Repo: name,
 		Branch: branch, Before: before, After: after, Pusher: pusher,
 	})
+	// Deliver the row now rather than waiting for the sweep. Detached, because
+	// the push is already answered by what happens here and nothing this does can
+	// change that; the sweep is what makes it eventual, this is what makes it
+	// fast.
+	go drain(s, ctx, org)
 }

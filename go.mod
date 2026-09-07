@@ -120,6 +120,7 @@ require (
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.17 // indirect
 	github.com/hanzoai/csqlite v0.1.2 // indirect
+	github.com/hanzoai/git/modules/actions/runner v0.0.0-20260907014409-964ba924a04f // indirect
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-fuse/v2 v2.9.4 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect

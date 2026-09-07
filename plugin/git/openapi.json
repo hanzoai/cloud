@@ -18,6 +18,9 @@
   "tags": [
     {
       "name": "git"
+    },
+    {
+      "name": "runner"
     }
   ],
   "paths": {
@@ -137,6 +140,69 @@
         "responses": {
           "204": {
             "description": "no content"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/git/pools": {
+      "get": {
+        "operationId": "get_git_pools",
+        "summary": "Returns the capacity this org has declared and how many daemons have entered each pool.",
+        "description": "Returns the capacity this org has declared and how many daemons have\nentered each pool.",
+        "tags": [
+          "git"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/poolList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_git_pools",
+        "summary": "Records the capacity an org has, and answers with the secret a runner daemon presents to enter it.",
+        "description": "Records the capacity an org has, and answers with the secret a\nrunner daemon presents to enter it.\n\nDeclaring is the ONLY way capacity comes to exist: a daemon cannot register\nagainst a pool nobody declared, because the secret it would have to present\ndoes not exist until this runs. Re-declaring an existing pool replaces its\nlabels and mints a fresh secret; runners already inside it keep working.",
+        "tags": [
+          "git"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "labels": [
+                  "ubuntu-latest",
+                  "linux/amd64"
+                ],
+                "name": "evo"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/poolDeclare"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/poolDeclared"
+                }
+              }
+            },
+            "description": "created"
           }
         },
         "x-public": true,
@@ -1322,6 +1388,146 @@
         "x-tool": true
       }
     },
+    "/v1/git/runners": {
+      "get": {
+        "operationId": "get_git_runners",
+        "summary": "Returns the daemons registered into this org's pools, newest first, with when each was last heard from.",
+        "description": "Returns the daemons registered into this org's pools, newest\nfirst, with when each was last heard from.",
+        "tags": [
+          "git"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/runnerList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/git/runs": {
+      "get": {
+        "operationId": "get_git_runs",
+        "summary": "Returns this org's runs, newest first.",
+        "description": "Returns this org's runs, newest first.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo restricts the listing to one repository. Empty lists the whole org.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the answer; 0 means the default of 50, and 200 is the ceiling.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/workflowRuns"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_git_runs",
+        "summary": "Runs a repository's workflows at a ref, on demand.",
+        "description": "Runs a repository's workflows at a ref, on demand.\n\nIt takes the SAME path a push takes: the request is recorded in the journal\nand delivered from there, so an explicit run and a pushed one are one\nmechanism with one idempotency rule and not two that can disagree. Asking\ntwice for the same commit yields the same run.",
+        "tags": [
+          "git"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "ref": "main",
+                "repo": "widgets"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/runStart"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/workflowRuns"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/git/runs/{id}": {
+      "get": {
+        "operationId": "get_git_runs_by_id",
+        "summary": "Returns one run.",
+        "description": "Returns one run.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the run to read, from the :id path segment.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/workflowRun"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/git/usage": {
       "get": {
         "operationId": "get_git_usage",
@@ -1370,6 +1576,50 @@
           "git"
         ],
         "x-public": true
+      }
+    },
+    "/v1/git/workflows": {
+      "get": {
+        "operationId": "get_git_workflows",
+        "summary": "Reports the workflows a repository declares at a ref and which declared pool would execute each job — the answer to \"would a push here run, and where\".",
+        "description": "Reports the workflows a repository declares at a ref and which\ndeclared pool would execute each job — the answer to \"would a push here run,\nand where\".",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo is the repository whose workflows to read.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ref",
+            "in": "query",
+            "required": false,
+            "description": "Ref is the branch to read them at; empty means the default.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/workflowList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/git/{org}/{project}/{repo}/git-receive-pack": {
@@ -1739,6 +1989,248 @@
           }
         ]
       }
+    },
+    "/v1/runner/declare": {
+      "post": {
+        "operationId": "post_runner_declare",
+        "summary": "Republishes what a registered runner can do, and answers with what this side understands, so the two learn about each other from one exchange.",
+        "description": "Republishes what a registered runner can do, and answers with what\nthis side understands, so the two learn about each other from one exchange.",
+        "tags": [
+          "runner"
+        ],
+        "parameters": [
+          {
+            "name": "x-runner-uuid",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-runner-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/runner.DeclareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/runner.DeclareOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/runner/log": {
+      "post": {
+        "operationId": "post_runner_log",
+        "summary": "Adds console output to a task's log and answers with how far that log is durable, so the runner knows where to resend from.",
+        "description": "Adds console output to a task's log and answers with how far that log is\ndurable, so the runner knows where to resend from.",
+        "tags": [
+          "runner"
+        ],
+        "parameters": [
+          {
+            "name": "x-runner-uuid",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-runner-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/runner.LogIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/runner.LogOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/runner/register": {
+      "post": {
+        "operationId": "post_runner_register",
+        "summary": "Trades a pool's join secret for a runner identity and the token that authenticates every later call.",
+        "description": "Trades a pool's join secret for a runner identity and the token that\nauthenticates every later call. It is the one operation with no credential to\ncheck, because a runner has none until this answers.\n\nThe secret names the pool it opens, and a pool exists only because somebody\ndeclared it. A daemon that starts against capacity nobody declared is refused\nhere, which is where the rule that pools are declared state actually holds.",
+        "tags": [
+          "runner"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/runner.RegisterIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/runner.RegisterOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/runner/state": {
+      "post": {
+        "operationId": "post_runner_state",
+        "summary": "Records a task's progress and that of its steps, and answers with the result this side now holds — which is how a runner learns its task was stopped from somewhere else.",
+        "description": "Records a task's progress and that of its steps, and answers with the\nresult this side now holds — which is how a runner learns its task was stopped\nfrom somewhere else.",
+        "tags": [
+          "runner"
+        ],
+        "parameters": [
+          {
+            "name": "x-runner-uuid",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-runner-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/runner.StateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/runner.StateOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/runner/task": {
+      "post": {
+        "operationId": "post_runner_task",
+        "summary": "Hands the runner a job to execute, if its pool has one, and answers immediately either way.",
+        "description": "Hands the runner a job to execute, if its pool has one, and answers\nimmediately either way. A runner sends the queue version it last saw; when it\nmatches, nothing has been queued since and no lease transaction is opened.",
+        "tags": [
+          "runner"
+        ],
+        "parameters": [
+          {
+            "name": "x-runner-uuid",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-runner-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/runner.TaskIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/runner.TaskOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
     }
   },
   "components": {
@@ -1895,6 +2387,26 @@
         },
         "type": "object"
       },
+      "jobView": {
+        "properties": {
+          "name": {
+            "description": "Name is the job's id in the workflow document.",
+            "type": "string"
+          },
+          "pool": {
+            "description": "Pool is the declared pool carrying every one of those labels, or empty\nwhen no pool does — which is the answer to \"why is nothing running\".",
+            "type": "string"
+          },
+          "runsOn": {
+            "description": "RunsOn is the labels the job asked for.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "keyList": {
         "properties": {
           "data": {
@@ -2037,6 +2549,73 @@
           "public": {
             "description": "Public flips anonymous read access. Omit it and the request is refused —\nthere is nothing else to update yet.",
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "poolDeclare": {
+        "properties": {
+          "labels": {
+            "description": "Labels are what a workflow's `runs-on:` selects this pool by. A job is\nassigned to a pool that carries EVERY label it asked for.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the pool's handle in this org, e.g. \"evo\" or \"spark\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "poolDeclared": {
+        "properties": {
+          "pool": {
+            "$ref": "#/components/schemas/poolView",
+            "description": "Pool is the capacity that now exists."
+          },
+          "secret": {
+            "description": "Secret is what a runner daemon presents to enter the pool. It is answered\nHERE AND NOWHERE ELSE — only a digest is stored — so a lost one is\nreplaced by declaring the pool again.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "poolList": {
+        "properties": {
+          "data": {
+            "description": "Data is the org's declared pools, by name.",
+            "items": {
+              "$ref": "#/components/schemas/poolView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "poolView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the pool was declared, in unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "labels": {
+            "description": "Labels are what a workflow's `runs-on:` selects this pool by.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the pool's handle in this org.",
+            "type": "string"
+          },
+          "runners": {
+            "description": "Runners is how many daemons have entered the pool. Zero means the\ncapacity is declared and nothing has turned up to provide it.",
+            "format": "int64",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -2308,6 +2887,523 @@
         },
         "type": "object"
       },
+      "runStart": {
+        "properties": {
+          "ref": {
+            "description": "Ref is the branch to run; empty means the repository's default.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the repository to run.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "runner.Context": {
+        "properties": {
+          "actions_url": {
+            "description": "ActionsURL is where act fetches an action repository from when a step\nnames one. A runner that receives nothing here composes an unusable URL\nand every job dies before its first step, so the runner supplies its own\nfallback rather than trusting this to be set.",
+            "type": "string"
+          },
+          "actor": {
+            "description": "Actor is who caused the run.",
+            "type": "string"
+          },
+          "api_url": {
+            "description": "APIURL is where the job reaches the forge's API.",
+            "type": "string"
+          },
+          "base_ref": {
+            "description": "BaseRef is the target branch of a pull request, empty otherwise.",
+            "type": "string"
+          },
+          "event": {
+            "contentEncoding": "base64",
+            "description": "Event is the webhook payload that triggered the run, as opaque JSON. It\nstays bytes because its shape belongs to the event and not to us: the\nrunner hands it to act, which evaluates github.event.* against it.",
+            "type": "string"
+          },
+          "event_name": {
+            "description": "EventName is what triggered the run, e.g. \"push\".",
+            "type": "string"
+          },
+          "head_ref": {
+            "description": "HeadRef is the source branch of a pull request, empty otherwise.",
+            "type": "string"
+          },
+          "job": {
+            "description": "Job is which job of the workflow document this task is.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is the full ref the run is for, e.g. \"refs/heads/main\".",
+            "type": "string"
+          },
+          "ref_name": {
+            "description": "RefName is that ref without its refs/heads/ or refs/tags/ prefix.",
+            "type": "string"
+          },
+          "ref_type": {
+            "description": "RefType is \"branch\" or \"tag\".",
+            "type": "string"
+          },
+          "repository": {
+            "description": "Repository is \"\u003cowner\u003e/\u003cname\u003e\".",
+            "type": "string"
+          },
+          "repository_owner": {
+            "description": "RepositoryOwner is the owner half of it.",
+            "type": "string"
+          },
+          "retention_days": {
+            "description": "RetentionDays is how long the run's artifacts are kept, as a number in a\nstring because that is what an expression reads.",
+            "type": "string"
+          },
+          "run_attempt": {
+            "description": "RunAttempt is which attempt of that run this is, counting from 1.",
+            "type": "string"
+          },
+          "run_id": {
+            "description": "RunID identifies the run this task belongs to.",
+            "type": "string"
+          },
+          "run_number": {
+            "description": "RunNumber is the run's position in its repository, counting from 1.",
+            "type": "string"
+          },
+          "runtime_token": {
+            "description": "RuntimeToken authorizes the job against the actions runtime: artifacts,\nthe cache. The runner passes it as ACTIONS_RUNTIME_TOKEN and masks it out\nof the log.",
+            "type": "string"
+          },
+          "server_url": {
+            "description": "ServerURL is the forge's own origin, as a link in a log points at it.",
+            "type": "string"
+          },
+          "sha": {
+            "description": "Sha is the commit being run, in full.",
+            "type": "string"
+          },
+          "token": {
+            "description": "Token is the job's credential against the forge's own API — github.token\nin an expression.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "runner.DeclareIn": {
+        "properties": {
+          "capabilities": {
+            "description": "Capabilities are the optional protocol behaviours this runner\nunderstands, e.g. \"cancelling\".",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "labels": {
+            "description": "Labels replace what the forge holds, so a relabelled runner follows its\nconfiguration without re-registering.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "description": "Version is the runner build now running.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "runner.DeclareOut": {
+        "properties": {
+          "capabilities": {
+            "description": "Capabilities are what THIS FORGE understands, so a runner learns what the\nother side supports from the reply body rather than from a header.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "runner": {
+            "$ref": "#/components/schemas/runner.Identity",
+            "description": "Runner is the stored identity as the forge now holds it. Its Token is\nempty: the credential is minted once, by register."
+          }
+        },
+        "type": "object"
+      },
+      "runner.Identity": {
+        "properties": {
+          "ephemeral": {
+            "description": "Ephemeral means the runner takes ONE job and exits, so the forge must not\nexpect it back.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the forge's own row id for this runner.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "labels": {
+            "description": "Labels are what a workflow's `runs-on:` selects this runner by.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is what a person calls this runner in the forge's UI.",
+            "type": "string"
+          },
+          "token": {
+            "description": "Token is the secret that authenticates that handle. It is in cleartext\nhere and nowhere else; the forge stores only a digest of it.",
+            "type": "string"
+          },
+          "uuid": {
+            "description": "UUID is the handle the runner presents on every later op.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the runner build the forge last heard from.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "runner.Line": {
+        "properties": {
+          "content": {
+            "description": "Content is the line itself, without its terminator.",
+            "type": "string"
+          },
+          "time": {
+            "description": "Time is when the line was written, in unix nanoseconds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "runner.LogIn": {
+        "properties": {
+          "index": {
+            "description": "Index is the position of the first line in that log, so a resent batch\noverlaps rather than duplicates.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "last": {
+            "description": "Last seals the log and moves it to storage. Appending past a seal is an\nerror; resending one is acknowledged.",
+            "type": "boolean"
+          },
+          "lines": {
+            "description": "Lines is the batch itself.",
+            "items": {
+              "$ref": "#/components/schemas/runner.Line"
+            },
+            "type": "array"
+          },
+          "task": {
+            "description": "Task is whose log this is.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "runner.LogOut": {
+        "properties": {
+          "ack": {
+            "description": "Ack is how far the log is durable — index plus lines accepted — and where\nthe runner resends from.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "runner.Need": {
+        "properties": {
+          "job": {
+            "description": "Job is the depended-on job's id in the workflow.",
+            "type": "string"
+          },
+          "outputs": {
+            "description": "Outputs are the values it published.",
+            "items": {
+              "$ref": "#/components/schemas/runner.Pair"
+            },
+            "type": "array"
+          },
+          "result": {
+            "description": "Result is how it finished.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "runner.Pair": {
+        "properties": {
+          "name": {
+            "description": "Name is what the value is filed under.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the value itself, always a string on this wire.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "runner.RegisterIn": {
+        "properties": {
+          "capabilities": {
+            "description": "Capabilities are the optional protocol behaviours this runner\nunderstands, e.g. \"cancelling\".",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ephemeral": {
+            "description": "Ephemeral declares that this runner takes ONE job and exits.",
+            "type": "boolean"
+          },
+          "labels": {
+            "description": "Labels are what a workflow's `runs-on:` will select this runner by.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is what to call this runner. Required.",
+            "type": "string"
+          },
+          "token": {
+            "description": "Token is the REGISTRATION secret, a different secret from the runner\ntoken the reply carries. Required.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the runner build asking to register.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "runner.RegisterOut": {
+        "properties": {
+          "runner": {
+            "$ref": "#/components/schemas/runner.Identity",
+            "description": "Runner is the minted identity, carrying the token in cleartext once."
+          }
+        },
+        "type": "object"
+      },
+      "runner.State": {
+        "properties": {
+          "id": {
+            "description": "ID is the task this is about.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "result": {
+            "description": "Result is how it finished; empty means it has not.",
+            "type": "string"
+          },
+          "started": {
+            "description": "Started is when it began, in unix nanoseconds; 0 is unset.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "steps": {
+            "description": "Steps is each step's own progress, in the order the workflow declares.",
+            "items": {
+              "$ref": "#/components/schemas/runner.Step"
+            },
+            "type": "array"
+          },
+          "stopped": {
+            "description": "Stopped is when it finished, in unix nanoseconds; 0 is unset.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "runner.StateIn": {
+        "properties": {
+          "outputs": {
+            "description": "Outputs are values the job has published since the last report.",
+            "items": {
+              "$ref": "#/components/schemas/runner.Pair"
+            },
+            "type": "array"
+          },
+          "state": {
+            "$ref": "#/components/schemas/runner.State",
+            "description": "State is the task's progress and that of each of its steps."
+          }
+        },
+        "type": "object"
+      },
+      "runner.StateOut": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/runner.State",
+            "description": "State is the task's result AS THE FORGE HOLDS IT, which may differ from\nwhat was reported: that is how a runner learns it was cancelled."
+          },
+          "stored": {
+            "description": "Stored names the outputs the forge has written down, so the runner stops\nresending them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "runner.Step": {
+        "properties": {
+          "id": {
+            "description": "ID is the step's position in the job, counting from 0.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "log_index": {
+            "description": "LogIndex is the first line of the task log this step wrote.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "log_length": {
+            "description": "LogLength is how many lines it wrote from there.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "result": {
+            "description": "Result is how the step finished; empty means it has not.",
+            "type": "string"
+          },
+          "started": {
+            "description": "Started is when it began, in unix nanoseconds; 0 is unset.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stopped": {
+            "description": "Stopped is when it finished, in unix nanoseconds; 0 is unset.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "runner.Task": {
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/runner.Context",
+            "description": "Context is what the job evaluates github.* against."
+          },
+          "id": {
+            "description": "ID identifies this task on every later state and log report.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "needs": {
+            "description": "Needs is what the jobs this one depends on produced.",
+            "items": {
+              "$ref": "#/components/schemas/runner.Need"
+            },
+            "type": "array"
+          },
+          "secrets": {
+            "description": "Secrets are the values masked out of the log and exposed as secrets.*.",
+            "items": {
+              "$ref": "#/components/schemas/runner.Pair"
+            },
+            "type": "array"
+          },
+          "vars": {
+            "description": "Vars are the values exposed as vars.*.",
+            "items": {
+              "$ref": "#/components/schemas/runner.Pair"
+            },
+            "type": "array"
+          },
+          "workflow": {
+            "contentEncoding": "base64",
+            "description": "Workflow is the workflow document verbatim. The forge decides THAT a job\nruns; act, on the runner, decides what the document means.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "runner.TaskIn": {
+        "properties": {
+          "queue": {
+            "description": "Queue is the queue version the runner last saw. When it equals the\nforge's, nothing has been queued since.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "runner.TaskOut": {
+        "properties": {
+          "queue": {
+            "description": "Queue is the forge's current queue version, to ask against next time.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "task": {
+            "$ref": "#/components/schemas/runner.Task",
+            "description": "Task is the assigned job, or nil for \"no work\"."
+          }
+        },
+        "type": "object"
+      },
+      "runnerList": {
+        "properties": {
+          "data": {
+            "description": "Data is the daemons registered into this org's pools, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/runnerView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "runnerView": {
+        "properties": {
+          "ephemeral": {
+            "description": "Ephemeral means the daemon takes ONE job and exits, so it is not expected\nback and its absence is not a fault.",
+            "type": "boolean"
+          },
+          "labels": {
+            "description": "Labels are what the daemon last said it can do.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "lastActive": {
+            "description": "LastActive is when it was last EXECUTING a job, in unix seconds. It lags\nLastOnline on an idle daemon, which is how the two differ.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "lastOnline": {
+            "description": "LastOnline is when it last called at all, in unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is what the daemon called itself when it registered.",
+            "type": "string"
+          },
+          "pool": {
+            "description": "Pool is the declared capacity it entered.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the runner build the daemon last reported.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "subscribeReq": {
         "properties": {
           "channel": {
@@ -2441,6 +3537,102 @@
             "description": "TotalBytes is the sum over Repos — the org's whole git footprint.",
             "format": "int64",
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "workflowList": {
+        "properties": {
+          "data": {
+            "description": "Data is the workflows the repository declares at the ref.",
+            "items": {
+              "$ref": "#/components/schemas/workflowView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "workflowRun": {
+        "properties": {
+          "actor": {
+            "description": "Actor is who caused it.",
+            "type": "string"
+          },
+          "commit": {
+            "description": "Commit is the commit being run, in full.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the run was opened, in unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "event": {
+            "description": "Event is what caused the run, e.g. \"push\".",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID addresses this run.",
+            "type": "string"
+          },
+          "number": {
+            "description": "Number is the run's position in its repository, counting from 1 — the\nhandle a person uses (\"#4\").",
+            "format": "int64",
+            "type": "integer"
+          },
+          "ref": {
+            "description": "Ref is the full ref, e.g. \"refs/heads/main\".",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the repository the run is for.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is waiting, running, success, failure, cancelled or skipped.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when its status last changed, in unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "workflow": {
+            "description": "Workflow is the path of the document being run, e.g.\n\".hanzo/workflows/ci.yml\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "workflowRuns": {
+        "properties": {
+          "data": {
+            "description": "Data is the runs in scope, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/workflowRun"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "workflowView": {
+        "properties": {
+          "fault": {
+            "description": "Fault is why this document cannot run at all, when it cannot be read.",
+            "type": "string"
+          },
+          "jobs": {
+            "description": "Jobs is what it declares, and where each would run.",
+            "items": {
+              "$ref": "#/components/schemas/jobView"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the document's path in the repository.",
+            "type": "string"
           }
         },
         "type": "object"

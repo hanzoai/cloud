@@ -342,7 +342,14 @@ var Apps = []App{
 	// bare 401. The surface itself stays in hanzo.ai/ci, which is deployed
 	// standalone too; apps/ci mounts it rather than forking it.
 	{Name: "ci", Prefixes: []string{"/v1/ci"}},
-	{Name: "git", Prefixes: []string{"/v1/git"}},
+	// TWO ROOTS, because git answers two audiences with two credentials.
+	// /v1/git is the control surface a person or an agent calls, behind the
+	// org a request carries. /v1/runner is the runner daemon's wire — five
+	// operations a machine calls holding a token it was minted at registration,
+	// meeting none of the principal middleware. Same app, because a run and the
+	// daemon that executes it are one subsystem and one store; separate roots,
+	// because a poll loop must not sit behind a gate designed for a session.
+	{Name: "git", Prefixes: []string{"/v1/git", "/v1/runner"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "compute", Prefixes: []string{"/v1/compute"}},
 	{Name: "captable", Prefixes: []string{"/v1/captable"}},
