@@ -206,6 +206,13 @@ export E2E_REDIRECT_URI="$BASE/auth/callback"
 # so the fee has one source of truth rather than two that can drift.
 export CLOUD_TODO_FEE_CENTS=500
 export E2E_TODO_FEE_CENTS="$CLOUD_TODO_FEE_CENTS"
+# Spec 136 moved its seam from todo to tracker and prices it from
+# CLOUD_TRACKER_FEE_CENTS, which nothing set — so the gated kind stayed free, and
+# the spec said so itself rather than passing: "the gated kind is FREE and
+# un-gated, this spec cannot prove anything". A refusal test on a free resource
+# proves nothing, so it refused to pretend.
+export CLOUD_TRACKER_FEE_CENTS=500
+export E2E_TRACKER_FEE_CENTS="$CLOUD_TRACKER_FEE_CENTS"
 
 say "booting cloud on $BASE (data: $DATA_DIR)"
 # commerce carries the money plane the billing surface reads, and todo supplies a
