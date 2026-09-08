@@ -53,12 +53,25 @@ import (
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plugin"
+	"github.com/hanzoai/cloud/secret"
 	"github.com/hanzoai/cloud/webui"
 	"github.com/hanzoai/cloud/webui/release"
 	"github.com/zap-proto/zip"
 )
 
 func main() {
+	// `cloud secret fetch` reads this service's own secrets and exits — the same
+	// secret.Boot a Go service calls at startup, delivered as files for a
+	// workload that is not Go. It serves nothing and mounts nothing, so it is
+	// answered here, ahead of every listener the server below sets up.
+	if len(os.Args) > 1 && os.Args[1] == "secret" {
+		if err := secret.Run(context.Background(), os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "cloud:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// BEFORE any plugin is mounted: the wire to a plugin resolves its transport
 	// from a process-global registry at dial time, and the default one caps a
 	// whole response at 30 seconds — which silently truncated every model

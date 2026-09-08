@@ -23,7 +23,7 @@ require (
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/git/modules/actions/runner v0.0.0-20260907014409-964ba924a04f
 	github.com/hanzoai/go-openai v1.41.0
-	github.com/hanzoai/iam v1.34.98
+	github.com/hanzoai/iam v1.34.99
 	github.com/hanzoai/kafka v1.3.2
 	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
