@@ -127,6 +127,17 @@ const freshness = time.Second
 // cache is for: a resolver that is slow must not make the console slow.
 const resolveTimeout = 2 * time.Second
 
+// mountTimeout bounds MOUNTING a release, which is a different question from
+// asking which one is published. Resolving reads one small record; mounting
+// lists a release and downloads every file in it — for this console, 1,735
+// objects and 93 MiB, fetched one at a time.
+//
+// Both ran on the resolve budget, so a mount had two seconds to move ninety-odd
+// megabytes and never once finished. What it reported was `list: context
+// deadline exceeded`, which reads like slow storage and is really a deadline
+// sized for a metadata call being handed a bulk transfer.
+const mountTimeout = 5 * time.Minute
+
 // ensure asks what is published if nobody has asked recently, and mounts it if it
 // moved. This is why nothing polls: a console nobody opens costs nothing, and a
 // console somebody opens is current when they open it.
@@ -233,7 +244,11 @@ func (s *Source) refresh(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("console release %s: %w", site.Prefix, err)
 	}
-	b, err := read(ctx, cli, site.Bucket, site.Prefix)
+	// Mounting gets its own budget: the caller's context bounds the RESOLVE, and
+	// a bundle this size cannot be pulled inside that.
+	mctx, cancelMount := context.WithTimeout(context.WithoutCancel(ctx), mountTimeout)
+	defer cancelMount()
+	b, err := read(mctx, cli, site.Bucket, site.Prefix)
 	if err != nil {
 		return false, err
 	}
