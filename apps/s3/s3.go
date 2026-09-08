@@ -60,7 +60,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -335,23 +334,25 @@ func friendlyParam(raw string) (string, bool) {
 // that addresses the operation by name is normalized by the same rule as one that
 // addresses it by URL.
 //
-// THE DECODE IS WHY THE SAME OBJECT HAS ONE KEY. The router hands a captured
-// segment over exactly as it arrived — measured, it decodes nothing, not %2F and
-// not %20 — while every client generated from this API percent-encodes a path
-// parameter (Go url.PathEscape, Python quote(safe=""), JS encodeURIComponent all
-// render "2019/summer/a.jpg" as "2019%2Fsummer%2Fa.jpg"). Undecoded, those two
-// spellings addressed two DIFFERENT keys and both answered success: a delete sent
-// by any SDK removed a key nobody had stored and reported 204 while the object it
-// named survived.
+// IT DOES NOT DECODE, BECAUSE THE ROUTER ALREADY DID. Measured on the router this
+// app mounts on: "a%25b.txt" arrives as "a%b.txt", "a%20b.txt" as "a b.txt" and
+// "a%2Fb.txt" as "a/b.txt". So every client that percent-encodes a path parameter
+// (Go url.PathEscape, Python quote(safe=""), JS encodeURIComponent all render
+// "2019/summer/a.jpg" as "2019%2Fsummer%2Fa.jpg") is already decoded once by the
+// time the field is bound, and the same object still has one key.
 //
-// ok is false for a malformed escape ("%zz"), which is a 400 rather than a key
-// containing a stray percent — the caller wrote an address that does not decode.
+// This function used to decode a second time, from a measurement that has since
+// stopped being true, and a second decode is not a no-op on the two spellings that
+// matter. A literal percent — "a%25b.txt", bound as "a%b.txt" — failed to unescape
+// and answered 400, so no key containing a percent was addressable at all. And
+// "a%2520b.txt", the encoding of the key "a%20b.txt", bound as "a%20b.txt" and
+// decoded again to "a b.txt": a different object, silently.
+//
+// ok stays in the signature because the caller reads it, and is now always true:
+// there is nothing left here that can fail. A malformed escape never reaches this
+// point — the router refuses it while parsing the path.
 func remainder(raw string) (string, bool) {
-	dec, err := url.PathUnescape(strings.TrimSpace(raw))
-	if err != nil {
-		return "", false
-	}
-	return strings.TrimPrefix(dec, "/"), true
+	return strings.TrimPrefix(strings.TrimSpace(raw), "/"), true
 }
 
 // cleanKey normalizes an object key and rejects any traversal or unsafe byte. An

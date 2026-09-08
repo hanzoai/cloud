@@ -240,17 +240,20 @@ func TestReadsRefuseWithoutAPrincipal(t *testing.T) {
 // that every unpadded value still works. Carrying the raw string and applying the
 // ONE existing parse rule keeps the wire exactly as it was.
 //
-// MEASURED, not assumed: fiber percent-decodes a QUERY value (and reads `+` as a
-// space) but does NOT decode a PATH segment, so the padded case is reachable on
-// ?tokenId= and unreachable on /{tokenId}. Both fields are strings anyway, because
-// two parse rules for one value is how they come to disagree.
+// MEASURED, not assumed, and re-measured since: the router percent-decodes BOTH a
+// query value (reading `+` as a space) and a path segment, so the padded case is
+// reachable either way. Both fields are strings anyway, because two parse rules
+// for one value is how they come to disagree — and this is exactly the narrowing
+// a uint64 field would have caused, since a decoded " 7 " only parses because
+// parseTokenID trims and zip's setScalar does not.
 func TestTokenIDKeepsItsOneParseRule(t *testing.T) {
 	app := mountApp(t)
 
-	// A path segment is NOT percent-decoded, so this is the literal "%207%20" —
-	// not a number, and 400 both before and after the conversion.
-	if code, _ := send(t, app, http.MethodGet, "/v1/validator/%207%20", "acme", ""); code != http.StatusBadRequest {
-		t.Errorf("GET an undecoded padded path tokenId = %d, want 400", code)
+	// A path segment IS percent-decoded, so this arrives as " 7 " — which the one
+	// parse rule trims and accepts, reaching the org-scoped lookup like any other
+	// id. A uint64 field would have refused it instead: the narrowing this pins.
+	if code, _ := send(t, app, http.MethodGet, "/v1/validator/%207%20", "acme", ""); code != http.StatusNotFound {
+		t.Errorf("GET a padded path tokenId = %d, want 404 — the parse rule trims it", code)
 	}
 	// A plain path id parses and reaches the org-scoped lookup: an unclaimed slot
 	// is 404, never a 400 about the id.

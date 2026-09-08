@@ -563,7 +563,7 @@ var errStore = fmt.Errorf("risk: the event surface is not reachable")
 // ensure creates this plane's own tables idempotently. cloud READS the event
 // planes and never creates them (their DDL owner is o11y); it owns
 // hanzo.risk_feature and hanzo.risk_baseline outright, so it creates those the
-// way apps/datastore creates hanzo.cloud_usage — CREATE IF NOT EXISTS plus
+// way datastore creates hanzo.cloud_usage — CREATE IF NOT EXISTS plus
 // additive ALTERs, so a fresh and a legacy warehouse converge.
 func ensure(ctx context.Context) error {
 	if !storeReady() {

@@ -177,7 +177,7 @@ var inflight = make(chan struct{}, maxEmits)
 // That leaves the collision that column has always had, and it is not ours to close
 // here: an org name is unique within an ISSUER, not across issuers, and ONE warehouse
 // serves every brand's deployments (there is no brand in the datastore address, the
-// database name, or anything else that reaches [apps/datastore] — two brands are two
+// database name, or anything else that reaches [datastore] — two brands are two
 // deployments of one artifact differing in a `--brand` flag). Two brands' `acme`
 // organisations are therefore one value in that column, in this table and in every
 // other table on that plane.

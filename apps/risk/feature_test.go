@@ -365,7 +365,7 @@ func TestFeatureSurface_IsTheOnlyDatastoreEndpoint(t *testing.T) {
 			t.Fatalf("parse %s: %v", name, err)
 		}
 		for _, imp := range f.Imports {
-			if strings.Contains(imp.Path.Value, "cloud/apps/datastore") && name != endpoint {
+			if strings.Contains(imp.Path.Value, "cloud/datastore") && name != endpoint {
 				offenders = append(offenders, name)
 			}
 		}
@@ -393,7 +393,7 @@ func TestFeatureSurface_IsTheOnlyDatastoreEndpoint(t *testing.T) {
 	}
 	var found bool
 	ast.Inspect(f, func(n ast.Node) bool {
-		if imp, ok := n.(*ast.ImportSpec); ok && strings.Contains(imp.Path.Value, "cloud/apps/datastore") {
+		if imp, ok := n.(*ast.ImportSpec); ok && strings.Contains(imp.Path.Value, "cloud/datastore") {
 			found = true
 		}
 		return true
