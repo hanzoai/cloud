@@ -340,7 +340,13 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// Native build API (the no-GitHub-builders trigger, ex-/v1/arcd). Privileged:
 	// token-gated + image-ref allowlisted (runner.go). `hanzo build` and the
 	// git-push-to-deploy hook both POST here.
-	zip.Post(app, "/v1/platform/runner", o.runnerBuild, zip.WithStatus(http.StatusAccepted))
+	//
+	// FLAT, and not under platform: building is its own concept. Nested under a
+	// product it read as something platform owns, which is how CI came to post
+	// its builds at /v1/runner — the runner daemon's own wire, five ops that have
+	// nothing to do with building — and get a 404 nobody could explain from the
+	// address alone. One concept, one service, addressed where its name says.
+	zip.Post(app, "/v1/build", o.runnerBuild, zip.WithStatus(http.StatusAccepted))
 }
 
 // ── tenancy ──────────────────────────────────────────────────────────────────

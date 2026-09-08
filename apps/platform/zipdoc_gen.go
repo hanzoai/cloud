@@ -407,10 +407,20 @@ func init() {
 			"releaseRow.version":     "Version is the released image tag, or v<n> when the image carries none.",
 		},
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /platform/build", zip.Doc{})
 	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /platform/fleet", zip.Doc{
 		Fields: map[string]string{
 			"App.org":      "Org is which org OWNS this app. On a reply that is a property of the thing\ndescribed, not a claim by the caller — a cross-org observer has to see it.",
 			"App.registry": "Registry is the image repository the workload actually runs, which is what\nthe board's tier classification reads — a real property of the deployment,\nnever an operator-typed label.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /platform/job", zip.Doc{
+		Fields: map[string]string{
+			"JobIn.id":       "the provider's job id",
+			"JobIn.provider": "forge | github",
+			"JobIn.repo":     "owner/name",
+			"JobIn.token":    "the registration token, or the JIT configuration",
+			"JobIn.url":      "the forge to register with",
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /platform/push", zip.Doc{
@@ -425,6 +435,38 @@ func init() {
 			"ReleaseIn.image":   "Image is the full registry ref; the tag MUST be clean semver (vX.Y.Z) and\nthe releaser refuses every mutable/sha/suffixed form.",
 			"ReleaseIn.service": "Service is the target CR metadata.name.",
 			"ReleaseIn.sha":     "SHA is the source commit, for provenance. Logged, never gated on.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/build", zip.Doc{
+		Description: "Triggers a native build — an image, or the binaries a repo declares.\n\nThe fabric's own build trigger, and what `hanzo build` and git-push-to-deploy\ncall. It answers 202 with the build job id: a queued build, not a pushed\nartifact.\n\nTwo lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and\nthe output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane\ntakes `binaries` — the same recipe the repo's hanzo.yml declares — and publishes\nto object storage instead; it must carry no `image`, because a build produces\nbinaries or an image, never both.\n\nPRIVILEGED, and A BUILD BELONGS TO THE ORGANIZATION ITS CREDENTIAL NAMES. Two\ncredentials, never a third:\n\n  - one that NAMES an organization — a person who administers it (the `hanzo\n    build` path, so one IAM login authorizes a build with no separate build\n    token), or that organization's own machine identity (the pipeline path). The\n    build is attributed to that org and confined to what it owns.\n  - the shared build-callback token, compared in constant time. It names NO\n    organization, which is both why the fabric's own release can publish across\n    brands with it and why anything that CAN name one is read first.\n\nBoth are bounded by the owned-registry allowlist. The org path is bounded again,\nby the org: the image's registry namespace must be one that organization owns, so\nit publishes into its own brand and can never overwrite another's through the\nshared push credential. The same confinement applies to the artifact lane's repo\nowner. There is no request field naming an organization — the attribution is read\noff the credential, so there is nothing for a caller to write it with.\n\nThe output image is parsed and validated as a single well-formed OCI ref before\nany authorization decision reads it, so a crafted ref cannot smuggle a\nbuild-exporter attribute past the check.",
+		Fields: map[string]string{
+			"binarySpec.image":            "Image is the toolchain image the recipe runs in, a Go bookworm image by\ndefault. It is the one field the GitHub lane ignores: there the runner IS\nthe toolchain, and a cluster has to be told what a runner already is.",
+			"binarySpec.ldflags":          "Ldflags are the Go linker flags, `-s -w` when the recipe names none, on one\nline. Go lane only.",
+			"binarySpec.main":             "Main is the Go package to build, repo-relative (`.` or `./cmd/x`), and it\nselects the GO LANE. Defaults to `.` when neither lane is named; declaring\nit together with `run` is refused.",
+			"binarySpec.name":             "Name is the artifact's base name: the prefix of every file published for\nthis entry, and the name a host later asks for. It must match\n`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, which is what makes it safe as both a\nfilename and a URL path segment.",
+			"binarySpec.out":              "Out is the glob of files `run` produced, relative to the repo root; matching\nnothing FAILS the build rather than publishing an empty entry. It expands\nunquoted, so it is bounded to path and glob characters. The Go lane names\nits own files and ignores this.",
+			"binarySpec.platforms":        "Platforms are the `<os>/<arch>` pairs the Go lane cross-compiles, [linux/amd64]\nby default. Each one publishes as `<name>-<os>-<arch>`, which is the shape a\nhost resolves a binary BY — so the list is what a caller can ask for later.",
+			"binarySpec.run":              "Run is any other toolchain's build command, run by `sh -c` in this entry's\nimage, and it selects the OTHER LANE. Arbitrary shell is the point — it is\nthe same trust as a Dockerfile RUN — which is why it executes with no\nobject-store credential and no service-account token. It requires `out`.",
+			"runnerBuildReq.arch":         "Arch is the target architecture for the artifact lane.",
+			"runnerBuildReq.args":         "Args are --build-arg values. They are what lets several images off ONE\nDockerfile mean different things — the sandbox classes are three entries\ndiffering only by STAGE. Validated at the k8s choke point, with VERSION and\nREVISION taking precedence: those are receipts the builder derives from the\ntag and the commit, and a caller that could overwrite them could make an\nimage lie about which commit it is.",
+			"runnerBuildReq.binaries":     "Binaries selects the ARTIFACT lane (artifact.go): build what the repo's\nhanzo.yml `binaries:` block declares — a Go binary, an npm tarball, a Rust\nbinary — and publish it to hanzoai/s3 instead of pushing an image. It is the\nsame recipe hanzoai/ci reads, sent verbatim, so `image` is meaningless here\nand must be absent.",
+			"runnerBuildReq.branch":       "Branch is the branch to build when no SHA or Ref is given.",
+			"runnerBuildReq.bucket":       "Bucket mirrors hanzo.yml's `bucket:` — where the artifact lane publishes.",
+			"runnerBuildReq.context":      "Context is the build context path within the repo.",
+			"runnerBuildReq.dockerTarget": "DockerTarget is the multi-stage build target to stop at.",
+			"runnerBuildReq.dockerfile":   "Dockerfile is the path to build from; empty uses the zero-config frontend.",
+			"runnerBuildReq.image":        "Image is the output image ref to push. Required on the image lane, and it\nmust target a registry namespace the caller's org owns.",
+			"runnerBuildReq.os":           "OS is the target operating system for the artifact lane.",
+			"runnerBuildReq.ref":          "Ref is the git ref to build when no SHA is given.",
+			"runnerBuildReq.repo":         "Repo is the repository clone URL to build. Required on the image lane.",
+			"runnerBuildReq.sha":          "SHA is the commit to pin; it wins over Ref and Branch.",
+			"runnerBuildReq.tag":          "Tag is the publish path segment, so both entry points write ONE index at ONE\nURL. It defaults to the pinned ref, and must be named explicitly for a\nbranch.",
+			"runnerBuildResp.buildJobId":  "BuildJobID is the queued build's id, and what its progress is read by.",
+			"runnerBuildResp.image":       "Image is the ref the image lane will push.",
+			"runnerBuildResp.index":       "Index is the binaries.json URL the artifact lane will publish.",
+			"runnerBuildResp.runnerPool":  "RunnerPool is the runner class the build was placed on.",
+			"runnerBuildResp.status":      "Status is `queued` — the build was accepted and has not finished.",
+			"runnerBuildResp.target":      "Target is the multi-stage build target, echoed back.",
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/fleet/:app/deploy", zip.Doc{
@@ -726,38 +768,6 @@ func init() {
 			"runView.shape":     "Shape is the compute size label the request asked for, or \"auto\".",
 			"runView.status":    "Status is the application's state — `deploying` on a fresh accept.",
 			"runView.url":       "URL is the run's live HTTPS address.",
-		},
-	})
-	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/runner", zip.Doc{
-		Description: "Triggers a native build — an image, or the binaries a repo declares.\n\nThe fabric's own build trigger, and what `hanzo build` and git-push-to-deploy\ncall. It answers 202 with the build job id: a queued build, not a pushed\nartifact.\n\nTwo lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and\nthe output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane\ntakes `binaries` — the same recipe the repo's hanzo.yml declares — and publishes\nto object storage instead; it must carry no `image`, because a build produces\nbinaries or an image, never both.\n\nPRIVILEGED, and A BUILD BELONGS TO THE ORGANIZATION ITS CREDENTIAL NAMES. Two\ncredentials, never a third:\n\n  - one that NAMES an organization — a person who administers it (the `hanzo\n    build` path, so one IAM login authorizes a build with no separate build\n    token), or that organization's own machine identity (the pipeline path). The\n    build is attributed to that org and confined to what it owns.\n  - the shared build-callback token, compared in constant time. It names NO\n    organization, which is both why the fabric's own release can publish across\n    brands with it and why anything that CAN name one is read first.\n\nBoth are bounded by the owned-registry allowlist. The org path is bounded again,\nby the org: the image's registry namespace must be one that organization owns, so\nit publishes into its own brand and can never overwrite another's through the\nshared push credential. The same confinement applies to the artifact lane's repo\nowner. There is no request field naming an organization — the attribution is read\noff the credential, so there is nothing for a caller to write it with.\n\nThe output image is parsed and validated as a single well-formed OCI ref before\nany authorization decision reads it, so a crafted ref cannot smuggle a\nbuild-exporter attribute past the check.",
-		Fields: map[string]string{
-			"binarySpec.image":            "Image is the toolchain image the recipe runs in, a Go bookworm image by\ndefault. It is the one field the GitHub lane ignores: there the runner IS\nthe toolchain, and a cluster has to be told what a runner already is.",
-			"binarySpec.ldflags":          "Ldflags are the Go linker flags, `-s -w` when the recipe names none, on one\nline. Go lane only.",
-			"binarySpec.main":             "Main is the Go package to build, repo-relative (`.` or `./cmd/x`), and it\nselects the GO LANE. Defaults to `.` when neither lane is named; declaring\nit together with `run` is refused.",
-			"binarySpec.name":             "Name is the artifact's base name: the prefix of every file published for\nthis entry, and the name a host later asks for. It must match\n`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, which is what makes it safe as both a\nfilename and a URL path segment.",
-			"binarySpec.out":              "Out is the glob of files `run` produced, relative to the repo root; matching\nnothing FAILS the build rather than publishing an empty entry. It expands\nunquoted, so it is bounded to path and glob characters. The Go lane names\nits own files and ignores this.",
-			"binarySpec.platforms":        "Platforms are the `<os>/<arch>` pairs the Go lane cross-compiles, [linux/amd64]\nby default. Each one publishes as `<name>-<os>-<arch>`, which is the shape a\nhost resolves a binary BY — so the list is what a caller can ask for later.",
-			"binarySpec.run":              "Run is any other toolchain's build command, run by `sh -c` in this entry's\nimage, and it selects the OTHER LANE. Arbitrary shell is the point — it is\nthe same trust as a Dockerfile RUN — which is why it executes with no\nobject-store credential and no service-account token. It requires `out`.",
-			"runnerBuildReq.arch":         "Arch is the target architecture for the artifact lane.",
-			"runnerBuildReq.args":         "Args are --build-arg values. They are what lets several images off ONE\nDockerfile mean different things — the sandbox classes are three entries\ndiffering only by STAGE. Validated at the k8s choke point, with VERSION and\nREVISION taking precedence: those are receipts the builder derives from the\ntag and the commit, and a caller that could overwrite them could make an\nimage lie about which commit it is.",
-			"runnerBuildReq.binaries":     "Binaries selects the ARTIFACT lane (artifact.go): build what the repo's\nhanzo.yml `binaries:` block declares — a Go binary, an npm tarball, a Rust\nbinary — and publish it to hanzoai/s3 instead of pushing an image. It is the\nsame recipe hanzoai/ci reads, sent verbatim, so `image` is meaningless here\nand must be absent.",
-			"runnerBuildReq.branch":       "Branch is the branch to build when no SHA or Ref is given.",
-			"runnerBuildReq.bucket":       "Bucket mirrors hanzo.yml's `bucket:` — where the artifact lane publishes.",
-			"runnerBuildReq.context":      "Context is the build context path within the repo.",
-			"runnerBuildReq.dockerTarget": "DockerTarget is the multi-stage build target to stop at.",
-			"runnerBuildReq.dockerfile":   "Dockerfile is the path to build from; empty uses the zero-config frontend.",
-			"runnerBuildReq.image":        "Image is the output image ref to push. Required on the image lane, and it\nmust target a registry namespace the caller's org owns.",
-			"runnerBuildReq.os":           "OS is the target operating system for the artifact lane.",
-			"runnerBuildReq.ref":          "Ref is the git ref to build when no SHA is given.",
-			"runnerBuildReq.repo":         "Repo is the repository clone URL to build. Required on the image lane.",
-			"runnerBuildReq.sha":          "SHA is the commit to pin; it wins over Ref and Branch.",
-			"runnerBuildReq.tag":          "Tag is the publish path segment, so both entry points write ONE index at ONE\nURL. It defaults to the pinned ref, and must be named explicitly for a\nbranch.",
-			"runnerBuildResp.buildJobId":  "BuildJobID is the queued build's id, and what its progress is read by.",
-			"runnerBuildResp.image":       "Image is the ref the image lane will push.",
-			"runnerBuildResp.index":       "Index is the binaries.json URL the artifact lane will publish.",
-			"runnerBuildResp.runnerPool":  "RunnerPool is the runner class the build was placed on.",
-			"runnerBuildResp.status":      "Status is `queued` — the build was accepted and has not finished.",
-			"runnerBuildResp.target":      "Target is the multi-stage build target, echoed back.",
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/platform PUT /v1/platform/projects/:project/apps/:app/env", zip.Doc{

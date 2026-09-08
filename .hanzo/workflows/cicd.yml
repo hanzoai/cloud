@@ -1314,7 +1314,7 @@ jobs:
           # THERE ARE TWO RUNNER LANES and they are not interchangeable. This one
           # publishes BINARIES to the object store — cloud's own, apps/platform/
           # artifact.go, whose first line names its address: POST
-          # /v1/platform/runner. The other is the IMAGE enqueue at
+          # /v1/build. The other is the IMAGE enqueue at
           # platform.hanzo.ai/v1/runner (apps/git/build_on_push.go's enqueueReq),
           # which takes {repo, sha, image} and would refuse a binaries: recipe as
           # "Missing required field(s): repo, sha, image" — measured, by sending
@@ -1394,7 +1394,7 @@ jobs:
           # timescale; twenty minutes buys one without holding the runner all night.
           ENQ_DEADLINE=$(( $(date +%s) + 1200 ))
           while :; do
-            code=$(curl -sS -o /tmp/enq.json -w '%{http_code}' -X POST "${CLOUD_API}/v1/platform/runner" \
+            code=$(curl -sS -o /tmp/enq.json -w '%{http_code}' -X POST "${CLOUD_API}/v1/build" \
               -H "Authorization: Bearer ${BUILD_TOKEN}" \
               -H 'Content-Type: application/json' -d "$body" || echo 000)
             resp=$(cat /tmp/enq.json 2>/dev/null || true)
@@ -1411,7 +1411,7 @@ jobs:
           # it prints what actually came back.
           index=$(printf '%s' "$resp" | jq -r '.index // empty' 2>/dev/null || true)
           job=$(printf '%s' "$resp" | jq -r '.buildJobId // empty' 2>/dev/null || true)
-          [ -n "$index" ] || { echo "::error::/v1/platform/runner at ${CLOUD_API} did not accept the recipe: $(printf '%s' "$resp" | head -c 300)"; exit 1; }
+          [ -n "$index" ] || { echo "::error::/v1/build at ${CLOUD_API} did not accept the recipe: $(printf '%s' "$resp" | head -c 300)"; exit 1; }
           echo "queued ${job:-?} -> ${index}"
 
           # Poll the INDEX, not the build status: the index is the one file a host

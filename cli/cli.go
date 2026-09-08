@@ -462,7 +462,7 @@ func (e *Env) platformToken(flagVal string) string {
 }
 
 // buildToken resolves the bearer `hanzo build` sends to the platform build
-// enqueue (/v1/platform/runner): the IAM login, and nothing else. The
+// enqueue (/v1/build): the IAM login, and nothing else. The
 // organization a build is attributed to is read off that identity. There used to
 // be a purpose-minted build token ahead of it — a shared secret the runner
 // compared — and it is gone on both sides.

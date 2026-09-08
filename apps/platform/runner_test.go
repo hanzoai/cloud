@@ -15,7 +15,7 @@ import (
 )
 
 // runnerApp mounts the platform routes over a ready fake cluster so a valid
-// /v1/platform/runner request reaches launchDirectBuild and returns 202.
+// /v1/build request reaches launchDirectBuild and returns 202.
 func runnerApp(t *testing.T) *zip.App {
 	t.Helper()
 	app, _ := runnerAppStore(t)
@@ -37,7 +37,7 @@ func runnerAppStore(t *testing.T) (*zip.App, *Store) {
 	return app, store
 }
 
-// postRunnerWith POSTs /v1/platform/runner with an explicit credential set: hdrs are the
+// postRunnerWith POSTs /v1/build with an explicit credential set: hdrs are the
 // identity headers SanitizeIdentity mints from a signature-verified token, auth is
 // the raw Authorization header value. Either, both, or neither — which is the point
 // of having one helper: the interesting cases are the ones where a caller presents
@@ -49,7 +49,7 @@ func postRunnerWith(t *testing.T, app *zip.App, hdrs map[string]string, auth str
 		b, _ := json.Marshal(body)
 		r = bytes.NewReader(b)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/v1/platform/runner", r)
+	req := httptest.NewRequest(http.MethodPost, "/v1/build", r)
 	req.Header.Set("Content-Type", "application/json")
 	for k, v := range hdrs {
 		req.Header.Set(k, v)
@@ -59,14 +59,14 @@ func postRunnerWith(t *testing.T, app *zip.App, hdrs map[string]string, auth str
 	}
 	resp, err := app.Test(req)
 	if err != nil {
-		t.Fatalf("Test POST /v1/platform/runner: %v", err)
+		t.Fatalf("Test POST /v1/build: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, b
 }
 
-// postRunner POSTs /v1/platform/runner with an optional Bearer token.
+// postRunner POSTs /v1/build with an optional Bearer token.
 // postRunner builds as the platform itself — a SuperAdmin at home in the admin
 // org — which is the identity the fabric's own release lane holds. It stands
 // where a shared build token used to.
@@ -75,7 +75,7 @@ func postRunner(t *testing.T, app *zip.App, body any) (int, []byte) {
 	return postRunnerWith(t, app, identity("platform", "hanzo", false, true), "", body)
 }
 
-// postRunnerAs POSTs /v1/platform/runner as a VALIDATED IAM principal: it sets the
+// postRunnerAs POSTs /v1/build as a VALIDATED IAM principal: it sets the
 // identity headers SanitizeIdentity mints from a signature-verified JWT
 // (X-User-Id ⇒ principal.Validated, X-Org-Id ⇒ principal.Org, and optionally
 // X-User-IsOrgAdmin / X-User-IsAdmin for the role). No Authorization bearer — this

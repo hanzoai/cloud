@@ -282,7 +282,7 @@ const (
 
 	// PlatformBuild builds one image from a repository at a commit — the native
 	// pipeline's per-image ask, from git to the builder over the plane. It
-	// replaced an HTTP call from this process to its own /v1/platform/runner
+	// replaced an HTTP call from this process to its own /v1/build
 	// carrying a shared PLATFORM_BUILD_CALLBACK_TOKEN: a hop across the edge to
 	// reach a builder this binary already carries, proven by a secret.
 	PlatformBuild = "platform_build"

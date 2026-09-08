@@ -302,7 +302,7 @@ func TestBuildReconcilerVersionMonotonic(t *testing.T) {
 	}
 }
 
-// A direct build — POST /v1/platform/runner, no deployment — must be able to reach a
+// A direct build — POST /v1/build, no deployment — must be able to reach a
 // terminal status. It could not: the reconciler drove only off building
 // DEPLOYMENTS and reconcileBuild returns early for anything not sourced from git,
 // so these rows stayed "queued" for the life of the row whether the Job had
