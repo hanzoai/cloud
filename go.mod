@@ -112,7 +112,6 @@ require (
 	github.com/go-resty/resty/v2 v2.17.2 // indirect
 	github.com/go-webauthn/webauthn v0.17.4 // indirect
 	github.com/go-webauthn/x v0.2.6 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
@@ -180,6 +179,7 @@ require (
 	github.com/parquet-go/bitpack v1.0.0 // indirect
 	github.com/parquet-go/jsonlite v1.0.0 // indirect
 	github.com/parquet-go/parquet-go v0.30.1 // indirect
+	github.com/netlify/netlify-go v0.1.11 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/peterh/liner v1.2.2 // indirect
 	github.com/pkg/sftp v1.13.10 // indirect
@@ -888,3 +888,6 @@ require github.com/hanzoai/s3 v1.0.29
 // stands down and hanzoai/s3's message_fbs compiles against the parent — same
 // import path, so no source moves.
 exclude github.com/google/flatbuffers/go v0.0.0-20230108230133-3b8644d32c50
+
+replace github.com/hanzoai/commerce => ../../hanzoai/commerce
+replace github.com/hanzoai/sqlite => ../../hanzoai/sqlite
