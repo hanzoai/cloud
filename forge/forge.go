@@ -17,8 +17,8 @@
 // # The wire
 //
 // The forge answers its REST API at /v1 — NOT /api/v1, which 404s. That is the
-// one fact most likely to be mis-remembered from upstream Gitea documentation,
-// so it is stated once, here, as [API], and never spelled again.
+// one fact most likely to be mis-remembered from upstream documentation, so it
+// is stated once, here, as [API], and never spelled again.
 //
 // # The two credentials, and why there is only one
 //

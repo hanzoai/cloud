@@ -77,7 +77,7 @@ not a relayable bearer, so those leases start with no session rather than with a
 key in a shell.
 
 **The far end.** `git.hanzo.ai` accepts the same token as a git credential
-(hanzoai/git `services/auth/iam.go`), verified against this deployment's own OIDC
+(hanzoai/forge `services/auth/iam.go`), verified against this deployment's own OIDC
 login source and resolved to an account only through the link that sign-in
 already wrote — so a subject that never signed in to the forge resolves to
 nobody, and nothing is created from a credential. Its scope there is

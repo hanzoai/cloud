@@ -40,7 +40,7 @@
 // rollback/rollout PATCHES it directly (P1's RegisterServiceReleaser), so deploys
 // work now. The end-state is true GitOps on OUR native git — RegisterPushBuilder
 // commits the CR image-tag change to the manifest repo on git.hanzo.ai
-// (github.com/hanzoai/git) and this engine syncs that repo → cluster with
+// (github.com/hanzoai/forge) and this engine syncs that repo → cluster with
 // self-heal. The desired-vs-live diff below is already structured for that: it
 // reads a desired source that is "cluster last-applied" now and becomes the
 // git.hanzo.ai manifest later, with no shape change. See deployDesiredTODO.

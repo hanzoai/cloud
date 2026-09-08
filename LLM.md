@@ -5627,7 +5627,7 @@ push-to-deploy is in-process and points GitHub events at the App. One verifier
 DO deliver to us. Superseded the "one door for every provider" note of earlier
 the same day.
 
-**The forge does not retry, so the answer is the recovery.** hanzoai/git marks a
+**The forge does not retry, so the answer is the recovery.** hanzoai/forge marks a
 delivery delivered before it attempts it; the only redelivery is a person clicking
 Replay. So the endpoint records a push as landed only after a SUCCESSFUL dispatch
 (`seen.hold` / `seen.drop`) and answers a failed one non-2xx — a Replay then

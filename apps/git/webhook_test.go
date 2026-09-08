@@ -80,7 +80,7 @@ func TestWebhookIsGoneForEveryDelivery(t *testing.T) {
 		body    []byte
 	}{
 		{"a real push delivery", map[string]string{"X-Git-Event": "push"}, push},
-		{"the forge's Gitea-compatible header", map[string]string{"X-Gitea-Event": "push"}, push},
+		{"the forge's X-Gitea-Event spelling", map[string]string{"X-Gitea-Event": "push"}, push},
 		{"a tag push", map[string]string{"X-Git-Event": "push"},
 			forgePayload("hanzoai", "cloud", "refs/tags/v1.2.3", after, "z")},
 		{"no event header at all", nil, push},
