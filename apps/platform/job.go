@@ -57,6 +57,18 @@ const (
 // Job name unquoted.
 var safeLabel = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 
+// objectName renders a repository as an object name. What a repository may be
+// called is wider than what the API accepts: `hanzoai_extension` is a legal
+// repository and an illegal Job, and the API refuses the whole create on it, so
+// every job from every underscored repository -- the mirrors, which is most of
+// them -- never got a runner at all. Anything outside an RFC 1123 subdomain
+// becomes a hyphen.
+var notObjectName = regexp.MustCompile(`[^a-z0-9.-]+`)
+
+func objectName(s string) string {
+	return strings.Trim(notObjectName.ReplaceAllString(strings.ToLower(s), "-"), "-.")
+}
+
 // runnerNode is the node architecture a job's labels ask for. A label names the
 // platform it wants -- linux-amd64, linux-arm64 -- so the architecture is read
 // from the label rather than assumed, and a job that names none (ubuntu-latest,
@@ -193,7 +205,7 @@ func launch(s *cloud.Service[state], ctx context.Context, ev cloud.JobEvent) (st
 	default:
 		return "", fmt.Errorf("runner: unknown provider %q", ev.Provider)
 	}
-	name := truncate(fmt.Sprintf("runner-%s-%s-%d", ev.Provider, strings.ToLower(repo), ev.ID), 63)
+	name := truncate(fmt.Sprintf("runner-%s-%s-%d", ev.Provider, objectName(repo), ev.ID), 63)
 	env = append(env, map[string]any{"name": "RUNNER_NAME", "value": name})
 	job := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "batch/v1",

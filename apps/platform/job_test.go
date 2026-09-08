@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -173,6 +174,28 @@ func TestRunnerNode(t *testing.T) {
 			t.Errorf("%v: %v", c.labels, err)
 		} else if arch != c.arch {
 			t.Errorf("%v: got %q, want %q", c.labels, arch, c.arch)
+		}
+	}
+}
+
+// A repository the forge accepts is not always a name the API accepts, and the
+// mirrors are named with underscores.
+func TestObjectName(t *testing.T) {
+	rfc1123 := regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`)
+	for in, want := range map[string]string{
+		"hanzoai_extension": "hanzoai-extension",
+		"hanzoai_engine":    "hanzoai-engine",
+		"hanzo.ai":          "hanzo.ai",
+		"Universe":          "universe",
+		"cloud":             "cloud",
+		"_leading":          "leading",
+	} {
+		got := objectName(in)
+		if got != want {
+			t.Errorf("objectName(%q) = %q, want %q", in, got, want)
+		}
+		if !rfc1123.MatchString("runner-forge-" + got + "-1") {
+			t.Errorf("objectName(%q) = %q, which is not a legal object name", in, got)
 		}
 	}
 }
