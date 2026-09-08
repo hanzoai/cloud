@@ -187,14 +187,22 @@ probes:
       port: http
     initialDelaySeconds: 30
     periodSeconds: 30
-  # Readiness targets /readyz on the ops (metrics) listener, which returns 503 the moment
-  # the process begins a graceful shutdown (drain.go) — so Kubernetes marks the pod
-  # NotReady and stops routing to it BEFORE it tears down. Liveness stays on /health (200
-  # throughout the drain) so the pod is never killed mid-drain. Keep readiness on the
-  # metrics port: /readyz there is the ONLY drain-aware endpoint.
+  # Readiness is /readyz, and it is on `http` because that is the only port this
+  # binary opens. It answers 503 the moment a graceful shutdown begins (drain.go), so
+  # Kubernetes marks the pod NotReady and stops routing BEFORE it tears down, and 503
+  # "unfit" when a Vital app is absent (cmd/cloud readyz_test.go) — the case where the
+  # process is fine and the product API is not. Liveness stays on /health, 200
+  # throughout the drain, so the pod is never killed mid-drain.
+  #
+  # It read `metrics` until this line, which was true while the fused monolith was the
+  # host: that ran cloud.Listen, which binds serve.go's healthMux on :9090. The router
+  # that replaced it links zip, the manifest and webui and never the root package, so
+  # nothing binds 9090 and the probe drew connection refused every period — the pod
+  # never went Ready and the rollout could not finish, on an image that was running
+  # perfectly. Both probes belong on the port main.go actually listens on.
   readiness:
     httpGet:
       path: /readyz
-      port: metrics
+      port: http
     initialDelaySeconds: 5
     periodSeconds: 5
