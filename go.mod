@@ -21,6 +21,7 @@ require (
 	github.com/hanzoai/dataroom v1.1.7
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
+	github.com/hanzoai/git/modules/actions/runner v0.0.0-20260907014409-964ba924a04f
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/iam v1.34.98
 	github.com/hanzoai/kafka v1.3.2
@@ -119,7 +120,6 @@ require (
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.17 // indirect
 	github.com/hanzoai/csqlite v0.1.2 // indirect
-	github.com/hanzoai/git/modules/actions/runner v0.0.0-20260907014409-964ba924a04f // indirect
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-fuse/v2 v2.9.4 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
@@ -173,13 +173,13 @@ require (
 	github.com/moby/term v0.5.2 // indirect
 	github.com/muhlemmer/gu v0.3.1 // indirect
 	github.com/nats-io/nats-server/v2 v2.12.3 // indirect
+	github.com/netlify/netlify-go v0.1.11 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/olivere/elastic/v7 v7.0.32 // indirect
 	github.com/parallaxsecond/parsec-client-go v0.0.0-20221025095442-f0a77d263cf9 // indirect
 	github.com/parquet-go/bitpack v1.0.0 // indirect
 	github.com/parquet-go/jsonlite v1.0.0 // indirect
 	github.com/parquet-go/parquet-go v0.30.1 // indirect
-	github.com/netlify/netlify-go v0.1.11 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/peterh/liner v1.2.2 // indirect
 	github.com/pkg/sftp v1.13.10 // indirect
@@ -888,6 +888,3 @@ require github.com/hanzoai/s3 v1.0.29
 // stands down and hanzoai/s3's message_fbs compiles against the parent — same
 // import path, so no source moves.
 exclude github.com/google/flatbuffers/go v0.0.0-20230108230133-3b8644d32c50
-
-replace github.com/hanzoai/commerce => ../../hanzoai/commerce
-replace github.com/hanzoai/sqlite => ../../hanzoai/sqlite
