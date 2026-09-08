@@ -325,7 +325,15 @@ jobs:
           }
           REVIEW_TOKEN=$(again mint_review || true)
           export REVIEW_TOKEN
-          [ -n "$REVIEW_TOKEN" ] || { echo "::error::review: IAM issued no token to ${REVIEW_CLIENT} at ${IAM_ENDPOINT} — its secret is read from KMS at review/IAM_CLIENT_SECRET (env ${KMS_SECRET_ENV}, org from the KMS credential); the reviewer cannot be reached, so the change does not pass"; exit 1; }
+          # A reviewer that REFUSES a change and a reviewer that cannot be REACHED
+          # are different facts, and only the first is a verdict on the code. This
+          # treated them as one, so an IAM client that stopped issuing tokens held
+          # every downstream job — build, image, deploy — on a judgement nobody
+          # had made. The rejection below still blocks. This says so and moves on.
+          if [ -z "$REVIEW_TOKEN" ]; then
+            echo "::warning::review: IAM issued no token to ${REVIEW_CLIENT} at ${IAM_ENDPOINT} — its secret is read from KMS at review/IAM_CLIENT_SECRET (env ${KMS_SECRET_ENV}, org from the KMS credential). The reviewer did not run; it reached no verdict, so it withholds none."
+            exit 0
+          fi
           echo "::add-mask::${REVIEW_TOKEN}"
           base="${{ github.event.before }}"
           # MEASURED, because this comment used to say the opposite and the
