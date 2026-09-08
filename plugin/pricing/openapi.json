@@ -929,7 +929,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Tariff"
+                  "$ref": "#/components/schemas/Card"
                 }
               }
             },
@@ -967,6 +967,36 @@
   },
   "components": {
     "schemas": {
+      "Card": {
+        "properties": {
+          "components": {
+            "description": "Components are the four things a bill is made of.",
+            "items": {
+              "$ref": "#/components/schemas/Component"
+            },
+            "type": "array"
+          },
+          "rates": {
+            "description": "Rates are the priced lines, each in micro-USD per its own unit.",
+            "items": {
+              "$ref": "#/components/schemas/Rate"
+            },
+            "type": "array"
+          },
+          "unit": {
+            "description": "Unit is the unit every amount on this card is stated in.",
+            "type": "string"
+          },
+          "windows": {
+            "description": "Speeds are the completion speeds, dearest first.",
+            "items": {
+              "$ref": "#/components/schemas/Speed"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "Component": {
         "properties": {
           "basis": {
@@ -1065,37 +1095,7 @@
         },
         "type": "object"
       },
-      "Tariff": {
-        "properties": {
-          "components": {
-            "description": "Components are the four things a bill is made of.",
-            "items": {
-              "$ref": "#/components/schemas/Component"
-            },
-            "type": "array"
-          },
-          "rates": {
-            "description": "Rates are the priced lines, each in micro-USD per its own unit.",
-            "items": {
-              "$ref": "#/components/schemas/Rate"
-            },
-            "type": "array"
-          },
-          "unit": {
-            "description": "Unit is the unit every amount on this card is stated in.",
-            "type": "string"
-          },
-          "windows": {
-            "description": "Windows are the completion windows, dearest first.",
-            "items": {
-              "$ref": "#/components/schemas/Window"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "Window": {
+      "Speed": {
         "properties": {
           "name": {
             "description": "Name is what a request asks for.",

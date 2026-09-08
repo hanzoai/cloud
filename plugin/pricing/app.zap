@@ -4,6 +4,13 @@
 
 package pricing
 
+struct Card {
+    Unit       text        @0
+    Components list<bytes> @8
+    Speeds     list<bytes> @16
+    Rates      list<bytes> @24
+}
+
 struct Overlay {
     Kind      text       @0
     ID        text       @8
@@ -12,13 +19,6 @@ struct Overlay {
     BetaOrgs  list<text> @24
     Overrides bytes      @32
     UpdatedAt i64        @40
-}
-
-struct Tariff {
-    Unit       text        @0
-    Components list<bytes> @8
-    Windows    list<bytes> @16
-    Rates      list<bytes> @24
 }
 
 struct adminEnablementBoard {
@@ -162,7 +162,7 @@ interface pricing {
     # authority the metering path reads, falling back to the same compiled floor. A
     # rate of zero is a price and not an absence — a paused computer, a computer's
     # creation, the interfaces and a seat all cost nothing by design.
-    get_pricing_tariff() returns (rep: Tariff)
+    get_pricing_tariff() returns (rep: Card)
     # Turns one model off, into beta for named orgs, or generally available.
     # Sets one model's availability overlay — and the price overrides applied on top
     # of the catalog — then answers the new effective overlay, so a console needs no
@@ -246,9 +246,9 @@ interface pricing {
 #   get_pricing_tools  pricingToolList.Tools  []pricing.pricingBlob  (no wire form)
 #
 # opaque (6) — crosses, arrives without its name:
-#   Tariff.Components  cloud.Component (list element)
-#   Tariff.Rates  cloud.Rate (list element)
-#   Tariff.Windows  cloud.Window (list element)
+#   Card.Components  cloud.Component (list element)
+#   Card.Rates  cloud.Rate (list element)
+#   Card.Speeds  cloud.Speed (list element)
 #   adminEnablementBoard.Items  pricing.adminEnablementItem (list element)
 #   enablementBoard.Betas  pricing.userEnablementItem (list element)
 #   enablementBoard.Items  pricing.userEnablementItem (list element)

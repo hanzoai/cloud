@@ -13,7 +13,7 @@ import (
 )
 
 // rateOf finds one line of the card by name, or fails.
-func rateOf(t *testing.T, card Tariff, name string) Rate {
+func rateOf(t *testing.T, card Card, name string) Rate {
 	t.Helper()
 	for _, r := range card.Rates {
 		if r.Name == name {
@@ -112,7 +112,7 @@ func TestAWebCallCostsLessThanACent(t *testing.T) {
 // MUTATION: make Rates return the ask's answer without a floor and every row
 // here reads 0.
 func TestTheCardPublishesTheFloorWhenNobodyHasPricedIt(t *testing.T) {
-	card := Card(context.Background())
+	card := Current(context.Background())
 	for _, tc := range []struct {
 		name string
 		want int64
@@ -140,7 +140,7 @@ func TestTheCardPublishesTheFloorWhenNobodyHasPricedIt(t *testing.T) {
 // MUTATION: route any of the four through RateMicros with a non-zero floor and
 // this fails naming it.
 func TestNothingIsChargedForAComputerThatIsNotRunning(t *testing.T) {
-	card := Card(context.Background())
+	card := Current(context.Background())
 	for _, name := range []string{"computer.paused", "computer.created", "interfaces", "seats"} {
 		if got := rateOf(t, card, name).Micros; got != 0 {
 			t.Errorf("%s costs %d µ$, want nothing", name, got)
@@ -161,7 +161,7 @@ func TestEveryRateSaysWhatItIsPerAndWhichComponentBillsIt(t *testing.T) {
 	for _, c := range Components() {
 		byName[c.Name] = true
 	}
-	for _, r := range Card(context.Background()).Rates {
+	for _, r := range Current(context.Background()).Rates {
 		switch {
 		case r.Name == "":
 			t.Error("a rate line carries no name")
@@ -262,8 +262,8 @@ func TestTheFiveTokenTiersAreDisjoint(t *testing.T) {
 //
 // MUTATION: swap two windows, or give two the same rank, and this fails.
 func TestTheWindowsRunDearestFirst(t *testing.T) {
-	want := []string{WindowImmediate, WindowPriority, WindowLoose}
-	got := Windows()
+	want := []string{SpeedImmediate, SpeedPriority, SpeedLoose}
+	got := Speeds()
 	if len(got) != len(want) {
 		t.Fatalf("%d completion windows are published, want %d", len(got), len(want))
 	}
@@ -290,7 +290,7 @@ func TestTheWindowsRunDearestFirst(t *testing.T) {
 //
 // MUTATION: change the unit string and this fails.
 func TestTheCardStatesItsUnitOnce(t *testing.T) {
-	if got := Card(context.Background()).Unit; got != "micro_usd" {
+	if got := Current(context.Background()).Unit; got != "micro_usd" {
 		t.Fatalf("the card is stated in %q, want micro_usd", got)
 	}
 }

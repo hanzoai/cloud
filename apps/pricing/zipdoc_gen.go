@@ -169,6 +169,10 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/tariff", zip.Doc{
 		Description: "Returns the platform's rate card: what a bill is made of, what each\npart costs, and the completion windows a request may ask for.\n\nFOUR COMPONENTS, and every charge is one of them — model inference, computer,\nweb tools and media generation. Two are quoted before they run, so an agent is\nrefused before it breaches its budget; two are booked from what they used,\nbecause neither a provider's charge nor a render's cost is knowable in advance.\n\nEVERY AMOUNT IS INTEGER MICRO-USD (1 USD = 1,000,000), stated once in `unit`,\nand each rate says what one unit of it is in `per`. The compute rates are per\nHOUR because that is the unit a span is priced in — rate × seconds / 3600 — and\nbecause a GiB-second is four and a half micro-USD, which no integer holds.\n\nThe rates are the ones the ledger books: each is resolved through the same\nauthority the metering path reads, falling back to the same compiled floor. A\nrate of zero is a price and not an absence — a paused computer, a computer's\ncreation, the interfaces and a seat all cost nothing by design.",
 		Fields: map[string]string{
+			"Card.components":     "Components are the four things a bill is made of.",
+			"Card.rates":          "Rates are the priced lines, each in micro-USD per its own unit.",
+			"Card.unit":           "Unit is the unit every amount on this card is stated in.",
+			"Card.windows":        "Speeds are the completion speeds, dearest first.",
 			"Component.basis":     "Basis is what it is metered by, in the fewest words that are true.",
 			"Component.name":      "Name is the component's name on the spend breakdown.",
 			"Component.note":      "Note is what the component means, in one sentence.",
@@ -181,13 +185,9 @@ func init() {
 			"Rate.per":            "Per names one unit, so a reader never has to guess what the number is per.",
 			"Rate.rate_micro_usd": "Micros is the price of ONE unit, in micro-USD. It is the number the ledger\nbooks, resolved through the same authority the metering path reads.",
 			"Rate.title":          "Title is how the line reads on a price list.",
-			"Tariff.components":   "Components are the four things a bill is made of.",
-			"Tariff.rates":        "Rates are the priced lines, each in micro-USD per its own unit.",
-			"Tariff.unit":         "Unit is the unit every amount on this card is stated in.",
-			"Tariff.windows":      "Windows are the completion windows, dearest first.",
-			"Window.name":         "Name is what a request asks for.",
-			"Window.note":         "Note is what asking for this window buys.",
-			"Window.rank":         "Rank orders the windows by price, 1 being the dearest.",
+			"Speed.name":          "Name is what a request asks for.",
+			"Speed.note":          "Note is what asking for this window buys.",
+			"Speed.rank":          "Rank orders the windows by price, 1 being the dearest.",
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/tools", zip.Doc{
