@@ -4694,6 +4694,33 @@ KMS-sync machine, named by its owner-bound audience — because authz decides
 machine-ness from an empty membership set, which a machine carrying memberships
 would defeat. It is a DENIAL layered over the grant, never a second route to one.
 
+### The third fact is a KIND, and it is not a scope
+
+| Header | Predicate | Means |
+|---|---|---|
+| `X-User-IsApp` | `appPrincipal` (`auth_identity.go`) | an APPLICATION acting as itself — a client_credentials identity |
+
+An application holds NEITHER admin scope, and that is right: `PlatformSudo` needs a
+membership set no app has, and `OrgAdmin` refuses every machine because an app is
+issued for a purpose rather than handed an org's self-service surface. What it does
+carry is **one organization it cannot choose** — IAM mints an app token no
+membership set, so the org-switch admits nothing and the effective org is always
+`owner`, the application's own organization.
+
+`appPrincipal` is the fact `homeOrg`'s machine branch already turns on, named once
+so the boundary can also state it. It asks `Claims.Machine()` FIRST, so the kind and
+platform sudo are mutually exclusive by construction. An `sk-` key is deliberately
+not one: a key resolves to a PERSON'S row (`subjectOrg`), so its authority is that
+person's.
+
+A surface reads it when its act is a PURPOSE rather than a person's admin panel.
+`POST /v1/runner` is the one: `runnerOrg` admits `IsSuperAdmin || IsOrgAdmin ||
+IsApp`, takes the organization from the credential, and confines the build to the
+registry namespace (image lane) and forge owner (artifact lane) that organization
+owns. The shared build-callback token names no organization, so nothing confines it
+beyond the owned-registry allowlist — and a credential that DOES name one is read
+first, so an ambient secret cannot promote an identity out of its own tenant.
+
 **There is no `isAdmin` CLAIM.** IAM mints one into *neither* token: `Claims` in
 `iam/internal/oidc/jwt.go` has no such field, and `(*Signer).claims` is the single
 place an `Identity` becomes a claim set, so the access token and the id_token
