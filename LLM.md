@@ -40,6 +40,8 @@ source for the generated per-language SDKs.
 - `manifest/apps.go` — the app set; the host mounts a plugin per entry (the old
   `apps/apps.go:Wire()` composition root was deleted with the mega build, 22f4fc64)
 - `deps.go` / `cloud.Deps` — process-wide handles · `apps/<name>/` — every subsystem
+- `secret/` — `secret.Boot` reads a service's own secrets at boot, into memory, on
+  the ServiceAccount token; `cloud secret fetch` is the same read for a non-Go workload
 - `openapi/` — the document pipeline: the spec is a projection of the live router,
   woven into `private.yaml` (everything the fleet serves) and projected to
   `openapi.yaml` beside it (the CUSTOMER contract, which is what `GET
@@ -612,6 +614,49 @@ unstealable. No credential that lives in a cluster is unstealable from someone
 who owns that cluster; what changes is what the theft is worth. A running host
 holds the key in memory, which only SEV-SNP or TDX closes, and with no TPM
 nothing measures the code.
+
+### A service's OWN material — `secret.Boot`
+
+The third kind, and the one neither of the above covers: the handful of values a
+service needs to open its own doors — its signing key, its database credential,
+the client secret of its own machine identity. Upstream keys are egress's; the
+data-plane master is the deployment's. This is the boot fact.
+
+    values, err := secret.Boot(ctx, "cloud/prod", "DB_URL", "SIGNING_KEY")
+
+**Not a Kubernetes Secret and not an environment variable, in production.** A
+Secret is a base64 field every `kubectl get -o yaml` in the namespace reads, then
+a file anything in the pod reads again. A variable is inherited by every child
+process, printed by every crash dumper, and shipped whole by anything that
+reports the environment. The material arrives over the network instead, at boot,
+and lives in the process's own memory.
+
+**The identity is the one the platform already vouches for.** The projected
+ServiceAccount token at `HANZO_SA_TOKEN` is the assertion; IAM exchanges it for a
+bearer (RFC 7523, `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`, at
+the same `/v1/iam/oauth/token` every other grant uses); KMS answers the reads
+that bearer's owner is scoped to. Nothing new is issued to a service to let it do
+this, so there is no second credential to distribute, rotate or leak.
+
+`HANZO_IAM_URL` (default `https://hanzo.id`), `KMS_URL` (default
+`http://kms.hanzo.svc:8010`) and `HANZO_ENV` (default `prod`) are the rest of the
+contract. **Every key must resolve**: a 404 fails the whole Boot naming the key,
+because a map short one entry is a service that starts, serves, and fails at the
+first request that needed it. One login per Boot, and exactly one more after a
+401 — a second refusal is real, and retrying it is how a boot loop becomes a
+login flood against IAM.
+
+**One env fallback, and it is the laptop's.** With no token file AND
+`HANZO_DEV=1`, Boot reads the keys from the environment and logs that it did.
+Without `HANZO_DEV` an absent token is an error, never a quiet fall back — same
+shape as the two refusals above.
+
+**For a workload that is not Go**, `cloud secret fetch --path <p> --key <k> [--key
+…] --out <dir>` is the same read, delivered as one 0400 file per key. Run it as
+an init container with a `medium: Memory` emptyDir at `--out`: the values never
+touch a disk and the tmpfs dies with the pod. A key is a bare NAME — the subpath
+belongs in `--path` — which is what makes writing outside `--out` structurally
+impossible rather than a check.
 
 ## One build contract: `mk/plugin.mk`, and an app's Makefile is its name
 
