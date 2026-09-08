@@ -370,7 +370,7 @@ jobs:
   # plugin/ingress silently lost eight paths) and checks with --porcelain rather
   # than `git diff` (so a NEW app's untracked subset cannot hide).
   gate:
-    # hanzoai/ci publishes the reusable at `.hanzo/workflows/build.yml` and nowhere
+    # hanzoai/ci publishes the reusable at `.github/workflows/build.yml` and nowhere
     # else, and git.hanzo.ai resolves that path alone. Pinned at a path the ref does
     # not carry, Hanzo Git cannot construct a run at all: no row is written, so dead
     # CI here is not red, it is absent.
@@ -392,7 +392,7 @@ jobs:
     #
     #   SELECT * FROM action_run_job WHERE parent_job_id = <this job>
     #
-    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
+    uses: hanzoai/ci/.github/workflows/build.yml@v1
     with:
       # Not on a tag: the tag is minted below only after this gate passed on main
       # AND the image built AND it smoked, so a tag build re-tests a proven
