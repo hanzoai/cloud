@@ -148,8 +148,8 @@ func newAskApp(t *testing.T, ai types.AIClient, books, projects byOrg, repos byR
 	})
 
 	peer("books", "/books/figures", client.BooksFigures, books)
-	peer("projects", "/projects/figures", client.ProjectsFigures, projects)
-	servePeers(t, "books", "projects")
+	peer("project", "/projects/figures", client.ProjectsFigures, projects)
+	servePeers(t, "books", "project")
 	// git is NOT a plane peer: its figures are rolled up from the forge's own
 	// repository inventory, so the stand-in is that inventory. The org still
 	// comes from the in-flight request and anonymous is still refused, which is
