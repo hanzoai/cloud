@@ -25,6 +25,7 @@ package account
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/hanzoai/cloud/internal/environ"
 	"io"
@@ -276,39 +277,100 @@ func keyBelongsTo(k userKey, owner, user string) bool {
 // sk- half; a publishable key returns its pk- (and IAM stores no secret for it at
 // all), which is the credential a browser bundle carries.
 func (c *iamClient) mintUserKey(ctx context.Context, id, typ, scope string) (string, error) {
-	form := url.Values{"id": {id}, "type": {typ}}
-	// Sent only when there is one: an empty scope would OVERWRITE the class IAM
-	// derives for a publishable key, turning a browser key into a key that resolves
-	// to a principal.
-	if scope != "" {
-		form.Set("scope", scope)
+	owner, user, ok := strings.Cut(id, "/")
+	if !ok || owner == "" || user == "" {
+		return "", fmt.Errorf("iam mint: %q is not an owner/user id", id)
 	}
-	env, err := c.do(ctx, http.MethodPost, "/v1/iam/keys/mint", form, nil)
+	name := keyRowName(user, typ)
+
+	// The key's CLASS rides as its scope. `publish` is the one IAM reads to mean
+	// "mint a pk- half and no secret at all"; a confidential key carries the reach
+	// the caller computed, and an empty scope stays empty rather than overwriting
+	// the class IAM derives.
+	row := map[string]string{"owner": owner, "name": name, "user": id}
+	switch {
+	case typ == keyTypePublishable:
+		row["scope"] = cloud.GrantClassPublish
+	case scope != "":
+		row["scope"] = scope
+	}
+	payload, err := json.Marshal(row)
+	if err != nil {
+		return "", err
+	}
+	// ROTATE, because that is what this call has always meant: "(re)generates the
+	// user's key of typ". IAM's create refuses a name already held rather than
+	// silently invalidating a key in production, so a second mint asks first and
+	// clears the old row ONLY when that refusal says the name is taken. Deleting
+	// up front would destroy a live credential even when the create was going to
+	// fail for some other reason.
+	env, err := c.do(ctx, http.MethodPost, "/v1/iam/keys", nil, payload)
+	if errors.Is(err, iam.ErrConflict) {
+		if derr := c.deleteKeyRow(ctx, owner, name); derr != nil {
+			return "", derr
+		}
+		env, err = c.do(ctx, http.MethodPost, "/v1/iam/keys", nil, payload)
+	}
 	if err != nil {
 		return "", err
 	}
 	var out struct {
-		AccessKey string `json:"accessKey"`
+		AccessKey    string `json:"accessKey"`
+		AccessSecret string `json:"accessSecret"`
 	}
 	if err := json.Unmarshal(env.Data, &out); err != nil {
-		return "", fmt.Errorf("iam mint-user-keys: decode: %w", err)
+		return "", fmt.Errorf("iam create key: decode: %w", err)
 	}
-	if out.AccessKey == "" {
-		return "", fmt.Errorf("iam did not return an access key")
+
+	// WHICH HALF IS THE CREDENTIAL DEPENDS ON THE TYPE, and reading the wrong
+	// field is how a caller asking for a browser key gets a session-equivalent
+	// secret. IAM mints a pk- accessKey on EVERY row and adds an sk- accessSecret
+	// only for a confidential one; the secret is returned exactly once, here.
+	got := out.AccessKey
+	if typ == keyTypePublishable {
+		// A publish-scoped row is minted with NO secret at all — that is the whole
+		// point of the class, "so there is no secret to leak". One that comes back
+		// carrying a confidential half means IAM did not honour the scope, and the
+		// row now sitting in its table is a session-equivalent credential under a
+		// name its holder believes is publishable. Refuse loudly rather than hand
+		// back the pk- and leave that behind: the deploy order is then safe instead
+		// of assumed.
+		if out.AccessSecret != "" {
+			return "", fmt.Errorf("iam minted a secret half for a %s key; it may not honour the publish scope yet", typ)
+		}
+	} else {
+		got = out.AccessSecret
 	}
+	if got == "" {
+		return "", fmt.Errorf("iam did not return a %s key", typ)
+	}
+
 	// The PREFIX must match the type that was asked for. A key's prefix is what every
 	// downstream reader dispatches on — a pk- resolves to an org, an sk- resolves to
 	// the USER — so a mismatch is not a labelling nit, it is a session-equivalent
 	// secret handed to a caller who asked for something to put in a browser bundle.
-	//
-	// It is reachable without anyone making a mistake: an IAM that predates the type
-	// field ignores an unknown query parameter and answers with the sk- it always
-	// minted. So this refuses rather than trusting deploy order, and the failure is a
-	// 502 the caller sees instead of a credential in the wrong place.
-	if want := prefixForType(typ); !strings.HasPrefix(out.AccessKey, want) {
-		return "", fmt.Errorf("iam returned a key that is not %s (expected the %s prefix); it may not support the type field yet", typ, want)
+	if want := prefixForType(typ); !strings.HasPrefix(got, want) {
+		return "", fmt.Errorf("iam returned a key that is not %s (expected the %s prefix)", typ, want)
 	}
-	return out.AccessKey, nil
+	return got, nil
+}
+
+// keyRowName addresses a user's key of one type. IAM keys a row by (owner, name),
+// so the two halves a person holds need two names or the second mint collides
+// with the first — which is exactly what "one key per user" meant when the verb
+// was /mint and the row was keyed on the user alone.
+func keyRowName(user, typ string) string {
+	return user + "-" + typ
+}
+
+// deleteKeyRow removes one key row, treating "there was none" as success. Only a
+// real failure stops a rotate.
+func (c *iamClient) deleteKeyRow(ctx context.Context, owner, name string) error {
+	_, err := c.do(ctx, http.MethodDelete, "/v1/iam/keys/"+url.PathEscape(owner)+"/"+url.PathEscape(name), nil, nil)
+	if err == nil || errors.Is(err, iam.ErrNotFound) {
+		return nil
+	}
+	return err
 }
 
 // prefixForType is the one place the wire type and the credential prefix are tied
@@ -323,8 +385,11 @@ func prefixForType(typ string) string {
 // revokeUserKey clears the user's key of `typ` (immediate revoke; the gateway key
 // cache lapses within ~5m). Scoped by the same field the mint takes.
 func (c *iamClient) revokeUserKey(ctx context.Context, id, typ string) error {
-	_, err := c.do(ctx, http.MethodPost, "/v1/iam/keys/revoke", url.Values{"id": {id}, "type": {typ}}, nil)
-	return err
+	owner, user, ok := strings.Cut(id, "/")
+	if !ok || owner == "" || user == "" {
+		return fmt.Errorf("iam revoke: %q is not an owner/user id", id)
+	}
+	return c.deleteKeyRow(ctx, owner, keyRowName(user, typ))
 }
 
 // ── organizations (onboarding) ───────────────────────────────────────────────

@@ -152,37 +152,75 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		ok(w, map[string]any{"keys": rows})
 	})
 
-	mux.HandleFunc("/v1/iam/keys/mint", func(w http.ResponseWriter, r *http.Request) {
+	// CREATE — the shape the REAL IAM serves. It was POST /v1/iam/keys/mint with
+	// the id and the type in the QUERY; IAM's key surface is noun-plural CRUD and
+	// has neither that path nor /revoke. This fake implemented the retired verbs,
+	// so every test here passed green while production 404'd on every mint — a
+	// double that answers a route the real service dropped is not a test, it is a
+	// second implementation nobody runs.
+	//
+	// IAM keys a row by (owner, name) and mints a pk- accessKey on EVERY row; the
+	// confidential sk- comes back in accessSecret, once, and only when the scope
+	// is not the publish class.
+	mux.HandleFunc("POST /v1/iam/keys", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
-		id, typ := r.URL.Query().Get("id"), fakeKeyType(r)
-		f.mu.Lock()
-		defer f.mu.Unlock()
+		var in struct{ Owner, Name, User, Scope string }
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		typ := "secret"
+		if in.Scope == "publish" {
+			typ = "publishable"
+		}
 		if f.ignoreKeyType {
 			typ = "secret"
 		}
-		f.mintedFor = append(f.mintedFor, id)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.mintedFor = append(f.mintedFor, in.User)
 		f.mintedTypes = append(f.mintedTypes, typ)
 		if f.failMintKey {
 			bad(w, "mint failed")
 			return
 		}
-		// The prefix IS the type: a publishable key is a pk-, a secret one an sk-.
-		// Nothing downstream may have to ask which it got.
-		key := "sk-" + strings.ReplaceAll(id, "/", "-") + "-SECRET"
-		if typ == "publishable" {
-			key = "pk-" + strings.ReplaceAll(id, "/", "-") + "-PUBLIC"
+		if _, taken := f.keys[keyRef{in.User, typ}]; taken {
+			// 409, which is what IAM answers: "a name already used in your
+			// organization is refused rather than reissued, so creating twice never
+			// silently invalidates a key that is in production." A rotate reads this
+			// and clears the row before asking again.
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"status":"error","msg":"key already exists"}`))
+			return
 		}
-		f.keys[keyRef{id, typ}] = key
-		ok(w, map[string]any{"accessKey": key})
+		pub := "pk-" + strings.ReplaceAll(in.User, "/", "-") + "-PUBLIC"
+		out := map[string]any{"owner": in.Owner, "name": in.Name, "user": in.User, "accessKey": pub}
+		key := pub
+		if typ != "publishable" {
+			key = "sk-" + strings.ReplaceAll(in.User, "/", "-") + "-SECRET"
+			out["accessSecret"] = key
+		}
+		f.keys[keyRef{in.User, typ}] = key
+		ok(w, out)
 	})
 
-	mux.HandleFunc("/v1/iam/keys/revoke", func(w http.ResponseWriter, r *http.Request) {
+	// DELETE /v1/iam/keys/{owner}/{name} — and 404 when the row is not there, so a
+	// rotate that clears a key which was never minted takes the same path a real
+	// first mint does.
+	mux.HandleFunc("DELETE /v1/iam/keys/{owner}/{name}", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
-		id, typ := r.URL.Query().Get("id"), fakeKeyType(r)
+		owner, name := r.PathValue("owner"), r.PathValue("name")
+		user, typ, _ := strings.Cut(name, "-")
+		id := owner + "/" + user
 		f.mu.Lock()
 		defer f.mu.Unlock()
+		// Recorded when the request ARRIVES, not when it finds a row. The seam gate
+		// asks whether the write reached IAM at all, and a delete of a key that was
+		// never minted reaches it exactly as one that was.
 		f.revokedFor = append(f.revokedFor, id)
 		f.revokedType = append(f.revokedType, typ)
+		if _, held := f.keys[keyRef{id, typ}]; !held {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"status":"error","msg":"key not found"}`))
+			return
+		}
 		delete(f.keys, keyRef{id, typ})
 		ok(w, map[string]any{})
 	})
