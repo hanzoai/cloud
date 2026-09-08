@@ -1,14 +1,21 @@
 # bench
 
-Four measurements, one per claim a competitor makes about us.
+Five measurements, one per claim a competitor makes about us.
 
-Every number below was taken on an M-series laptop in September 2026, and every
+Every number below was taken on an M-series laptop on 2026-09-07, and every
 script here re-runs to produce it. Where we lose, the row says so — a benchmark
 suite that only contains wins is a brochure.
+
+Timings are the median of the pass; memory is deterministic and has no range.
+This is the same pass the two papers cite, and they carry the ranges:
+`hanzoai/papers` `hanzo-dormant-agents` and `hanzo-multi-hop-retrieval`. One set
+of numbers, one run behind them — if you re-run and get different figures,
+update both.
 
 ```
 node fleet/fleet.mjs /tmp/fleet     # 1M dormant agents: bytes, write rate, resume
 node fleet/cost.mjs                 # the same, as a monthly bill
+cd goroutine && go build -o /tmp/g . && /tmp/g   # agent as goroutine; goja, gpython, wasm
 node brain/brain.mjs                # LoCoMo recall, single-hop and multi-hop
 node sandbox/sandbox.mjs            # cold start: isolate vs container vs pooled
 node pricing/pricing.mjs            # what a call costs, and what it could sell for
@@ -23,8 +30,8 @@ node pricing/pricing.mjs            # what a call costs, and what it could sell 
 | state per dormant agent | **477 bytes** | ~1 MB *(their assumption)* |
 | 1M agents on disk | **455 MB** | ~977 GB |
 | storage at list | **$0.01/mo** | $22/mo |
-| write | 310,270 agents/s | — |
-| resume | **0.031 ms** in-process | — |
+| write | 309,789 agents/s | — |
+| resume | **0.034 ms** in-process | — |
 
 Their row is marked *"MODELLED, NEVER BILLED."* Ours is a file you can `ls`.
 2,198× is the distance between an assumption and a measurement.
@@ -33,18 +40,39 @@ Their row is marked *"MODELLED, NEVER BILLED."* Ours is a file you can `ls`.
 
 | | measured here | published |
 |---|---|---|
-| V8 context | **0.16 ms** | Naïve, isolated-vm: 2.79 ms |
-| container, cold | **149.6 ms** | E2B <200 ms · Modal ~1 s · Cloudflare 1–3 s |
-| container, pooled | **35.8 ms** | — |
+| V8 context | **0.15 ms** | Naïve, isolated-vm: 2.79 ms |
+| container, cold | **150.8 ms** | E2B <200 ms · Modal ~1 s · Cloudflare 1–3 s |
+| container, pooled | **37.5 ms** | — |
 
 Two honest readings. A plain V8 context is **17× faster than their isolate
 number**, so an isolate tier would beat the row they lead with. And our cold
 container already beats E2B, Modal and Cloudflare, while a pooled one answers in
-35.8 ms.
+37.5 ms.
 
 But an isolate runs JavaScript. It cannot run pytest, pip, cargo, or a shell —
 which is what a coding agent was asked to do. The two rows are different
 primitives and the comparison is per workload, not per millisecond.
+
+### Agent as goroutine — the execution half of the fleet claim
+
+A dormant agent is a row. An agent that is *running* still has to hold its
+place, and that is a goroutine rather than a container.
+
+| | measured here | published |
+|---|---|---|
+| per live agent | **601 bytes** of heap | Naïve, isolated-vm: 1.2 MB |
+| spawn | **187 ns** | 2.79 ms cold start |
+| wake 1M | 114 ms (114 ns each) | — |
+| wazero (WASM) | 8.9 µs instantiate, 23 ns call | — |
+| goja (JavaScript) | 2.7 µs per VM, 818 ns warm eval | — |
+| gpython (Python) | 29.9 µs per context | — |
+
+601 bytes against a 128 MB container floor is ~223,000×. Memory was identical
+on all five runs; the timings are medians. Benchmark a **built binary** — under
+`go run` the compile is counted and spawn reads 253 ns instead of 187 ns.
+
+WASM is not one language: CPython, QuickJS for TypeScript, Rust and Go all
+target it. A V8 isolate is JavaScript only.
 
 ### Agent Brain — we lose today, and the gap is legible
 
