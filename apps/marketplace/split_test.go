@@ -96,7 +96,7 @@ func runChild(role string) int {
 	extra := ""
 
 	switch role {
-	case "wallets":
+	case "wallet":
 		k, err := kms.New(kms.Config{DataDir: dir, MasterKeyB64: os.Getenv("CLOUD_SPLIT_KMS")}, log)
 		if err != nil {
 			return childFail("kms.New: %v", err)
@@ -280,7 +280,7 @@ func splitFleet(t *testing.T) *fleet {
 
 	kmsKey := make([]byte, 32)
 	_, _ = rand.Read(kmsKey)
-	f.wallet = f.start("wallets", "CLOUD_SPLIT_KMS="+base64.StdEncoding.EncodeToString(kmsKey))
+	f.wallet = f.start("wallet", "CLOUD_SPLIT_KMS="+base64.StdEncoding.EncodeToString(kmsKey))
 	f.start("commerce")
 	f.start("marketplace", "CLOUD_SPLIT_WALLET="+f.wallet)
 	f.start("x402")
