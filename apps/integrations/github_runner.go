@@ -74,6 +74,29 @@ func jitConfig(ctx context.Context, token, owner, name string, labels []string) 
 	return out.JIT, nil
 }
 
+// ours reports whether a queued GitHub job asked for this fleet.
+//
+// GITHUB HAS RUNNERS OF ITS OWN AND THE FORGE DOES NOT. Every forge job is
+// ours by construction; a GitHub job naming ubuntu-latest is answered by
+// GitHub, and minting for it would put a pod on the cluster that nothing ever
+// claims. So a runner is minted only for a job that named the fleet: the
+// platform-and-architecture labels the hosts advertise, or the self-hosted
+// label that means the same thing.
+//
+// Only Linux is served here, because this mints a Kubernetes pod. macOS and
+// Windows are real hosts registered with the forge, not pods, so a job asking
+// for them is not something this path can answer.
+func ours(labels []string) bool {
+	for _, l := range labels {
+		l = strings.ToLower(l)
+		if l == "self-hosted" ||
+			strings.HasSuffix(l, "linux-amd64") || strings.HasSuffix(l, "linux-arm64") {
+			return true
+		}
+	}
+	return false
+}
+
 // handleGitHubJobEvent turns a queued job into a runner; every other action
 // is answered 200 and ignored, so GitHub does not retry.
 func handleGitHubJobEvent(s *cloud.Service[state], c *zip.Ctx, body []byte) error {
@@ -86,6 +109,9 @@ func handleGitHubJobEvent(s *cloud.Service[state], c *zip.Ctx, body []byte) erro
 	}
 	if ev.Installation.ID == 0 {
 		return c.JSON(http.StatusOK, map[string]any{"ignored": "no installation"})
+	}
+	if !ours(ev.Job.Labels) {
+		return c.JSON(http.StatusOK, map[string]any{"ignored": "not this fleet", "labels": ev.Job.Labels})
 	}
 	org, ok := OrgForExternalID("github", strconv.FormatInt(ev.Installation.ID, 10))
 	if !ok {
