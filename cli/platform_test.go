@@ -127,11 +127,14 @@ func TestPlatformRedeployNotOK(t *testing.T) {
 
 func TestPlatformEnqueueBuild(t *testing.T) {
 	p, done := platformStub(t, "svc-tok", func(w http.ResponseWriter, r *http.Request) {
-		// The build endpoint sends the caller's own token, not the platform token.
+		// The build endpoint sends the CALLER's token — the one `hanzo login` mints —
+		// rather than the platform's service token.
 		if got := r.Header.Get("Authorization"); got != "Bearer build-tok" {
-			t.Errorf("build auth header = %q (must use build token)", got)
+			t.Errorf("build auth header = %q (must use the caller's token)", got)
 		}
-		if r.URL.Path != "/v1/platform/runner" {
+		// /v1/build is served by the cloud binary, not the platform app, which is
+		// why the runner client is built against CloudURL.
+		if r.URL.Path != "/v1/build" {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		body, _ := io.ReadAll(r.Body)
@@ -157,7 +160,7 @@ func TestPlatformEnqueueBuild(t *testing.T) {
 		t.Fatalf("EnqueueBuild: %v %+v", err, job)
 	}
 	if _, err := p.EnqueueBuild(context.Background(), BuildReq{Repo: "r", SHA: "s", Image: "i"}, ""); err == nil {
-		t.Fatalf("expected error with empty build token")
+		t.Fatalf("expected error with no caller token")
 	}
 }
 

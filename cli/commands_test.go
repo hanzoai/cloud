@@ -237,11 +237,15 @@ func TestBuildCommandValidation(t *testing.T) {
 
 func TestBuildCommand(t *testing.T) {
 	withCloud(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/platform/runner" {
+		// /v1/build is the cloud binary's route, not the platform app's.
+		if r.URL.Path != "/v1/build" {
 			t.Errorf("path = %s", r.URL.Path)
 		}
-		if got := r.Header.Get("Authorization"); got != "Bearer bt" {
-			t.Errorf("build auth = %q", got)
+		// The IAM login is the ONE identity that authorizes a build, and the org it
+		// is attributed to is read off it. The purpose-minted build token that used
+		// to ride ahead of it is gone on both sides.
+		if got := r.Header.Get("Authorization"); got != "Bearer iam-jwt" {
+			t.Errorf("build auth = %q (must be the IAM login)", got)
 		}
 		// --org selects what the CLI reads and renders; it does not travel on a
 		// build. A build belongs to the organization its credential carries, so
@@ -255,7 +259,8 @@ func TestBuildCommand(t *testing.T) {
 		w.WriteHeader(202)
 		_ = json.NewEncoder(w).Encode(BuildJob{BuildJobID: "bj-9", Status: "queued", Image: "ghcr.io/hanzoai/pricing:t"})
 	})
-	out, err := runRoot(t, "", "--org", "acme", "build", "hanzoai/pricing", "--sha", "abc", "--image", "ghcr.io/hanzoai/pricing:t", "--build-token", "bt")
+	t.Setenv("HANZO_TOKEN", "iam-jwt")
+	out, err := runRoot(t, "", "--org", "acme", "build", "hanzoai/pricing", "--sha", "abc", "--image", "ghcr.io/hanzoai/pricing:t")
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

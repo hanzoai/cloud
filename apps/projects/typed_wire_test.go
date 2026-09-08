@@ -136,6 +136,13 @@ var untypedByDesign = map[string]string{
 		"path is c.JSON(out).",
 	"POST /v1/project/{slug}/deploy": "takes the built artifact as its raw body — the bytes are the " +
 		"deploy — so a JSON In would refuse every real publish.",
+
+	// The SAME two routes at the plural spelling, which manifest/apps.go still
+	// lists beside the singular so the rename does not break a caller mid-flight.
+	// One route, two addresses: the wire fact is the singular entry's, and both
+	// entries go when the alias does.
+	"GET /v1/projects/{slug}/shot":    "the /v1/project alias of the screenshot bytes; same wire, same reason.",
+	"POST /v1/projects/{slug}/deploy": "the /v1/project alias of the raw-body deploy; same wire, same reason.",
 }
 
 // TestEveryRouteIsTypedOrNamed requires the two ledgers to SUM to the served
