@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -87,6 +88,13 @@ func exposeJob() {
 				Labels: in.Labels, URL: in.URL, Token: in.Token,
 			})
 			if err != nil {
+				// A full cluster is a RETRY, not a fault: the provider redelivers a
+				// queued job whose runner never registered, so 429 is the honest
+				// answer and the build is not lost. Every other failure here is the
+				// caller's or ours and keeps its own status.
+				if errors.Is(err, errTooManyRunners) {
+					return nil, zip.Errorf(429, "platform job: %v", err)
+				}
 				return nil, err
 			}
 			return &client.Launched{Job: name}, nil
@@ -107,6 +115,18 @@ func launch(s *cloud.Service[state], ctx context.Context, ev cloud.JobEvent) (st
 	}
 	ns, err := ownNamespace()
 	if err != nil {
+		return "", err
+	}
+	// One delivery becomes one runner, and a runner is a kata microVM whose guest
+	// RAM comes out of this node's /dev/shm — so a busy afternoon on a big repo
+	// was seven runners for one repository and twelve across the cluster, 9-10 GB
+	// apiece, until the kernel began killing processes. Nothing bounded it: the
+	// build path counts its Jobs before starting another and this path did not.
+	//
+	// Refusing is safe here in a way it would not be for a build: the provider
+	// redelivers a queued job whose runner never registered, so declining costs a
+	// redelivery rather than a lost build.
+	if err := k.admitRunner(ctx, ns); err != nil {
 		return "", err
 	}
 	owner, repo, ok := strings.Cut(ev.Repo, "/")

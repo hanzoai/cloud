@@ -363,6 +363,7 @@ type resourceLimits struct {
 	maxStorageGB    int    // per-app persistent volume ceiling, in GiB
 	maxBuilds       int    // concurrent build Jobs per org (shared build ns)
 	maxDeploys      int    // concurrent in-flight SYNCHRONOUS image deploys per org (L1)
+	maxRunners      int    // concurrent runner Jobs, CLUSTER-wide (job.go)
 	quotaCPU        string // ResourceQuota: total requests.cpu / limits.cpu
 	quotaMemory     string // ResourceQuota: total requests.memory / limits.memory
 	quotaPods       string // ResourceQuota: total pods
@@ -384,6 +385,7 @@ func newResourceLimits() resourceLimits {
 		maxStorageGB:    atoiDefault(environ.Or("CLOUD_PLATFORM_MAX_STORAGE_GB", ""), defaultMaxStorageGB),
 		maxBuilds:       atoiDefault(environ.Or("CLOUD_PLATFORM_MAX_CONCURRENT_BUILDS", ""), defaultMaxBuilds),
 		maxDeploys:      atoiDefault(environ.Or("CLOUD_PLATFORM_MAX_CONCURRENT_DEPLOYS", ""), defaultMaxDeploys),
+		maxRunners:      atoiDefault(environ.Or("CLOUD_PLATFORM_MAX_CONCURRENT_RUNNERS", ""), defaultMaxRunners),
 		quotaCPU:        environ.Or("CLOUD_PLATFORM_QUOTA_CPU", "20"),
 		quotaMemory:     environ.Or("CLOUD_PLATFORM_QUOTA_MEMORY", "40Gi"),
 		quotaPods:       environ.Or("CLOUD_PLATFORM_QUOTA_PODS", "50"),
@@ -409,6 +411,14 @@ const (
 	// otherwise let one org pile up in waitForTenantRBAC's ~45s wait. Fail-secure:
 	// an unset ceiling falls back here, never to zero or unlimited.
 	defaultMaxDeploys = 8
+	// defaultMaxRunners bounds concurrent runner Jobs across the WHOLE cluster,
+	// not per org: a runner is a kata microVM whose guest RAM is backed by the
+	// node's /dev/shm, so what it exhausts is the node, and one tenant's fair
+	// share is not the constraint. Twelve ran at once here, each holding 9-10 GB,
+	// and the box began killing processes. Six leaves room for the fleet beside
+	// them. It is a REFUSAL, not a queue — the provider redelivers a job whose
+	// runner never registered, so declining is a retry and not a lost build.
+	defaultMaxRunners = 6
 	// defaultMaxStorageGB bounds one app's volume. Unlike replicas, storage is not
 	// reclaimed when the app stops — a claim keeps costing until someone deletes
 	// it — so the ceiling exists to bound spend, not just scheduling.
@@ -466,6 +476,16 @@ func (r resourceLimits) maxConcurrentBuilds() int {
 // maxConcurrentDeploys is the per-org in-flight SYNCHRONOUS image-deploy ceiling
 // (L1), falling back to the safe default when unset (fail-secure). It mirrors
 // maxConcurrentBuilds for the image path, which has no build Job to count.
+// maxConcurrentRunners is the CLUSTER-wide ceiling on live runner Jobs, falling
+// back to the safe default when unset (fail-secure), exactly as the build and
+// deploy ceilings do.
+func (r resourceLimits) maxConcurrentRunners() int {
+	if r.maxRunners <= 0 {
+		return defaultMaxRunners
+	}
+	return r.maxRunners
+}
+
 func (r resourceLimits) maxConcurrentDeploys() int {
 	if r.maxDeploys <= 0 {
 		return defaultMaxDeploys

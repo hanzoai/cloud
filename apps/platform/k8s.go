@@ -118,6 +118,14 @@ const tenantPullSecretName = "ghcr-pull"
 // DoS). The deploy path maps it to HTTP 429.
 var errTooManyBuilds = errors.New("platform: too many concurrent builds for this org")
 
+// errTooManyRunners is returned by admitRunner when the CLUSTER already holds
+// the maximum number of live runner Jobs. Unlike builds this is not per org: a
+// runner is a kata microVM whose guest memory comes out of the node's /dev/shm,
+// so the resource it exhausts is the node and every tenant shares it. Twelve
+// were live here at once, 9-10 GB apiece, and the kernel started killing
+// processes. The job path maps it to HTTP 429.
+var errTooManyRunners = errors.New("platform: too many concurrent runners on this cluster")
+
 // errTenantProvisioning is returned by waitForTenantRBAC when the operator has not
 // projected cloud-api's per-tenant RoleBinding (cloud-api-platform) into a
 // freshly-created namespace within the bounded wait. It is a RETRYABLE condition
@@ -1274,12 +1282,12 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 					},
 				},
 				"spec": map[string]any{
-					"restartPolicy":                "Never",
+					"restartPolicy": "Never",
 					// Builds yield. hanzo-ci sits below hanzo-infra-critical and
 					// hanzo-money-critical, so a queue of them can never push a serving
 					// workload off a node, and raising a single run's class is how one
 					// build gets moved to the front without stopping the others.
-					"priorityClassName":            "hanzo-ci",
+					"priorityClassName": "hanzo-ci",
 					// The builder runs where the ARCHITECTURE it builds for actually is. This
 					// pinned a pool name, and the only node carrying it is arm64 — so every
 					// linux/amd64 image the door produces was built under emulation on the
@@ -1523,6 +1531,42 @@ func (k *k8sClient) admitBuild(ctx context.Context, org string) error {
 		return errTooManyBuilds
 	}
 	return nil
+}
+
+// admitRunner refuses a new runner when the cluster is already at its ceiling.
+//
+// Counted just-in-time from the live Jobs rather than tracked in memory, for the
+// same reason admitBuild counts: the Jobs outlive the request that made them and
+// several replicas make them, so the only honest count is the cluster's own.
+func (k *k8sClient) admitRunner(ctx context.Context, ns string) error {
+	active, err := k.countActiveRunners(ctx, ns)
+	if err != nil {
+		return fmt.Errorf("count active runners: %w", err)
+	}
+	if active >= k.limits.maxConcurrentRunners() {
+		return errTooManyRunners
+	}
+	return nil
+}
+
+// countActiveRunners returns how many runner Jobs in ns are NOT finished. The
+// label is the one job.go stamps; each candidate's status is re-checked so a
+// completed-but-not-yet-TTL'd Job does not hold a slot.
+func (k *k8sClient) countActiveRunners(ctx context.Context, ns string) (int, error) {
+	list, err := k.dyn.Resource(jobsGVR).Namespace(ns).List(ctx, metav1.ListOptions{
+		LabelSelector: "hanzo.ai/managed-by=platform,hanzo.ai/runner",
+	})
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for i := range list.Items {
+		if jobFinished(&list.Items[i]) {
+			continue
+		}
+		n++
+	}
+	return n, nil
 }
 
 // countActiveBuilds returns how many build Jobs the org currently has that are

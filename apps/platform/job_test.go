@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -103,5 +104,40 @@ func TestLaunchRefusesWhatItCannotName(t *testing.T) {
 		if _, err := launch(s, context.Background(), ev); err == nil {
 			t.Errorf("%s: launched", name)
 		}
+	}
+}
+
+// A runner is refused once the cluster is at its ceiling.
+//
+// The failure this prevents: one delivery became one kata microVM with no bound,
+// so a busy repository put seven runners up at once and twelve across the
+// cluster, 9-10 GB of guest RAM apiece, until the kernel started killing
+// processes. The build path already counts its Jobs before starting another;
+// this one did not.
+func TestLaunchRefusesOverTheRunnerCeiling(t *testing.T) {
+	s := jobService(t)
+	ev := cloud.JobEvent{
+		Provider: "forge",
+		Org:      "hanzo",
+		Repo:     "hanzo/gui",
+		ID:       42,
+		URL:      "https://git.hanzo.ai",
+		Token:    "tok",
+		Labels:   []string{"hanzo-build-linux-amd64"},
+	}
+
+	// Fill the cluster to the ceiling, then ask for one more.
+	max := s.State.k8s.limits.maxConcurrentRunners()
+	for i := range max {
+		ev.ID = int64(100 + i)
+		if _, err := launch(s, context.Background(), ev); err != nil {
+			t.Fatalf("runner %d of %d refused early: %v", i+1, max, err)
+		}
+	}
+
+	ev.ID = 999
+	_, err := launch(s, context.Background(), ev)
+	if !errors.Is(err, errTooManyRunners) {
+		t.Fatalf("over the ceiling must refuse with errTooManyRunners, got %v", err)
 	}
 }
