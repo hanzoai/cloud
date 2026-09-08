@@ -39,14 +39,16 @@ type githubJob struct {
 	} `json:"installation"`
 }
 
-// jitConfig mints a one-job runner registration for owner/repo with the
-// installation's own token. Repository scope, because the App's permission
-// for it is the repository's administration, which every installation carries.
-func jitConfig(ctx context.Context, token, owner, repo, name string, labels []string) (string, error) {
+// jitConfig mints a one-job runner registration in owner's organization with
+// the installation's own token. Organization scope, because that is the
+// permission the App carries: organization_self_hosted_runners. The
+// repository endpoint wants a repository's administration, which the App does
+// not hold, and answered 403 to every job.
+func jitConfig(ctx context.Context, token, owner, name string, labels []string) (string, error) {
 	body, _ := json.Marshal(map[string]any{
 		"name": name, "runner_group_id": 1, "labels": labels, "work_folder": "_work",
 	})
-	u := githubAPIBase + "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo) + "/actions/runners/generate-jitconfig"
+	u := githubAPIBase + "/orgs/" + url.PathEscape(owner) + "/actions/runners/generate-jitconfig"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
 	if err != nil {
 		return "", err
@@ -61,13 +63,13 @@ func jitConfig(ctx context.Context, token, owner, repo, name string, labels []st
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("github jitconfig %s/%s: %d %s", owner, repo, resp.StatusCode, strings.TrimSpace(string(b)))
+		return "", fmt.Errorf("github jitconfig %s: %d %s", owner, resp.StatusCode, strings.TrimSpace(string(b)))
 	}
 	var out struct {
 		JIT string `json:"encoded_jit_config"`
 	}
 	if err := json.Unmarshal(b, &out); err != nil || out.JIT == "" {
-		return "", fmt.Errorf("github jitconfig %s/%s: no configuration in the answer", owner, repo)
+		return "", fmt.Errorf("github jitconfig %s: no configuration in the answer", owner)
 	}
 	return out.JIT, nil
 }
@@ -96,7 +98,7 @@ func handleGitHubJobEvent(s *cloud.Service[state], c *zip.Ctx, body []byte) erro
 		return zip.Errorf(http.StatusBadGateway, "no installation token; redeliver")
 	}
 	name := fmt.Sprintf("runner-github-%s-%d", strings.ToLower(repo), ev.Job.ID)
-	jit, err := jitConfig(c.Context(), token, owner, repo, name, ev.Job.Labels)
+	jit, err := jitConfig(c.Context(), token, owner, name, ev.Job.Labels)
 	if err != nil {
 		s.Log.Error("github job: jit config", "org", org, "repo", repo, "job", ev.Job.ID, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "GitHub refused a runner registration; redeliver")
