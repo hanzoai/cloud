@@ -268,6 +268,25 @@ var costly = func() map[string]string {
 // promise somebody has to keep re-checking. Every entry below is here because the
 // promise is the TRUE statement and Metered would be the false one.
 var freeOfVendor = map[string]string{
+	// METERED AT THE WORK, NOT THE ADDRESS. These two reach real per-call compute,
+	// and both are charged for it by the app that owns the act — before the compute,
+	// not after. knowledge/meter.go reserves the fee in afford() BEFORE the auto
+	// engine is asked, and refuses outright without PIECES_RUNNER_SECRET, so a run
+	// that is not paid for never occupies a pod. content/studio_render.go gates the
+	// org before the GPU render and answers 402 when it is out of funds or over its
+	// spend cap, debiting once the render returns.
+	//
+	// So the failure this gate names — the edge charges nothing, Billable requires no
+	// standing, and no meter downstream debits anybody — does not hold here: a meter
+	// downstream does debit, and it debits the CALLER, which is why it does not
+	// matter which binary asks. Declaring these surfaces Metered would be the wrong
+	// cure: it prices the whole surface, and the surface is storage, search and
+	// connectors that really are free. Only the piece run and the render cost, and
+	// each already carries its own price.
+	"framework:auto.hanzo.svc":       "knowledge meters the piece run in afford() before the engine is asked; free without the runner secret",
+	"framework:PIECES_RUNNER_SECRET": "the secret is what makes a piece run paid, and knowledge reserves the fee before dialling",
+	"integration:studio:8188":        "content is the sole meter for a studio render: the org is gated before the GPU compute and 402d when short",
+
 	// NOT A VENDOR. apps/kms's newAttest asks the cluster API who is on the
 	// other end of its socket, through the pod's OWN mounted service account —
 	// it identifies a peer, it does not buy anything. Outside a cluster
