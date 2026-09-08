@@ -222,7 +222,7 @@ func meterRuntime(ctx context.Context, st *state, log logger, now int64, emit fu
 			ok, err := sto.Advance(ctx, org, named[id], was, at)
 			if ok && err == nil && rate > 0 && at > was {
 				// The same span the org is billed for, on the bot's own tally.
-				if cerr := sto.Consume(ctx, org, named[id], "", "", ComponentComputer, (at-was)*rate/3600); cerr != nil {
+				if cerr := sto.Consume(ctx, org, named[id], "", "", cloud.ComponentComputer, (at-was)*rate/3600); cerr != nil {
 					log.Warn("runtime meter: bot spend not recorded", "org", org, "agent", named[id], "err", cerr)
 				}
 			}
