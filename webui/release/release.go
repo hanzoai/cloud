@@ -91,11 +91,16 @@ type bundle struct {
 // cost whatever the S3 client's own retries cost, unbounded, and boot waited:
 // measured against a dead store, 21 seconds before the process began listening.
 //
-// Nothing is lost by giving up early, because giving up is not the end of the
-// attempt — `Watch` is already running and fills the Source on its next tick.
-// The bound is therefore about STARTUP, not about the console: it decides how
-// long a process delays serving its API for a browser bundle nothing headless
-// asks for.
+// Giving up early costs only the first browser: the read path mounts on demand
+// (`ensure`), so the release lands on the first request for it instead of on the
+// way to the listener. The bound is therefore about STARTUP, not about the
+// console: it decides how long a process delays serving its API for a browser
+// bundle nothing headless asks for.
+//
+// It is load-bearing, not advisory. This process has a 300s startup probe and
+// already spends ~120s of it composing subsystems; a boot that also pulled the
+// bundle would spend ~180s more and be killed mid-mount, taking the API down
+// with a console nothing headless reads.
 const first = 2 * time.Second
 
 func Load(ctx context.Context, cfg Config, log luxlog.Logger) (*Source, error) {
@@ -162,7 +167,7 @@ func (s *Source) ensure() {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), resolveTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), mountTimeout)
 	defer cancel()
 	changed, err := s.refresh(ctx)
 	s.checked.Store(time.Now().UnixNano())
@@ -225,8 +230,20 @@ func (s *Source) Watch(ctx context.Context) {
 
 // refresh resolves the site's active release and mounts it if it moved. It
 // reports whether anything changed.
+// THE CALLER STATES THE WHOLE BUDGET, and only the RESOLVE is sub-bounded here.
+// Resolving reads one small record; mounting lists a release and downloads every
+// file in it — for this console, 1,735 objects and 93 MiB fetched one at a time,
+// about three minutes. Those are different questions and a single number cannot
+// answer both, so the caller says which it is asking: `ensure` grants a mount,
+// `Load` grants a boot's worth and takes whatever fits.
+//
+// Detaching the mount from the caller's deadline instead (WithoutCancel) gave it
+// the long budget everywhere INCLUDING boot, where the point of the boot bound is
+// that nothing may hold the listener.
 func (s *Source) refresh(ctx context.Context) (bool, error) {
-	site, err := s.resolve(ctx)
+	rctx, cancel := context.WithTimeout(ctx, resolveTimeout)
+	defer cancel()
+	site, err := s.resolve(rctx)
 	if err != nil {
 		return false, err
 	}
@@ -244,11 +261,7 @@ func (s *Source) refresh(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("console release %s: %w", site.Prefix, err)
 	}
-	// Mounting gets its own budget: the caller's context bounds the RESOLVE, and
-	// a bundle this size cannot be pulled inside that.
-	mctx, cancelMount := context.WithTimeout(context.WithoutCancel(ctx), mountTimeout)
-	defer cancelMount()
-	b, err := read(mctx, cli, site.Bucket, site.Prefix)
+	b, err := read(ctx, cli, site.Bucket, site.Prefix)
 	if err != nil {
 		return false, err
 	}

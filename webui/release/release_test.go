@@ -186,7 +186,7 @@ func TestResolveIsOrgPinnedAndNamesEveryFailure(t *testing.T) {
 	defer sites.SetFallbackResolver(nil)
 	cfg := Config{Org: "hanzo", Slug: "hanzo-console", Poll: time.Minute}
 
-	live := sites.Site{Org: "hanzo", Slug: "hanzo-console", Bucket: "b", Prefix: "hanzo/.releases/hanzo-console/rel_x", Status: "live"}
+	live := sites.Site{Org: "hanzo", Slug: "hanzo-console", Bucket: "bundles", Prefix: "hanzo/.releases/hanzo-console/rel_x", Status: "live"}
 	r := &stubResolver{site: live, found: true}
 	sites.SetFallbackResolver(r)
 
@@ -320,5 +320,66 @@ func TestEnsureCoalescesWithinTheFreshnessWindow(t *testing.T) {
 	}
 	if s.checked.Load() != before {
 		t.Error("a burst of reads inside the freshness window asked the resolver again")
+	}
+}
+
+// blockingResolver answers only when its caller gives up, so the deadline the
+// caller set is the only thing that can end a refresh.
+type blockingResolver struct{ waited time.Duration }
+
+func (r *blockingResolver) Resolve(context.Context, string) (sites.Site, bool, error) {
+	return sites.Site{}, false, errors.New("the console must never resolve unpinned")
+}
+
+func (r *blockingResolver) ResolveOrg(ctx context.Context, _, _ string) (sites.Site, bool, error) {
+	start := time.Now()
+	<-ctx.Done()
+	r.waited = time.Since(start)
+	return sites.Site{}, false, ctx.Err()
+}
+
+// TestBootIsNotHeldByAMount: the caller states the budget, and BOOT's budget is
+// the one thing that may not stretch.
+//
+// This process has a 300s startup probe and spends most of it composing
+// subsystems. Mounting a release is minutes of work — 1,735 objects fetched one
+// at a time — so a boot that waited for one would be killed mid-mount, taking
+// every /v1 route down for a browser bundle nothing headless reads.
+//
+// The store here answers nothing until the CALLER gives up, which is the shape
+// that matters: a refused connection fails fast and would pass either way. A
+// mount detached from the caller's deadline runs to the mount budget even on the
+// boot path, so this fails by taking minutes where it should take seconds.
+func TestBootIsNotHeldByAMount(t *testing.T) {
+	defer sites.SetFallbackResolver(nil)
+	sites.SetFallbackResolver(&stubResolver{
+		site:  sites.Site{Org: "hanzo", Slug: "hanzo-console", Bucket: "bundles", Prefix: "hanzo/.releases/hanzo-console/rel_x", Status: "live"},
+		found: true,
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done() // silent until the reader's deadline ends it
+	}))
+	defer srv.Close()
+
+	t.Setenv("S3_ADMIN_ENDPOINT", strings.TrimPrefix(srv.URL, "http://"))
+	t.Setenv("S3_ADMIN_ACCESS_KEY", "k")
+	t.Setenv("S3_ADMIN_SECRET_KEY", "s")
+	t.Setenv("S3_SECURE", "false")
+
+	done := make(chan time.Duration, 1)
+	go func() {
+		start := time.Now()
+		Load(context.Background(), Config{Org: "hanzo", Slug: "hanzo-console"}, luxlog.Default())
+		done <- time.Since(start)
+	}()
+
+	select {
+	case took := <-done:
+		if took > 4*first {
+			t.Errorf("Load took %s, want it bounded by first (%s) — boot inherited the mount budget", took, first)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatalf("Load still running after 30s, want it bounded by first (%s) — boot is holding the listener", first)
 	}
 }
