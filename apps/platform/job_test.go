@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -173,6 +174,45 @@ func TestRunnerNode(t *testing.T) {
 			t.Errorf("%v: %v", c.labels, err)
 		} else if arch != c.arch {
 			t.Errorf("%v: got %q, want %q", c.labels, arch, c.arch)
+		}
+	}
+}
+
+// TestRunnerNameIsAValidObjectName: a repository name is not an object name.
+//
+// `safeLabel` admits `_` on purpose — a repository may carry one — so the two
+// alphabets differ, and the Job name has to be composed in Kubernetes's. It was
+// composed in the repository's instead, which the API server refuses:
+//
+//	Job.batch "runner-forge-hanzoai_extension-3903" is invalid: metadata.name:
+//	a lowercase RFC 1123 subdomain must consist of lowercase alphanumeric
+//	characters, '-' or '.'
+//
+// The create failed, the webhook answered 500, and the forge redelivered the
+// same queued job forever — so every repository with `_` in its name could never
+// run CI at all. Three of them were stuck when this was found.
+func TestRunnerNameIsAValidObjectName(t *testing.T) {
+	// The API server's own rule for a Job name.
+	rfc1123 := regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$`)
+
+	for _, tc := range []struct{ in, want string }{
+		{"hanzoai_extension", "hanzoai-extension"},
+		{"hanzoai_universe", "hanzoai-universe"},
+		{"Console", "console"},
+		{"hanzo.ai", "hanzo.ai"},
+		{"weird__name__", "weird--name"},
+		{"_leading", "leading"},
+	} {
+		if got := dns1123(tc.in); got != tc.want {
+			t.Errorf("dns1123(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+
+	// The composed name, which is what actually reaches the API server.
+	for _, repo := range []string{"hanzoai_extension", "console", "hanzo.ai", "A_B_C"} {
+		name := truncate("runner-forge-"+dns1123(repo)+"-3903", 63)
+		if !rfc1123.MatchString(name) {
+			t.Errorf("Job name %q (repo %q) is not a valid object name", name, repo)
 		}
 	}
 }

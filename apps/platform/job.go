@@ -52,10 +52,36 @@ const (
 	runnerTries = int64(3)
 )
 
-// safeLabel is what a runner label or a repository segment may be: the same
-// alphabet a hostname allows, so nothing a provider sends reaches a shell or a
-// Job name unquoted.
+// safeLabel is what a runner label or a repository segment may be. It is an
+// INPUT guard — it keeps anything a provider sends from reaching a shell or a
+// Job name unquoted — and it deliberately admits `_`, because a repository may
+// carry one and refusing the repo is not ours to do.
+//
+// It is NOT the Kubernetes alphabet, which is the mistake the old comment here
+// invited by calling it "the same alphabet a hostname allows": a hostname has no
+// underscore, and neither does an object name. Composing a name straight from
+// this alphabet produced `runner-forge-hanzoai_extension-3903`, which the API
+// server refuses outright — so every repository with `_` in its name could never
+// launch a runner, 500'd its webhook, and had the provider redeliver the same
+// queued job forever. `dns1123` below is what bridges the two.
 var safeLabel = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+
+// dns1123 maps a segment onto the alphabet Kubernetes accepts for an object
+// name. Mapping rather than refusing, because the name is an ADDRESS this code
+// chooses, not a fact about the repository — and the job id that follows it is
+// what keeps it unique, so two repos that map alike still get distinct names.
+func dns1123(s string) string {
+	b := make([]rune, 0, len(s))
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '.':
+			b = append(b, r)
+		default:
+			b = append(b, '-')
+		}
+	}
+	return strings.Trim(string(b), "-.")
+}
 
 // runnerNode is the node architecture a job's labels ask for. A label names the
 // platform it wants -- linux-amd64, linux-arm64 -- so the architecture is read
@@ -193,7 +219,7 @@ func launch(s *cloud.Service[state], ctx context.Context, ev cloud.JobEvent) (st
 	default:
 		return "", fmt.Errorf("runner: unknown provider %q", ev.Provider)
 	}
-	name := truncate(fmt.Sprintf("runner-%s-%s-%d", ev.Provider, strings.ToLower(repo), ev.ID), 63)
+	name := truncate(fmt.Sprintf("runner-%s-%s-%d", ev.Provider, dns1123(repo), ev.ID), 63)
 	env = append(env, map[string]any{"name": "RUNNER_NAME", "value": name})
 	job := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "batch/v1",
