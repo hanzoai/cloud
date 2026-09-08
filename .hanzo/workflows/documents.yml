@@ -56,7 +56,7 @@ jobs:
   write:
     # The label the gate uses. `ubuntu-*` is not advertised to this fleet, and an
     # unmatched label does not error — the job queues until it times out.
-    runs-on: [hanzo-build-linux-amd64]
+    runs-on: [linux-amd64]
     # The sweep is ~6 minutes against the warm per-runner cache and ~50 cold, and
     # a runner that has never built this repo is the case that has to fit.
     timeout-minutes: 90
@@ -220,7 +220,7 @@ jobs:
           fi
           git -c user.name=hanzo-dev -c user.email=dev@hanzo.ai commit \
             -m 'regenerate the fleet documents from source' \
-            -m 'Written by the Documents workflow on hanzo-build-linux-amd64 — the platform the drift gate judges them on, with the RAM-backed scratch the codec requires and a checkout nothing else is editing.'
+            -m 'Written by the Documents workflow on linux-amd64 — the platform the drift gate judges them on, with the RAM-backed scratch the codec requires and a checkout nothing else is editing.'
 
           # The push is FAST-FORWARD, and that is the compare-and-swap. If main
           # moved while the sweep ran, these documents were generated from a tree
@@ -290,7 +290,7 @@ jobs:
             fi
             git -c user.name=hanzo-dev -c user.email=dev@hanzo.ai commit \
               -m 'regenerate the fleet documents from source' \
-              -m 'Written by the Documents workflow on hanzo-build-linux-amd64 — the platform the drift gate judges them on, with the RAM-backed scratch the codec requires and a checkout nothing else is editing.'
+              -m 'Written by the Documents workflow on linux-amd64 — the platform the drift gate judges them on, with the RAM-backed scratch the codec requires and a checkout nothing else is editing.'
           done
           echo "pushed $(git rev-parse --short HEAD) to main"
 
