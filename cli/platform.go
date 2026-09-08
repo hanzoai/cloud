@@ -359,5 +359,5 @@ func (p *Platform) EnqueueBuild(ctx context.Context, req BuildReq, token string)
 		return nil, fmt.Errorf("not authenticated: run `hanzo login` (an IAM login authorizes builds)")
 	}
 	out := &BuildJob{}
-	return out, p.do(ctx, http.MethodPost, "/v1/platform/runner", token, req, out)
+	return out, p.do(ctx, http.MethodPost, "/v1/build", token, req, out)
 }
