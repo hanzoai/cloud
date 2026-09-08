@@ -166,8 +166,32 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/summary", zip.Doc{
 		Description: "Returns the catalog's headline statistics — model counts by\nfamily and the provider directory. The provider sub-object is filtered to what\nthe caller's org may see, so a disabled provider's name never leaks; the\naggregate counts are the catalog's own, over everything it holds.",
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/tariff", zip.Doc{
+		Description: "Returns the platform's rate card: what a bill is made of, what each\npart costs, and the completion windows a request may ask for.\n\nFOUR COMPONENTS, and every charge is one of them — model inference, computer,\nweb tools and media generation. Two are quoted before they run, so an agent is\nrefused before it breaches its budget; two are booked from what they used,\nbecause neither a provider's charge nor a render's cost is knowable in advance.\n\nEVERY AMOUNT IS INTEGER MICRO-USD (1 USD = 1,000,000), stated once in `unit`,\nand each rate says what one unit of it is in `per`. The compute rates are per\nHOUR because that is the unit a span is priced in — rate × seconds / 3600 — and\nbecause a GiB-second is four and a half micro-USD, which no integer holds.\n\nThe rates are the ones the ledger books: each is resolved through the same\nauthority the metering path reads, falling back to the same compiled floor. A\nrate of zero is a price and not an absence — a paused computer, a computer's\ncreation, the interfaces and a seat all cost nothing by design.",
+		Fields: map[string]string{
+			"Component.basis":     "Basis is what it is metered by, in the fewest words that are true.",
+			"Component.name":      "Name is the component's name on the spend breakdown.",
+			"Component.note":      "Note is what the component means, in one sentence.",
+			"Component.quoted":    "Quoted says whether a call is priced BEFORE it runs. A quoted component can\nrefuse a call that would breach a budget; a measured one is booked from what\nit used and is bounded by the headroom under the per-task cap instead.",
+			"Component.tiers":     "Tiers are the disjoint tiers this component meters in, where it has them.",
+			"Component.title":     "Title is how it reads on a price list.",
+			"Rate.component":      "Component is which of the four this line bills under.",
+			"Rate.name":           "Name addresses the rate.",
+			"Rate.note":           "Note is what the line covers.",
+			"Rate.per":            "Per names one unit, so a reader never has to guess what the number is per.",
+			"Rate.rate_micro_usd": "Micros is the price of ONE unit, in micro-USD. It is the number the ledger\nbooks, resolved through the same authority the metering path reads.",
+			"Rate.title":          "Title is how the line reads on a price list.",
+			"Tariff.components":   "Components are the four things a bill is made of.",
+			"Tariff.rates":        "Rates are the priced lines, each in micro-USD per its own unit.",
+			"Tariff.unit":         "Unit is the unit every amount on this card is stated in.",
+			"Tariff.windows":      "Windows are the completion windows, dearest first.",
+			"Window.name":         "Name is what a request asks for.",
+			"Window.note":         "Note is what asking for this window buys.",
+			"Window.rank":         "Rank orders the windows by price, 1 being the dearest.",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/tools", zip.Doc{
-		Description: "Returns the per-use tool prices — web search, code\ninterpreter, file storage, image generation, speech-to-text and\ntext-to-speech — each with the unit it is billed by and its price in that\nunit.",
+		Description: "Returns the per-use tool prices — web search, web fetch, code\ninterpreter, file storage, image generation, speech-to-text and\ntext-to-speech — each with the unit it is billed by and its price in that\nunit.\n\nThe two WEB rows are priced from the rate card rather than from the catalog,\nbecause those are the rows the platform charges by the call and a published\nnumber that is also a charged one has exactly one home (see tariff.go). Read\nthem as integer micro-USD at /v1/pricing/tariff; the decimal here is the\ndisplay this list has always carried.",
 		Fields: map[string]string{
 			"pricingToolList.tools": "Tools are the metered tools, each an opaque object exactly as the pricing\nsource emits it — typically name, billing unit and price.",
 		},

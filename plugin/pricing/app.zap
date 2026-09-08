@@ -14,6 +14,13 @@ struct Overlay {
     UpdatedAt i64        @40
 }
 
+struct Tariff {
+    Unit       text        @0
+    Components list<bytes> @8
+    Windows    list<bytes> @16
+    Rates      list<bytes> @24
+}
+
 struct adminEnablementBoard {
     Items list<bytes> @0
 }
@@ -141,6 +148,21 @@ interface pricing {
     # the caller's org may see, so a disabled provider's name never leaks; the
     # aggregate counts are the catalog's own, over everything it holds.
     get_pricing_summary()
+    # Returns the platform's rate card: what a bill is made of, what each
+    # part costs, and the completion windows a request may ask for.
+    # FOUR COMPONENTS, and every charge is one of them — model inference, computer,
+    # web tools and media generation. Two are quoted before they run, so an agent is
+    # refused before it breaches its budget; two are booked from what they used,
+    # because neither a provider's charge nor a render's cost is knowable in advance.
+    # EVERY AMOUNT IS INTEGER MICRO-USD (1 USD = 1,000,000), stated once in `unit`,
+    # and each rate says what one unit of it is in `per`. The compute rates are per
+    # HOUR because that is the unit a span is priced in — rate × seconds / 3600 — and
+    # because a GiB-second is four and a half micro-USD, which no integer holds.
+    # The rates are the ones the ledger books: each is resolved through the same
+    # authority the metering path reads, falling back to the same compiled floor. A
+    # rate of zero is a price and not an absence — a paused computer, a computer's
+    # creation, the interfaces and a seat all cost nothing by design.
+    get_pricing_tariff() returns (rep: Tariff)
     # Turns one model off, into beta for named orgs, or generally available.
     # Sets one model's availability overlay — and the price overrides applied on top
     # of the catalog — then answers the new effective overlay, so a console needs no
@@ -196,7 +218,7 @@ interface pricing {
 }
 
 # ---------------------------------------------------------------------
-# 18 op(s) here. What follows is what this schema does not carry.
+# 19 op(s) here. What follows is what this schema does not carry.
 #
 # dropped (2) — the value does not cross, and nothing fails:
 #   modelPatchIn.overlayPatch  pricing.overlayPatch  (promoted, not carried)
@@ -223,7 +245,10 @@ interface pricing {
 #   get_pricing_subscriptions  pricingPlanList  pricing.pricingPlanList  (reaches one)
 #   get_pricing_tools  pricingToolList.Tools  []pricing.pricingBlob  (no wire form)
 #
-# opaque (3) — crosses, arrives without its name:
+# opaque (6) — crosses, arrives without its name:
+#   Tariff.Components  cloud.Component (list element)
+#   Tariff.Rates  cloud.Rate (list element)
+#   Tariff.Windows  cloud.Window (list element)
 #   adminEnablementBoard.Items  pricing.adminEnablementItem (list element)
 #   enablementBoard.Betas  pricing.userEnablementItem (list element)
 #   enablementBoard.Items  pricing.userEnablementItem (list element)

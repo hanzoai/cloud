@@ -232,7 +232,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	logger.Info("pricing mounted",
 		"prefix", "/v1/pricing",
-		"section_routes", 14, // the fixed plans/infra/tools/gpu/policy sections
+		"section_routes", 16, // the fixed plans/infra/tools/gpu/policy sections
+		"card_routes", 1, // the rate card, assembled in Go from the charged floors
 		"gated_routes", 6, // models, free, featured, providers, summary, model/:name
 		"admin_routes", 3, // GET /v1/admin/pricing/catalog + PATCH models/* + PATCH providers/:name
 		"overlay_db", "catalog", // the subsystem; build.go already logs the data dir
@@ -527,6 +528,12 @@ func (o ops) catalog(ctx context.Context, _ *pricingNoInput) (*pricingBlob, erro
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "pricing catalog shape not recognised")
 	}
+	// The rate card rides on the whole document as well as at its own address:
+	// this is what the marketing build syncs, and a rate it cannot read here is a
+	// rate it would end up typing. It is written BEFORE the gate because the card
+	// carries no model or provider identity — there is nothing in it to hide from
+	// an org, and a gate that walked it would only be able to damage it.
+	priceCard(ctx, data)
 	if cat == nil {
 		return &data, nil
 	}

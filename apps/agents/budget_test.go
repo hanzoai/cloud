@@ -145,10 +145,10 @@ func TestACallUnderTheCapProceedsAndIsMetered(t *testing.T) {
 	if sp.RemainingMicroUSD != 10_000_000-want {
 		t.Fatalf("remaining want %d, got %d", 10_000_000-want, sp.RemainingMicroUSD)
 	}
-	if sp.ByComponent[ComponentModel] != want {
+	if sp.ByComponent[cloud.ComponentModel] != want {
 		t.Fatalf("model component want %d, got %v", want, sp.ByComponent)
 	}
-	if _, has := sp.ByComponent[ComponentComputer]; has {
+	if _, has := sp.ByComponent[cloud.ComponentComputer]; has {
 		t.Fatalf("a component with no spend must be absent, got %v", sp.ByComponent)
 	}
 }
@@ -176,7 +176,7 @@ func TestThePeriodResets(t *testing.T) {
 	// 900 of 1,000 spent in a window that has since closed: a quote of 500 fits
 	// the NEW window, and the old spend does not follow it in.
 	st := &state{}
-	if err := st.afford(ctx, sto, &a, &runTally{ID: "r"}, nil, quote{Micros: 500, Component: ComponentModel}); err != nil {
+	if err := st.afford(ctx, sto, &a, &runTally{ID: "r"}, nil, quote{Micros: 500, Component: cloud.ComponentModel}); err != nil {
 		t.Fatalf("a fresh window must admit the call, got %v", err)
 	}
 	if a.ConsumedMicroUSD != 0 || a.PeriodStartedAt != periodStart(time.Now(), PeriodDay) {
@@ -190,8 +190,8 @@ func TestThePeriodResets(t *testing.T) {
 		t.Fatalf("the store must hold the reset too, got %d", got.ConsumedMicroUSD)
 	}
 	// The same window, now 900 spent again: 500 more is refused.
-	st.settle(ctx, sto, &a, &runTally{ID: "r"}, nil, ComponentModel, 900)
-	if err := st.afford(ctx, sto, &a, &runTally{ID: "r"}, nil, quote{Micros: 500, Component: ComponentModel}); !isBudgetRefusal(err) {
+	st.settle(ctx, sto, &a, &runTally{ID: "r"}, nil, cloud.ComponentModel, 900)
+	if err := st.afford(ctx, sto, &a, &runTally{ID: "r"}, nil, quote{Micros: 500, Component: cloud.ComponentModel}); !isBudgetRefusal(err) {
 		t.Fatalf("over the cap in the current window must refuse, got %v", err)
 	}
 }
@@ -224,7 +224,7 @@ func TestSessionBudgetRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sto.Consume(context.Background(), "acme", "worker", "", id, ComponentModel, 60); err != nil {
+	if err := sto.Consume(context.Background(), "acme", "worker", "", id, cloud.ComponentModel, 60); err != nil {
 		t.Fatal(err)
 	}
 	if code, out := set(id, map[string]any{"budget_micro_usd": 60}); code != http.StatusBadRequest {
@@ -274,7 +274,7 @@ func TestASessionPausesAtItsCapAndResumesWhenRaised(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := &mounted.State
-	err = st.afford(ctx, sto, &a, &runTally{ID: "r"}, &sess, quote{Micros: 20, Component: ComponentModel})
+	err = st.afford(ctx, sto, &a, &runTally{ID: "r"}, &sess, quote{Micros: 20, Component: cloud.ComponentModel})
 	if !isBudgetRefusal(err) || !strings.Contains(err.Error(), "session") {
 		t.Fatalf("over the session cap must refuse for the session, got %v", err)
 	}

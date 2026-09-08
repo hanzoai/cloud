@@ -129,6 +129,9 @@ func mountSections(zapp *zip.App, o ops) {
 	zip.Get(zapp, "/v1/pricing/gpu", o.gpu)
 	zip.Get(zapp, "/v1/pricing/datastore", o.datastore)
 	zip.Get(zapp, "/v1/pricing/services", o.services)
+	// The rate card is assembled in Go from the charged floors rather than read
+	// from the bundle, so it is not a sectionOf — see tariff.go.
+	zip.Get(zapp, "/v1/pricing/tariff", o.tariff)
 }
 
 // GetServicePricing returns the managed-service rate cards — Search, Crawl,
@@ -240,12 +243,23 @@ func (o ops) paas(ctx context.Context, _ *pricingNoInput) (*pricingPlanList, err
 
 // ---- metered surfaces ----
 
-// ListToolPrices returns the per-use tool prices — web search, code
+// ListToolPrices returns the per-use tool prices — web search, web fetch, code
 // interpreter, file storage, image generation, speech-to-text and
 // text-to-speech — each with the unit it is billed by and its price in that
 // unit.
+//
+// The two WEB rows are priced from the rate card rather than from the catalog,
+// because those are the rows the platform charges by the call and a published
+// number that is also a charged one has exactly one home (see tariff.go). Read
+// them as integer micro-USD at /v1/pricing/tariff; the decimal here is the
+// display this list has always carried.
 func (o ops) tools(ctx context.Context, _ *pricingNoInput) (*pricingToolList, error) {
-	return sectionOf[pricingToolList](ctx, o, "tools")
+	out, err := sectionOf[pricingToolList](ctx, o, "tools")
+	if err != nil {
+		return nil, err
+	}
+	out.Tools = repricedTools(ctx, out.Tools)
+	return out, nil
 }
 
 // ListGPUTiers returns the rentable GPU configurations, each with its

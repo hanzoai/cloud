@@ -52,14 +52,10 @@ const (
 	PeriodMonth = "month"
 )
 
-// The components spend is attributed to. Model is every completion an agent
-// buys; computer is the runtime it was resident for; tool is a priced tool call.
-// A component with no spend is absent from a read, never zero.
-const (
-	ComponentModel    = "model"
-	ComponentComputer = "computer"
-	ComponentTool     = "tool"
-)
+// The components spend is attributed to are [cloud.ComponentModel] and the three
+// beside it: what a bill is made of is the price list's to state, and an agent
+// that named its own would put a line on a breakdown no price list mentions. A
+// component with no spend is absent from a read, never zero.
 
 // defaultCompletionCeiling is the output ceiling a quote assumes when the request
 // names none. A quote is an UPPER bound, so it errs large: the settle records what
@@ -147,7 +143,7 @@ func quoteChat(req *types.ChatRequest) quote {
 	if out <= 0 {
 		out = defaultCompletionCeiling
 	}
-	return quote{Micros: cloud.InferenceMicros(prompt + out), Component: ComponentModel}
+	return quote{Micros: cloud.InferenceMicros(prompt + out), Component: cloud.ComponentModel}
 }
 
 // runTally is what one run — one task — has spent so far. It lives for the run
@@ -316,7 +312,7 @@ func (b *budgeted) ChatCompletion(ctx context.Context, req *types.ChatRequest) (
 		return nil, err
 	}
 	if resp != nil {
-		b.st.settle(ctx, b.sto, b.a, b.run, b.sess, ComponentModel, cloud.InferenceMicros(resp.PromptTokens+resp.CompletionTokens))
+		b.st.settle(ctx, b.sto, b.a, b.run, b.sess, cloud.ComponentModel, cloud.InferenceMicros(resp.PromptTokens+resp.CompletionTokens))
 	}
 	return resp, nil
 }
@@ -337,7 +333,7 @@ func (b *budgeted) Rerank(ctx context.Context, req *types.RerankRequest) ([]floa
 // is already at or over a cap, which is the honest enforcement a free quote
 // admits. When tools carry a price the quote is where it goes.
 func (b *budgeted) affordTool(ctx context.Context, name string) error {
-	err := b.st.afford(ctx, b.sto, b.a, b.run, b.sess, quote{Micros: 0, Component: ComponentTool})
+	err := b.st.afford(ctx, b.sto, b.a, b.run, b.sess, quote{Micros: 0, Component: cloud.ComponentWeb})
 	if err != nil && b.refused == nil {
 		b.refused = err
 	}
