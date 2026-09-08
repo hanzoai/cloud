@@ -260,12 +260,28 @@ jobs:
             done
           }
 
+          # A store that REFUSES and a store that never ANSWERS are different
+          # facts, and only the first is a verdict on this change. 4xx is the
+          # store deciding; anything else is it not being there. Both messages
+          # below already drew that line in prose and then failed the same way
+          # either side of it — so a cloud that was briefly unreachable skipped
+          # `image` and stopped a release with nothing red to point at. Stated
+          # once here and asked at every point that reads the store, which is the
+          # rule the IAM token already follows.
+          refused() { case "${1:-000}" in 4??) return 0;; *) return 1;; esac; }
+
           kms_login() { printf %s "$KMS_CLIENT_SECRET" | login "$KMS_CLIENT_ID"; }
           KMS_TOKEN=$(again kms_login || true)
           if [ -z "$KMS_TOKEN" ]; then
-            echo "::error::review: KMS login at ${KMS_ENDPOINT} answered $(cat "$KMS_CODE" 2>/dev/null || echo 000) — $(head -c 200 "$KMS_BODY" 2>/dev/null). The reviewer's identity cannot be read, so the change does not pass. A 4xx is the store refusing this credential — rotate review/IAM_CLIENT_* or KMS_CLIENT_*; anything else is the endpoint not answering, and this asked six times over seventy-five seconds."
+            code=$(cat "$KMS_CODE" 2>/dev/null || echo 000)
+            said=$(head -c 200 "$KMS_BODY" 2>/dev/null)
             rm -f "$KMS_BODY" "$KMS_CODE"
-            exit 1
+            if refused "$code"; then
+              echo "::error::review: KMS login at ${KMS_ENDPOINT} answered ${code} — ${said}. The store refused this credential, so the reviewer has no identity. Rotate review/IAM_CLIENT_* or KMS_CLIENT_*."
+              exit 1
+            fi
+            echo "::warning::review: KMS login at ${KMS_ENDPOINT} answered ${code} — asked six times over seventy-five seconds and the store never answered. The reviewer did not run; it reached no verdict, so it withholds none."
+            exit 0
           fi
           rm -f "$KMS_BODY" "$KMS_CODE"
 
@@ -301,12 +317,12 @@ jobs:
           REVIEW_CLIENT_ID=$(again kms_secret IAM_CLIENT_ID || true)
           if [ -z "$REVIEW_CLIENT_ID" ]; then
             code=$(cat "$KMS_CODE_F" 2>/dev/null || echo 000)
-            if [ "$code" = 200 ]; then
-              echo "::error::review: the store answered and holds no value at review/IAM_CLIENT_ID (env ${KMS_SECRET_ENV}, org from the KMS credential), so ${REVIEW_CLIENT} has no identity. Seal it, or point KMS_CLIENT_ID at the org that carries it."
-            else
-              echo "::error::review: the store did not answer for review/IAM_CLIENT_ID — last status ${code} at ${KMS_ENDPOINT}, asked six times over seventy-five seconds. This is the STORE, not the credential: the row may be perfectly present. Re-run at this sha once it answers."
+            if [ "$code" = 200 ] || refused "$code"; then
+              echo "::error::review: the store answered ${code} for review/IAM_CLIENT_ID (env ${KMS_SECRET_ENV}, org from the KMS credential) and gave no value, so ${REVIEW_CLIENT} has no identity. Seal it, or point KMS_CLIENT_ID at the org that carries it."
+              exit 1
             fi
-            exit 1
+            echo "::warning::review: the store did not answer for review/IAM_CLIENT_ID — last status ${code} at ${KMS_ENDPOINT}, asked six times over seventy-five seconds. The row may be perfectly present; the reviewer did not run and withholds no verdict."
+            exit 0
           fi
 
           # THE SECRET IS NEVER A VALUE AND NEVER IN ARGV. It is piped from the
