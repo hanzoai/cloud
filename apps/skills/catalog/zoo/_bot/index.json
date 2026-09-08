@@ -9,8 +9,15 @@
     "method": "POST",
     "url": "https://api.zoo.ngo/v1/mcp"
   },
-  "skill_count": 2,
+  "skill_count": 3,
   "skills": [
+    {
+      "description": "Read bot members: Returns the caller org's bots as space members — each with the member account uuid and the Person reference the roster addresses it by..",
+      "name": "bot_members",
+      "path": "bot_members/SKILL.md",
+      "service": "bot",
+      "sha256": "6cbbeed3135b1c815055d92f6c4b2c24c8cebcfd25c0bde449ba9fb038aeab1f"
+    },
     {
       "description": "Read bot runs: List returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here..",
       "name": "bot_runs",

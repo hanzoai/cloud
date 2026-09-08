@@ -129,6 +129,7 @@ func init() {
 			"BotMember.name":      "Name is the display name.",
 			"BotMember.personRef": "PersonRef is the projected Person _id.",
 			"BotMember.userId":    "UserID is the derived member account uuid (personUuid).",
+			"BotRoster.bots":      "Bots is one entry per bot, each carrying the member account uuid and the\nPerson reference the space roster addresses it by. Empty means the org has\nno bots — not that the roster could not be read, which is an error.",
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/team POST /team/bots/sync", zip.Doc{

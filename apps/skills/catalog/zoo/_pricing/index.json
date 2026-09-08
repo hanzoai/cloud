@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.zoo.ngo/v1/mcp"
   },
-  "skill_count": 21,
+  "skill_count": 22,
   "skills": [
     {
       "description": "Read pricing base: Returns the Zoo Base plans — the managed-instance tiers, each with its monthly and annual price, storage and request allowances and feature list..",
@@ -152,11 +152,18 @@
       "sha256": "85d2fc34c1c71a099276f9874c3dff6ba5f525c0dff3a9e15bc26e510f0d0de9"
     },
     {
-      "description": "Read pricing tools: Returns the per-use tool prices — web search, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit..",
+      "description": "Read pricing tariff: Returns the platform's rate card: what a bill is made of, what each part costs, and the completion windows a request may ask for..",
+      "name": "pricing_tariff",
+      "path": "pricing_tariff/SKILL.md",
+      "service": "pricing",
+      "sha256": "f31671e4fd6d207f15d398bfbd784f1cb33a94f780eef05dc3d13c84e2c84ce6"
+    },
+    {
+      "description": "Read pricing tools: Returns the per-use tool prices — web search, web fetch, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit..",
       "name": "pricing_tools",
       "path": "pricing_tools/SKILL.md",
       "service": "pricing",
-      "sha256": "c313498ec77c85b8b962a7aac744cff509aef65dd5706927a01bcf9de78439bc"
+      "sha256": "316383f72318a734b6b662ecd1f17111eb8a07d5038e6a8950b2414424884fdf"
     }
   ],
   "spec_version": "8.0.0"

@@ -1,0 +1,65 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read function deployments: Is what is live right now — each function's current record IS its live deployment, so this is the deployment inventory..",
+      "name": "function_deployments",
+      "path": "function_deployments/SKILL.md",
+      "service": "function",
+      "sha256": "ee95fab3cbd0c310932ed7b0c0b4afa6e1e4d6f33b0a25a3194cf69d9f595c54"
+    },
+    {
+      "description": "Read function function: Is every serverless function the caller's org has published, each with its real 7-day rollup., Is one function with everything a detail page needs in one round-trip: its definition, its 7-day rollup, its trigger, its twenty most recent invocations and the ",
+      "name": "function_function",
+      "path": "function_function/SKILL.md",
+      "service": "function",
+      "sha256": "1a9f5194a39081e898707dbeff99f3ed56c9aa39ee3e044390ac78bc67b02258"
+    },
+    {
+      "description": "Read function invocations: Is one function's past runs, newest first — each with its status, HTTP code, method, time and duration..",
+      "name": "function_invocations",
+      "path": "function_invocations/SKILL.md",
+      "service": "function",
+      "sha256": "101c54a5d8e68e9726da147dd5c04b06f10f314503a2153ff4874af58de0e01f"
+    },
+    {
+      "description": "Read function logs: Is the output of a function's most recent run — its error text when that run failed, else what it printed..",
+      "name": "function_logs",
+      "path": "function_logs/SKILL.md",
+      "service": "function",
+      "sha256": "a91c89a6296de90706f6e9df83f4985338b92f5cc68902a2f04caaa94d063e60"
+    },
+    {
+      "description": "Read function metrics: Is the org's serverless dashboard over a window: a per-function invocation costLine and how those invocations ended..",
+      "name": "function_metrics",
+      "path": "function_metrics/SKILL.md",
+      "service": "function",
+      "sha256": "c942193488476c4eba4a260c085c2068494882f60ac9ec382b2fad1606f43460"
+    },
+    {
+      "description": "Read function secrets: Is the NAMES of the secrets the caller org's functions mount..",
+      "name": "function_secrets",
+      "path": "function_secrets/SKILL.md",
+      "service": "function",
+      "sha256": "36bd33ec1baf3b0ab89a21f7cec22d99605e75e73a48cf7d7ce23a08c690d89c"
+    },
+    {
+      "description": "Read function triggers: Is what calls the caller org's functions — one row per function..",
+      "name": "function_triggers",
+      "path": "function_triggers/SKILL.md",
+      "service": "function",
+      "sha256": "77fe268f893c0600ced4bfaaaa51c3544bf34aa69b3cb8f97314d6ee2f9d7151"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

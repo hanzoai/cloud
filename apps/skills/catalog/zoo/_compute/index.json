@@ -1,0 +1,65 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read compute clusters: Returns the caller org's clusters from both sources: the managed clusters projected from Visor's node pools, and the BYO clusters attached to the caller's project..",
+      "name": "compute_clusters",
+      "path": "compute_clusters/SKILL.md",
+      "service": "compute",
+      "sha256": "1003165f6768239ff2a40e4ccc783d93734ea6346c4d8ba3b653c6b17c185f5b"
+    },
+    {
+      "description": "Read compute fleet: Returns every compute unit the caller's org has, from every source, each carrying its latest utilization: agent run-targets, the BYO machines that dialed in, attached BYO clusters and Visor-provisioned machines., Returns the caller org's gpu-jobs render queue,",
+      "name": "compute_fleet",
+      "path": "compute_fleet/SKILL.md",
+      "service": "compute",
+      "sha256": "cdb4b84c05f3bf603a484784eb01ff251cc7f6908b794fa463275c6c76447411"
+    },
+    {
+      "description": "Read compute gpus: Returns one row per physical accelerator the caller's org has, derived from its real GPU machines (the size slug says how many cards a node holds) and from the accelerators BYO workers report through nvidia-smi., Is an HONEST empty surface: Visor exposes no GPU",
+      "name": "compute_gpus",
+      "path": "compute_gpus/SKILL.md",
+      "service": "compute",
+      "sha256": "a74755bec4e1eed55abe8741ace78eab4b5fdee07435a989b95506dd634a0033"
+    },
+    {
+      "description": "Read compute k8s: Lists the org's DOKS clusters (Visor, house account) folded with the org's BYO clusters — ONE fleet cluster view under the unified k8s noun., Returns one cluster's detail: node pools + worker nodes., Returns every DOKS worker node in the org's clusters as a mach",
+      "name": "compute_k8s",
+      "path": "compute_k8s/SKILL.md",
+      "service": "compute",
+      "sha256": "cd143828b966477ebcf0e06f128bab6b7bc0fe4558aa6ca215b19bb2ed2d0308"
+    },
+    {
+      "description": "Read compute machines: Returns every machine the caller's org has — Visor's registry, the live DigitalOcean droplets and the DOKS worker nodes (deduped into one union), plus the BYO machines that dialed in via `hanzo link` (provider \"byo\")., Returns every agent↔machine binding in",
+      "name": "compute_machines",
+      "path": "compute_machines/SKILL.md",
+      "service": "compute",
+      "sha256": "91c478b5a47847854e35d9c68662f493bdb32edc676a5967739e8f66f58e917c"
+    },
+    {
+      "description": "Read compute regions: Regions lists the regions a machine can be launched in..",
+      "name": "compute_regions",
+      "path": "compute_regions/SKILL.md",
+      "service": "compute",
+      "sha256": "103439d11164d6388fd354f07bd75d72338319ed07ef7a16e409ade0e3f39527"
+    },
+    {
+      "description": "Read compute sizes: Sizes lists the machine sizes available to launch, with their specifications..",
+      "name": "compute_sizes",
+      "path": "compute_sizes/SKILL.md",
+      "service": "compute",
+      "sha256": "bcf5d7e1324c94c14287a012b3295456ba531aeb8d2f264d57fee70f80becf91"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

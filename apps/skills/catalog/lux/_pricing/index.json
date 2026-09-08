@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.lux.network/v1/mcp"
   },
-  "skill_count": 21,
+  "skill_count": 22,
   "skills": [
     {
       "description": "Read pricing base: Returns the Lux Base plans — the managed-instance tiers, each with its monthly and annual price, storage and request allowances and feature list..",
@@ -152,11 +152,18 @@
       "sha256": "eaee8cd2961a22e1afca19f43dfdbda1f63f0007b817a79b2209df66d504b916"
     },
     {
-      "description": "Read pricing tools: Returns the per-use tool prices — web search, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit..",
+      "description": "Read pricing tariff: Returns the platform's rate card: what a bill is made of, what each part costs, and the completion windows a request may ask for..",
+      "name": "pricing_tariff",
+      "path": "pricing_tariff/SKILL.md",
+      "service": "pricing",
+      "sha256": "03a1c2b48baadb1c13b2a038a6c8524a0b82fc7823d0d6f6a53cb4c49ec9c23a"
+    },
+    {
+      "description": "Read pricing tools: Returns the per-use tool prices — web search, web fetch, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit..",
       "name": "pricing_tools",
       "path": "pricing_tools/SKILL.md",
       "service": "pricing",
-      "sha256": "ad406e2510ebfcda41a609a1cb2586fb984ba6d77cdb587c9e2e759180800e87"
+      "sha256": "afd09a0e2bfbc4a250f91eb16d3ffb94cbf94f86d5110415dcb51a65869400ee"
     }
   ],
   "spec_version": "8.0.0"

@@ -1,0 +1,58 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 6,
+  "skills": [
+    {
+      "description": "Read tool activation: Reports which tools are switched on for the caller's org and project..",
+      "name": "tool_activation",
+      "path": "tool_activation/SKILL.md",
+      "service": "tool",
+      "sha256": "291a2dc4d825a7dbadfcc34de58e3283a38a54bfc2f245e12885dc95b512a74e"
+    },
+    {
+      "description": "Read tool catalog: Lists the MCP servers the public registries publish, as we hold them: our canonical copy of registry.modelcontextprotocol.io, plus what we decided about each entry., Returns one catalog entry in full: the publisher's description, its repository and site, every ",
+      "name": "tool_catalog",
+      "path": "tool_catalog/SKILL.md",
+      "service": "tool",
+      "sha256": "50af1188c2c5eff484fa22a39eb5698e34fee63ec110a23f618f98ecc94318a7"
+    },
+    {
+      "description": "Read tool mcp: Lists the external MCP servers the caller's org has registered..",
+      "name": "tool_mcp",
+      "path": "tool_mcp/SKILL.md",
+      "service": "tool",
+      "sha256": "81b66f971344250a173f505cb2a39c18f59ce3c21a2417af683933d90a05c7d0"
+    },
+    {
+      "description": "Read tool plugins: Reports what this deployment actually mounted: every subsystem the composition root declared and whether it is switched on., Lists the plugins the caller's org BUILT, newest first, each with the TypeScript as authored..",
+      "name": "tool_plugins",
+      "path": "tool_plugins/SKILL.md",
+      "service": "tool",
+      "sha256": "b761ae09262855d2efacd63e52b415e7e334a06e2b3bdcc2148e9d57ade28fc2"
+    },
+    {
+      "description": "Read tool skills: Lists the skills the caller's org can reach — the brand's embedded catalogue plus the org's own authored ones — with each one's activation flag., Lists the caller org's OWN skills with their SKILL.md bodies..",
+      "name": "tool_skills",
+      "path": "tool_skills/SKILL.md",
+      "service": "tool",
+      "sha256": "67482952bdae7451fdcd8f86599d06201ccd86a1f75ba028e6409e252af70744"
+    },
+    {
+      "description": "Read tool tool: Lists every tool the caller's org and project can reach, from every source, each flagged with whether it is activated..",
+      "name": "tool_tool",
+      "path": "tool_tool/SKILL.md",
+      "service": "tool",
+      "sha256": "0ff30a1c0a75a4ca110a6ab3be54299002302bf6e0e9065e3f271bb0203c36fb"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

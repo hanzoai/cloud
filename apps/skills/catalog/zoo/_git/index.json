@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.zoo.ngo/v1/mcp"
   },
-  "skill_count": 9,
+  "skill_count": 13,
   "skills": [
     {
       "description": "Read git blob: View a file in a repository.",
@@ -54,11 +54,32 @@
       "sha256": "917d5c344c0df854a49e4f2bf106b10a58ffb0937622f7a8ebf1b71219c6926e"
     },
     {
+      "description": "Read git pools: Returns the capacity this org has declared and how many daemons have entered each pool..",
+      "name": "git_pools",
+      "path": "git_pools/SKILL.md",
+      "service": "git",
+      "sha256": "c9d3004f87a0b157732bcd749fb251ae1db34b89e40fcfc28d8bef136df83b70"
+    },
+    {
       "description": "Read git repos: Returns the repos in the caller's scope, most recently updated first., Returns one repo with its live ref state: every branch name and the resolved HEAD commit., Returns one file's bytes at one revision..",
       "name": "git_repos",
       "path": "git_repos/SKILL.md",
       "service": "git",
-      "sha256": "6284661e214467f484390466f1c4551b6d2d4a79f2af46e8f35a6a2d443bff96"
+      "sha256": "6202cdd1f2c29bee0bf848c5068aed59fcf50b47b09e0f677a5e22162c8888c4"
+    },
+    {
+      "description": "Read git runners: Returns the daemons registered into this org's pools, newest first, with when each was last heard from..",
+      "name": "git_runners",
+      "path": "git_runners/SKILL.md",
+      "service": "git",
+      "sha256": "a38e09334f61c1e4aa85adfacd94953104fe8aaf85743e09cef7be906135ca8e"
+    },
+    {
+      "description": "Read git runs: Returns this org's runs, newest first., Returns one run..",
+      "name": "git_runs",
+      "path": "git_runs/SKILL.md",
+      "service": "git",
+      "sha256": "750af9e8600f127f2a03fdcfe1f463bcb71420f26a06f12601a7bde2e5c8b2e4"
     },
     {
       "description": "Read git tree: Browse a directory inside a repository.",
@@ -73,6 +94,13 @@
       "path": "git_usage/SKILL.md",
       "service": "git",
       "sha256": "29a4aecaa3ee908930e66a980568aca6d387ddf58eb9168efa44f60aabadae6d"
+    },
+    {
+      "description": "Read git workflows: Reports the workflows a repository declares at a ref and which declared pool would execute each job — the answer to \"would a push here run, and where\"..",
+      "name": "git_workflows",
+      "path": "git_workflows/SKILL.md",
+      "service": "git",
+      "sha256": "b539ec489454ef32825d695231b6ff566862a8a5a8150022fed87ca85478bc03"
     }
   ],
   "spec_version": "8.0.0"
