@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.lux.network/v1/mcp"
   },
-  "skill_count": 8,
+  "skill_count": 7,
   "skills": [
     {
       "description": "Read team account: Start a sign-in at lux.id, Complete a sign-in and hand the browser its session, Returns the identity providers this deployment starts a login with..",
@@ -24,13 +24,6 @@
       "path": "team_billing/SKILL.md",
       "service": "team",
       "sha256": "b212822353d36d40fd5a58039e85daa2b06528b26d67dc8d0ee90b7be590fa0c"
-    },
-    {
-      "description": "Read team bots: Returns the caller org's bot members — the org's agents projected as the space Employees they become, each with the member account uuid and Person reference the roster addresses it by..",
-      "name": "team_bots",
-      "path": "team_bots/SKILL.md",
-      "service": "team",
-      "sha256": "52131fe25351562df30901568d8d8c97b28bd656734cef693ca5738a0340b7b0"
     },
     {
       "description": "Read team collaborator: Open the live collaborative-editing socket.",

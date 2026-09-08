@@ -19,12 +19,12 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 - `GET https://api.zoo.ngo/v1/git/repos/{name}/blob` — Returns one file's bytes at one revision.
 - `GET https://api.zoo.ngo/v1/git/repos/{name}/commits` — Walks a ref's history newest first, or one path's history when a path is given.
 - `GET https://api.zoo.ngo/v1/git/repos/{name}/files` — Returns every file a glob selects at one revision, WITH its bytes and the revision they came from.
-- `GET https://api.zoo.ngo/v1/git/repos/{name}/mirrors` — Returns a repo's outbound mirror targets — the downstream remotes the mirror reactor pushes to whenever a push lands here.
 - `GET https://api.zoo.ngo/v1/git/repos/{name}/pulls` — Returns a repo's pull requests, newest number first — what is waiting to be reviewed, and what has already landed.
 - `GET https://api.zoo.ngo/v1/git/repos/{name}/pulls/{number}` — Returns one pull request by its per-repo number.
 - `GET https://api.zoo.ngo/v1/git/repos/{name}/readme` — Returns the README at the tree root as plain text — unrendered, so the caller decides how to present it.
 - `GET https://api.zoo.ngo/v1/git/repos/{name}/refs` — Lists a repo's branches, tags and default branch — what a branch picker needs in one call.
 - `GET https://api.zoo.ngo/v1/git/repos/{name}/subscriptions` — Returns a repo's Slack subscriptions — which channels the lifecycle notifier posts this repo's push and deploy events to.
+- `GET https://api.zoo.ngo/v1/git/repos/{name}/targets` — Returns a repo's outbound mirror targets — the downstream remotes the mirror reactor pushes to whenever a push lands here.
 - `GET https://api.zoo.ngo/v1/git/repos/{name}/tree` — Lists the immediate children of one directory at one revision, directories before files.
 
 ## Parameters
@@ -46,12 +46,12 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 - `/v1/git/repos/{name}/blob` → `blobJSON` object with fields: `binary`, `content`, `encoding`, `path`, `size`, `truncated`.
 - `/v1/git/repos/{name}/commits` → `commitsJSON` object with fields: `commits`.
 - `/v1/git/repos/{name}/files` → `filesJSON` object with fields: `files`, `rev`.
-- `/v1/git/repos/{name}/mirrors` → `mirrorList` object with fields: `data`.
 - `/v1/git/repos/{name}/pulls` → `pullList` object with fields: `data`.
 - `/v1/git/repos/{name}/pulls/{number}` → `pullView` object with fields: `author`, `base`, `body`, `createdAt`, `head`, `mergedRev`, `number`, `repo`, `state`, `title`, `updatedAt`.
 - `/v1/git/repos/{name}/readme` → `readmeJSON` object with fields: `content`, `encoding`, `path`.
 - `/v1/git/repos/{name}/refs` → `refsJSON` object with fields: `branches`, `default`, `tags`.
 - `/v1/git/repos/{name}/subscriptions` → `subscriptionList` object with fields: `data`.
+- `/v1/git/repos/{name}/targets` → `mirrorList` object with fields: `data`.
 - `/v1/git/repos/{name}/tree` → `treeJSON` object with fields: `entries`.
 
 ## Example

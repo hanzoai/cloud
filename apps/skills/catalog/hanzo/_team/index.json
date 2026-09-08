@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.hanzo.ai/v1/mcp"
   },
-  "skill_count": 8,
+  "skill_count": 7,
   "skills": [
     {
       "description": "Read team account: Start a sign-in at hanzo.id, Complete a sign-in and hand the browser its session, Returns the identity providers this deployment starts a login with..",
@@ -24,13 +24,6 @@
       "path": "team_billing/SKILL.md",
       "service": "team",
       "sha256": "c44d29778bc91ed7f12456fd9d78d60efdb4b7c59a6be7c78c607c55a99fbba0"
-    },
-    {
-      "description": "Read team bots: Returns the caller org's bot members — the org's agents projected as the space Employees they become, each with the member account uuid and Person reference the roster addresses it by..",
-      "name": "team_bots",
-      "path": "team_bots/SKILL.md",
-      "service": "team",
-      "sha256": "43c33c0d1294da3cbd97f7f85bc9ea4f8bc807fa3dd10f8ab60bc9ae1cfefee9"
     },
     {
       "description": "Read team collaborator: Open the live collaborative-editing socket.",

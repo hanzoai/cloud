@@ -1,7 +1,7 @@
 ---
 name: pricing_tools
 version: "8.0.0"
-description: "Read pricing tools: Returns the per-use tool prices — web search, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit.."
+description: "Read pricing tools: Returns the per-use tool prices — web search, web fetch, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit.."
 ---
 
 # Lux · PRICING · tools
@@ -14,7 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/pricing/tools` — Returns the per-use tool prices — web search, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit.
+- `GET https://api.lux.network/v1/pricing/tools` — Returns the per-use tool prices — web search, web fetch, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit.
 
 ## Response
 

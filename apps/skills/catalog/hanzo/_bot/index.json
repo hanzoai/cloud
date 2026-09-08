@@ -9,8 +9,15 @@
     "method": "POST",
     "url": "https://api.hanzo.ai/v1/mcp"
   },
-  "skill_count": 2,
+  "skill_count": 3,
   "skills": [
+    {
+      "description": "Read bot members: Returns the caller org's bots as space members — each with the member account uuid and the Person reference the roster addresses it by..",
+      "name": "bot_members",
+      "path": "bot_members/SKILL.md",
+      "service": "bot",
+      "sha256": "7a11512e42ed44cba3d04c493f395c92bdea306447009369bbd051847be8bf30"
+    },
     {
       "description": "Read bot runs: List returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here..",
       "name": "bot_runs",

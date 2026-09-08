@@ -1,0 +1,72 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 8,
+  "skills": [
+    {
+      "description": "Read project deployments: Returns a project's deploy history, newest version first., Returns one deployment of a project by id..",
+      "name": "project_deployments",
+      "path": "project_deployments/SKILL.md",
+      "service": "project",
+      "sha256": "52587d1fcaa049fdfaf41fbe24a83e72e19726e29be605d6432f04f77e56ce05"
+    },
+    {
+      "description": "Read project domains: Returns every custom hostname this site holds: the live ones, plus any pending claim with the DNS records it still owes..",
+      "name": "project_domains",
+      "path": "project_domains/SKILL.md",
+      "service": "project",
+      "sha256": "5934fb0fcbadd99b9330de50f2906acc5da46660ed349c20cfa3ee5067330daa"
+    },
+    {
+      "description": "Read project edge: health reports whether a publish reaches readers, rather than whether it was accepted..",
+      "name": "project_edge",
+      "path": "project_edge/SKILL.md",
+      "service": "project",
+      "sha256": "da39316b6cb61cdc703c327fc296dd443fe625be65c75411c00fc5f55b5ae547"
+    },
+    {
+      "description": "Read project project: Returns every project your org owns., Returns one project of yours by slug — its settings, its live URL and the deployment currently serving it..",
+      "name": "project_project",
+      "path": "project_project/SKILL.md",
+      "service": "project",
+      "sha256": "50f89e8009fc56f9ac975fd85cac19261fbf1ec50c33031b616e41bb0e801a64"
+    },
+    {
+      "description": "Read project releases: Returns a site's releases newest-first, marking the active one — the rollback menu..",
+      "name": "project_releases",
+      "path": "project_releases/SKILL.md",
+      "service": "project",
+      "sha256": "edba9ac3c6602e26969415d8c02d617c2c64ed276fd0b699f72bcdc42bbd0e31"
+    },
+    {
+      "description": "Read project shot: Get a PNG of the project's live site.",
+      "name": "project_shot",
+      "path": "project_shot/SKILL.md",
+      "service": "project",
+      "sha256": "4d063e74918fb5294c75196462f62e5c50b7ad51a4b1a2bca9a392e4b89fa0fe"
+    },
+    {
+      "description": "Read project sites: Returns the org's deployed sites at the pretty URLs they serve at., Returns one site — the same row ListSites carries, for one slug..",
+      "name": "project_sites",
+      "path": "project_sites/SKILL.md",
+      "service": "project",
+      "sha256": "b4c48d0f5a44fd06ee6108065730ca67e5f343c6a7988359d020a2118ff514e3"
+    },
+    {
+      "description": "Read project tags: The site's browser tag set for the hosted tag — which pixels to inject, by publishable key.",
+      "name": "project_tags",
+      "path": "project_tags/SKILL.md",
+      "service": "project",
+      "sha256": "1abb48cba949f1b62b779de18752e5cdbd30af06c6f9877052ce937f399f161e"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

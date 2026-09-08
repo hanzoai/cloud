@@ -431,7 +431,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"name":"sql","kind":"sql","tier":"data","org":"hanzoai","cluster":"hanzo-k8s","env":"main","namespace":"hanzo","repo":"hanzoai/sql","phase":"Running","declaredTag":"v1.4.2","runningTag":"v1.4.2","latestTag":"","health":"green","drift":false,"driftSeverity":"ok","updated":""}],"total":1}`),
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/admin GET /v1/admin/promos", zip.Doc{
-		Description: "Reads the current platform plan promo — the singleton discount offer, e.g.\nthe 50%-off launch promo. Commerce stores it in the reserved platform namespace, so\nthe org sent with the read is the admin org and the service token is what passes\ncommerce's own platform-admin gate.",
+		Description: "Reads the current platform plan promo — the singleton discount offer, e.g.\nthe 50%-off launch promo. Commerce stores it in the reserved platform namespace, so\nthe org sent with the read is the admin org, and the platform identity the\ntransport carries is what passes commerce's own platform-admin gate.",
 		Fields: map[string]string{
 			"rawOut.data":   "Data is the upstream's payload verbatim, left undescribed for the same reason\nas iamRowsOut: re-describing someone else's schema here would be a second copy\nof it, free to drift.",
 			"rawOut.msg":    "Msg is the failure reason when Status is \"error\", empty otherwise.",

@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.hanzo.ai/v1/mcp"
   },
-  "skill_count": 21,
+  "skill_count": 22,
   "skills": [
     {
       "description": "Read pricing base: Returns the Hanzo Base plans — the managed-instance tiers, each with its monthly and annual price, storage and request allowances and feature list..",
@@ -152,11 +152,18 @@
       "sha256": "5d65a35340baf32831e832534e91890d399cefa98f96696375a62074dc138e42"
     },
     {
-      "description": "Read pricing tools: Returns the per-use tool prices — web search, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit..",
+      "description": "Read pricing tariff: Returns the platform's rate card: what a bill is made of, what each part costs, and the completion windows a request may ask for..",
+      "name": "pricing_tariff",
+      "path": "pricing_tariff/SKILL.md",
+      "service": "pricing",
+      "sha256": "3e214ff20a69466e7b12a8dfaf44d9e31b54670eeb556312cece378f067e1452"
+    },
+    {
+      "description": "Read pricing tools: Returns the per-use tool prices — web search, web fetch, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit..",
       "name": "pricing_tools",
       "path": "pricing_tools/SKILL.md",
       "service": "pricing",
-      "sha256": "f132652be58c993801934a21be042ea08bf3f2f34cbdfc7c8a732b2df9a31213"
+      "sha256": "5d321987bf43ddecfdf2fe34bcc4d4b3c7492d2fb9d5c48fa155bf09121521d8"
     }
   ],
   "spec_version": "8.0.0"

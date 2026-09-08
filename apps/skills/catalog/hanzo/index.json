@@ -36,9 +36,9 @@
       "skill_count": 3
     },
     {
-      "name": "agents",
-      "path": "_agents/index.json",
-      "skill_count": 8
+      "name": "agent",
+      "path": "_agent/index.json",
+      "skill_count": 9
     },
     {
       "name": "ai",
@@ -98,7 +98,7 @@
     {
       "name": "bot",
       "path": "_bot/index.json",
-      "skill_count": 2
+      "skill_count": 3
     },
     {
       "name": "campaign",
@@ -116,8 +116,8 @@
       "skill_count": 1
     },
     {
-      "name": "channels",
-      "path": "_channels/index.json",
+      "name": "channel",
+      "path": "_channel/index.json",
       "skill_count": 5
     },
     {
@@ -148,6 +148,11 @@
     {
       "name": "compliance",
       "path": "_compliance/index.json",
+      "skill_count": 7
+    },
+    {
+      "name": "compute",
+      "path": "_compute/index.json",
       "skill_count": 7
     },
     {
@@ -226,8 +231,8 @@
       "skill_count": 2
     },
     {
-      "name": "flags",
-      "path": "_flags/index.json",
+      "name": "flag",
+      "path": "_flag/index.json",
       "skill_count": 3
     },
     {
@@ -241,8 +246,8 @@
       "skill_count": 4
     },
     {
-      "name": "functions",
-      "path": "_functions/index.json",
+      "name": "function",
+      "path": "_function/index.json",
       "skill_count": 7
     },
     {
@@ -253,7 +258,7 @@
     {
       "name": "git",
       "path": "_git/index.json",
-      "skill_count": 9
+      "skill_count": 13
     },
     {
       "name": "graph",
@@ -286,8 +291,8 @@
       "skill_count": 5
     },
     {
-      "name": "integrations",
-      "path": "_integrations/index.json",
+      "name": "integration",
+      "path": "_integration/index.json",
       "skill_count": 10
     },
     {
@@ -408,11 +413,11 @@
     {
       "name": "pricing",
       "path": "_pricing/index.json",
-      "skill_count": 21
+      "skill_count": 22
     },
     {
-      "name": "projects",
-      "path": "_projects/index.json",
+      "name": "project",
+      "path": "_project/index.json",
       "skill_count": 8
     },
     {
@@ -513,7 +518,7 @@
     {
       "name": "team",
       "path": "_team/index.json",
-      "skill_count": 8
+      "skill_count": 7
     },
     {
       "name": "tel",
@@ -531,8 +536,8 @@
       "skill_count": 4
     },
     {
-      "name": "tools",
-      "path": "_tools/index.json",
+      "name": "tool",
+      "path": "_tool/index.json",
       "skill_count": 6
     },
     {
@@ -566,11 +571,6 @@
       "skill_count": 2
     },
     {
-      "name": "visor",
-      "path": "_visor/index.json",
-      "skill_count": 6
-    },
-    {
       "name": "wallet",
       "path": "_wallet/index.json",
       "skill_count": 2
@@ -601,7 +601,7 @@
       "skill_count": 1
     }
   ],
-  "skill_count": 683,
+  "skill_count": 690,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface..",
@@ -961,60 +961,67 @@
       "sha256": "8ca7e9d5ca4d714a40dd036c106170988f008b3b17ee91a069b3419393a9ff21"
     },
     {
-      "description": "Read agents activity: Serves the org-wide recent-activity feed..",
-      "name": "agents_activity",
-      "path": "agents_activity/SKILL.md",
-      "service": "agents",
-      "sha256": "1afb1cb9dbb5016960a5ad71f39c899e78ba704872b564856a67e313eb3aa620"
+      "description": "Read agent activity: Serves the org-wide recent-activity feed..",
+      "name": "agent_activity",
+      "path": "agent_activity/SKILL.md",
+      "service": "agent",
+      "sha256": "e2097001985523df6d10449b57db6c4e9db0093d3a8c136a124d4ab240f5f7fc"
     },
     {
-      "description": "Read agents agents: Returns every agent defined in the caller's org, each with the number of runs recorded against it., Returns one agent with its system prompt and its 20 most recent runs..",
-      "name": "agents_agents",
-      "path": "agents_agents/SKILL.md",
-      "service": "agents",
-      "sha256": "9152eb304833866d9708e9a14be96aeba226595a51200f0563eeba781aee88b2"
+      "description": "Read agent agent: Returns every agent defined in the caller's org, each with the number of runs recorded against it., Returns one agent with its system prompt and its 20 most recent runs..",
+      "name": "agent_agent",
+      "path": "agent_agent/SKILL.md",
+      "service": "agent",
+      "sha256": "01af8e74a5dd83caa1bf57e9542932504df4d8bd1d41bbb668bc6a970469ccc4"
     },
     {
-      "description": "Read agents builds: Returns the public index of every published build, most recently updated first, so a gallery can link straight to the story behind each product., Returns the readable build of one product: the agent session that produced it, turn by turn — the prompts, the rea",
-      "name": "agents_builds",
-      "path": "agents_builds/SKILL.md",
-      "service": "agents",
-      "sha256": "456be603989dacdac7a93e86398960b8acf974289b67e78b16a0d37d3619ed00"
+      "description": "Read agent builds: Returns the public index of every published build, most recently updated first, so a gallery can link straight to the story behind each product., Returns the readable build of one product: the agent session that produced it, turn by turn — the prompts, the reas",
+      "name": "agent_builds",
+      "path": "agent_builds/SKILL.md",
+      "service": "agent",
+      "sha256": "cc21520cfed0de7aeb52178539111c08f9c1b7c6b20597d6b30b041fe4cd7bec"
     },
     {
-      "description": "Read agents chat: List the agent threads in your org, Read one agent thread in full, List the agent presets available to a caller.",
-      "name": "agents_chat",
-      "path": "agents_chat/SKILL.md",
-      "service": "agents",
-      "sha256": "f5666b24ddde06631458690f0bf7fb90c0f2f598978d9c5c31779d9de197da08"
+      "description": "Read agent chat: List the agent threads in your org, Read one agent thread in full, List the agent presets available to a caller.",
+      "name": "agent_chat",
+      "path": "agent_chat/SKILL.md",
+      "service": "agent",
+      "sha256": "0685a3fbc007e6699b5044379a1ddb9be03b4340e9089cbc963f7519c6c15ed3"
     },
     {
-      "description": "Read agents metrics: Serves the invocations-over-time histogram for the org's Agents dashboard..",
-      "name": "agents_metrics",
-      "path": "agents_metrics/SKILL.md",
-      "service": "agents",
-      "sha256": "76ff52c28f6b3486aefb0188ab7031912a38a2fb33090d26d470e2e61b745ff8"
+      "description": "Read agent metrics: Serves the invocations-over-time histogram for the org's Agents dashboard..",
+      "name": "agent_metrics",
+      "path": "agent_metrics/SKILL.md",
+      "service": "agent",
+      "sha256": "fdfe4745208bba43c2b03705c7df4ae34a57199b7b3aa8508a6fdfcafd47d080"
     },
     {
-      "description": "Read agents runs: Returns the org's agent runs across EVERY agent, newest first — what ran here, for whom, on which model, how long it took, and why it failed., Returns one agent's execution history, newest first — each run's input, its output or its error, and how long it took..",
-      "name": "agents_runs",
-      "path": "agents_runs/SKILL.md",
-      "service": "agents",
-      "sha256": "6fe60c36201058a4767517305a729f173a0b7391fccfd585f949fa6d6873d21b"
+      "description": "Read agent runs: Returns the org's agent runs across EVERY agent, newest first — what ran here, for whom, on which model, how long it took, and why it failed., Returns one agent's execution history, newest first — each run's input, its output or its error, and how long it took..",
+      "name": "agent_runs",
+      "path": "agent_runs/SKILL.md",
+      "service": "agent",
+      "sha256": "b5b73a691d7fb30112a5c23f945cc0d0089788838affd1f886df4d6f213fa63d"
     },
     {
-      "description": "Read agents sessions: Returns the caller org's live sessions, newest first — each with its event count, its direct-child count and a one-line preview of its latest event., Live session and event updates for the caller's org, as Server-Sent Events., Returns one session with its di",
-      "name": "agents_sessions",
-      "path": "agents_sessions/SKILL.md",
-      "service": "agents",
-      "sha256": "2822532292f44c6129f78a75493975ee2799013ff2225c4e19d475afb5357fab"
+      "description": "Read agent sessions: Returns the caller org's live sessions, newest first — each with its event count, its direct-child count and a one-line preview of its latest event., Live session and event updates for the caller's org, as Server-Sent Events., Returns one session with its dir",
+      "name": "agent_sessions",
+      "path": "agent_sessions/SKILL.md",
+      "service": "agent",
+      "sha256": "ed91c3ddf300b9361c4ac682eae41bf6581b4911dac66b32b35fc70096749dab"
     },
     {
-      "description": "Read agents targets: Returns every machine registered to the caller's org, newest first, each with its live session load., Returns one registered machine, with its live session load..",
-      "name": "agents_targets",
-      "path": "agents_targets/SKILL.md",
-      "service": "agents",
-      "sha256": "ba6c32cc26e642fb6b45c9c5b76e6527304ed2e4f1a853a87093410535f9e37d"
+      "description": "Read agent spend: Answers what one of your org's agents has spent, in integer micro-USD..",
+      "name": "agent_spend",
+      "path": "agent_spend/SKILL.md",
+      "service": "agent",
+      "sha256": "24e23cb789d27ff4579fb540a6946f1c27acc0798c78ea9794b2982a44d71810"
+    },
+    {
+      "description": "Read agent targets: Returns every machine registered to the caller's org, newest first, each with its live session load., Returns one registered machine, with its live session load..",
+      "name": "agent_targets",
+      "path": "agent_targets/SKILL.md",
+      "service": "agent",
+      "sha256": "49d9bf3f5505bcdff10fac79f1a5df183db0b849a73c99e12632a13549439d17"
     },
     {
       "description": "Read ai account: Account.",
@@ -1661,6 +1668,13 @@
       "sha256": "cf1f42fd7d0b126820f9603cd30dc051652836023a5184d3d1ec9a46cc861da8"
     },
     {
+      "description": "Read bot members: Returns the caller org's bots as space members — each with the member account uuid and the Person reference the roster addresses it by..",
+      "name": "bot_members",
+      "path": "bot_members/SKILL.md",
+      "service": "bot",
+      "sha256": "7a11512e42ed44cba3d04c493f395c92bdea306447009369bbd051847be8bf30"
+    },
+    {
       "description": "Read bot runs: List returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here..",
       "name": "bot_runs",
       "path": "bot_runs/SKILL.md",
@@ -1780,39 +1794,39 @@
       "sha256": "1fd8e72d8b4e93fa5aa2ffb080987aab8011a8519b0a59f064dd9b0396a61722"
     },
     {
-      "description": "Read channels agent: Returns which agent answers the caller org's channel: the default and every room bound to another agent..",
-      "name": "channels_agent",
-      "path": "channels_agent/SKILL.md",
-      "service": "channels",
-      "sha256": "ce151ac9d4a17b84c802fa81d974c47fd968a13c0426ed129f45a924e927a91c"
+      "description": "Read channel agent: Returns which agent answers the caller org's channel: the default and every room bound to another agent..",
+      "name": "channel_agent",
+      "path": "channel_agent/SKILL.md",
+      "service": "channel",
+      "sha256": "59080dc2b2c90beb8322715216d66dbf19bcbc224674823a48d9cde5327d9840"
     },
     {
-      "description": "Read channels allowlist: Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-on",
-      "name": "channels_allowlist",
-      "path": "channels_allowlist/SKILL.md",
-      "service": "channels",
-      "sha256": "86b776cc6d75e5899092da893c8b10f73294c2726f24fd1ac5c61714483b52b3"
+      "description": "Read channel allowlist: Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-onl",
+      "name": "channel_allowlist",
+      "path": "channel_allowlist/SKILL.md",
+      "service": "channel",
+      "sha256": "e15de85e57efa87e69bf0529a44f5636e4905db6aab811c28ac48b9f83fc6e71"
     },
     {
-      "description": "Read channels channels: Reports every chat channel this org can send through, and whether it can send through it right now..",
-      "name": "channels_channels",
-      "path": "channels_channels/SKILL.md",
-      "service": "channels",
-      "sha256": "90811d96780016de41404a3ed8c19bed081489cf2e47d6a2a125e826e7f94700"
+      "description": "Read channel channel: Reports every chat channel this org can send through, and whether it can send through it right now..",
+      "name": "channel_channel",
+      "path": "channel_channel/SKILL.md",
+      "service": "channel",
+      "sha256": "8812d230493a1f9a9e0e5d68ba1429d2b96bef8261bdc2fbf68a858144953a46"
     },
     {
-      "description": "Read channels inbox: Returns the messages people have sent to the caller org's connected chat bots, oldest first, in the portable envelope shape every transport normalises into..",
-      "name": "channels_inbox",
-      "path": "channels_inbox/SKILL.md",
-      "service": "channels",
-      "sha256": "3674b65d6638dc636fa909745237c74f7548b9c9184cd33d258449348a7c62de"
+      "description": "Read channel inbox: Returns the messages people have sent to the caller org's connected chat bots, oldest first, in the portable envelope shape every transport normalises into..",
+      "name": "channel_inbox",
+      "path": "channel_inbox/SKILL.md",
+      "service": "channel",
+      "sha256": "c3871d5576f22cf1c5985f5500f562bbd20f3a9d84d3df39fa27c973412075a6"
     },
     {
-      "description": "Read channels pairing: Returns the pairing requests waiting for the caller org to approve — one per person who messaged a connected bot on a channel whose DM policy is \"pairing\" and who is not allowed yet..",
-      "name": "channels_pairing",
-      "path": "channels_pairing/SKILL.md",
-      "service": "channels",
-      "sha256": "c0f61a795ad010542ec781922efa690cf05f339bd8e8b6286d71a3136fb88829"
+      "description": "Read channel pairing: Returns the pairing requests waiting for the caller org to approve — one per person who messaged a connected bot on a channel whose DM policy is \"pairing\" and who is not allowed yet..",
+      "name": "channel_pairing",
+      "path": "channel_pairing/SKILL.md",
+      "service": "channel",
+      "sha256": "89798ed9fe9cb09fa4a18056f1ee1cfea83f4a7eb0316af35857c5cb030a4896"
     },
     {
       "description": "Read ci fleet: Compares what was written with what is running, one row per service along a single causal line: head, the commit on the branch; built, the image that commit produced; declared, the tag pinned in the universe repository; running, what the cluster serves..",
@@ -2156,6 +2170,55 @@
       "path": "compliance_verifications/SKILL.md",
       "service": "compliance",
       "sha256": "b09504857cf7f9c54493c3720e670cf5cd83bc4a6c22757afae5cc368a1ece65"
+    },
+    {
+      "description": "Read compute clusters: Returns the caller org's clusters from both sources: the managed clusters projected from Visor's node pools, and the BYO clusters attached to the caller's project..",
+      "name": "compute_clusters",
+      "path": "compute_clusters/SKILL.md",
+      "service": "compute",
+      "sha256": "cf77c9ab53b618d3e51d42a2b6b7fda1bb0dbcd07b482c04e9ef18b790cb9833"
+    },
+    {
+      "description": "Read compute fleet: Returns every compute unit the caller's org has, from every source, each carrying its latest utilization: agent run-targets, the BYO machines that dialed in, attached BYO clusters and Visor-provisioned machines., Returns the caller org's gpu-jobs render queue,",
+      "name": "compute_fleet",
+      "path": "compute_fleet/SKILL.md",
+      "service": "compute",
+      "sha256": "fdba85cf923760083950ad1871d39a7edacf94da464ea69250b56fb3aa82deb2"
+    },
+    {
+      "description": "Read compute gpus: Returns one row per physical accelerator the caller's org has, derived from its real GPU machines (the size slug says how many cards a node holds) and from the accelerators BYO workers report through nvidia-smi., Is an HONEST empty surface: Visor exposes no GPU",
+      "name": "compute_gpus",
+      "path": "compute_gpus/SKILL.md",
+      "service": "compute",
+      "sha256": "d97a5ce3e576e5f9d5ff0699cb10a031583a286c60463f4a2a995fab688bcd98"
+    },
+    {
+      "description": "Read compute k8s: Lists the org's DOKS clusters (Visor, house account) folded with the org's BYO clusters — ONE fleet cluster view under the unified k8s noun., Returns one cluster's detail: node pools + worker nodes., Returns every DOKS worker node in the org's clusters as a mach",
+      "name": "compute_k8s",
+      "path": "compute_k8s/SKILL.md",
+      "service": "compute",
+      "sha256": "82d8232d50b5b3704438940405808e85c381bd3327c49fffd558dd9caa19577f"
+    },
+    {
+      "description": "Read compute machines: Returns every machine the caller's org has — Visor's registry, the live DigitalOcean droplets and the DOKS worker nodes (deduped into one union), plus the BYO machines that dialed in via `hanzo link` (provider \"byo\")., Returns every agent↔machine binding in",
+      "name": "compute_machines",
+      "path": "compute_machines/SKILL.md",
+      "service": "compute",
+      "sha256": "9c3813f67108eb11006d5a35dd57ea2e2e7daffe7e26233ccfb9481f889b5452"
+    },
+    {
+      "description": "Read compute regions: Regions lists the regions a machine can be launched in..",
+      "name": "compute_regions",
+      "path": "compute_regions/SKILL.md",
+      "service": "compute",
+      "sha256": "700ad65c17100eee0a057c26b51a95bc024336204ef9b2d90385e30fe10adb00"
+    },
+    {
+      "description": "Read compute sizes: Sizes lists the machine sizes available to launch, with their specifications..",
+      "name": "compute_sizes",
+      "path": "compute_sizes/SKILL.md",
+      "service": "compute",
+      "sha256": "2c282f783e02d452d228d963a9db22c7736ad1f3fcd74398a9d73b6dda4dda09"
     },
     {
       "description": "Read content board: Aggregates the caller org's marketing content across every publishable content type into ONE queue board — the cross-type read the framework's per-DocType list cannot give..",
@@ -2592,25 +2655,25 @@
       "sha256": "21d1943d559cedc0b0b8b85b69ccba1e23299303493af426e380fd5947c358b5"
     },
     {
-      "description": "Read flags activity: Returns the caller's flag change log newest-first: every create, update and delete, with the actor and the time..",
-      "name": "flags_activity",
-      "path": "flags_activity/SKILL.md",
-      "service": "flags",
-      "sha256": "2c77ef2802268647b2781536372a3ad671d1bfa0b89b9f73d7b20b5b3f5c10e1"
+      "description": "Read flag activity: Returns the caller's flag change log newest-first: every create, update and delete, with the actor and the time..",
+      "name": "flag_activity",
+      "path": "flag_activity/SKILL.md",
+      "service": "flag",
+      "sha256": "d7d8a0ab28f6c8ed3c9de12d9cfb993fcde7d3015c301e115373d8243e59ff64"
     },
     {
-      "description": "Read flags defs: Returns every flag definition in the caller's (org, project) store, by key, with its version and who last changed it., Returns one flag definition by key, or 404 when the caller's store has none under that key..",
-      "name": "flags_defs",
-      "path": "flags_defs/SKILL.md",
-      "service": "flags",
-      "sha256": "896f4ba5b77a55ff6b7e9745a085fde8843954d7b6079e1ad0acc8c19cb11f52"
+      "description": "Read flag defs: Returns every flag definition in the caller's (org, project) store, by key, with its version and who last changed it., Returns one flag definition by key, or 404 when the caller's store has none under that key..",
+      "name": "flag_defs",
+      "path": "flag_defs/SKILL.md",
+      "service": "flag",
+      "sha256": "f70424ad174d9da19491684455ea2ad9c972240b3a74ce41741ddb735e254c95"
     },
     {
-      "description": "Read flags health: Health reports that the flag engine is serving..",
-      "name": "flags_health",
-      "path": "flags_health/SKILL.md",
-      "service": "flags",
-      "sha256": "7aa491fc24b26d42769f8e0155f74b0c93926536ad079365fbe2938eaa3aa135"
+      "description": "Read flag health: Health reports that the flag engine is serving..",
+      "name": "flag_health",
+      "path": "flag_health/SKILL.md",
+      "service": "flag",
+      "sha256": "fd9e47aac795eeece0285c0e760c3c2c94b67e3a7615aadb56230f143daea84f"
     },
     {
       "description": "Read flow runs: Runs reads one workflow's recorded runs: every component build with its result, keyed by component..",
@@ -2662,53 +2725,53 @@
       "sha256": "31d6563f586be9919b938ccc8d72b34757bd84b0b3a0d7350a97f8ea647e5038"
     },
     {
-      "description": "Read functions deployments: Is what is live right now — each function's current record IS its live deployment, so this is the deployment inventory..",
-      "name": "functions_deployments",
-      "path": "functions_deployments/SKILL.md",
-      "service": "functions",
-      "sha256": "f0ab133f16036e5aa15196c0ba99d9d0bcf261b9f184b8f842408993e17858ef"
+      "description": "Read function deployments: Is what is live right now — each function's current record IS its live deployment, so this is the deployment inventory..",
+      "name": "function_deployments",
+      "path": "function_deployments/SKILL.md",
+      "service": "function",
+      "sha256": "2f143d5bf4089ef4c2f6ac69ae9c91852412cc506ede4044a936ff3144d14b13"
     },
     {
-      "description": "Read functions functions: Is every serverless function the caller's org has published, each with its real 7-day rollup., Is one function with everything a detail page needs in one round-trip: its definition, its 7-day rollup, its trigger, its twenty most recent invocations and th",
-      "name": "functions_functions",
-      "path": "functions_functions/SKILL.md",
-      "service": "functions",
-      "sha256": "a66c6b2f6a1ac486be437900fca51a6ac42d382a002a1fb420cf5f73c5175dca"
+      "description": "Read function function: Is every serverless function the caller's org has published, each with its real 7-day rollup., Is one function with everything a detail page needs in one round-trip: its definition, its 7-day rollup, its trigger, its twenty most recent invocations and the ",
+      "name": "function_function",
+      "path": "function_function/SKILL.md",
+      "service": "function",
+      "sha256": "3f4fc9cff1f80287d65651be9e6fe887692c0df789d977769695f09bc7f5f442"
     },
     {
-      "description": "Read functions invocations: Is one function's past runs, newest first — each with its status, HTTP code, method, time and duration..",
-      "name": "functions_invocations",
-      "path": "functions_invocations/SKILL.md",
-      "service": "functions",
-      "sha256": "ad5b1bc0595dd709d2a5e39eeaa26c59e8a3bd6bb5756ea58f3d4cd209abc7bb"
+      "description": "Read function invocations: Is one function's past runs, newest first — each with its status, HTTP code, method, time and duration..",
+      "name": "function_invocations",
+      "path": "function_invocations/SKILL.md",
+      "service": "function",
+      "sha256": "2ea0ea38eee9f9bda6e56de32a15adc46bac1b3b85750ab683fb11c8ac773c95"
     },
     {
-      "description": "Read functions logs: Is the output of a function's most recent run — its error text when that run failed, else what it printed..",
-      "name": "functions_logs",
-      "path": "functions_logs/SKILL.md",
-      "service": "functions",
-      "sha256": "dc83bb468207decdeb1d545f6de0506cb2c51cdb3774a392b684a1af16f46d10"
+      "description": "Read function logs: Is the output of a function's most recent run — its error text when that run failed, else what it printed..",
+      "name": "function_logs",
+      "path": "function_logs/SKILL.md",
+      "service": "function",
+      "sha256": "20da75a0a750552433665431ad3965eb29fcb963086e97e9e6dc43b984e61d1f"
     },
     {
-      "description": "Read functions metrics: Is the org's serverless dashboard over a window: a per-function invocation costLine and how those invocations ended..",
-      "name": "functions_metrics",
-      "path": "functions_metrics/SKILL.md",
-      "service": "functions",
-      "sha256": "185be7a8d8ed9dab0a87a52c0636cd290614f8f34e0c4dde00aed354d3fe53a7"
+      "description": "Read function metrics: Is the org's serverless dashboard over a window: a per-function invocation costLine and how those invocations ended..",
+      "name": "function_metrics",
+      "path": "function_metrics/SKILL.md",
+      "service": "function",
+      "sha256": "eaf902976146ef796a950dad209a60b4af7d45b48fc25ac91ec5716fce5c8362"
     },
     {
-      "description": "Read functions secrets: Is the NAMES of the secrets the caller org's functions mount..",
-      "name": "functions_secrets",
-      "path": "functions_secrets/SKILL.md",
-      "service": "functions",
-      "sha256": "b405ba251072ee54d2e8c021eaa5e5f47ebfc7c75c189cce04150b9f42c5d87e"
+      "description": "Read function secrets: Is the NAMES of the secrets the caller org's functions mount..",
+      "name": "function_secrets",
+      "path": "function_secrets/SKILL.md",
+      "service": "function",
+      "sha256": "0b71a5d8ad0f88e0eae59a56c1596ac73c953c2a39112fc7c72d82014656e477"
     },
     {
-      "description": "Read functions triggers: Is what calls the caller org's functions — one row per function..",
-      "name": "functions_triggers",
-      "path": "functions_triggers/SKILL.md",
-      "service": "functions",
-      "sha256": "cc4e91b28ec270496a572cfcf73f46521fe7f00923be1c76c98166754f161798"
+      "description": "Read function triggers: Is what calls the caller org's functions — one row per function..",
+      "name": "function_triggers",
+      "path": "function_triggers/SKILL.md",
+      "service": "function",
+      "sha256": "29a10c7c94b19ef909f558d66c25fdfc364027f0ef847ec6ddb7b6c0cc2e4ada"
     },
     {
       "description": "Read gateway config: Read returns the EFFECTIVE edge policy the caller is subject to: the platform CORS allowlist and pre-auth per-IP flood cap in force, plus the caller's own authenticated rate ceiling, edge-cache TTLs and accepted-method allowlist..",
@@ -2767,11 +2830,32 @@
       "sha256": "7754f747a04fdf3c86badefd0c70ac424ceb8197bce69e63ed188e471d48a17c"
     },
     {
+      "description": "Read git pools: Returns the capacity this org has declared and how many daemons have entered each pool..",
+      "name": "git_pools",
+      "path": "git_pools/SKILL.md",
+      "service": "git",
+      "sha256": "7edcac514dd6c5b4d568e82c6f127dcc30d537a2b8aea98908e7f8f932e9f6f5"
+    },
+    {
       "description": "Read git repos: Returns the repos in the caller's scope, most recently updated first., Returns one repo with its live ref state: every branch name and the resolved HEAD commit., Returns one file's bytes at one revision..",
       "name": "git_repos",
       "path": "git_repos/SKILL.md",
       "service": "git",
-      "sha256": "2e3efa9cafad26d4763c828be7758e14ad0d923a2cc279aeb43710fd437279b0"
+      "sha256": "21547cea631ea139e078ec228ad0e4547244181625aba278e668bb1eb72d1a75"
+    },
+    {
+      "description": "Read git runners: Returns the daemons registered into this org's pools, newest first, with when each was last heard from..",
+      "name": "git_runners",
+      "path": "git_runners/SKILL.md",
+      "service": "git",
+      "sha256": "a88c4278684df5b1981a351f3d0af6826bcf1335e879ec79f39ffd552cfce6d2"
+    },
+    {
+      "description": "Read git runs: Returns this org's runs, newest first., Returns one run..",
+      "name": "git_runs",
+      "path": "git_runs/SKILL.md",
+      "service": "git",
+      "sha256": "cb4ac218b8e781602bff694bfaeb6bf686c497fb9d74ea48935a582bbdee835d"
     },
     {
       "description": "Read git tree: Browse a directory inside a repository.",
@@ -2786,6 +2870,13 @@
       "path": "git_usage/SKILL.md",
       "service": "git",
       "sha256": "1914254a0d5aba0f2034d1e30a90555761531e9cbe9824992b7541625772df9d"
+    },
+    {
+      "description": "Read git workflows: Reports the workflows a repository declares at a ref and which declared pool would execute each job — the answer to \"would a push here run, and where\"..",
+      "name": "git_workflows",
+      "path": "git_workflows/SKILL.md",
+      "service": "git",
+      "sha256": "54f0afe38a979f368129ae7c8e932094e8a128ac0f76bcb144e9befa84fb1fb0"
     },
     {
       "description": "Read graph graph: Read the assertions this organization has recorded.",
@@ -3152,74 +3243,74 @@
       "sha256": "f94fe1a17a4719453e64b37ef09076852960e5738d79851152f86e469920ba53"
     },
     {
-      "description": "Read integrations callback: OAuth return for any connector.",
-      "name": "integrations_callback",
-      "path": "integrations_callback/SKILL.md",
-      "service": "integrations",
-      "sha256": "9d5544a6eaf88e1d4869bc3e0f15c1187d4499b1ae77505d17120ac470757eae"
+      "description": "Read integration callback: OAuth return for any connector.",
+      "name": "integration_callback",
+      "path": "integration_callback/SKILL.md",
+      "service": "integration",
+      "sha256": "cf0bbaa47023b8b2144ee3834c38d6af1139b51cdbd1c183c4599475ec3ec954"
     },
     {
-      "description": "Read integrations connectors: Lists the caller's OWN connectors across every provider — the set `hanzo connector ls` prints., Lists the user-scoped provider cards — the catalog of what a user can connect, and how., Hands the custodied access token to its owner — the ONE place cus",
-      "name": "integrations_connectors",
-      "path": "integrations_connectors/SKILL.md",
-      "service": "integrations",
-      "sha256": "0715169cbb6a4d3fe9abe8e22135fa592c239740e7c4116e496e10f97af9875a"
+      "description": "Read integration connectors: Lists the caller's OWN connectors across every provider — the set `hanzo connector ls` prints., Lists the user-scoped provider cards — the catalog of what a user can connect, and how., Hands the custodied access token to its owner — the ONE place cust",
+      "name": "integration_connectors",
+      "path": "integration_connectors/SKILL.md",
+      "service": "integration",
+      "sha256": "8584ca88368ab0af7e04ef7603a6ff8b7d71388f85814c20c53b9c30d9e07c18"
     },
     {
-      "description": "Read integrations discord: Begin linking a Hanzo account from Discord, Complete the Discord account link, Discord sign-in return leg.",
-      "name": "integrations_discord",
-      "path": "integrations_discord/SKILL.md",
-      "service": "integrations",
-      "sha256": "1ce341f275bf06727c2523dc10f7edc7d8f205e411b48ebafbbffa115cacaa0c"
+      "description": "Read integration discord: Begin linking a Hanzo account from Discord, Complete the Discord account link, Discord sign-in return leg.",
+      "name": "integration_discord",
+      "path": "integration_discord/SKILL.md",
+      "service": "integration",
+      "sha256": "1cb5013cfabc2b5a04000fc41688d3f899dae020907b8c264f026352b47ea45f"
     },
     {
-      "description": "Read integrations github: Lists the GitHub accounts the caller may see the App installed on, each confirmed against the App's own list, plus where to add another., Lists the org's granted GitHub repositories, each annotated with its native import + sync status from the git object",
-      "name": "integrations_github",
-      "path": "integrations_github/SKILL.md",
-      "service": "integrations",
-      "sha256": "821f8e653d31fcd70d8b0b3cbc13d0497497a341ee566706a46072ee2b0933e8"
+      "description": "Read integration github: Lists the GitHub accounts the caller may see the App installed on, each confirmed against the App's own list, plus where to add another., Lists the org's granted GitHub repositories, each annotated with its native import + sync status from the git object ",
+      "name": "integration_github",
+      "path": "integration_github/SKILL.md",
+      "service": "integration",
+      "sha256": "33b9f58d5f922a56091abeb1cd900b8ee8f1594b1531a1e6b844eb5981428978"
     },
     {
-      "description": "Read integrations gitlab: Lists the projects the org's GitLab connection can reach — membership projects, most recently active first..",
-      "name": "integrations_gitlab",
-      "path": "integrations_gitlab/SKILL.md",
-      "service": "integrations",
-      "sha256": "b4281739a629c3ce0b36ab922f1724fe06c846ed0fe55b05d895ebcd52bc32ce"
+      "description": "Read integration gitlab: Lists the projects the org's GitLab connection can reach — membership projects, most recently active first..",
+      "name": "integration_gitlab",
+      "path": "integration_gitlab/SKILL.md",
+      "service": "integration",
+      "sha256": "616332d271cadd09c613a75967299caedf5fee75d488b096226aa42b30a4546f"
     },
     {
-      "description": "Read integrations integrations: Returns every registered integration provider together with THIS org's connection status for it — the catalog the console's Integrations page renders., Returns ONE provider with this org's connection status — the same view list carries, for a singl",
-      "name": "integrations_integrations",
-      "path": "integrations_integrations/SKILL.md",
-      "service": "integrations",
-      "sha256": "1025ab3c9dda90dd0f4a7528a76a66a186cbcd384f9498e00e81bccc0183a685"
+      "description": "Read integration integration: Returns every registered integration provider together with THIS org's connection status for it — the catalog the console's Integrations page renders., Returns ONE provider with this org's connection status — the same view list carries, for a single ",
+      "name": "integration_integration",
+      "path": "integration_integration/SKILL.md",
+      "service": "integration",
+      "sha256": "ce566dd7468f8bdb9a95b699100e01c135e30f64ed294c3d7136bce33db45d9d"
     },
     {
-      "description": "Read integrations slack: Install the Hanzo app into a Slack workspace, Begin linking a Hanzo account from Slack, Complete the Slack account link.",
-      "name": "integrations_slack",
-      "path": "integrations_slack/SKILL.md",
-      "service": "integrations",
-      "sha256": "a13b2ebe78e19417a9da5834c83b038f22059d9fe07779a1fa2fdd4f994d18ee"
+      "description": "Read integration slack: Install the Hanzo app into a Slack workspace, Begin linking a Hanzo account from Slack, Complete the Slack account link.",
+      "name": "integration_slack",
+      "path": "integration_slack/SKILL.md",
+      "service": "integration",
+      "sha256": "e7d6dc4d223b66a8a7c4687f4a3cb05e4f446f87a23a94e156d310b169c938f3"
     },
     {
-      "description": "Read integrations teams: Begin linking a Hanzo account from Teams, Microsoft sign-in return leg, Complete the Teams account link.",
-      "name": "integrations_teams",
-      "path": "integrations_teams/SKILL.md",
-      "service": "integrations",
-      "sha256": "b5fd4cc2f0c85121e68057b2d2d53a3733ec000a2742f33adae08ee391896e32"
+      "description": "Read integration teams: Begin linking a Hanzo account from Teams, Microsoft sign-in return leg, Complete the Teams account link.",
+      "name": "integration_teams",
+      "path": "integration_teams/SKILL.md",
+      "service": "integration",
+      "sha256": "f7cdc82fec6c9d3140eee746dd8c7373c3fc662c4cf383958e2c4254315463ff"
     },
     {
-      "description": "Read integrations telegram: Begin linking a Hanzo account from Telegram, Telegram Login Widget return leg, Complete the Telegram account link.",
-      "name": "integrations_telegram",
-      "path": "integrations_telegram/SKILL.md",
-      "service": "integrations",
-      "sha256": "62cff993e25267044663d24bb0846b7e3527bedf36a6c62a5830b599d0447ddd"
+      "description": "Read integration telegram: Begin linking a Hanzo account from Telegram, Telegram Login Widget return leg, Complete the Telegram account link.",
+      "name": "integration_telegram",
+      "path": "integration_telegram/SKILL.md",
+      "service": "integration",
+      "sha256": "0f5a20fe73a4fed36f1bf837562a29226b0eb3c351455fd91d8210f6a0550c7c"
     },
     {
-      "description": "Read integrations whatsapp: WhatsApp Cloud API subscription challenge.",
-      "name": "integrations_whatsapp",
-      "path": "integrations_whatsapp/SKILL.md",
-      "service": "integrations",
-      "sha256": "fc787193115c138b296f959e947728d225a5b259b54977ef9a57eea1e2beebdb"
+      "description": "Read integration whatsapp: WhatsApp Cloud API subscription challenge.",
+      "name": "integration_whatsapp",
+      "path": "integration_whatsapp/SKILL.md",
+      "service": "integration",
+      "sha256": "96de2c8b776e1c386b7bd0ee4bef9fcd6bd689420a0ea30bc2de5d5f803c2d09"
     },
     {
       "description": "Read kms config: Returns the runtime configuration for the KMS console..",
@@ -4510,67 +4601,74 @@
       "sha256": "5d65a35340baf32831e832534e91890d399cefa98f96696375a62074dc138e42"
     },
     {
-      "description": "Read pricing tools: Returns the per-use tool prices — web search, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit..",
+      "description": "Read pricing tariff: Returns the platform's rate card: what a bill is made of, what each part costs, and the completion windows a request may ask for..",
+      "name": "pricing_tariff",
+      "path": "pricing_tariff/SKILL.md",
+      "service": "pricing",
+      "sha256": "3e214ff20a69466e7b12a8dfaf44d9e31b54670eeb556312cece378f067e1452"
+    },
+    {
+      "description": "Read pricing tools: Returns the per-use tool prices — web search, web fetch, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit..",
       "name": "pricing_tools",
       "path": "pricing_tools/SKILL.md",
       "service": "pricing",
-      "sha256": "f132652be58c993801934a21be042ea08bf3f2f34cbdfc7c8a732b2df9a31213"
+      "sha256": "5d321987bf43ddecfdf2fe34bcc4d4b3c7492d2fb9d5c48fa155bf09121521d8"
     },
     {
-      "description": "Read projects deployments: Returns a project's deploy history, newest version first., Returns one deployment of a project by id..",
-      "name": "projects_deployments",
-      "path": "projects_deployments/SKILL.md",
-      "service": "projects",
-      "sha256": "90e735ea88c7e04ee18467af721efe308ab39d48b2c79df1d8f07c92082ef547"
+      "description": "Read project deployments: Returns a project's deploy history, newest version first., Returns one deployment of a project by id..",
+      "name": "project_deployments",
+      "path": "project_deployments/SKILL.md",
+      "service": "project",
+      "sha256": "6c3ca05c5eebace71e8e6a6d3a5d3964178ad79a423ad4277c8d0d98b9bc52a0"
     },
     {
-      "description": "Read projects domains: Returns every custom hostname this site holds: the live ones, plus any pending claim with the DNS records it still owes..",
-      "name": "projects_domains",
-      "path": "projects_domains/SKILL.md",
-      "service": "projects",
-      "sha256": "2a297c201d89da8b18464a83e2c4fff0239dacd976d9d590a56232803eda3b36"
+      "description": "Read project domains: Returns every custom hostname this site holds: the live ones, plus any pending claim with the DNS records it still owes..",
+      "name": "project_domains",
+      "path": "project_domains/SKILL.md",
+      "service": "project",
+      "sha256": "55caa0acdc4eb80f64c6db3e486eacbefc49cdac7f9d12a34ad3a5dd2dc7b400"
     },
     {
-      "description": "Read projects edge: health reports whether a publish reaches readers, rather than whether it was accepted..",
-      "name": "projects_edge",
-      "path": "projects_edge/SKILL.md",
-      "service": "projects",
-      "sha256": "39d19da571b81208d9c3fba2cecde7efdb5e0910ad3eafa4ba864af030e635c8"
+      "description": "Read project edge: health reports whether a publish reaches readers, rather than whether it was accepted..",
+      "name": "project_edge",
+      "path": "project_edge/SKILL.md",
+      "service": "project",
+      "sha256": "8c0c77ed48bc2bee35b5de90921b394dc0d68e306661519e2003f0043da93cb4"
     },
     {
-      "description": "Read projects projects: Returns every project your org owns., Returns one project of yours by slug — its settings, its live URL and the deployment currently serving it..",
-      "name": "projects_projects",
-      "path": "projects_projects/SKILL.md",
-      "service": "projects",
-      "sha256": "fc0cda26d2820ba839a30da2275688af2de2d29159ea720872d81f7e6251c309"
+      "description": "Read project project: Returns every project your org owns., Returns one project of yours by slug — its settings, its live URL and the deployment currently serving it..",
+      "name": "project_project",
+      "path": "project_project/SKILL.md",
+      "service": "project",
+      "sha256": "dca5f0f22999eef943b7fc438f5baff927a373a88a14e198dbd9abed604befca"
     },
     {
-      "description": "Read projects releases: Returns a site's releases newest-first, marking the active one — the rollback menu..",
-      "name": "projects_releases",
-      "path": "projects_releases/SKILL.md",
-      "service": "projects",
-      "sha256": "6798d0e1f14cda23bd3e897e032386958205ec4de4b5ed8ff715f978a542c97a"
+      "description": "Read project releases: Returns a site's releases newest-first, marking the active one — the rollback menu..",
+      "name": "project_releases",
+      "path": "project_releases/SKILL.md",
+      "service": "project",
+      "sha256": "ada417cd611ff4f7ebfc8c4457996fe1c907d4c79e9cd0a9b9b8d6cc4a1a45d6"
     },
     {
-      "description": "Read projects shot: Get a PNG of the project's live site.",
-      "name": "projects_shot",
-      "path": "projects_shot/SKILL.md",
-      "service": "projects",
-      "sha256": "0fc533c3266ac737748cd028a506ba20c750eff85d909cd515d2e2d36eb6a048"
+      "description": "Read project shot: Get a PNG of the project's live site.",
+      "name": "project_shot",
+      "path": "project_shot/SKILL.md",
+      "service": "project",
+      "sha256": "8f479a28d8a498997fac88835aa2be9b1ec74fd64b22a3a4ec2dcc60ecb863c0"
     },
     {
-      "description": "Read projects sites: Returns the org's deployed sites at the pretty URLs they serve at., Returns one site — the same row ListSites carries, for one slug..",
-      "name": "projects_sites",
-      "path": "projects_sites/SKILL.md",
-      "service": "projects",
-      "sha256": "1d4a4c5bbcd4c499f97ae3740f7e390f7b707d559a38b4e3a02affe95026d348"
+      "description": "Read project sites: Returns the org's deployed sites at the pretty URLs they serve at., Returns one site — the same row ListSites carries, for one slug..",
+      "name": "project_sites",
+      "path": "project_sites/SKILL.md",
+      "service": "project",
+      "sha256": "7e98a856c932a0a82552d078597e8b6394d2680c5b5e85429f95d043aec8370f"
     },
     {
-      "description": "Read projects tags: The site's browser tag set for the hosted tag — which pixels to inject, by publishable key.",
-      "name": "projects_tags",
-      "path": "projects_tags/SKILL.md",
-      "service": "projects",
-      "sha256": "c40d6d562ab67b0a3ca806e10dbc0fdd2b3f1c2e15dfb9849d8c3aa2c7b1ccdf"
+      "description": "Read project tags: The site's browser tag set for the hosted tag — which pixels to inject, by publishable key.",
+      "name": "project_tags",
+      "path": "project_tags/SKILL.md",
+      "service": "project",
+      "sha256": "56fccca5a5603c9dcaeb9e2ecf7de16e01834a9bf80d5400747eb44c0fca0081"
     },
     {
       "description": "Read prompt catalog: Catalog returns the read-only starter prompt library shipped with the binary — reference content every tenant sees the same, NOT the caller's own prompts and never mixed into them..",
@@ -4944,13 +5042,6 @@
       "sha256": "c44d29778bc91ed7f12456fd9d78d60efdb4b7c59a6be7c78c607c55a99fbba0"
     },
     {
-      "description": "Read team bots: Returns the caller org's bot members — the org's agents projected as the space Employees they become, each with the member account uuid and Person reference the roster addresses it by..",
-      "name": "team_bots",
-      "path": "team_bots/SKILL.md",
-      "service": "team",
-      "sha256": "43c33c0d1294da3cbd97f7f85bc9ea4f8bc807fa3dd10f8ab60bc9ae1cfefee9"
-    },
-    {
       "description": "Read team collaborator: Open the live collaborative-editing socket.",
       "name": "team_collaborator",
       "path": "team_collaborator/SKILL.md",
@@ -5049,46 +5140,46 @@
       "sha256": "f935ab1f1952b3a8fe18708da6ebfe565290098d2cbdaffa8464544728d836a0"
     },
     {
-      "description": "Read tools activation: Reports which tools are switched on for the caller's org and project..",
-      "name": "tools_activation",
-      "path": "tools_activation/SKILL.md",
-      "service": "tools",
-      "sha256": "7bcb02c8075ebc22812ae665979d6fcb9df80a7e613f5419b34b1923f26bb9f9"
+      "description": "Read tool activation: Reports which tools are switched on for the caller's org and project..",
+      "name": "tool_activation",
+      "path": "tool_activation/SKILL.md",
+      "service": "tool",
+      "sha256": "291a2dc4d825a7dbadfcc34de58e3283a38a54bfc2f245e12885dc95b512a74e"
     },
     {
-      "description": "Read tools catalog: Lists the MCP servers the public registries publish, as we hold them: our canonical copy of registry.modelcontextprotocol.io, plus what we decided about each entry., Returns one catalog entry in full: the publisher's description, its repository and site, every",
-      "name": "tools_catalog",
-      "path": "tools_catalog/SKILL.md",
-      "service": "tools",
-      "sha256": "0da9b1b5191eb7c6b1e98cab8b8eb339f57ffce425bd3f8467f845881119701d"
+      "description": "Read tool catalog: Lists the MCP servers the public registries publish, as we hold them: our canonical copy of registry.modelcontextprotocol.io, plus what we decided about each entry., Returns one catalog entry in full: the publisher's description, its repository and site, every ",
+      "name": "tool_catalog",
+      "path": "tool_catalog/SKILL.md",
+      "service": "tool",
+      "sha256": "50af1188c2c5eff484fa22a39eb5698e34fee63ec110a23f618f98ecc94318a7"
     },
     {
-      "description": "Read tools mcp: Lists the external MCP servers the caller's org has registered..",
-      "name": "tools_mcp",
-      "path": "tools_mcp/SKILL.md",
-      "service": "tools",
-      "sha256": "179a51731c7b2090dc3cdb5041d11b26a873b6d6cc7417249040679d0ae47ce5"
+      "description": "Read tool mcp: Lists the external MCP servers the caller's org has registered..",
+      "name": "tool_mcp",
+      "path": "tool_mcp/SKILL.md",
+      "service": "tool",
+      "sha256": "81b66f971344250a173f505cb2a39c18f59ce3c21a2417af683933d90a05c7d0"
     },
     {
-      "description": "Read tools plugins: Reports what this deployment actually mounted: every subsystem the composition root declared and whether it is switched on., Lists the plugins the caller's org BUILT, newest first, each with the TypeScript as authored..",
-      "name": "tools_plugins",
-      "path": "tools_plugins/SKILL.md",
-      "service": "tools",
-      "sha256": "d7058040ee6024fb5c8fc398d04692a02362ebedc21aa8b9f11892b353749e9a"
+      "description": "Read tool plugins: Reports what this deployment actually mounted: every subsystem the composition root declared and whether it is switched on., Lists the plugins the caller's org BUILT, newest first, each with the TypeScript as authored..",
+      "name": "tool_plugins",
+      "path": "tool_plugins/SKILL.md",
+      "service": "tool",
+      "sha256": "b761ae09262855d2efacd63e52b415e7e334a06e2b3bdcc2148e9d57ade28fc2"
     },
     {
-      "description": "Read tools skills: Lists the skills the caller's org can reach — the brand's embedded catalogue plus the org's own authored ones — with each one's activation flag., Lists the caller org's OWN skills with their SKILL.md bodies..",
-      "name": "tools_skills",
-      "path": "tools_skills/SKILL.md",
-      "service": "tools",
-      "sha256": "e4ca074f47ee5411dced2cc50c8e95212ab6a697995dca1416a3f59eb1a49178"
+      "description": "Read tool skills: Lists the skills the caller's org can reach — the brand's embedded catalogue plus the org's own authored ones — with each one's activation flag., Lists the caller org's OWN skills with their SKILL.md bodies..",
+      "name": "tool_skills",
+      "path": "tool_skills/SKILL.md",
+      "service": "tool",
+      "sha256": "67482952bdae7451fdcd8f86599d06201ccd86a1f75ba028e6409e252af70744"
     },
     {
-      "description": "Read tools tools: Lists every tool the caller's org and project can reach, from every source, each flagged with whether it is activated..",
-      "name": "tools_tools",
-      "path": "tools_tools/SKILL.md",
-      "service": "tools",
-      "sha256": "a006c28950588b0a8099820e7385b296845ecb60ce4636bb8627d94f0659ab0c"
+      "description": "Read tool tool: Lists every tool the caller's org and project can reach, from every source, each flagged with whether it is activated..",
+      "name": "tool_tool",
+      "path": "tool_tool/SKILL.md",
+      "service": "tool",
+      "sha256": "0ff30a1c0a75a4ca110a6ab3be54299002302bf6e0e9065e3f271bb0203c36fb"
     },
     {
       "description": "Read translate memory: List returns the org's own translation-memory entries, newest first, optionally narrowed to one target language and/or one position on the review ladder..",
@@ -5250,48 +5341,6 @@
       "path": "videos_videos/SKILL.md",
       "service": "videos",
       "sha256": "ac824f9049b5e3a6da74067cabf5b19fb93e1fe2177195a35d513e4f9163f9b2"
-    },
-    {
-      "description": "Read visor clusters: Returns the caller org's clusters from both sources: the managed clusters projected from Visor's node pools, and the BYO clusters attached to the caller's project..",
-      "name": "visor_clusters",
-      "path": "visor_clusters/SKILL.md",
-      "service": "visor",
-      "sha256": "fb5ff7dcaf6c56364e13b3ecd81bb7ba80365bc96b3a7ae8250264f03ec486cf"
-    },
-    {
-      "description": "Read visor compute: Returns the caller org's bot machines — the kind=bot machines — each joined with the agent binding that says which cloud Agent it runs., Returns one of the caller org's bot machines with its agent binding., Regions lists the regions a machine can be launched i",
-      "name": "visor_compute",
-      "path": "visor_compute/SKILL.md",
-      "service": "visor",
-      "sha256": "591fcdd86abb34b460a3be83c0e045ffdbc58f501568bce9258fb8b56f681576"
-    },
-    {
-      "description": "Read visor fleet: Returns every compute unit the caller's org has, from every source, each carrying its latest utilization: agent run-targets, the BYO machines that dialed in, attached BYO clusters and Visor-provisioned machines., Returns the caller org's gpu-jobs render queue, e",
-      "name": "visor_fleet",
-      "path": "visor_fleet/SKILL.md",
-      "service": "visor",
-      "sha256": "a9978aef3f83954d88c32dd12184e765ebff19ff3b6aa9d5c47cf43b9434dff7"
-    },
-    {
-      "description": "Read visor gpus: Returns one row per physical accelerator the caller's org has, derived from its real GPU machines (the size slug says how many cards a node holds) and from the accelerators BYO workers report through nvidia-smi., Is an HONEST empty surface: Visor exposes no GPU a",
-      "name": "visor_gpus",
-      "path": "visor_gpus/SKILL.md",
-      "service": "visor",
-      "sha256": "0b5ab1e2d9c4c76757ad868eeac513893821deddcf132e84c62ed4befac86595"
-    },
-    {
-      "description": "Read visor k8s: Lists the org's DOKS clusters (Visor, house account) folded with the org's BYO clusters — ONE fleet cluster view under the unified k8s noun., Returns one cluster's detail: node pools + worker nodes., Returns every DOKS worker node in the org's clusters as a machin",
-      "name": "visor_k8s",
-      "path": "visor_k8s/SKILL.md",
-      "service": "visor",
-      "sha256": "d7c4ce0965e25ecd0d81b92c5fd592c32776672cb294f4f6a5c8496c0ec2681d"
-    },
-    {
-      "description": "Read visor machines: Returns every machine the caller's org has — Visor's registry, the live DigitalOcean droplets and the DOKS worker nodes (deduped into one union), plus the BYO machines that dialed in via `hanzo link` (provider \"byo\")., Returns every agent↔machine binding in t",
-      "name": "visor_machines",
-      "path": "visor_machines/SKILL.md",
-      "service": "visor",
-      "sha256": "234daf30d3169273a2c1358578aa21a0d407ccdbf052563e75c0486698eee828"
     },
     {
       "description": "Read wallet accounts: Returns the caller org's wallet accounts, newest first..",

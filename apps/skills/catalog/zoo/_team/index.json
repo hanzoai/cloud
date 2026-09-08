@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.zoo.ngo/v1/mcp"
   },
-  "skill_count": 8,
+  "skill_count": 7,
   "skills": [
     {
       "description": "Read team account: Start a sign-in at zoolabs.id, Complete a sign-in and hand the browser its session, Returns the identity providers this deployment starts a login with..",
@@ -24,13 +24,6 @@
       "path": "team_billing/SKILL.md",
       "service": "team",
       "sha256": "947f294dd7e81d2fb1f432a86117dd4ed926a53fa86370a4e7a130f1e3902a17"
-    },
-    {
-      "description": "Read team bots: Returns the caller org's bot members — the org's agents projected as the space Employees they become, each with the member account uuid and Person reference the roster addresses it by..",
-      "name": "team_bots",
-      "path": "team_bots/SKILL.md",
-      "service": "team",
-      "sha256": "a2c4f85ccc57f61d8587cb6ebe10c0e6b2dd319cb0b9210b034f6ff9e3f2867f"
     },
     {
       "description": "Read team collaborator: Open the live collaborative-editing socket.",

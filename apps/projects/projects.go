@@ -653,67 +653,100 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(r, "/v1/project/:slug/releases", o.listReleases)
 	zip.Post(r, "/v1/project/:slug/releases/:release/activate", o.activateRelease)
 
-	for _, pfx := range []string{"/v1/projects"} {
-		zip.Post(r, pfx, o.create, zip.WithStatus(http.StatusCreated))
-		zip.Post(r, pfx+"/fork", o.fork, zip.WithStatus(http.StatusCreated))
-		zip.Get(r, pfx, o.list)
-		zip.Post(r, pfx+"/sites", o.buildSite)
-		zip.Post(r, pfx+"/sites/deploy", o.deploySite)
-		zip.Get(r, pfx+"/sites", o.listSites)
-		zip.Get(r, pfx+"/sites/:slug", o.getSite)
-		zip.Get(r, pfx+"/edge", o.edge, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
-		zip.Get(r, pfx+"/:slug", o.get)
-		zip.Patch(r, pfx+"/:slug", o.update)
-		zip.Delete(r, pfx+"/:slug", o.del, zip.WithStatus(http.StatusNoContent))
-		app.Post(pfx+"/:slug/deploy", cloud.Handle(s, deploy))
-		app.Get(pfx+"/:slug/shot", cloud.Handle(s, shotOf))
-		zip.Put(r, pfx+"/:slug/star", o.star)
-		zip.Delete(r, pfx+"/:slug/star", o.unstar)
-		zip.Post(r, pfx+"/:slug/purge", o.purge)
-		zip.Post(r, pfx+"/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
-		zip.Get(r, pfx+"/:slug/deployments", o.listDeployments)
-		zip.Get(r, pfx+"/:slug/deployments/:id", o.getDeployment)
-		zip.Post(r, pfx+"/:slug/deployments/:id/complete", o.completeDeployment)
-		zip.Get(r, pfx+"/:slug/domains", o.listDomains)
-		zip.Post(r, pfx+"/:slug/domains", o.bindDomains)
-		zip.Post(r, pfx+"/:slug/domains/:host/verify", o.verifyDomain)
-		zip.Delete(r, pfx+"/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
-		zip.Post(r, pfx+"/:slug/publish", o.publishSiteRelease)
-		zip.Post(r, pfx+"/:slug/releases", o.createRelease, zip.WithStatus(http.StatusCreated))
-		zip.Get(r, pfx+"/:slug/releases", o.listReleases)
-		zip.Post(r, pfx+"/:slug/releases/:release/activate", o.activateRelease)
-	}
+	// Unrolled from a loop over ONE prefix. zipdoc reads a route path statically,
+	// so a path built from a loop variable has no identity to document and the
+	// whole package is refused. One element is not a range; it is a constant.
+	zip.Post(r, "/v1/projects", o.create, zip.WithStatus(http.StatusCreated))
+	zip.Post(r, "/v1/projects/fork", o.fork, zip.WithStatus(http.StatusCreated))
+	zip.Get(r, "/v1/projects", o.list)
+	zip.Post(r, "/v1/projects/sites", o.buildSite)
+	zip.Post(r, "/v1/projects/sites/deploy", o.deploySite)
+	zip.Get(r, "/v1/projects/sites", o.listSites)
+	zip.Get(r, "/v1/projects/sites/:slug", o.getSite)
+	zip.Get(r, "/v1/projects/edge", o.edge, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
+	zip.Get(r, "/v1/projects/:slug", o.get)
+	zip.Patch(r, "/v1/projects/:slug", o.update)
+	zip.Delete(r, "/v1/projects/:slug", o.del, zip.WithStatus(http.StatusNoContent))
+	app.Post("/v1/projects/:slug/deploy", cloud.Handle(s, deploy))
+	app.Get("/v1/projects/:slug/shot", cloud.Handle(s, shotOf))
+	zip.Put(r, "/v1/projects/:slug/star", o.star)
+	zip.Delete(r, "/v1/projects/:slug/star", o.unstar)
+	zip.Post(r, "/v1/projects/:slug/purge", o.purge)
+	zip.Post(r, "/v1/projects/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
+	zip.Get(r, "/v1/projects/:slug/deployments", o.listDeployments)
+	zip.Get(r, "/v1/projects/:slug/deployments/:id", o.getDeployment)
+	zip.Post(r, "/v1/projects/:slug/deployments/:id/complete", o.completeDeployment)
+	zip.Get(r, "/v1/projects/:slug/domains", o.listDomains)
+	zip.Post(r, "/v1/projects/:slug/domains", o.bindDomains)
+	zip.Post(r, "/v1/projects/:slug/domains/:host/verify", o.verifyDomain)
+	zip.Delete(r, "/v1/projects/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
+	zip.Post(r, "/v1/projects/:slug/publish", o.publishSiteRelease)
+	zip.Post(r, "/v1/projects/:slug/releases", o.createRelease, zip.WithStatus(http.StatusCreated))
+	zip.Get(r, "/v1/projects/:slug/releases", o.listReleases)
+	zip.Post(r, "/v1/projects/:slug/releases/:release/activate", o.activateRelease)
 
 	// NATIVE STATIC SITE /v1/site and /v1/sites API
-	for _, pfx := range []string{"/v1/sites", "/v1/site"} {
-		zip.Get(r, pfx, o.listSites)
-		zip.Post(r, pfx, o.buildSite)
-		zip.Post(r, pfx+"/deploy", o.deploySite)
-		zip.Get(r, pfx+"/edge", o.edge, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
-		zip.Get(r, pfx+"/:slug", o.getSite)
-		zip.Patch(r, pfx+"/:slug", o.update)
-		zip.Delete(r, pfx+"/:slug", o.del, zip.WithStatus(http.StatusNoContent))
+	// Unrolled, and stated once per prefix. A path assembled from a loop
+	// variable has no identity zipdoc can read, so the package was refused
+	// whole. /v1/sites and /v1/site are the same surface under two names —
+	// worth collapsing to one, but that is a caller-visible change and this
+	// is not the moment for it.
+	zip.Get(r, "/v1/sites", o.listSites)
+	zip.Post(r, "/v1/sites", o.buildSite)
+	zip.Post(r, "/v1/sites/deploy", o.deploySite)
+	zip.Get(r, "/v1/sites/edge", o.edge, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
+	zip.Get(r, "/v1/sites/:slug", o.getSite)
+	zip.Patch(r, "/v1/sites/:slug", o.update)
+	zip.Delete(r, "/v1/sites/:slug", o.del, zip.WithStatus(http.StatusNoContent))
 
-		app.Post(pfx+"/:slug/deploy", cloud.Handle(s, deploy))
-		app.Get(pfx+"/:slug/shot", cloud.Handle(s, shotOf))
+	app.Post("/v1/sites/:slug/deploy", cloud.Handle(s, deploy))
+	app.Get("/v1/sites/:slug/shot", cloud.Handle(s, shotOf))
 
-		zip.Post(r, pfx+"/:slug/purge", o.purge)
-		zip.Post(r, pfx+"/:slug/publish", o.publishSiteRelease)
+	zip.Post(r, "/v1/sites/:slug/purge", o.purge)
+	zip.Post(r, "/v1/sites/:slug/publish", o.publishSiteRelease)
 
-		zip.Post(r, pfx+"/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
-		zip.Get(r, pfx+"/:slug/deployments", o.listDeployments)
-		zip.Get(r, pfx+"/:slug/deployments/:id", o.getDeployment)
-		zip.Post(r, pfx+"/:slug/deployments/:id/complete", o.completeDeployment)
+	zip.Post(r, "/v1/sites/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
+	zip.Get(r, "/v1/sites/:slug/deployments", o.listDeployments)
+	zip.Get(r, "/v1/sites/:slug/deployments/:id", o.getDeployment)
+	zip.Post(r, "/v1/sites/:slug/deployments/:id/complete", o.completeDeployment)
 
-		zip.Get(r, pfx+"/:slug/releases", o.listReleases)
-		zip.Post(r, pfx+"/:slug/releases", o.createRelease, zip.WithStatus(http.StatusCreated))
-		zip.Post(r, pfx+"/:slug/releases/:release/activate", o.activateRelease)
+	zip.Get(r, "/v1/sites/:slug/releases", o.listReleases)
+	zip.Post(r, "/v1/sites/:slug/releases", o.createRelease, zip.WithStatus(http.StatusCreated))
+	zip.Post(r, "/v1/sites/:slug/releases/:release/activate", o.activateRelease)
 
-		zip.Get(r, pfx+"/:slug/domains", o.listDomains)
-		zip.Post(r, pfx+"/:slug/domains", o.bindDomains)
-		zip.Post(r, pfx+"/:slug/domains/:host/verify", o.verifyDomain)
-		zip.Delete(r, pfx+"/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
-	}
+	zip.Get(r, "/v1/sites/:slug/domains", o.listDomains)
+	zip.Post(r, "/v1/sites/:slug/domains", o.bindDomains)
+	zip.Post(r, "/v1/sites/:slug/domains/:host/verify", o.verifyDomain)
+	zip.Delete(r, "/v1/sites/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
+
+	zip.Get(r, "/v1/site", o.listSites)
+	zip.Post(r, "/v1/site", o.buildSite)
+	zip.Post(r, "/v1/site/deploy", o.deploySite)
+	zip.Get(r, "/v1/site/edge", o.edge, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
+	zip.Get(r, "/v1/site/:slug", o.getSite)
+	zip.Patch(r, "/v1/site/:slug", o.update)
+	zip.Delete(r, "/v1/site/:slug", o.del, zip.WithStatus(http.StatusNoContent))
+
+	app.Post("/v1/site/:slug/deploy", cloud.Handle(s, deploy))
+	app.Get("/v1/site/:slug/shot", cloud.Handle(s, shotOf))
+
+	zip.Post(r, "/v1/site/:slug/purge", o.purge)
+	zip.Post(r, "/v1/site/:slug/publish", o.publishSiteRelease)
+
+	zip.Post(r, "/v1/site/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
+	zip.Get(r, "/v1/site/:slug/deployments", o.listDeployments)
+	zip.Get(r, "/v1/site/:slug/deployments/:id", o.getDeployment)
+	zip.Post(r, "/v1/site/:slug/deployments/:id/complete", o.completeDeployment)
+
+	zip.Get(r, "/v1/site/:slug/releases", o.listReleases)
+	zip.Post(r, "/v1/site/:slug/releases", o.createRelease, zip.WithStatus(http.StatusCreated))
+	zip.Post(r, "/v1/site/:slug/releases/:release/activate", o.activateRelease)
+
+	zip.Get(r, "/v1/site/:slug/domains", o.listDomains)
+	zip.Post(r, "/v1/site/:slug/domains", o.bindDomains)
+	zip.Post(r, "/v1/site/:slug/domains/:host/verify", o.verifyDomain)
+	zip.Delete(r, "/v1/site/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
+
 }
 
 // ---- handlers ----
