@@ -1275,7 +1275,13 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 				},
 				"spec": map[string]any{
 					"restartPolicy":                "Never",
-					"nodeSelector":                 map[string]any{"runner-pool": "32g"},
+					// The builder runs where the ARCHITECTURE it builds for actually is. This
+					// pinned a pool name, and the only node carrying it is arm64 — so every
+					// linux/amd64 image the door produces was built under emulation on the
+					// wrong machine. Selecting the arch is also what makes a second platform
+					// possible later: the node is chosen by what is being built, not by a
+					// label that happens to name one box.
+					"nodeSelector":                 map[string]any{"kubernetes.io/arch": "amd64"},
 					"tolerations":                  []any{map[string]any{"key": "dedicated", "operator": "Equal", "value": "ci-runner", "effect": "NoSchedule"}},
 					"automountServiceAccountToken": false,
 					// Pod-level: run the whole pod as the non-root buildkit user.
