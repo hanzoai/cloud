@@ -28,6 +28,7 @@ import (
 	// owns process-lifetime resources, a Shutdown); Wire references them directly.
 	"github.com/hanzoai/cloud/clients/auditlog"
 	"github.com/hanzoai/cloud/clients/base"
+	"github.com/hanzoai/cloud/clients/bot"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/dns"
 	"github.com/hanzoai/cloud/clients/do"
@@ -77,6 +78,9 @@ func Wire() []cloud.MountSpec {
 		{Name: "validators", Mount: validators.Mount, Shutdown: ctxShutdown(validators.Shutdown)},
 		{Name: "code", Mount: code.Mount, Shutdown: code.Shutdown},
 		{Name: "session", Mount: session.Mount, Shutdown: ctxShutdown(session.Shutdown)},
+		// The gateway a Hanzo Bot announces itself to: /v1/bot, and the registry
+		// of which bots are live, suspended, or gone.
+		{Name: "bot", Mount: bot.Mount, Shutdown: ctxShutdown(bot.Shutdown)},
 		{Name: "zero-trust", Mount: zt.Mount},
 		// ngrok-native public sharing: /v1/share/* provisions a per-org zrok account.
 		{Name: "share", Mount: share.Mount},
