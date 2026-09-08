@@ -565,11 +565,23 @@ func newRootCmd() *cobra.Command {
 	return root
 }
 
+// delegateWait bounds how long the fabric CLI has to answer `--version`. Three
+// seconds is generous for a process that prints one line and exits, and short
+// enough that a wedged delegate does not hold `hanzo version` open.
+//
+// It is a var so a test can lend itself a longer one. The version tests spawn a
+// real shell script, and on a machine already running the whole suite the spawn
+// alone can outlast a production bound sized for an idle terminal — which made
+// the agreeing-delegate case report "would not report a version" at exactly the
+// timeout, every full run. Raising the shipped bound to suit a loaded test box
+// would trade a real user's latency for a test's convenience.
+var delegateWait = 3 * time.Second
+
 // delegateVersion asks the fabric CLI what it is. Empty means it would not say,
 // which is reported as such rather than guessed at — a version nobody can trust
 // is worse than none.
 func delegateVersion(bin string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), delegateWait)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, bin, "--version").Output()
 	if err != nil {
