@@ -533,6 +533,11 @@ func (k *k8sClient) artifactJobSpec(jobName, repoURL, ref, tag, base, putBase st
 				}},
 				"spec": map[string]any{
 					"restartPolicy":                "Never",
+					// Builds yield. hanzo-ci sits below hanzo-infra-critical and
+					// hanzo-money-critical, so a queue of them can never push a serving
+					// workload off a node, and raising a single run's class is how one
+					// build gets moved to the front without stopping the others.
+					"priorityClassName":            "hanzo-ci",
 					// The builder runs where the ARCHITECTURE it builds for actually is. This
 					// pinned a pool name, and the only node carrying it is arm64 — so every
 					// linux/amd64 image the door produces was built under emulation on the
