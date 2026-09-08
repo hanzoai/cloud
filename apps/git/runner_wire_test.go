@@ -17,7 +17,7 @@ import (
 // runner_wire_test.go is the ORACLE for the port.
 //
 // The runner protocol has a reference implementation — the forge at
-// github.com/hanzoai/git, routers/api/actions/runner.go — and a client that
+// github.com/hanzoai/forge, routers/api/actions/runner.go — and a client that
 // speaks it today, github.com/hanzoai/git-runner. This file holds that reference
 // to the implementation here: same addresses, same operation names, same typed
 // payloads, same validation, same timestamp precision, same failures. Where the

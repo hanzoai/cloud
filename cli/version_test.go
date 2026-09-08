@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeDelegate installs a script as the fabric CLI and points resolution at it
@@ -58,6 +59,10 @@ func TestVersionOutputContract(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			defer func(v string) { Version = v }(Version)
 			Version = "v1.234.5"
+			// Spawning a shell script competes with every other package in a full
+			// run, so lend the probe more room than the shipped bound allows.
+			defer func(d time.Duration) { delegateWait = d }(delegateWait)
+			delegateWait = 60 * time.Second
 			path := tc.setup(t)
 
 			var out, errOut bytes.Buffer

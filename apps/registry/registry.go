@@ -8,7 +8,7 @@
 // PRODUCT-REPO MODEL. The registries themselves are running products: the OCI
 // registry at oci.hanzo.ai (github.com/hanzoai/registry — CNCF distribution,
 // S3-backed, Hanzo IAM token auth) and the npm registry at pkg.hanzo.ai
-// (hanzoai/pkg — verdaccio on S3, with the hanzoai/git forge's /v1/packages
+// (hanzoai/pkg — verdaccio on S3, with hanzoai/forge's /v1/packages
 // ecosystems beside it on the same host). This subsystem reimplements NONE of
 // them: every op is a typed read of what those services genuinely answer today,
 // plus one token mint through the SAME IAM realm the docker CLI uses. cloud

@@ -1110,8 +1110,8 @@ jobs:
           set -euo pipefail
           # A push IS the compare-and-swap: the server refuses to move a ref that
           # already names something else, and re-pushing the identical value is a
-          # no-op. Gitea has no POST for a ref outside refs/tags, and it does not
-          # need one — this is the operation that endpoint would have wrapped.
+          # no-op. The forge has no POST for a ref outside refs/tags, and it does
+          # not need one — this is the operation that endpoint would have wrapped.
           if git push "https://x:${GIT_TOKEN}@${remote#https://}" \
                "${{ github.sha }}:refs/${{ steps.img.outputs.receipt }}" 2>/tmp/receipt.err; then
             echo "recorded: ${{ steps.img.outputs.digest }} booted, built from ${{ github.sha }}"

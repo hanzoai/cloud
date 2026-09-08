@@ -55,7 +55,7 @@ var intentRefused = map[string]string{
 	"/v1/registry/scan":      "no vulnerability scanner is deployed behind the registry; a scan route with no scanner is a fake",
 	"/v1/registry/delete":    "destructive manifest deletion ships only after a live proof lane exists for it; an unproven delete on shared images is a footgun, not a feature",
 	"/v1/registry/push":      "push credentials are CI custody (KMS-held service accounts), never minted to callers — a push grant here would be privilege escalation",
-	// The forge's package ecosystems (go, cargo, … via hanzoai/git on
+	// The forge's package ecosystems (go, cargo, … via hanzoai/forge on
 	// pkg.hanzo.ai/v1/packages) are live but unlisted here for now.
 	"/v1/registry/ecosystems": "forge package listing needs the IAM-org→forge-owner mapping, which is unbuilt; npm listing is served because its @scope IS the org slug",
 }
