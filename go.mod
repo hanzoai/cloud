@@ -21,6 +21,7 @@ require (
 	github.com/hanzoai/dataroom v1.1.7
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
+	github.com/hanzoai/git/modules/actions/runner v0.0.0-20260907014409-964ba924a04f
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/iam v1.34.98
 	github.com/hanzoai/kafka v1.3.2
@@ -112,7 +113,6 @@ require (
 	github.com/go-resty/resty/v2 v2.17.2 // indirect
 	github.com/go-webauthn/webauthn v0.17.4 // indirect
 	github.com/go-webauthn/x v0.2.6 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
@@ -120,7 +120,6 @@ require (
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.17 // indirect
 	github.com/hanzoai/csqlite v0.1.2 // indirect
-	github.com/hanzoai/git/modules/actions/runner v0.0.0-20260907014409-964ba924a04f // indirect
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-fuse/v2 v2.9.4 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
@@ -174,6 +173,7 @@ require (
 	github.com/moby/term v0.5.2 // indirect
 	github.com/muhlemmer/gu v0.3.1 // indirect
 	github.com/nats-io/nats-server/v2 v2.12.3 // indirect
+	github.com/netlify/netlify-go v0.1.11 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/olivere/elastic/v7 v7.0.32 // indirect
 	github.com/parallaxsecond/parsec-client-go v0.0.0-20221025095442-f0a77d263cf9 // indirect

@@ -49,15 +49,15 @@ import (
 // authority the metering path reads, falling back to the same compiled floor. A
 // rate of zero is a price and not an absence — a paused computer, a computer's
 // creation, the interfaces and a seat all cost nothing by design.
-func (o ops) tariff(ctx context.Context, _ *pricingNoInput) (*cloud.Tariff, error) {
-	card := cloud.Card(ctx)
+func (o ops) tariff(ctx context.Context, _ *pricingNoInput) (*cloud.Card, error) {
+	card := cloud.Current(ctx)
 	return &card, nil
 }
 
 // priceCard writes the card into a served document and reprices the tool rows the
 // card owns. It is the ONE assembly both published forms go through.
 func priceCard(ctx context.Context, doc map[string]any) {
-	card := cloud.Card(ctx)
+	card := cloud.Current(ctx)
 	doc["tariff"] = card
 	if tools, ok := doc["tools"].([]any); ok {
 		doc["tools"] = repriceTools(tools, card)
@@ -75,7 +75,7 @@ var webRows = map[string]string{"Web Search": "web_search", "Web Fetch": "web_fe
 // in — and the card owns the number, which is the same division of ownership the
 // first-party model overlay keeps. A row whose shape is not the list's is passed
 // through untouched rather than guessed at.
-func repriceTools(tools []any, card cloud.Tariff) []any {
+func repriceTools(tools []any, card cloud.Card) []any {
 	priced := map[string]cloud.Rate{}
 	for _, r := range card.Rates {
 		priced[r.Name] = r
@@ -129,7 +129,7 @@ func repricedTools(ctx context.Context, tools []pricingBlob) []pricingBlob {
 	for _, t := range tools {
 		raw = append(raw, map[string]any(t))
 	}
-	out := repriceTools(raw, cloud.Card(ctx))
+	out := repriceTools(raw, cloud.Current(ctx))
 	rows := make([]pricingBlob, 0, len(out))
 	for _, r := range out {
 		if m, ok := r.(map[string]any); ok {

@@ -276,7 +276,7 @@ func TestTheToolListTakesItsWebRowsFromTheCard(t *testing.T) {
 
 	// What the card says a web call costs, in the decimal this list carries.
 	want := map[string]float64{}
-	for _, r := range cloud.Card(context.Background()).Rates {
+	for _, r := range cloud.Current(context.Background()).Rates {
 		switch r.Name {
 		case "web_search":
 			want["Web Search"] = float64(r.Micros) / 1e6

@@ -268,6 +268,26 @@ var costly = func() map[string]string {
 // promise somebody has to keep re-checking. Every entry below is here because the
 // promise is the TRUE statement and Metered would be the false one.
 var freeOfVendor = map[string]string{
+	// NOT A VENDOR. apps/kms's newAttest asks the cluster API who is on the
+	// other end of its socket, through the pod's OWN mounted service account —
+	// it identifies a peer, it does not buy anything. Outside a cluster
+	// InClusterConfig fails and every peer is a host process, so the call is
+	// absent rather than unpaid. Every app opens its store through kms, which is
+	// why this reaches nearly the whole fleet; pricing a surface on it would
+	// price the act of having a store.
+	"ad:InClusterConfig()":          "kms attests its socket peer through the pod's own service account; buys nothing",
+	"billing:InClusterConfig()":     "kms attests its socket peer through the pod's own service account; buys nothing",
+	"campaign:InClusterConfig()":    "kms attests its socket peer through the pod's own service account; buys nothing",
+	"catalog:InClusterConfig()":     "kms attests its socket peer through the pod's own service account; buys nothing",
+	"destination:InClusterConfig()": "kms attests its socket peer through the pod's own service account; buys nothing",
+	"git:InClusterConfig()":         "kms attests its socket peer through the pod's own service account; buys nothing",
+	"guide:InClusterConfig()":       "kms attests its socket peer through the pod's own service account; buys nothing",
+	"integration:InClusterConfig()": "kms attests its socket peer through the pod's own service account; buys nothing",
+	"kms:InClusterConfig()":         "kms attests its socket peer through the pod's own service account; buys nothing",
+	"link:InClusterConfig()":        "kms attests its socket peer through the pod's own service account; buys nothing",
+	"sync:InClusterConfig()":        "kms attests its socket peer through the pod's own service account; buys nothing",
+	"team:InClusterConfig()":        "kms attests its socket peer through the pod's own service account; buys nothing",
+
 	// A CHOKE POINT, CHECKED. Every Cloudflare call in this binary would have to
 	// come through cloudflare.With/New, whose only non-test caller is
 	// apps/projects/edgecred.go's newEdge, whose only caller is the edge field
