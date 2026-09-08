@@ -2154,6 +2154,27 @@ components:
         dropped:
           type: integer
       type: object
+    Card:
+      properties:
+        components:
+          description: Components are the four things a bill is made of.
+          items:
+            $ref: '#/components/schemas/Component'
+          type: array
+        rates:
+          description: Rates are the priced lines, each in micro-USD per its own unit.
+          items:
+            $ref: '#/components/schemas/Rate'
+          type: array
+        unit:
+          description: Unit is the unit every amount on this card is stated in.
+          type: string
+        windows:
+          description: Speeds are the completion speeds, dearest first.
+          items:
+            $ref: '#/components/schemas/Speed'
+          type: array
+      type: object
     Cart:
       properties:
         createdAt:
@@ -3023,6 +3044,34 @@ components:
         label:
           description: Label is the text a client would insert, and what an editor
             lists.
+          type: string
+      type: object
+    Component:
+      properties:
+        basis:
+          description: Basis is what it is metered by, in the fewest words that are
+            true.
+          type: string
+        name:
+          description: Name is the component's name on the spend breakdown.
+          type: string
+        note:
+          description: Note is what the component means, in one sentence.
+          type: string
+        quoted:
+          description: |-
+            Quoted says whether a call is priced BEFORE it runs. A quoted component can
+            refuse a call that would breach a budget; a measured one is booked from what
+            it used and is bounded by the headroom under the per-task cap instead.
+          type: boolean
+        tiers:
+          description: Tiers are the disjoint tiers this component meters in, where
+            it has them.
+          items:
+            type: string
+          type: array
+        title:
+          description: Title is how it reads on a price list.
           type: string
       type: object
     Config:
@@ -8625,6 +8674,31 @@ components:
           $ref: '#/components/schemas/Position'
           description: Start is the first position in the span, included.
       type: object
+    Rate:
+      properties:
+        component:
+          description: Component is which of the four this line bills under.
+          type: string
+        name:
+          description: Name addresses the rate.
+          type: string
+        note:
+          description: Note is what the line covers.
+          type: string
+        per:
+          description: Per names one unit, so a reader never has to guess what the
+            number is per.
+          type: string
+        rate_micro_usd:
+          description: |-
+            Micros is the price of ONE unit, in micro-USD. It is the number the ledger
+            books, resolved through the same authority the metering path reads.
+          format: int64
+          type: integer
+        title:
+          description: Title is how the line reads on a price list.
+          type: string
+      type: object
     RateCard:
       properties:
         basis:
@@ -10632,6 +10706,19 @@ components:
         os:
           description: linux | darwin | windows
           type: string
+      type: object
+    Speed:
+      properties:
+        name:
+          description: Name is what a request asks for.
+          type: string
+        note:
+          description: Note is what asking for this window buys.
+          type: string
+        rank:
+          description: Rank orders the windows by price, 1 being the dearest.
+          format: int64
+          type: integer
       type: object
     Spend:
       properties:
@@ -13688,8 +13775,14 @@ components:
       properties:
         avatar:
           type: string
+        cap_micro_usd:
+          format: int64
+          type: integer
         computeRef:
           type: string
+        consumed_micro_usd:
+          format: int64
+          type: integer
         createdAt:
           type: string
         description:
@@ -13706,9 +13799,14 @@ components:
             one field the list read withholds, because it is the agent's whole behaviour
             and a page of them would be a page of prompts.
           type: string
+        max_task_micro_usd:
+          format: int64
+          type: integer
         model:
           type: string
         name:
+          type: string
+        period:
           type: string
         recentRuns:
           description: |-
@@ -13793,6 +13891,11 @@ components:
         input:
           description: Input is the text the run was given, verbatim.
           type: string
+        micro_usd:
+          description: MicroUSD is what the run spent, integer micro-USD. Absent when
+            nothing was metered.
+          format: int64
+          type: integer
         model:
           description: |-
             Model is the model that actually SERVED this run, which is not always the one
@@ -13847,12 +13950,25 @@ components:
             Avatar is the agent's picture: an image URL, or the image itself inline as a
             data URL up to 96 KiB. Empty when the agent has no image.
           type: string
+        cap_micro_usd:
+          description: |-
+            CapMicroUSD is the total this agent may spend within one Period, as an
+            integer number of micro-USD (1,000,000 = $1). It is required at creation: a
+            cap of zero would mean no limit and no per-agent spend record at all.
+          format: int64
+          type: integer
         computeRef:
           description: |-
             ComputeRef is the visor machine this bot is bound to, opaque here: this
             package stores and echoes it, and the binding's lifecycle belongs elsewhere.
             Empty means unbound, which is what every one-shot agent is.
           type: string
+        consumed_micro_usd:
+          description: |-
+            ConsumedMicroUSD is what has been spent in the current period, in micro-USD.
+            It is settled from what the gateway reported, not from the quote.
+          format: int64
+          type: integer
         createdAt:
           description: CreatedAt is when the agent was defined, RFC 3339 in UTC to
             the second.
@@ -13885,6 +14001,13 @@ components:
             of crypto/rand. A caller cannot choose it, and it never changes — unlike Name,
             which is the other way to address the same agent.
           type: string
+        max_task_micro_usd:
+          description: |-
+            MaxTaskMicroUSD is the ceiling for a single run, in micro-USD. A session
+            cannot exceed it even when the period cap still has room, so one runaway
+            task cannot consume a month.
+          format: int64
+          type: integer
         model:
           description: |-
             Model is the Zen model this agent runs on, and it is always OUR name for it:
@@ -13900,6 +14023,9 @@ components:
             it is what a run row records, and it is the suffix of the `agent_<name>` tool
             other agents call this one by. Set once at create; no update route moves it,
             because moving it would orphan that history.
+          type: string
+        period:
+          description: 'Period is the window the cap resets on: day, week or month.'
           type: string
         runs:
           description: |-
@@ -19874,6 +20000,13 @@ components:
             avatar passes, so the 96 KiB bound and the accepted URL forms are stated
             once for every subject that has a face.
           type: string
+        cap_micro_usd:
+          description: |-
+            The budget, required. An agent is not creatable without one: a zero cap
+            would mean no limit and no record of its spend, which is what a budget
+            exists to remove. Integer micro-USD; the CLI converts dollars before sending.
+          format: int64
+          type: integer
         computeRef:
           description: |-
             ComputeRef optionally binds this bot to a visor machine. Opaque here, bounded
@@ -19903,6 +20036,13 @@ components:
             Instructions is the system prompt, up to 32 KiB, stored verbatim. This is what
             the model reads; Description is what other CALLERS read.
           type: string
+        max_task_micro_usd:
+          description: |-
+            MaxTaskMicroUSD is the ceiling for a single run, in micro-USD. A session
+            cannot exceed it even when the period cap still has room, so one runaway
+            task cannot consume a month.
+          format: int64
+          type: integer
         model:
           description: |-
             Model names the model to run on. Omit it to take the deployment's configured
@@ -19915,6 +20055,9 @@ components:
             Name is the agent's org-unique handle and the only required field. It must
             match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$, and a name already taken in this org
             is a 409 rather than an overwrite. It is permanent: no update route moves it.
+          type: string
+        period:
+          description: 'Period is the window the cap resets on: day, week or month.'
           type: string
         schedule:
           description: |-
@@ -47305,6 +47448,12 @@ components:
             ("hanzo-dev"). REQUIRED, up to 128 characters, and free text — nothing
             resolves it against a defined agent.
           type: string
+        budget_micro_usd:
+          description: |-
+            BudgetMicroUSD caps what this session may spend, integer micro-USD. Zero
+            means no cap; a cap can be raised or removed later, never added.
+          format: int64
+          type: integer
         cwd:
           description: |-
             Cwd is the directory the session starts in, up to 1024 characters. It can be
@@ -52156,6 +52305,44 @@ components:
           format: int64
           type: integer
       type: object
+    sessionBudgetIn:
+      properties:
+        budget_micro_usd:
+          description: BudgetMicroUSD is the new cap, or null to remove the cap for
+            good.
+          format: int64
+          type: integer
+        id:
+          description: ID is the session, from the path.
+          type: string
+      type: object
+    sessionBudgetView:
+      properties:
+        budget_micro_usd:
+          description: |-
+            BudgetMicroUSD is this session's own ceiling in micro-USD, beyond the agent's.
+            A replacement must strictly exceed what the session has already consumed, and
+            removing it is one-way.
+          format: int64
+          type: integer
+        budget_removed:
+          description: BudgetRemoved says the session's own cap was taken off. It
+            cannot be put back.
+          type: boolean
+        consumed_micro_usd:
+          description: |-
+            ConsumedMicroUSD is what has been spent in the current period, in micro-USD.
+            It is settled from what the gateway reported, not from the quote.
+          format: int64
+          type: integer
+        id:
+          description: ID names the session.
+          type: string
+        status:
+          description: 'Status is the session''s state: running, paused at its cap,
+            or done.'
+          type: string
+      type: object
     sessionDetail:
       properties:
         account:
@@ -53189,6 +53376,52 @@ components:
             Total is how many spaces this org has. It equals len(spaces): the listing is
             not paged, because one bucket per (org, space) keeps an org's count small by
             construction, which is the whole reason a drive is a prefix and not a bucket.
+          format: int64
+          type: integer
+      type: object
+    spendView:
+      properties:
+        by_component:
+          additionalProperties:
+            format: int64
+            type: integer
+          description: ByComponent holds only the components with spend. Absent, not
+            zero.
+          type: object
+        cap_micro_usd:
+          description: |-
+            CapMicroUSD is the total this agent may spend within one Period, as an
+            integer number of micro-USD (1,000,000 = $1). It is required at creation: a
+            cap of zero would mean no limit and no per-agent spend record at all.
+          format: int64
+          type: integer
+        consumed_micro_usd:
+          description: |-
+            ConsumedMicroUSD is what has been spent in the current period, in micro-USD.
+            It is settled from what the gateway reported, not from the quote.
+          format: int64
+          type: integer
+        max_task_micro_usd:
+          description: |-
+            MaxTaskMicroUSD is the ceiling for a single run, in micro-USD. A session
+            cannot exceed it even when the period cap still has room, so one runaway
+            task cannot consume a month.
+          format: int64
+          type: integer
+        period:
+          description: 'Period is the window the cap resets on: day, week or month.'
+          type: string
+        period_started_at:
+          description: PeriodStartedAt is when the current period began, as a Unix
+            second.
+          format: int64
+          type: integer
+        ref:
+          description: Ref names the agent this spend belongs to.
+          type: string
+        remaining_micro_usd:
+          description: RemainingMicroUSD is what the cap still allows this period,
+            in micro-USD.
           format: int64
           type: integer
       type: object
@@ -55202,6 +55435,11 @@ components:
             setting an image clears a glyph and "" for both goes back to the initial —
             there is no state where a row holds two answers.
           type: string
+        cap_micro_usd:
+          description: The budget, any part of it. Changing the period opens a new
+            window.
+          format: int64
+          type: integer
         computeRef:
           description: ComputeRef re-binds (or, with "", unbinds) the visor machine.
             Opaque here.
@@ -55229,11 +55467,21 @@ components:
             Instructions replaces the system prompt whole, up to 32 KiB. There is no
             append: a prompt is one text, and sending "" clears it.
           type: string
+        max_task_micro_usd:
+          description: |-
+            MaxTaskMicroUSD is the ceiling for a single run, in micro-USD. A session
+            cannot exceed it even when the period cap still has room, so one runaway
+            task cannot consume a month.
+          format: int64
+          type: integer
         model:
           description: |-
             Model re-points the agent at another model, checked against the gateway's
             served catalogue exactly as create checks it. Empty STRING is refused — say
             nothing to keep the current one. Past runs keep the model that served them.
+          type: string
+        period:
+          description: 'Period is the window the cap resets on: day, week or month.'
           type: string
         ref:
           description: Ref is the agent to update — its public id or org-unique name,
@@ -57349,6 +57597,46 @@ paths:
       x-app: agent
       x-public: true
       x-tool: true
+  /v1/agent/{ref}/spend:
+    get:
+      description: |-
+        Answers what one of your org's agents has spent, in integer micro-USD.
+
+        It answers the agent's budget — `cap_micro_usd` per `period`,
+        `max_task_micro_usd` per run — with what the current period has consumed,
+        what remains, and `by_component`: the spend attributed to `model` (every
+        completion the agent bought), `computer` (the runtime it was resident for)
+        and `tool`. A component with no spend is absent, not zero. Every amount is an
+        integer number of micro-USD (1,000,000 = $1); 11902000 is $11.902. Pass
+        `by=component` to ask for the breakdown by name — it is the one grouping, and
+        the default.
+      operationId: get_agent_by_ref_spend
+      parameters:
+      - description: Ref is the agent's public id or its org-unique name.
+        in: path
+        name: ref
+        required: true
+        schema:
+          type: string
+      - description: 'By groups the answer: "component" is the only grouping today.'
+        in: query
+        name: by
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/spendView'
+          description: ok
+      summary: Answers what one of your org's agents has spent, in integer micro-USD.
+      tags:
+      - agent
+      x-app: agent
+      x-public: true
+      x-tool: true
   /v1/agent/activity:
     get:
       description: |-
@@ -57783,6 +58071,42 @@ paths:
       summary: 'Updates a session''s surface-owned truth: its status, its title, the
         run-target it is dispatched to, and the product it built plus whether that
         build''s story is public.'
+      tags:
+      - agent
+      x-app: agent
+      x-public: true
+      x-tool: true
+  /v1/agent/sessions/{id}/budget:
+    post:
+      description: |-
+        Sets, raises, or removes a session's cap.
+
+          - a replacement must be strictly greater than what the session has consumed
+          - removal is one-way: a session whose cap was removed cannot take one again,
+            and a session created without one cannot be given one
+          - raising or removing the cap resumes work that paused at it
+      operationId: post_agent_sessions_by_id_budget
+      parameters:
+      - description: ID is the session, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/sessionBudgetIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sessionBudgetView'
+          description: ok
+      summary: Sets, raises, or removes a session's cap.
       tags:
       - agent
       x-app: agent
@@ -117532,13 +117856,54 @@ paths:
       x-app: pricing
       x-public: true
       x-tool: true
+  /v1/pricing/tariff:
+    get:
+      description: |-
+        Returns the platform's rate card: what a bill is made of, what each
+        part costs, and the completion windows a request may ask for.
+
+        FOUR COMPONENTS, and every charge is one of them — model inference, computer,
+        web tools and media generation. Two are quoted before they run, so an agent is
+        refused before it breaches its budget; two are booked from what they used,
+        because neither a provider's charge nor a render's cost is knowable in advance.
+
+        EVERY AMOUNT IS INTEGER MICRO-USD (1 USD = 1,000,000), stated once in `unit`,
+        and each rate says what one unit of it is in `per`. The compute rates are per
+        HOUR because that is the unit a span is priced in — rate × seconds / 3600 — and
+        because a GiB-second is four and a half micro-USD, which no integer holds.
+
+        The rates are the ones the ledger books: each is resolved through the same
+        authority the metering path reads, falling back to the same compiled floor. A
+        rate of zero is a price and not an absence — a paused computer, a computer's
+        creation, the interfaces and a seat all cost nothing by design.
+      operationId: get_pricing_tariff
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+          description: ok
+      summary: 'Returns the platform''s rate card: what a bill is made of, what each
+        part costs, and the completion windows a request may ask for.'
+      tags:
+      - pricing
+      x-app: pricing
+      x-public: true
+      x-tool: true
   /v1/pricing/tools:
     get:
       description: |-
-        Returns the per-use tool prices — web search, code
+        Returns the per-use tool prices — web search, web fetch, code
         interpreter, file storage, image generation, speech-to-text and
         text-to-speech — each with the unit it is billed by and its price in that
         unit.
+
+        The two WEB rows are priced from the rate card rather than from the catalog,
+        because those are the rows the platform charges by the call and a published
+        number that is also a charged one has exactly one home (see tariff.go). Read
+        them as integer micro-USD at /v1/pricing/tariff; the decimal here is the
+        display this list has always carried.
       operationId: get_pricing_tools
       responses:
         "200":
@@ -117547,9 +117912,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/pricingToolList'
           description: ok
-      summary: Returns the per-use tool prices — web search, code interpreter, file
-        storage, image generation, speech-to-text and text-to-speech — each with the
-        unit it is billed by and its price in that unit.
+      summary: Returns the per-use tool prices — web search, web fetch, code interpreter,
+        file storage, image generation, speech-to-text and text-to-speech — each with
+        the unit it is billed by and its price in that unit.
       tags:
       - pricing
       x-app: pricing
