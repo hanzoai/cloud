@@ -223,8 +223,25 @@ func launch(s *cloud.Service[state], ctx context.Context, ev cloud.JobEvent) (st
 						"name":  "runner",
 						"image": image,
 						"env":   env,
+						// REQUESTS EQUAL LIMITS, because this pod is a virtual
+						// machine. runtimeClassName is kata-fc, and a Kata guest is
+						// sized from the LIMIT at boot: with 6/12Gi declared, the
+						// hypervisor starts `-smp 7 -m 12320M` and holds it for the
+						// life of the job whether a step uses it or not.
+						//
+						// Requesting 1/2Gi therefore did not describe a smaller
+						// workload, it described a smaller LIE. The scheduler priced
+						// eight runners at 8 CPU and 16Gi while they had claimed 56
+						// vCPU and 96Gi, so it kept admitting more onto a node that
+						// was already full — and the pods that could not fit were
+						// ordinary workloads with honest requests, refused for
+						// capacity that had already been spent.
+						//
+						// Equal also makes the QoS class Guaranteed, which is the
+						// truth for a VM: guest memory is not reclaimable, so there
+						// is nothing for the kubelet to take back under pressure.
 						"resources": map[string]any{
-							"requests": map[string]any{"cpu": "1", "memory": "2Gi"},
+							"requests": map[string]any{"cpu": "6", "memory": "12Gi"},
 							"limits":   map[string]any{"cpu": "6", "memory": "12Gi"},
 						},
 					}},
