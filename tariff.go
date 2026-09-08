@@ -75,14 +75,14 @@ const (
 // different price — so it is chosen per request rather than per account, and the
 // interactive tariff is paid only when a person is actually waiting.
 //
-// The ORDER is the published fact and it is what [Windows] carries. The numbers
+// The ORDER is the published fact and it is what [Speeds] carries. The numbers
 // are per model and come from commerce, addressed by the window: a window is a
 // rung of a model's rate, the way a context rung already is, and inventing a
 // factor here would be a second price for a model this package does not price.
 const (
-	WindowImmediate = "immediate"
-	WindowPriority  = "priority"
-	WindowLoose     = "loose"
+	SpeedImmediate = "immediate"
+	SpeedPriority  = "priority"
+	SpeedLoose     = "loose"
 )
 
 // ComputerProduct and its meters address what a running computer costs. An
@@ -133,9 +133,9 @@ type Component struct {
 	Note string `json:"note"`
 }
 
-// Window is one completion window: how soon an answer comes, and therefore what
+// Speed is one completion speed: how soon an answer comes, and therefore what
 // it costs.
-type Window struct {
+type Speed struct {
 	// Name is what a request asks for.
 	Name string `json:"name"`
 	// Rank orders the windows by price, 1 being the dearest.
@@ -161,14 +161,14 @@ type Rate struct {
 	Note string `json:"note"`
 }
 
-// Tariff is the whole rate card.
-type Tariff struct {
+// Card is the whole rate card.
+type Card struct {
 	// Unit is the unit every amount on this card is stated in.
 	Unit string `json:"unit"`
 	// Components are the four things a bill is made of.
 	Components []Component `json:"components"`
-	// Windows are the completion windows, dearest first.
-	Windows []Window `json:"windows"`
+	// Speeds are the completion speeds, dearest first.
+	Speeds []Speed `json:"windows"`
 	// Rates are the priced lines, each in micro-USD per its own unit.
 	Rates []Rate `json:"rates"`
 }
@@ -210,12 +210,12 @@ func Components() []Component {
 	}}
 }
 
-// Windows answers the three completion windows, dearest first.
-func Windows() []Window {
-	return []Window{
-		{Name: WindowImmediate, Rank: 1, Note: "Answers now, at the highest tariff."},
-		{Name: WindowPriority, Rank: 2, Note: "Answers soon, at a lower one."},
-		{Name: WindowLoose, Rank: 3, Note: "Answers eventually, at the lowest."},
+// Speeds answers the three completion speeds, dearest first.
+func Speeds() []Speed {
+	return []Speed{
+		{Name: SpeedImmediate, Rank: 1, Note: "Answers now, at the highest tariff."},
+		{Name: SpeedPriority, Rank: 2, Note: "Answers soon, at a lower one."},
+		{Name: SpeedLoose, Rank: 3, Note: "Answers eventually, at the lowest."},
 	}
 }
 
@@ -276,11 +276,11 @@ func Rates(ctx context.Context) []Rate {
 }
 
 // Card answers the whole rate card, priced now.
-func Card(ctx context.Context) Tariff {
-	return Tariff{
+func Current(ctx context.Context) Card {
+	return Card{
 		Unit:       "micro_usd",
 		Components: Components(),
-		Windows:    Windows(),
+		Speeds:     Speeds(),
 		Rates:      Rates(ctx),
 	}
 }
