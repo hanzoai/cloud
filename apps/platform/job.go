@@ -57,6 +57,30 @@ const (
 // Job name unquoted.
 var safeLabel = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 
+// runnerNode is the node architecture a job's labels ask for. A label names the
+// platform it wants -- linux-amd64, linux-arm64 -- so the architecture is read
+// from the label rather than assumed, and a job that names none (ubuntu-latest,
+// and every plain workflow) runs on amd64. macOS and Windows are named the same
+// way and have no node in this cluster, so they are refused: a Linux runner
+// would answer such a job with an artifact for the wrong machine and nothing
+// would say so.
+func runnerNode(labels []string) (string, error) {
+	arch := "amd64"
+	for _, l := range labels {
+		for _, part := range strings.Split(l, "-") {
+			switch part {
+			case "macos", "darwin", "windows", "win":
+				return "", fmt.Errorf("runner: label %q names a platform with no node in this cluster", l)
+			case "arm64", "aarch64":
+				arch = "arm64"
+			case "amd64", "x64", "x86_64":
+				arch = "amd64"
+			}
+		}
+	}
+	return arch, nil
+}
+
 // ownNamespace is the namespace this process runs in, from the service account
 // the cluster mounted, or the override.
 func ownNamespace() (string, error) {
@@ -138,6 +162,10 @@ func launch(s *cloud.Service[state], ctx context.Context, ev cloud.JobEvent) (st
 			return "", fmt.Errorf("runner: malformed label")
 		}
 	}
+	arch, err := runnerNode(ev.Labels)
+	if err != nil {
+		return "", err
+	}
 	if strings.TrimSpace(ev.Token) == "" {
 		return "", fmt.Errorf("runner: no registration for the job")
 	}
@@ -188,7 +216,7 @@ func launch(s *cloud.Service[state], ctx context.Context, ev cloud.JobEvent) (st
 				"spec": map[string]any{
 					"restartPolicy":                "Never",
 					"runtimeClassName":             runnerRuntimeClass,
-					"nodeSelector":                 map[string]any{"kubernetes.io/arch": "amd64"},
+					"nodeSelector":                 map[string]any{"kubernetes.io/arch": arch},
 					"automountServiceAccountToken": false,
 					"imagePullSecrets":             []any{map[string]any{"name": runnerPullSecret}},
 					"containers": []any{map[string]any{

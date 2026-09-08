@@ -144,3 +144,35 @@ func TestLaunchRefusesOverTheRunnerCeiling(t *testing.T) {
 		t.Fatalf("over the ceiling must refuse with errTooManyRunners, got %v", err)
 	}
 }
+
+func TestRunnerNode(t *testing.T) {
+	for _, c := range []struct {
+		labels []string
+		arch   string
+		refuse bool
+	}{
+		{labels: []string{"linux-amd64"}, arch: "amd64"},
+		{labels: []string{"linux-arm64"}, arch: "arm64"},
+		{labels: []string{"hanzo-build-linux-amd64"}, arch: "amd64"},
+		{labels: []string{"ubuntu-latest"}, arch: "amd64"},
+		{labels: []string{"depot-ubuntu-24.04"}, arch: "amd64"},
+		{labels: []string{}, arch: "amd64"},
+		{labels: []string{"self-hosted", "linux-arm64"}, arch: "arm64"},
+		{labels: []string{"macos-arm64"}, refuse: true},
+		{labels: []string{"win-amd64"}, refuse: true},
+		{labels: []string{"windows-latest"}, refuse: true},
+	} {
+		arch, err := runnerNode(c.labels)
+		if c.refuse {
+			if err == nil {
+				t.Errorf("%v: wanted a refusal, got %q", c.labels, arch)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%v: %v", c.labels, err)
+		} else if arch != c.arch {
+			t.Errorf("%v: got %q, want %q", c.labels, arch, c.arch)
+		}
+	}
+}
