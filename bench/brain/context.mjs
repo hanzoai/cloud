@@ -37,11 +37,15 @@ export const DEV = new Set([0, 1, 2])
 export const SPLITS = { dev: (ci) => DEV.has(ci), test: (ci) => !DEV.has(ci), all: () => true }
 
 // ── data
-const store = JSON.parse(readFileSync(new URL('./brain-vectors.json', import.meta.url), 'utf8'))
+// --embed=<name> loads brain-vectors-<name>.json (see embed-store.mjs): the same store in another embedding space
+export const EMBED = arg('embed', process.env.EMBED ?? '')
+const suffix = EMBED ? `-${EMBED}` : ''
+const store = JSON.parse(readFileSync(new URL(`./brain-vectors${suffix}.json`, import.meta.url), 'utf8'))
 const corpus = JSON.parse(readFileSync(new URL('./locomo10.json', import.meta.url), 'utf8'))
 const FACTS = arg('facts', process.env.FACTS ?? 'locomo')
 const loadFacts = (f) => { const p = new URL(f, import.meta.url); return existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : null }
-const factSets = { locomo: loadFacts('./facts-vectors.json'), ours: loadFacts('./facts-ours-vectors.json') }
+const factSets = { locomo: loadFacts(`./facts-vectors${suffix}.json`), ours: loadFacts(`./facts-ours-vectors${suffix}.json`) }
+if (EMBED && !process.env.EMBED_MODEL) process.env.EMBED_MODEL = { minilm: 'all-minilm' }[EMBED] ?? EMBED
 if (FACTS !== 'locomo' && !factSets.ours) { console.error('no facts-ours-vectors.json yet — run extract.mjs, or use --facts=locomo'); process.exit(1) }
 const factsFor = (ci) => FACTS === 'union' ? [...(factSets.locomo?.[ci] ?? []), ...(factSets.ours?.[ci] ?? [])] : (factSets[FACTS]?.[ci] ?? [])
 
@@ -92,19 +96,20 @@ export const ixs = store.map((_, ci) => build(ci))
 
 // ── caches: query-time embeddings and facets, on disk so a rerun is free
 const CACHE_DIR = new URL('./data/', import.meta.url); mkdirSync(CACHE_DIR, { recursive: true })
-const embedFile = new URL('./data/embed-cache.json', import.meta.url)
+const embedFile = new URL(`./data/embed-cache${suffix}.json`, import.meta.url)
 const embedCache = new Map(existsSync(embedFile) ? Object.entries(JSON.parse(readFileSync(embedFile, 'utf8'))) : [])
 let embedDirty = 0
 async function qvec(text) {
   if (embedCache.has(text)) return embedCache.get(text)
   const [v] = await embed([text]); const u = unit(v); embedCache.set(text, u); if (++embedDirty % 50 === 0) flushEmbed(); return u
 }
-const flushEmbed = () => writeFileSync(embedFile, JSON.stringify(Object.fromEntries(embedCache)))
+// merge with what another process wrote meanwhile, so two runs never lose each other's entries
+const flushEmbed = () => { if (existsSync(embedFile)) { try { for (const [k, v] of Object.entries(JSON.parse(readFileSync(embedFile, 'utf8')))) if (!embedCache.has(k)) embedCache.set(k, v) } catch {} } writeFileSync(embedFile, JSON.stringify(Object.fromEntries(embedCache))) }
 /** Many texts at once: one queued request per 64 instead of one per question. */
 export async function qvecMany(texts) {
   const todo = [...new Set(texts.filter((t) => !embedCache.has(t)))]
-  for (let i = 0; i < todo.length; i += 64) { const chunk = todo.slice(i, i + 64); const vs = await embed(chunk); chunk.forEach((t, j) => embedCache.set(t, unit(vs[j]))); process.stdout.write(`\r  embedded ${Math.min(i + 64, todo.length)}/${todo.length}`) }
-  if (todo.length) { flushEmbed(); process.stdout.write('\n') }
+  for (let i = 0; i < todo.length; i += 64) { const chunk = todo.slice(i, i + 64); const vs = await embed(chunk); chunk.forEach((t, j) => embedCache.set(t, unit(vs[j]))); process.stderr.write(`\r  embedded ${Math.min(i + 64, todo.length)}/${todo.length}`) }
+  if (todo.length) { flushEmbed(); process.stderr.write('\n') }
 }
 const facetFile = new URL('./data/facets.json', import.meta.url)
 const facetCache = existsSync(facetFile) ? JSON.parse(readFileSync(facetFile, 'utf8')) : {}
@@ -188,6 +193,11 @@ export async function retrieve(ix, q, cfg) {
 }
 const finish = (ids, examined, contrib, t0) => ({ ids, examined, contrib, ms: Number(process.hrtime.bigint() - t0) / 1e6 })
 
+/** A query that is not in the store — a LoCoMo-Conv request, a live user — embedded at query time, then retrieved like any other. */
+export async function retrieveText(ix, question, cfg) { const v = await qvec(question); return retrieve(ix, { question, v }, cfg) }
+/** The frozen configuration for a fact set, if the dev sweep has produced one. */
+export function frozenConfig(row = '+iterative hops') { const f = new URL(`./ablations/frozen-${FACTS}.json`, import.meta.url); if (!existsSync(f)) return ROWS[row]; const z = JSON.parse(readFileSync(f, 'utf8')); return { ...ROWS[z.row ?? row], w: z.w, budget: z.budget } }
+
 /** The second hop's query: the question plus what the first hop resolved (or, for chain search, the top turn alone). */
 export function hopText(ix, q, cfg, order, fOrder) {
   const known = cfg.chain ? [ix.turns[order[0]].body] : (fOrder ? fOrder.slice(0, 3).map((fi) => ix.facts[fi].text) : order.slice(0, 2).map((i) => ix.turns[i].body))
@@ -249,17 +259,22 @@ const sha = (s) => createHash('sha256').update(s).digest('hex').slice(0, 16)
 const MAIN = process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop())
 if (MAIN) {
   const split = arg('split', 'dev'), want = arg('rows', 'all'), inSplit = SPLITS[split]
-  if (has('facets')) { let n = 0; for (const [ci, c] of store.entries()) { if (!inSplit(ci)) continue; for (const q of c.qa) { if (!q.evidence.length) continue; await facets(q.question); if (++n % 25 === 0) process.stdout.write(`\r  facets ${n}`) } } console.log(`\nfacets cached for ${n} questions (${split})`); process.exit(0) }
+  if (has('facets')) { let n = 0; for (const [ci, c] of store.entries()) { if (!inSplit(ci)) continue; for (const q of c.qa) { if (!q.evidence.length) continue; await facets(q.question); if (++n % 25 === 0) process.stderr.write(`\r  facets ${n}`) } } console.log(`\nfacets cached for ${n} questions (${split})`); process.exit(0) }
   const names = want === 'all' ? Object.keys(ROWS) : want.split(',').map((s) => s.trim())
+  // --frozen: every row takes the weights and budgets the dev sweep froze, so a test table is one configuration, ablated
+  const frozenFile = new URL(`./ablations/frozen-${FACTS}.json`, import.meta.url)
+  const frozen = has('frozen') ? JSON.parse(readFileSync(frozenFile, 'utf8')) : null
+  if (has('frozen')) console.log(`frozen configuration from ${frozenFile.pathname.split('/').pop()} · commit ${frozen.commit}`)
+  const withFrozen = (cfg) => frozen ? { ...cfg, w: { ...frozen.w, ...(cfg.w ?? {}) }, budget: { ...frozen.budget, ...(cfg.budget ?? {}) } } : cfg
   const cats = [...new Set(store.flatMap((c) => c.qa.map((q) => q.category)))].sort()
   const label = { 1: 'multi-hop', 2: 'temporal', 3: 'open-domain', 4: 'single-hop' }
   console.log(`\n── LoCoMo retrieval · split ${split} · facts ${FACTS} · k=${K} · commit ${commit()} ──`)
   console.log(`${'row'.padEnd(26)} ${cats.map((c) => (label[c] ?? c).padStart(9) + ' ALL/ANY').join('  ')}   MRR   nDCG  SUPP   pool   tok    p50ms`)
-  for (const name of names) { const cfg = ROWS[name] ?? JSON.parse(name); await prepare(cfg, split); const t = await evaluate(cfg, split, { trace: has('write') }); const s = t.summary
+  for (const name of names) { const cfg = withFrozen(ROWS[name] ?? JSON.parse(name)); await prepare(cfg, split); const t = await evaluate(cfg, split, { trace: has('write') }); const s = t.summary
     const cells = cats.map((c) => s[c] ? `${pct(s[c][`all@${K}`].mean).padStart(5)}/${pct(s[c][`any@${K}`].mean).padStart(5)}` : '     -/-    ')
     console.log(`${name.padEnd(26)} ${cells.join('        ')}   ${pct(s.all.mrr.mean).padStart(5)} ${pct(s.all[`ndcg@${K}`].mean).padStart(5)} ${pct(s.all.supported.mean).padStart(5)}  ${s.all.examined.toFixed(0).padStart(4)}  ${s.all.tokens.toFixed(0).padStart(5)}  ${s.all.p50.toFixed(2).padStart(6)}`)
-    if (has('write')) { const dir = new URL(`./runs/locomo-retrieval-${split}-${name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase()}-${FACTS}/`, import.meta.url); mkdirSync(dir, { recursive: true })
-      writeFileSync(new URL('metrics.json', dir), JSON.stringify({ row: name, cfg, split, facts: FACTS, k: K, summary: s }, null, 1))
+    if (has('write')) { const dir = new URL(`./runs/locomo-retrieval-${split}-${name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase()}-${FACTS}${suffix}/`, import.meta.url); mkdirSync(dir, { recursive: true })
+      writeFileSync(new URL('metrics.json', dir), JSON.stringify({ row: name, cfg, split, facts: FACTS, k: K, frozen: frozen ? { commit: frozen.commit, objective: frozen.objective } : null, summary: s }, null, 1))
       writeFileSync(new URL('traces.jsonl', dir), t.traces.map((x) => JSON.stringify(x)).join('\n'))
       writeFileSync(new URL('meta.json', dir), JSON.stringify({ commit: commit(), embedding: process.env.EMBED_MODEL ?? 'zenlm/zen-embedding-0.6b', facts: FACTS, k: K, split, store: sha(readFileSync(new URL('./brain-vectors.json', import.meta.url))), when: new Date().toISOString() }, null, 1)) }
   }

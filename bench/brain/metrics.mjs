@@ -27,9 +27,9 @@ export function rank(ids, gold, ks = [5, 10, 20]) {
   const G = new Set(gold), out = {}
   for (const k of ks) { const top = new Set(ids.slice(0, k)); const hits = gold.filter((g) => top.has(g)).length; out[`all@${k}`] = Number(hits === gold.length); out[`any@${k}`] = Number(hits > 0); out[`recall@${k}`] = gold.length ? hits / gold.length : 0 }
   const first = ids.findIndex((id) => G.has(id)); out.mrr = first < 0 ? 0 : 1 / (first + 1)
-  const K = Math.max(...ks); let dcg = 0; ids.slice(0, K).forEach((id, i) => { if (G.has(id)) dcg += 1 / Math.log2(i + 2) })
-  let ideal = 0; for (let i = 0; i < Math.min(gold.length, K); i++) ideal += 1 / Math.log2(i + 2)
-  out[`ndcg@${K}`] = ideal ? dcg / ideal : 0
+  for (const k of ks) { let dcg = 0; ids.slice(0, k).forEach((id, i) => { if (G.has(id)) dcg += 1 / Math.log2(i + 2) })
+    let ideal = 0; for (let i = 0; i < Math.min(gold.length, k); i++) ideal += 1 / Math.log2(i + 2)
+    out[`ndcg@${k}`] = ideal ? dcg / ideal : 0 }
   return out
 }
 
