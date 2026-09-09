@@ -53,3 +53,38 @@ generic multi-query, chain search, surface-entity expansion, global RRF.
 
 A configuration is chosen on dev, its commit hash written into `RESULTS.md`, and the
 test split run once. A later change is a new run id beside the old, never over it.
+
+## Track B · Hanzo ContextBench
+
+The external benchmarks ask whether a system answers a third-person question. The
+product is asked something else: a user says something, and the right memory has to
+arrive without being asked for. ContextBench scores that, on ten dimensions, each a
+column, none folded into a single number:
+
+| dimension | question it answers | measured by |
+|---|---|---|
+| answer | was the reply correct | token F1 / EM, or judge where the item is open |
+| grounding | is every claim in the reply supported by returned memory | claim → source check |
+| evidence completeness | was enough evidence returned to prove the answer | EXACT / SUPPORTED / ANSWERED grade |
+| contextuality | was an implicit need recognised | implicit items, fact_used |
+| composition | were two memories combined | composed items, atomic-fact coverage |
+| temporal | was the right historical or current state chosen | dated items with a superseded value |
+| conflict | was superseded information suppressed | items whose old value is a trap |
+| efficiency | how many tokens were returned | tokens delivered per query |
+| latency | how long retrieval took | p50 / p95 ms, retrieval only |
+| provenance | can each returned memory be traced to a source turn | share of returned items with a source id |
+
+Evidence has three grades, so a correct answer grounded on an equivalent turn the
+annotator did not mark is not a miss: EXACT (an annotated gold turn was returned),
+SUPPORTED (a returned turn shares an atomic fact with a gold turn, or contains the
+gold answer), ANSWERED (the reply is correct). The `supported` column in the LoCoMo
+tables is this grade applied to a public benchmark.
+
+Items are drawn from real Hanzo conversations and repositories (with consent, scrubbed),
+in ten styles: explicit, implicit, temporal, conflicting, composed, causal, cross-session,
+cross-document, user/org, memory + current context; and for `/v1/code` the same
+structure over symbol, definition, reference, implementation, caller, callee, type,
+file, commit, issue, test and runtime log. Each item carries the gold source ids, the
+atomic facts the answer needs, and the date it was asked, so temporal and conflict
+items are scored deterministically. Construction is the next milestone; this pass
+ships the scorer (metrics.mjs, context.mjs grades) and runs it on the public sets.
