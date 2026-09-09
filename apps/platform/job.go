@@ -40,6 +40,9 @@ const (
 	runnerRuntimeClass = "kata-fc"
 	// runnerPullSecret is the registry credential the runner image pulls with.
 	runnerPullSecret = "oci-hanzo-ai"
+	// runnerPriorityClass ranks a runner below every serving workload, so a
+	// build waits for capacity rather than taking it from a customer.
+	runnerPriorityClass = "hanzo-ci"
 	// runnerDeadline bounds one job in seconds. The forge's own runner timeout
 	// is four hours; a job past it is dead, and the pod goes with it.
 	runnerDeadline = int64(4 * 60 * 60)
@@ -240,9 +243,23 @@ func launch(s *cloud.Service[state], ctx context.Context, ev cloud.JobEvent) (st
 			"template": map[string]any{
 				"metadata": map[string]any{"labels": map[string]any{"hanzo.ai/runner": ev.Provider}},
 				"spec": map[string]any{
-					"restartPolicy":                "Never",
-					"runtimeClassName":             runnerRuntimeClass,
-					"nodeSelector":                 map[string]any{"kubernetes.io/arch": arch},
+					"restartPolicy":    "Never",
+					"runtimeClassName": runnerRuntimeClass,
+					"nodeSelector":     map[string]any{"kubernetes.io/arch": arch},
+					// evo carries hanzo.ai/no-ci and is the only amd64 node, so
+					// without this every amd64 runner is unschedulable — which is
+					// what it was: twelve pods Pending, the oldest by 84 minutes,
+					// and no forge job had run since the taint went on. The taint
+					// keeps batch work from CROWDING the node that serves
+					// production; the priority class is what actually enforces
+					// that, by making a runner yield to anything a customer is
+					// waiting on. Same pair the chart gives every other app.
+					"priorityClassName": runnerPriorityClass,
+					"tolerations": []any{map[string]any{
+						"key":      "hanzo.ai/no-ci",
+						"operator": "Exists",
+						"effect":   "NoSchedule",
+					}},
 					"automountServiceAccountToken": false,
 					"imagePullSecrets":             []any{map[string]any{"name": runnerPullSecret}},
 					"containers": []any{map[string]any{
