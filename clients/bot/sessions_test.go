@@ -415,3 +415,33 @@ func TestARetriedCreateMakesOneSession(t *testing.T) {
 		t.Errorf("%d retries of one idempotent create made %d sessions: %v", tries, len(keys), keys)
 	}
 }
+
+// The chat pane takes a lease on the session it shows, on every open. This
+// surface narrows nothing by key — every connection on a bot hears that bot's
+// sessions — so the lease succeeds, and says so. Refusing would claim the
+// messages are not coming when they are, and the client renders that claim
+// over the conversation.
+func TestAChatPaneMayLeaseASession(t *testing.T) {
+	ws := dial(t, serve(t), who{org: "acme"})
+
+	frame := say(t, ws, "1", "connect", `{"minProtocol":4,"maxProtocol":4}`)
+	if frame["ok"] != true {
+		t.Fatalf("connect: %v", frame)
+	}
+	for _, c := range []struct{ method, want string }{
+		{"sessions.messages.subscribe", "true"},
+		{"sessions.messages.unsubscribe", "false"},
+	} {
+		got := say(t, ws, "2", c.method, `{"key":"main","agentId":"main"}`)
+		if got["ok"] != true {
+			t.Fatalf("%s refused: %v", c.method, got)
+		}
+		out, _ := got["payload"].(map[string]any)
+		if fmt.Sprint(out["subscribed"]) != c.want {
+			t.Errorf("%s answered subscribed=%v, want %s", c.method, out["subscribed"], c.want)
+		}
+		if out["key"] != "main" {
+			t.Errorf("%s answered key %v, want the key it was given", c.method, out["key"])
+		}
+	}
+}
