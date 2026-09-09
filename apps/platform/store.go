@@ -232,9 +232,9 @@ CREATE INDEX IF NOT EXISTS ix_pf_domains_app ON platform_domains(org, app_id);
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
-	// Forward-only additive columns for the /v1/platform/run autoscaling bounds. Idempotent:
-	// a fresh DB already has them (CREATE TABLE above) so ADD COLUMN reports a
-	// duplicate, which is the success case here — never a schema-fork.
+	// Forward-only additive columns. Idempotent: a fresh DB already has them
+	// (CREATE TABLE above) so ADD COLUMN reports a duplicate, which is the success
+	// case here — never a schema-fork.
 	for _, alter := range []string{
 		`ALTER TABLE platform_apps ADD COLUMN min_scale INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE platform_apps ADD COLUMN max_scale INTEGER NOT NULL DEFAULT 0`,
@@ -250,7 +250,7 @@ CREATE INDEX IF NOT EXISTS ix_pf_domains_app ON platform_domains(org, app_id);
 		`ALTER TABLE platform_builds ADD COLUMN platforms TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
-			return fmt.Errorf("migrate scale: %w", err)
+			return fmt.Errorf("migrate column: %w", err)
 		}
 	}
 	return nil
