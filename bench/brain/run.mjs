@@ -34,7 +34,7 @@ const system = readFileSync(PROMPT_PATH, 'utf8').trim()
 const corpus = JSON.parse(readFileSync('locomo10.json', 'utf8'))
 const dates = corpus.map((c) => Object.fromEntries(Object.entries(c.conversation).filter(([k]) => k.endsWith('_date_time')).map(([k, v]) => [k.replace('_date_time', ''), v])))
 const turnsById = store.map((c) => new Map(c.turns.map((t) => [t.id, t])))
-const ranked = rankAll(POLICY, K)
+const ranked = await rankAll(POLICY, K)
 const key = credential(API)
 
 const qs = []
@@ -45,6 +45,9 @@ const goldOf = ({ ci, question }) => corpus[ci].qa.find((x) => x.question === qu
 const log = (s) => { const line = `${new Date().toISOString()} ${s}`; console.log(line); appendFileSync(`${DIR}/log.txt`, line + '\n') }
 const started = Date.now()
 let meta = existsSync(`${DIR}/meta.json`) ? JSON.parse(readFileSync(`${DIR}/meta.json`, 'utf8')) : {}
+// wall time accumulates across invocations: a row filled one category at a time is still one row
+const priorWall = meta.wall_seconds ?? 0
+const wall = () => priorWall + Math.round((Date.now() - started) / 1000)
 meta = { ...meta, name: NAME, benchmark: 'locomo', policy: POLICY, k: K, reader: READER, api: new URL(API).host, cats: CATS, workers: WORKERS,
   prompt: PROMPT_PATH.pathname.split('/').slice(-2).join('/'), prompt_sha256: sha(PROMPT_PATH), dataset_sha256: sha('locomo10.json'), store_sha256: sha('brain-vectors.json'),
   facts_sha256: existsSync('facts-vectors.json') ? sha('facts-vectors.json') : null, commit: execSync('git rev-parse HEAD').toString().trim(),
@@ -95,7 +98,7 @@ while (pass++ < MAX_PASSES) {
   })
   const failed = Object.values(fails).reduce((a, b) => a + b, 0)
   log(`pass ${pass}: asked ${todo.length}, answered ${okCount}, failed ${failed}${failed ? ' ' + JSON.stringify(fails) + ' e.g. ' + sample : ''} in ${((Date.now() - t0) / 1000).toFixed(0)}s`)
-  writeMetrics(); writeMeta({ passes: pass, wall_seconds: Math.round((Date.now() - started) / 1000) })
+  writeMetrics(); writeMeta({ passes: pass, wall_seconds: wall() })
   if (!failed) continue
   quiet = okCount ? 0 : quiet + 1
   // a pass that answered nothing is the router saying not now: wait longer each time, up to half an hour
@@ -105,7 +108,7 @@ while (pass++ < MAX_PASSES) {
 }
 const m = writeMetrics()
 const rows = readRows(DIR)
-writeMeta({ finished: new Date().toISOString(), wall_seconds: Math.round((Date.now() - started) / 1000), answered: rows.length,
+writeMeta({ finished: new Date().toISOString(), wall_seconds: wall(), answered: rows.length,
   tokens_per_question: rows.length ? Math.round(rows.reduce((a, r) => a + r.tokens, 0) / rows.length) : 0,
   reader_tokens: rows.reduce((a, r) => a + (r.usage?.total_tokens ?? 0), 0) })
 log(`done: ${rows.length}/${qs.length} answered`)
