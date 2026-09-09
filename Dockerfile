@@ -70,15 +70,15 @@
 # long-term home is oci.hanzo.ai/hanzoai/mirror/* — repoint once the runners
 # carry its IAM pull credentials (follow-up).
 
-FROM ghcr.io/hanzoai/mirror/golang:1.26.5-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS build
+FROM ghcr.io/hanzoai/mirror/golang:1.26.8-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS build
 # go.mod is the ONE place the Go version is declared.
 #
 # The golang image ships GOTOOLCHAIN=local, which makes the image's own Go the
 # authority and refuses to honour a newer `go` directive. That put the version in
 # TWO places that had to be kept in agreement by hand — this digest pin and
-# go.mod — and they drifted: go.mod went to 1.26.5 while this digest stayed on
-# 1.26.4, and every release then died at `go mod download` with
-#   go: go.mod requires go >= 1.26.5 (running go 1.26.4; GOTOOLCHAIN=local)
+# go.mod — and they drifted: go.mod went to 1.26.8 while this digest stayed on
+# 1.26.8, and every release then died at `go mod download` with
+#   go: go.mod requires go >= 1.26.8 (running go 1.26.8; GOTOOLCHAIN=local)
 # after the image had already built for a minute. Tags were not minted, so
 # nothing shipped broken — releases simply stopped, quietly, for everyone.
 #
