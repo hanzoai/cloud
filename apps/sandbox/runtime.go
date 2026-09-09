@@ -498,17 +498,28 @@ var runtimes = map[string]struct{ kernel, shares bool }{
 // behaviour rather than adding one.
 const shared = "gvisor"
 
-// preferred is the boundary to reach for when nothing else decided — a microVM,
-// which is the strongest isolation this cloud runs and the one a sandbox should
-// get by default.
+// preferred is the boundary to reach for when nothing else decided.
 //
-// IT CANNOT BE THE FLOOR, and that is a property of the boundary rather than a
-// preference: Firecracker has no virtio-fs, so `runtimes` records shares:false
-// and a sandbox carrying a project volume does not fit on it. Writes would land
-// in a tmpfs and be lost when the sandbox ends. So this is the default for a
-// sandbox that KEEPS NOTHING, and anything with a disk falls to `shared` — which
-// is the existing behaviour, unchanged, reached by the same `fits`.
-const preferred = "kata-fc"
+// It names gVisor, and the reason is that ASKING FOR kata-fc DOES NOT GET ONE.
+// Kata derives its config from the name the shim was invoked as, so
+// `containerd-shim-kata-fc-v2` looks for `configuration-fc.toml`; the package
+// ships `configuration-rs-fc.toml`, the lookup misses, and the shim falls back
+// to `configuration.toml`, whose path is qemu-system-x86_64. Measured on evo:
+// sixteen sandboxes asking for kata-fc, sixteen QEMU q35 machines, and the kata
+// log naming QemuInner. So the boundary this constant used to name was not a
+// microVM at all — it was the heaviest hypervisor present, chosen by accident.
+//
+// The cost of that accident is why it is not worth reaching for even once it is
+// fixed: 9,048M of QEMU, 4,763M of virtiofsd and 2,918M of shims against 43M of
+// runsc for the same fleet, plus a whole vCPU reserved per sandbox — a 10m
+// request is admitted as 1010m, so on a busy node no sandbox starts at all and
+// the error reads OutOfcpu rather than anything about isolation.
+//
+// gVisor has a kernel of its own and shares a filesystem, so unlike the old
+// default it is also a floor: `runtimes` records shares:true and a sandbox
+// carrying a project volume fits without falling anywhere. One boundary answers
+// both cases, which is what makes this a default rather than a first guess.
+const preferred = shared
 
 // fits reports whether this deployment may put a sandbox on a boundary — the
 // ONE predicate, asked by all three paths into runtimeFor.
