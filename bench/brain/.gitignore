@@ -3,3 +3,5 @@ brain-vectors.json
 facts-vectors.json
 answers-*.json
 data/
+brain-vectors-*.json
+facts-vectors-*.json
