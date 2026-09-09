@@ -5,6 +5,7 @@ go 1.26.5
 // Dependencies will be added as subsystems are mounted per HIP-0106.
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/digitalocean/godo v1.197.0
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/s3-go v1.0.0
@@ -23,6 +24,7 @@ require (
 require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb // indirect
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzoai/csqlite v0.1.0 // indirect
 	github.com/hanzoai/sqlcipher v0.1.0 // indirect
@@ -179,4 +181,3 @@ replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-2026012609
 // "sqlite" driver is registered exactly once.
 
 exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
-
