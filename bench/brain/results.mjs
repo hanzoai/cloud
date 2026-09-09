@@ -93,6 +93,6 @@ const sections = runs.map((d) => { const m = read(`./runs/${d}/metrics.json`), m
   return { bench: d.split('-')[0], run: d, row: m.row ?? null, split: m.split ?? meta.split ?? null, k: m.k ?? meta.k ?? null, reader: m.reader ?? meta.reader ?? null, facts: m.facts ?? meta.facts ?? null, commit: meta.commit ?? meta.commit ?? null,
     categories, table: typeof m.table === 'string' ? m.table : null } })
 // a run with fewer than fifty questions in every row is a smoke test, not a table for the site
-const shown = sections.filter((x) => x.table || x.categories.some((c) => (c.n ?? 0) >= 50))
+const shown = sections.filter((x) => !/-v\d+$/.test(x.run) && (x.table || x.categories.some((c) => (c.n ?? 0) >= 50)))
 writeFileSync(new URL('./benchmarks.json', here), JSON.stringify({ generated: new Date().toISOString(), sections: shown }, null, 1))
 console.log(md)
