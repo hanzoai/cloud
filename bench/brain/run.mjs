@@ -50,7 +50,7 @@ meta = { ...meta, name: NAME, benchmark: 'locomo', policy: POLICY, k: K, reader:
   facts_sha256: existsSync('facts-vectors.json') ? sha('facts-vectors.json') : null, commit: execSync('git rev-parse HEAD').toString().trim(),
   temperature: 0, max_tokens: 64, questions: qs.length, started: meta.started ?? new Date(started).toISOString() }
 const writeMeta = (extra = {}) => writeFileSync(`${DIR}/meta.json`, JSON.stringify({ ...meta, ...extra }, null, 1))
-const writeMetrics = () => { const rows = readRows(DIR); const m = scoreRows(rows, store, expectedCounts(store, CATS)); writeFileSync(`${DIR}/metrics.json`, JSON.stringify(m, null, 1)); return m }
+const writeMetrics = () => { const rows = readRows(DIR); const m = scoreRows(rows, store, expectedCounts(store, [1, 2, 3, 4])); writeFileSync(`${DIR}/metrics.json`, JSON.stringify(m, null, 1)); return m }
 writeMeta()
 
 async function pool(items, fn) {
@@ -86,7 +86,13 @@ while (pass++ < MAX_PASSES) {
   if (!todo.length) break
   const fails = {}; let okCount = 0, sample = ''
   const t0 = Date.now()
-  await pool(todo, async (q) => { const r = await one(q); if (r.ok) okCount++; else { fails[r.kind] = (fails[r.kind] ?? 0) + 1; if (!sample) sample = r.message.slice(0, 120) } })
+  // a line every 25 answers, and the first failure of each kind as it happens, so a
+  // pass over 1,536 questions is not silent for an hour
+  await pool(todo, async (q) => {
+    const r = await one(q)
+    if (r.ok) { okCount++; if (okCount % 25 === 0) log(`  ${okCount + Object.values(fails).reduce((a, b) => a + b, 0)}/${todo.length} asked, ${okCount} answered, ${((Date.now() - t0) / 1000 / okCount).toFixed(1)}s each`) }
+    else { fails[r.kind] = (fails[r.kind] ?? 0) + 1; if (fails[r.kind] === 1) log(`  first ${r.kind} failure: ${r.message.slice(0, 140)}`); if (!sample) sample = r.message.slice(0, 120) }
+  })
   const failed = Object.values(fails).reduce((a, b) => a + b, 0)
   log(`pass ${pass}: asked ${todo.length}, answered ${okCount}, failed ${failed}${failed ? ' ' + JSON.stringify(fails) + ' e.g. ' + sample : ''} in ${((Date.now() - t0) / 1000).toFixed(0)}s`)
   writeMetrics(); writeMeta({ passes: pass, wall_seconds: Math.round((Date.now() - started) / 1000) })

@@ -98,8 +98,8 @@ if (MAIN) {
   const split = (process.argv.find((a) => a.startsWith('--split=')) ?? '--split=all').split('=')[1]
   for (const d of dirs) {
     const rows = readRows(d); if (!rows.length) { console.log(`${d}: no predictions`); continue }
-    const meta = existsSync(`${d}/meta.json`) ? JSON.parse(readFileSync(`${d}/meta.json`, 'utf8')) : {}
-    const m = scoreRows(rows, store, expectedCounts(store, meta.cats ?? [1, 2, 3, 4]))
+    // a run's scope is the benchmark's four categories, however it was filled in
+    const m = scoreRows(rows, store, expectedCounts(store, [1, 2, 3, 4]))
     console.log(table(d.replace(/^runs\//, ''), m, split) + '\n')
   }
 }
