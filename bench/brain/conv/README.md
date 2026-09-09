@@ -54,6 +54,10 @@ should sit near Naive RAG over the original questions. Exact MiniLM, top-10:
 | whole session       | 62.1            | 61.8                       |     6855 |
 | paper, Naive RAG    | dialog .533     | counterfactual .573        |        — |
 
+Same protocol, single turns, embedder swapped for ours: `zenlm/zen-embedding-0.6b`
+gives 59.7 [57.1, 60.7] on the full pool (ALL 54.9, ANY 65.6, 315 tokens/q,
+p50 1.0 ms) — seventeen points from the embedder alone, before any linkage.
+
 By category at the single-turn unit: single-hop 52.3, multi-hop 27.0, temporal 49.4,
 open-domain 26.3, adversarial 33.9 (ALL 39.0, ANY 47.9). Latency p50 0.3 ms.
 
