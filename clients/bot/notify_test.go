@@ -1,0 +1,298 @@
+package bot
+
+import (
+	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/ecdh"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/hkdf"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	"github.com/fasthttp/websocket"
+)
+
+// A person's notification defaults follow them to every browser and are stored
+// in the org's own file: the bot a connection happens to be bound to says
+// nothing about where they live (notifyStore). So a change made in one browser
+// is news to every browser that person has open, whichever partition each one
+// bound to — and a change nobody hears about is a screen showing settings that
+// are no longer stored anywhere.
+
+// pushBrowser registers one browser for push and starts it hearing about the
+// person's defaults, which is what reading the preferences does.
+func pushBrowser(t *testing.T, ws *websocket.Conn, id, endpoint string) {
+	t.Helper()
+	// A real P-256 key, because the subscription is what a notification is
+	// encrypted to and one this cloud cannot encrypt to is refused at once.
+	key, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("browser key: %v", err)
+	}
+	p256dh := base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes())
+	auth := base64.RawURLEncoding.EncodeToString(make([]byte, 16))
+	frame := reply(t, ws, id+":sub", "push.web.subscribe",
+		`{"endpoint":"`+endpoint+`","keys":{"p256dh":"`+p256dh+`","auth":"`+auth+`"}}`)
+	if frame["ok"] != true {
+		t.Fatalf("push.web.subscribe refused: %v", frame)
+	}
+	if frame = reply(t, ws, id+":get", "push.web.preferences.get",
+		`{"endpoint":"`+endpoint+`"}`); frame["ok"] != true {
+		t.Fatalf("push.web.preferences.get refused: %v", frame)
+	}
+}
+
+func TestPrefsChangedReachesEveryBrowserOfThePerson(t *testing.T) {
+	url := serve(t)
+	announceAt(t, url, "acme", "bot_aaaaaaaa")
+	plain := dialAs(t, url, "acme", "op@acme", "", false)
+	bound := dialAs(t, url, "acme", "op@acme", "bot_aaaaaaaa", false)
+
+	pushBrowser(t, plain, "1", "https://push.example.com/plain")
+	pushBrowser(t, bound, "2", "https://push.example.com/bound")
+
+	seen := listen(bound)
+	frame := reply(t, plain, "3:set", "push.web.preferences.set",
+		`{"endpoint":"https://push.example.com/plain","scope":"user","preferences":{`+
+			`"categories":{"approvalRequested":true,"agentFinished":true,"agentQuestion":true,`+
+			`"humanMentioned":true,"scheduledTaskFailed":true,"backgroundTaskFailed":true},`+
+			`"detailLevel":"private",`+
+			`"quietHours":{"enabled":false,"startMinute":0,"endMinute":0,"timeZone":"UTC"},`+
+			`"agentIds":[]}}`)
+	if frame["ok"] != true {
+		t.Fatalf("push.web.preferences.set refused: %v", frame)
+	}
+
+	// A marker every connection of the org hears, raised after the change.
+	PublishOrg("acme", "", "probe.moved", map[string]any{"key": "marker"})
+	if got := until(t, seen, "probe.moved"); !slices.Contains(got, "users.prefs.changed") {
+		t.Errorf("the person's other browser was not told their defaults changed: %v", got)
+	}
+}
+
+// ---- delivery ----
+
+// browserSub mints a subscription the test holds the browser key for, so what
+// pushDeliver sends can be read the way the browser that registered it would.
+func browserSub(t *testing.T, endpoint string) (pushSub, *ecdh.PrivateKey, []byte) {
+	t.Helper()
+	key, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("browser key: %v", err)
+	}
+	auth := make([]byte, 16)
+	if _, err := rand.Read(auth); err != nil {
+		t.Fatalf("auth secret: %v", err)
+	}
+	return pushSub{
+		ID:       "sub_" + pushID(endpoint)[:8],
+		User:     "op@acme",
+		Endpoint: endpoint,
+		P256dh:   pushB64(key.PublicKey().Bytes()),
+		Auth:     pushB64(auth),
+	}, key, auth
+}
+
+// browserOpen is the receiving half of RFC 8291 over the aes128gcm content
+// encoding of RFC 8188: it derives the same key from the record's own header
+// and returns the bytes a service worker would be handed.
+func browserOpen(t *testing.T, browser *ecdh.PrivateKey, auth, body []byte) []byte {
+	t.Helper()
+	if len(body) < 22 {
+		t.Fatalf("record is %d bytes, too short to carry a header", len(body))
+	}
+	salt, rs, idLen := body[:16], binary.BigEndian.Uint32(body[16:20]), int(body[20])
+	if rs != pushRecord {
+		t.Errorf("record size %d, want %d", rs, pushRecord)
+	}
+	server, err := ecdh.P256().NewPublicKey(body[21 : 21+idLen])
+	if err != nil {
+		t.Fatalf("the record does not carry a P-256 key: %v", err)
+	}
+	shared, err := browser.ECDH(server)
+	if err != nil {
+		t.Fatalf("ecdh: %v", err)
+	}
+	prk, err := hkdf.Extract(sha256.New, shared, auth)
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	info := append([]byte("WebPush: info\x00"), browser.PublicKey().Bytes()...)
+	info = append(info, server.Bytes()...)
+	ikm, err := hkdf.Expand(sha256.New, prk, string(info), 32)
+	if err != nil {
+		t.Fatalf("expand ikm: %v", err)
+	}
+	if prk, err = hkdf.Extract(sha256.New, ikm, salt); err != nil {
+		t.Fatalf("extract salted: %v", err)
+	}
+	cek, err := hkdf.Expand(sha256.New, prk, "Content-Encoding: aes128gcm\x00", 16)
+	if err != nil {
+		t.Fatalf("expand cek: %v", err)
+	}
+	nonce, err := hkdf.Expand(sha256.New, prk, "Content-Encoding: nonce\x00", 12)
+	if err != nil {
+		t.Fatalf("expand nonce: %v", err)
+	}
+	block, err := aes.NewCipher(cek)
+	if err != nil {
+		t.Fatalf("aes: %v", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		t.Fatalf("gcm: %v", err)
+	}
+	plain, err := gcm.Open(nil, nonce, body[21+idLen:], nil)
+	if err != nil {
+		t.Fatalf("the browser could not decrypt what was sent it: %v", err)
+	}
+	plain = bytes.TrimRight(plain, "\x00")
+	if len(plain) == 0 || plain[len(plain)-1] != 0x02 {
+		t.Fatalf("the record does not end in the last-record delimiter")
+	}
+	return plain[:len(plain)-1]
+}
+
+// A notification leaves as ciphertext only the browser that registered can
+// read, under an assertion signed by the key that browser bound itself to.
+// A push service checks both before it will carry anything, so a delivery that
+// never reaches the encryption is a notification nobody gets.
+func TestPushDeliverEncryptsToTheBrowser(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("gateway key: %v", err)
+	}
+
+	var seen *http.Request
+	var body []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Clone(r.Context())
+		body, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+
+	sub, browser, auth := browserSub(t, srv.URL)
+	payload := []byte(`{"title":"Hanzo","body":"Web push test notification"}`)
+	got := pushDeliver(t.Context(), key, "https://cloud.hanzo.ai", sub, payload)
+
+	if !got.OK || got.Status != http.StatusCreated || got.Error != "" {
+		t.Fatalf("delivery reported %+v, want ok at 201", got)
+	}
+	if got.ID != sub.ID {
+		t.Errorf("result names %q, want the subscription %q", got.ID, sub.ID)
+	}
+	if seen == nil {
+		t.Fatal("the push service was never called")
+	}
+	if seen.Method != http.MethodPost {
+		t.Errorf("method %s, want POST", seen.Method)
+	}
+	for h, want := range map[string]string{
+		"Content-Encoding": "aes128gcm",
+		"Content-Type":     "application/octet-stream",
+		"TTL":              strconv.Itoa(pushTTL),
+	} {
+		if v := seen.Header.Get(h); v != want {
+			t.Errorf("%s is %q, want %q", h, v, want)
+		}
+	}
+
+	// The assertion names the gateway by the same public key vapidPublicKey
+	// answers with; a browser refuses one minted under any other.
+	pub, err := key.PublicKey.ECDH()
+	if err != nil {
+		t.Fatalf("gateway public key: %v", err)
+	}
+	assertion := seen.Header.Get("Authorization")
+	if !strings.HasPrefix(assertion, "vapid t=") || !strings.Contains(assertion, ", k="+pushB64(pub.Bytes())) {
+		t.Errorf("Authorization %q is not a VAPID assertion under this gateway's key", assertion)
+	}
+
+	if out := browserOpen(t, browser, auth, body); !bytes.Equal(out, payload) {
+		t.Errorf("the browser reads %q, but %q was sent", out, payload)
+	}
+}
+
+// A fan-out over several browsers is several independent outcomes. One
+// unreachable browser must not swallow the others: it is reported against its
+// own endpoint, and every later endpoint is still tried.
+func TestPushDeliverReportsEachEndpointSeparately(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("gateway key: %v", err)
+	}
+
+	// A browser that took it, one whose push service is not answering at all,
+	// one the push service says is gone, and one behind both failures.
+	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer ok.Close()
+	gone := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusGone)
+		_, _ = w.Write([]byte("push subscription expired"))
+	}))
+	defer gone.Close()
+	var reachedLast atomic.Bool
+	tail := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reachedLast.Store(true)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer tail.Close()
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	dead.Close()
+
+	subs := make([]pushSub, 0, 4)
+	for _, e := range []string{ok.URL, dead.URL, gone.URL, tail.URL} {
+		s, _, _ := browserSub(t, e)
+		subs = append(subs, s)
+	}
+
+	// The fan-out pushTest performs: every subscription is attempted and its
+	// outcome kept, whatever the one before it did.
+	results := make([]pushResult, 0, len(subs))
+	for _, s := range subs {
+		results = append(results, pushDeliver(t.Context(), key, "https://cloud.hanzo.ai", s, []byte(`{"title":"t","body":"b"}`)))
+	}
+
+	if len(results) != len(subs) {
+		t.Fatalf("%d results for %d subscriptions", len(results), len(subs))
+	}
+	if !reachedLast.Load() {
+		t.Error("the endpoint after the failures was never tried")
+	}
+	for i, want := range []struct {
+		ok     bool
+		status int
+	}{{true, http.StatusCreated}, {false, 0}, {false, http.StatusGone}, {true, http.StatusCreated}} {
+		got := results[i]
+		if got.OK != want.ok || got.Status != want.status {
+			t.Errorf("subscription %d reported %+v, want ok=%v status=%d", i, got, want.ok, want.status)
+		}
+		if got.ID != subs[i].ID {
+			t.Errorf("result %d names %q, want %q", i, got.ID, subs[i].ID)
+		}
+		if !want.ok && got.Error == "" {
+			t.Errorf("subscription %d failed without saying why", i)
+		}
+	}
+
+	// 410 is how a push service reports a subscription the browser abandoned.
+	// pushTest drops that row, so the status has to survive as a status.
+	if results[2].Status != http.StatusGone {
+		t.Errorf("an abandoned subscription reported %d, want 410 so its row is dropped", results[2].Status)
+	}
+}
