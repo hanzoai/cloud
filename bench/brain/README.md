@@ -142,6 +142,57 @@ difference between a store and a memory.
 The measurement that would settle it is the one this directory does not have
 yet: the same 282 multi-hop questions, answered, with the resolver and without.
 
+## Linkage, built and measured
+
+`cer2.mjs`. The backbone stays cosine over turns. A tight pool is drawn — the
+top forty turns, the turns cited by the twenty facts nearest the question, and
+the neighbours of the top three — and each candidate is scored once: its own
+cosine, plus a fifth of the cosine of the best fact that cites it, plus a small
+bonus for sitting beside a top turn, plus a smaller one for sitting in the
+session a dated question names. Nothing learned, nothing called, and every term
+is ablated so the gain has a mechanism attached.
+
+| recall@20 | single-hop all / any | multi-hop all / any | ms |
+|---|---|---|---|
+| single (baseline) | 78.2% / 80.7% | 22.7% / 80.1% | 0.50 |
+| + fact index | 78.4% / 80.7% | 35.8% / 86.2% | 0.70 |
+| + adjacent | 80.6% / 82.8% | 36.2% / 87.2% | 0.70 |
+| + name link | 80.0% / 81.9% | 34.0% / 85.8% | 0.74 |
+| **+ time (shipped)** | **81.8% / 83.8%** | **36.2% / 87.2%** | 0.70 |
+
+Multi-hop *all* moves from 22.7% to 36.2% and single-hop does not pay for it;
+the shipped row is better on both columns than the baseline on either. By k,
+for whoever quotes it: multi-hop all is 12.8% at 5, 23.0% at 10, 36.2% at 20.
+
+Two things the table says that matter more than the number.
+
+**The fact index is the representation, and it has a ceiling.** `misses.mjs`:
+79.9% of multi-hop gold turns are cited by some LoCoMo observation; for those,
+the best citing fact ranks at median 8 against the question, where the turn
+itself ranks at median 20. Facts are shorter, one thing each, and written in the
+question's register — that is why they are found. The other 20.1% are cited by
+nothing, and no ranking of facts reaches them. LoCoMo's observations were
+extracted by a model; the same pass over our own turns is what lifts the
+ceiling, and it needs a model to run.
+
+**Surface linkage does not work.** `cer.mjs` fused whole ranked lists and lost
+four points; `oracle.mjs` then measured each link alone — of the evidence cosine
+misses, a fact reaches 24%, adjacency 17%, a shared capitalised name 20%, all of
+them together 52% — and the name hop, added to the shipped row, costs two
+points. 2,672 capitalised tokens, median one turn each: "Sunday" is not an
+entity. The hop has to follow a typed thing, *the same person*, *the week
+after*, which is the extraction pass again.
+
+## Answers, when there is a reader
+
+`answer.mjs` reads the shipped retrieval into a model and scores token F1 and
+exact match against the gold answer, the paper's own metric, and reports tokens
+delivered per question beside it. It is written against `api.hanzo.ai` with a
+matched `openai/gpt-4o-mini` reader so the row is comparable to CAR's; it has
+not been run, because the key on this machine no longer resolves. That row is
+the one that would sit beside the published figures, and it is one command from
+existing.
+
 ## On comparing to a published figure
 
 Any external multi-hop number should be read with its k and its metric. At k=20
