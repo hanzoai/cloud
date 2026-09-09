@@ -227,6 +227,50 @@ func validateDockerfile(raw string) (string, error) {
 	return s, nil
 }
 
+// ── target platforms ─────────────────────────────────────────────────────────
+
+// nativeArch maps a build platform to the node architecture that runs it without
+// emulation. A platform is listed here when the fleet HAS a node of that
+// architecture, and a platform absent from it is refused rather than emulated.
+//
+// The refusal is the point. Both nodes register qemu-binfmt with the F flag, so
+// an unlisted platform would build — slowly, correctly, and invisibly. That is
+// the worst of the three outcomes: a build nobody can tell from a native one
+// except by the clock. Measured on our own images, emulation is not a tax we can
+// absorb: cloud, iam, ci, team, sql and base declare no $BUILDPLATFORM stage, and
+// cloud's plugin stage is CGO_ENABLED=1 against libsqlcipher, so a foreign
+// platform there is 118 emulated C-linked compiles rather than a cross-compile.
+// One node per architecture is what we have and what this map spends.
+var nativeArch = map[string]string{
+	"linux/amd64": "amd64",
+	"linux/arm64": "arm64",
+}
+
+// buildPlatforms validates the requested target platforms and returns them in a
+// stable order. An empty request stays empty: the caller then gets exactly the
+// single-platform build it gets today, rather than a silently doubled one.
+//
+// Sorted and deduplicated for the reason buildArgs is sorted — the platform list
+// is part of the build's identity, and two requests naming the same platforms in
+// two orders must not be two builds.
+func buildPlatforms(ps []string) ([]string, error) {
+	if len(ps) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(nativeArch))
+	for _, p := range ps {
+		p = strings.TrimSpace(p)
+		if _, ok := nativeArch[p]; !ok {
+			return nil, fmt.Errorf("platform %q has no node to build it on (have %s)", p, strings.Join(slices.Sorted(maps.Keys(nativeArch)), ", "))
+		}
+		if !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
 // buildArgNameRE is a Dockerfile `ARG` name: the C-identifier shape docker
 // itself accepts, and nothing else. A name is half of one `build-arg:K=V` argv
 // element, so anything that could read as a second `=` or a leading dash is

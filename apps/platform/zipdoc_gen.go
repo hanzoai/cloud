@@ -407,7 +407,11 @@ func init() {
 			"releaseRow.version":     "Version is the released image tag, or v<n> when the image carries none.",
 		},
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /platform/build", zip.Doc{})
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /platform/build", zip.Doc{
+		Fields: map[string]string{
+			"BuildIn.platforms": "Platforms are the `<os>/<arch>` pairs the image is built for. Empty builds\none image for the default architecture; two publishes one manifest index\nover an image built on a node of each.",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /platform/fleet", zip.Doc{
 		Fields: map[string]string{
 			"App.org":      "Org is which org OWNS this app. On a reply that is a property of the thing\ndescribed, not a claim by the caller — a cross-org observer has to see it.",
@@ -457,6 +461,7 @@ func init() {
 			"runnerBuildReq.dockerfile":   "Dockerfile is the path to build from; empty uses the zero-config frontend.",
 			"runnerBuildReq.image":        "Image is the output image ref to push. Required on the image lane, and it\nmust target a registry namespace the caller's org owns.",
 			"runnerBuildReq.os":           "OS is the target operating system for the artifact lane.",
+			"runnerBuildReq.platforms":    "Platforms are the `<os>/<arch>` pairs the image is built for. Empty builds\none image for the fleet's default architecture, which is what every caller\ngets today. Naming two builds each on a node of that architecture and\npublishes ONE manifest index over them, so a single tag serves both.",
 			"runnerBuildReq.ref":          "Ref is the git ref to build when no SHA is given.",
 			"runnerBuildReq.repo":         "Repo is the repository clone URL to build. Required on the image lane.",
 			"runnerBuildReq.sha":          "SHA is the commit to pin; it wins over Ref and Branch.",
@@ -464,6 +469,7 @@ func init() {
 			"runnerBuildResp.buildJobId":  "BuildJobID is the queued build's id, and what its progress is read by.",
 			"runnerBuildResp.image":       "Image is the ref the image lane will push.",
 			"runnerBuildResp.index":       "Index is the binaries.json URL the artifact lane will publish.",
+			"runnerBuildResp.platforms":   "Platforms are the architectures the image lane will publish, echoed back.",
 			"runnerBuildResp.runnerPool":  "RunnerPool is the runner class the build was placed on.",
 			"runnerBuildResp.status":      "Status is `queued` — the build was accepted and has not finished.",
 			"runnerBuildResp.target":      "Target is the multi-stage build target, echoed back.",

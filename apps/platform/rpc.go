@@ -115,7 +115,7 @@ func exposeBuild() {
 			out, err := build(s, ctx, who.Org, false, runnerBuildReq{
 				Repo: in.Repo, SHA: in.SHA, Image: in.Image, Branch: in.Branch, Ref: in.Ref,
 				Dockerfile: in.Dockerfile, Context: in.Context, DockerTarget: in.DockerTarget,
-				OS: in.OS, Arch: in.Arch, Args: in.Args,
+				OS: in.OS, Arch: in.Arch, Args: in.Args, Platforms: in.Platforms,
 			})
 			if err != nil {
 				return nil, err

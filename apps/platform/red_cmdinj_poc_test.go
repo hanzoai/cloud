@@ -212,7 +212,7 @@ func TestBuildJobSpec_RootlessAndScopedCred(t *testing.T) {
 	if push != "push-luxfi" {
 		t.Fatalf("push secret must be per-org (push-luxfi), got %q", push)
 	}
-	job := k.buildJobSpec("pf-runner-x", "platform", "runner", push, []any{"buildctl-daemonless.sh"})
+	job := k.buildJobSpec("pf-runner-x", "platform", "runner", push, []any{"buildctl-daemonless.sh"}, defaultArch)
 	podSpec, _, _ := unstructured.NestedMap(job.Object, "spec", "template", "spec")
 
 	containers, _, _ := unstructured.NestedSlice(podSpec, "containers")

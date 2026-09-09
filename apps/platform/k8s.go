@@ -869,12 +869,12 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	// param, computed by buildImageRef from the validated tenant) and appears as
 	// its own fixed argv element, so a client can never override --output/--opt to
 	// push to another tenant's repo.
-	command := buildFrontendCmdRev(buildCtx, dockerfile, image, cleanRef)
+	command := buildFrontendCmdRev(buildCtx, dockerfile, image, image, cleanRef, nil)
 	pushSecret, err := buildPushSecret(image)
 	if err != nil {
 		return "", err
 	}
-	job := k.buildJobSpec(jobName, org, a.Slug, pushSecret, command)
+	job := k.buildJobSpec(jobName, org, a.Slug, pushSecret, command, defaultArch)
 	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}
@@ -901,7 +901,7 @@ const platformBuildOrg = "platform"
 // repositories to the git context — BuildKit's gitsource presents it as the HTTPS
 // credential, and the forge serves no repository, public or private, without one.
 func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
-	return buildFrontendCmdRev(buildCtx, dockerfile, image, "")
+	return buildFrontendCmdRev(buildCtx, dockerfile, image, image, "", nil)
 }
 
 // buildFrontendCmdArgs is buildFrontendCmdRev plus the image's declared
@@ -912,8 +912,8 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 // receipts — the tag the image is published under and the commit it was built
 // from — and an image that can name a different commit than it was built from is
 // the one lie the whole digest-pinned lane exists to prevent.
-func buildFrontendCmdArgs(buildCtx, dockerfile, image, revision string, args map[string]string) ([]any, error) {
-	cmd := buildFrontendCmdRev(buildCtx, dockerfile, image, revision)
+func buildFrontendCmdArgs(buildCtx, dockerfile, image, push, revision string, args map[string]string, platforms []string) ([]any, error) {
+	cmd := buildFrontendCmdRev(buildCtx, dockerfile, image, push, revision, platforms)
 	declared := make(map[string]string, len(args))
 	for k, v := range args {
 		switch k {
@@ -948,7 +948,12 @@ func buildFrontendCmdArgs(buildCtx, dockerfile, image, revision string, args map
 // image can name its own commit, so the arg is passed here and the label is true
 // no matter which builder ran.
 
-func buildFrontendCmdRev(buildCtx, dockerfile, image, revision string) []any {
+// `image` is what the build CLAIMS TO BE — the version it stamps into itself and
+// the repository its layer cache is keyed on. `push` is where this Job writes it.
+// The two are the same ref for every build but one half of a fan-out, which
+// publishes at the release tag plus its architecture and would otherwise stamp
+// that suffix into the binary's own version string.
+func buildFrontendCmdRev(buildCtx, dockerfile, image, push, revision string, platforms []string) []any {
 	cmd := []any{"buildctl-daemonless.sh", "build"}
 	if strings.TrimSpace(dockerfile) != "" {
 		cmd = append(cmd,
@@ -962,6 +967,14 @@ func buildFrontendCmdRev(buildCtx, dockerfile, image, revision string) []any {
 			"--opt", "source="+packFrontendImage,
 			"--opt", "context="+buildCtx,
 		)
+	}
+	// The platform this solve targets. Unnamed, buildkit builds for the worker's
+	// own architecture — which is the single-platform case, where the node has
+	// already been chosen for the architecture asked for and naming it again would
+	// say nothing. Named, it is what makes the output an image FOR something rather
+	// than an image from wherever it happened to run.
+	if len(platforms) > 0 {
+		cmd = append(cmd, "--opt", "platform="+strings.Join(platforms, ","))
 	}
 	cmd = append(cmd, "--secret", "id=GIT_AUTH_TOKEN,env=GIT_AUTH_TOKEN")
 	// The package-registry credential, for a build that installs the fabric's own
@@ -1018,8 +1031,11 @@ func buildFrontendCmdRev(buildCtx, dockerfile, image, revision string) []any {
 	// cache miss, never a build failure, so a first build (or a registry hiccup)
 	// behaves exactly as it does today. Skipped for a digest-pinned ref, which
 	// names no tag to hang the cache off.
+	// Keyed per architecture. Two halves of a fan-out build the same repository at
+	// the same tag, so one cache ref would have each overwriting the other's index
+	// on every build and neither ever reading its own.
 	if repo, tag := splitImageRef(image); tag != "" && !strings.Contains(tag, ":") {
-		for _, a := range cacheArgs(repo) {
+		for _, a := range cacheArgs(repo, cacheArch(platforms)) {
 			cmd = append(cmd, a)
 		}
 	}
@@ -1053,7 +1069,16 @@ func buildFrontendCmdRev(buildCtx, dockerfile, image, revision string) []any {
 	// One caller had to change WITH this and is not optional: imagePullable in
 	// pin.go negotiates the manifest by Accept, and ghcr answers a type it was not
 	// offered with 404. See the note there.
-	return append(cmd, "--output", "type=image,name="+image+",push=true,compression=zstd,force-compression=true,oci-mediatypes=true")
+	return append(cmd, "--output", "type=image,name="+push+",push=true,compression=zstd,force-compression=true,oci-mediatypes=true")
+}
+
+// cacheArch names the architecture a cache belongs to, and nothing when the build
+// did not say — which is the ref every cache in the registry is under today.
+func cacheArch(platforms []string) string {
+	if len(platforms) != 1 {
+		return ""
+	}
+	return nativeArch[platforms[0]]
 }
 
 // cacheBucket is the object-store bucket the layer cache lives in. One bucket for
@@ -1078,18 +1103,18 @@ const cacheBucket = "buildcache"
 // backend to use is therefore a deployment fact, not a code opinion: grant
 // hanzo-build ingress to the s3 service, set the endpoint, and the cache moves
 // with no code change. Until then the registry backend is what works.
-func cacheArgs(repo string) []string {
+func cacheArgs(repo, arch string) []string {
 	if ep := environ.Or("BUILD_CACHE_S3_ENDPOINT", ""); ep != "" {
 		common := "type=s3,bucket=" + environ.Or("BUILD_CACHE_S3_BUCKET", cacheBucket) +
 			",region=" + environ.Or("S3_REGION", "us-east-1") +
 			",endpoint_url=" + s3CacheEndpoint(ep) +
-			",use_path_style=true,name=" + cacheKey(repo)
+			",use_path_style=true,name=" + cacheKey(repo) + suffix(arch)
 		// mode=min, for the reason spelled out on the registry branch below: max
 		// re-compresses and re-uploads the whole build stage to buy back a few
 		// seconds of `apk add`.
 		return []string{"--import-cache", common, "--export-cache", common + ",mode=min,compression=zstd"}
 	}
-	ref := repo + ":buildcache"
+	ref := repo + ":buildcache" + suffix(arch)
 	// mode=min. The claim this used to carry — that max keeps the Go compiles warm
 	// — is not what the builds do. Two independent cloud builds imported this cache
 	// and got the SAME eight cached steps: `apk add`, `adduser`, the libsqlcipher
@@ -1236,8 +1261,8 @@ func buildPushSecret(image string) (string, error) {
 //   - runs in the ISOLATED build namespace (k.buildNS, defaulted off the main
 //     platform namespace) with automountServiceAccountToken=false and pinned to the
 //     dedicated CI runner pool (taint + nodeSelector) — retained from before.
-func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command []any) *unstructured.Unstructured {
-	return &unstructured.Unstructured{Object: map[string]any{
+func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command []any, arch string) *unstructured.Unstructured {
+	spec := map[string]any{
 		"apiVersion": "batch/v1",
 		"kind":       "Job",
 		"metadata": map[string]any{
@@ -1288,13 +1313,6 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 					// workload off a node, and raising a single run's class is how one
 					// build gets moved to the front without stopping the others.
 					"priorityClassName": "hanzo-ci",
-					// The builder runs where the ARCHITECTURE it builds for actually is. This
-					// pinned a pool name, and the only node carrying it is arm64 — so every
-					// linux/amd64 image the door produces was built under emulation on the
-					// wrong machine. Selecting the arch is also what makes a second platform
-					// possible later: the node is chosen by what is being built, not by a
-					// label that happens to name one box.
-					"nodeSelector":                 map[string]any{"kubernetes.io/arch": "amd64"},
 					"tolerations":                  []any{map[string]any{"key": "dedicated", "operator": "Equal", "value": "ci-runner", "effect": "NoSchedule"}},
 					"automountServiceAccountToken": false,
 					// Pod-level: run the whole pod as the non-root buildkit user.
@@ -1430,7 +1448,26 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 				},
 			},
 		},
-	}}
+	}
+	// The builder runs on a node of the architecture it is building for, so the
+	// compiler in the build is the machine's own. This pinned a POOL name once,
+	// and the only node carrying that pool was arm64 — every linux/amd64 image the
+	// door produced was emulated on the wrong machine, correct and ten times slow,
+	// with nothing in the output to say so. Both nodes register qemu-binfmt, so
+	// there is no error to catch it either; only the clock shows it.
+	//
+	// Empty for the index solve alone. That one executes nothing — it resolves two
+	// already-built images and writes a manifest — so it has no architecture to
+	// prefer and takes whichever node has room.
+	if arch != "" {
+		podSpec(spec)["nodeSelector"] = map[string]any{"kubernetes.io/arch": arch}
+	}
+	return &unstructured.Unstructured{Object: spec}
+}
+
+// podSpec reaches the pod template's spec inside a Job object.
+func podSpec(job map[string]any) map[string]any {
+	return job["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)
 }
 
 // launchDirectBuild launches a privileged build. It takes explicit
@@ -1449,7 +1486,7 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 // looping deploys locked every other org out of building, with no attribution in
 // the Job labels to see it by. /v1/platform/runner still passes platformBuildOrg (its
 // builds ARE the fabric's); a tenant deploy passes the tenant.
-func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, image, dockerfile, buildID string, args map[string]string) (string, error) {
+func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, image, dockerfile, buildID string, args map[string]string, platforms []string) (string, error) {
 	if strings.TrimSpace(org) == "" {
 		return "", fmt.Errorf("a build must be attributed to an org")
 	}
@@ -1467,22 +1504,151 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, im
 	if err := k.admitBuild(ctx, org); err != nil {
 		return "", err
 	}
-	jobName := truncate("pf-runner-"+jobIDSuffix(buildID), 63)
 	buildCtx := strings.TrimSuffix(cleanURL, ".git") + ".git#" + cleanRef
-	command, err := buildFrontendCmdArgs(buildCtx, cleanDockerfile, image, cleanRef, args)
+
+	// ONE PLATFORM, ONE JOB — the shape every build has had, now saying out loud
+	// which architecture it is for.
+	if len(platforms) < 2 {
+		arch := defaultArch
+		if len(platforms) == 1 {
+			arch = nativeArch[platforms[0]]
+		}
+		return k.launchBuild(ctx, org, buildJobName(buildID, ""), image, image, buildCtx, cleanDockerfile, cleanRef, args, platforms, arch)
+	}
+
+	// SEVERAL PLATFORMS, ONE JOB EACH, EACH ON A NODE OF ITS OWN ARCHITECTURE.
+	// The alternative — one solve naming both platforms — builds the foreign half
+	// under qemu, and measured on our own images that is not a tax worth paying:
+	// cloud, iam, ci, team, sql and base declare no $BUILDPLATFORM stage, and
+	// cloud's plugin stage is CGO_ENABLED=1 against libsqlcipher, so its foreign
+	// half is 118 emulated C-linked compiles rather than a cross-compile. We own a
+	// machine of each architecture; this spends them.
+	//
+	// Each half publishes at its own tag and is a real, pullable image. The index
+	// that joins them is composed FROM those tags (launchIndexBuild) once both have
+	// landed, which is also why a failed join leaves two working images behind
+	// instead of nothing.
+	for _, p := range platforms {
+		arch := nativeArch[p]
+		if _, err := k.launchBuild(ctx, org, buildJobName(buildID, arch), image, archTag(image, arch), buildCtx, cleanDockerfile, cleanRef, args, []string{p}, arch); err != nil {
+			return "", err
+		}
+	}
+	return buildJobName(buildID, indexJobSuffix), nil
+}
+
+// launchBuild creates one BuildKit Job: the argv, the push credential its image
+// implies, and a node of the architecture it targets.
+func (k *k8sClient) launchBuild(ctx context.Context, org, jobName, image, push, buildCtx, dockerfile, revision string, args map[string]string, platforms []string, arch string) (string, error) {
+	command, err := buildFrontendCmdArgs(buildCtx, dockerfile, image, push, revision, args, platforms)
 	if err != nil {
 		return "", fmt.Errorf("invalid build input: %w", err)
 	}
-	pushSecret, err := buildPushSecret(image)
+	pushSecret, err := buildPushSecret(push)
 	if err != nil {
 		return "", err
 	}
-	job := k.buildJobSpec(jobName, org, "runner", pushSecret, command)
+	job := k.buildJobSpec(jobName, org, "runner", pushSecret, command, arch)
 	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}
 	return jobName, nil
 }
+
+// launchIndexBuild publishes `image` as a manifest index over the per-architecture
+// images the fan-out pushed. The reconciler calls it once every one of those has
+// succeeded — an index naming an image that is not there is a broken tag, so the
+// order is the whole contract.
+//
+// It executes NOTHING. The build is a single FROM resolved once per platform, so
+// both halves are read from the registry as they were built and neither is run,
+// which is what lets one node write an index for two architectures honestly.
+func (k *k8sClient) launchIndexBuild(ctx context.Context, org, image, buildID string, platforms []string) (string, error) {
+	if err := k.ready(); err != nil {
+		return "", err
+	}
+	pushSecret, err := buildPushSecret(image)
+	if err != nil {
+		return "", err
+	}
+	jobName := buildJobName(buildID, indexJobSuffix)
+	job := k.buildJobSpec(jobName, org, "runner", pushSecret, indexCmd(image, platforms), "")
+	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
+		return "", err
+	}
+	return jobName, nil
+}
+
+// indexDir is where the index build's one-line Dockerfile is written, and its
+// build context. Both are the same directory because the context is empty: a FROM
+// with nothing after it copies nothing in.
+const indexDir = "/tmp/index"
+
+// indexJobSuffix names the Job that joins a fan-out. It is derived from the build
+// id like every other Job name here, so a retry collides at 409 rather than
+// writing the index twice.
+const indexJobSuffix = "index"
+
+// indexScript writes the join Dockerfile and hands buildctl the rest of the argv.
+//
+// The script is a CONSTANT and every value the caller influenced arrives as a
+// separate argv element through "$@", so the exec-form rule holds exactly as it
+// does for a build: nothing a request can reach is ever parsed by a shell. The
+// Dockerfile it writes has to be a file because buildctl reads its context off
+// disk, and a constant written by a constant is the cheapest file there is.
+//
+// TARGETARCH is a predefined build arg the dockerfile frontend places in the
+// global scope, so each half of the solve resolves ITS OWN architecture's image.
+const indexScript = `set -eu
+mkdir -p ` + indexDir + `
+printf '%s\n' 'ARG SRC' 'FROM ${SRC}-${TARGETARCH}' > ` + indexDir + `/Dockerfile
+exec buildctl-daemonless.sh build "$@"`
+
+// indexCmd is the index build's argv. No layer cache and no compression override:
+// the layers already exist in this repository exactly as the fan-out wrote them,
+// so the push is manifests and nothing else.
+func indexCmd(image string, platforms []string) []any {
+	return []any{"/bin/sh", "-c", indexScript, indexJobSuffix,
+		"--frontend=dockerfile.v0",
+		"--local", "context=" + indexDir,
+		"--local", "dockerfile=" + indexDir,
+		"--opt", "build-arg:SRC=" + image,
+		"--opt", "platform=" + strings.Join(platforms, ","),
+		"--output", "type=image,name=" + image + ",push=true,oci-mediatypes=true",
+	}
+}
+
+// buildJobName is the ONE name a build's Jobs are known by: derived from the build
+// id, so a retry of one build collides rather than duplicating, and suffixed by
+// what the Job is for when a build has more than one.
+func buildJobName(buildID, suffix string) string {
+	name := "pf-runner-" + jobIDSuffix(buildID)
+	if suffix != "" {
+		name += "-" + suffix
+	}
+	return truncate(name, 63)
+}
+
+// archTag is where one half of a fan-out publishes: the requested tag plus the
+// architecture that built it. Each is a real image a caller can pull on its own,
+// and the index is composed from them by name.
+func archTag(image, arch string) string {
+	repo, tag := splitImageRef(image)
+	return repo + ":" + tag + "-" + arch
+}
+
+// suffix prefixes a non-empty discriminator with a dash, so an absent one leaves
+// the name it qualifies exactly as it was.
+func suffix(s string) string {
+	if s == "" {
+		return ""
+	}
+	return "-" + s
+}
+
+// defaultArch is where a build that names no platform runs — unchanged behaviour
+// for every caller that does not use the field.
+const defaultArch = "amd64"
 
 // jobPollInterval is how often waitForJob re-reads a Job's terminal state.
 const jobPollInterval = 5 * time.Second

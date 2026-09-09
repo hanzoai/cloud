@@ -2651,6 +2651,10 @@ type BuildIn struct {
 	OS           string            `json:"os,omitempty"`
 	Arch         string            `json:"arch,omitempty"`
 	Args         map[string]string `json:"args,omitempty"`
+	// Platforms are the `<os>/<arch>` pairs the image is built for. Empty builds
+	// one image for the default architecture; two publishes one manifest index
+	// over an image built on a node of each.
+	Platforms []string `json:"platforms,omitempty"`
 }
 
 // Queued is a build platform accepted.

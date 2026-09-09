@@ -14,7 +14,7 @@ import (
 // "The node was low on resource: ephemeral-storage … request is 0".
 func TestBuildDeclaresItsDiskNeed(t *testing.T) {
 	k := fakeK8s()
-	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
+	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"}, defaultArch)
 	cs, _, err := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "containers")
 	if err != nil || len(cs) == 0 {
 		t.Fatalf("no containers: %v", err)
@@ -44,7 +44,7 @@ func TestBuildDeclaresItsDiskNeed(t *testing.T) {
 // 396s and the two-platform build completed.
 func TestBuildDeclaresItsComputeNeed(t *testing.T) {
 	k := fakeK8s()
-	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
+	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"}, defaultArch)
 	cs, _, _ := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "containers")
 	res, ok := cs[0].(map[string]any)["resources"].(map[string]any)
 	if !ok {
@@ -67,7 +67,7 @@ func TestBuildDeclaresItsComputeNeed(t *testing.T) {
 // a node already at its threshold, ten minutes in.
 func TestTheDiskRequestMatchesARealBuild(t *testing.T) {
 	k := fakeK8s()
-	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
+	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"}, defaultArch)
 	cs, _, _ := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "containers")
 	res := cs[0].(map[string]any)["resources"].(map[string]any)
 	req, _ := res["requests"].(map[string]any)
@@ -81,7 +81,7 @@ func TestTheDiskRequestMatchesARealBuild(t *testing.T) {
 // the nodes.
 func TestAFinishedBuildReleasesItsDiskPromptly(t *testing.T) {
 	k := fakeK8s()
-	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
+	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"}, defaultArch)
 	ttl, found, err := unstructured.NestedInt64(job.Object, "spec", "ttlSecondsAfterFinished")
 	if err != nil || !found {
 		t.Fatal("the build job must bound how long it holds a node's disk")
@@ -104,14 +104,14 @@ func TestAFinishedBuildReleasesItsDiskPromptly(t *testing.T) {
 func TestTheCacheBackendFollowsWhatIsReachable(t *testing.T) {
 	// Unset: the backend that works today.
 	t.Setenv("BUILD_CACHE_S3_ENDPOINT", "")
-	got := strings.Join(cacheArgs("ghcr.io/hanzoai/cloud"), " ")
+	got := strings.Join(cacheArgs("ghcr.io/hanzoai/cloud", ""), " ")
 	if !strings.Contains(got, "type=registry") {
 		t.Errorf("with no object store configured the cache must stay on the registry: %s", got)
 	}
 
 	// Set: the cache moves, with no code change.
 	t.Setenv("BUILD_CACHE_S3_ENDPOINT", "s3.hanzo.svc:9000")
-	got = strings.Join(cacheArgs("ghcr.io/hanzoai/cloud"), " ")
+	got = strings.Join(cacheArgs("ghcr.io/hanzoai/cloud", ""), " ")
 	for _, want := range []string{
 		"type=s3", "bucket=buildcache",
 		"endpoint_url=http://s3.hanzo.svc:9000",
@@ -136,7 +136,7 @@ func TestTheCacheBackendFollowsWhatIsReachable(t *testing.T) {
 // ENVIRONMENT and never argv — a build command is logged and inspectable.
 func TestTheCacheCredentialIsNeverOnArgv(t *testing.T) {
 	t.Setenv("BUILD_CACHE_S3_ENDPOINT", "s3.hanzo.svc:9000")
-	got := strings.Join(cacheArgs("ghcr.io/hanzoai/cloud"), " ")
+	got := strings.Join(cacheArgs("ghcr.io/hanzoai/cloud", ""), " ")
 	for _, leak := range []string{"access_key_id=", "secret_access_key="} {
 		if strings.Contains(got, leak) {
 			t.Errorf("the build command carries %q; it belongs in the env", leak)
@@ -146,7 +146,7 @@ func TestTheCacheCredentialIsNeverOnArgv(t *testing.T) {
 	// absent, buildkit reports a miss and the build runs uncached rather than the
 	// Job being unschedulable. A cache accelerates; it never gates.
 	k := fakeK8s()
-	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
+	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"}, defaultArch)
 	cs, _, _ := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "containers")
 	env, _ := cs[0].(map[string]any)["env"].([]any)
 	found := map[string]bool{}
@@ -178,7 +178,7 @@ func TestTheCacheCredentialIsNeverOnArgv(t *testing.T) {
 // disk, where it filled the runner pool and evicted builds mid-run.
 func TestBuildPodCanReachTheObjectStore(t *testing.T) {
 	k := fakeK8s()
-	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
+	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"}, defaultArch)
 
 	pod, _, err := unstructured.NestedStringMap(job.Object, "spec", "template", "metadata", "labels")
 	if err != nil {
@@ -247,7 +247,7 @@ func TestEveryJobEmptyDirIsCapped(t *testing.T) {
 		vol  string
 		want string
 	}{
-		{"build", k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"}), "buildkitd", buildCacheLimit},
+		{"build", k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"}, defaultArch), "buildkitd", buildCacheLimit},
 		{"artifact", k.artifactJobSpec("pf-art-t", "https://github.com/hanzoai/runner", "main", "v1", "base", "put", nil), "w", artifactWorkspaceLimit},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -268,7 +268,7 @@ func TestEveryJobEmptyDirIsCapped(t *testing.T) {
 // the point: one has a working degraded mode and the other has none.
 func TestBuildCarriesAPackageRegistryCredentialApartFromTheForgeOne(t *testing.T) {
 	k := fakeK8s()
-	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
+	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"}, defaultArch)
 	cs, _, err := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "containers")
 	if err != nil || len(cs) == 0 {
 		t.Fatalf("no containers: %v", err)

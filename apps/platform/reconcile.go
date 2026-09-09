@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -96,17 +97,17 @@ func reconcileDirectBuilds(s *cloud.Service[state], ctx context.Context) {
 		if b.DeploymentID != "" {
 			continue // the deployment path owns this one
 		}
-		done, succeeded, jErr := s.State.k8s.jobResult(ctx, b.JobName)
+		done, succeeded, jErr := directBuildResult(s, ctx, b)
 		switch {
 		case jErr != nil:
 			// Includes a TTL-deleted Job (NotFound). Only the deadline decides,
 			// never a transient read.
-			if time.Now().Unix()-b.CreatedAt > int64(buildDeadline.Seconds()) {
+			if time.Now().Unix()-b.CreatedAt > int64(stuckAfter(b).Seconds()) {
 				finishDirectBuild(s, ctx, b, "failed")
 			}
 		case !done:
 			// Still running. A Job that outlives the deadline is stuck, not slow.
-			if time.Now().Unix()-b.CreatedAt > int64(buildDeadline.Seconds()) {
+			if time.Now().Unix()-b.CreatedAt > int64(stuckAfter(b).Seconds()) {
 				finishDirectBuild(s, ctx, b, "failed")
 			}
 		case succeeded:
@@ -115,6 +116,59 @@ func reconcileDirectBuilds(s *cloud.Service[state], ctx context.Context) {
 			finishDirectBuild(s, ctx, b, "failed")
 		}
 	}
+}
+
+// stuckAfter is how long a build may run before it is called stuck rather than
+// slow. A build across several architectures is TWO phases — every architecture
+// at once, then the index over them — and one deadline for both would call a
+// healthy second phase a failure, in the record, while the image it is writing
+// publishes anyway.
+func stuckAfter(b Build) time.Duration {
+	if len(b.Platforms) > 1 {
+		return 2 * buildDeadline
+	}
+	return buildDeadline
+}
+
+// directBuildResult asks whether one direct build is finished, and advances it if
+// it is a fan-out that is ready for its next step.
+//
+// A single-architecture build is its Job and nothing else. A build across several
+// architectures is one Job per architecture and then an index Job that joins them,
+// and the order is the contract: an index naming an image that is not published is
+// a broken tag, so the join is launched only once every architecture has landed.
+// The answer it returns has the same shape either way, so the outcome is still
+// recorded in one place.
+func directBuildResult(s *cloud.Service[state], ctx context.Context, b Build) (done, succeeded bool, err error) {
+	if len(b.Platforms) < 2 {
+		return s.State.k8s.jobResult(ctx, b.JobName)
+	}
+	// The index Job decides the build the moment it exists.
+	done, succeeded, err = s.State.k8s.jobResult(ctx, b.JobName)
+	if !apierrors.IsNotFound(err) {
+		return done, succeeded, err
+	}
+	for _, p := range b.Platforms {
+		d, ok, jErr := s.State.k8s.jobResult(ctx, buildJobName(b.ID, nativeArch[p]))
+		switch {
+		case jErr != nil:
+			return false, false, jErr
+		case !d:
+			return false, false, nil
+		case !ok:
+			// One architecture failed. There is nothing honest to join, and the half
+			// that did build stays at its own tag to be looked at.
+			return true, false, nil
+		}
+	}
+	if _, lErr := s.State.k8s.launchIndexBuild(ctx, b.Org, b.Image, b.ID, b.Platforms); lErr != nil {
+		if !apierrors.IsAlreadyExists(lErr) {
+			return false, false, lErr
+		}
+		return false, false, nil // another replica got there first
+	}
+	s.Log.Info("build index launched", "build", b.ID, "image", b.Image, "platforms", b.Platforms)
+	return false, false, nil
 }
 
 // finishDirectBuild writes one terminal status. Its only job is to make the row

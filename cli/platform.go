@@ -336,6 +336,11 @@ type BuildReq struct {
 	OS           string `json:"os,omitempty"`
 	Arch         string `json:"arch,omitempty"`
 
+	// Platforms are the `<os>/<arch>` pairs the image lane builds for. Empty is
+	// one image for the default architecture; two is one manifest index over an
+	// image built natively on a node of each.
+	Platforms []string `json:"platforms,omitempty"`
+
 	// The artifact lane: `binaries:` + `bucket:` from the repo's hanzo.yml.
 	Binaries []BuildBinary `json:"binaries,omitempty"`
 	Bucket   string        `json:"bucket,omitempty"`

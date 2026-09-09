@@ -67,8 +67,8 @@ func TestDeclaredArgsCannotForgeTheReceipts(t *testing.T) {
 	// release" is answered with.
 	cmd, err := buildFrontendCmdArgs(
 		"https://github.com/hanzoai/bot.git#refs/heads/main", "Dockerfile.box",
-		"oci.hanzo.ai/hanzoai/sandbox:1.0.1-dev", "fedeb0e5d0b3f7a9b171823a4f3ecf33686e5b1a",
-		map[string]string{"STAGE": "dev", "VERSION": "9.9.9", "REVISION": "0000000000000000000000000000000000000000"},
+		"oci.hanzo.ai/hanzoai/sandbox:1.0.1-dev", "oci.hanzo.ai/hanzoai/sandbox:1.0.1-dev", "fedeb0e5d0b3f7a9b171823a4f3ecf33686e5b1a",
+		map[string]string{"STAGE": "dev", "VERSION": "9.9.9", "REVISION": "0000000000000000000000000000000000000000"}, nil,
 	)
 	if err != nil {
 		t.Fatalf("buildFrontendCmdArgs: %v", err)
@@ -163,7 +163,7 @@ func TestABuildRefusesAnAbbreviatedRevision(t *testing.T) {
 // stamp were dropped on the way.
 func TestAFullRevisionIsStamped(t *testing.T) {
 	const full = "8c8c58108e4b18a4c8b06d4b6a6f91e616a5f6cc"
-	cmd, err := buildFrontendCmdArgs("ctx.git#x", "Dockerfile", "ghcr.io/x/y:t", full, nil)
+	cmd, err := buildFrontendCmdArgs("ctx.git#x", "Dockerfile", "ghcr.io/x/y:t", "ghcr.io/x/y:t", full, nil, nil)
 	if err != nil {
 		t.Fatalf("full commit refused: %v", err)
 	}

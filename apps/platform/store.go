@@ -115,6 +115,13 @@ type Build struct {
 	Image         string
 	JobName       string
 	LogsRef       string
+	// Platforms are the architectures this build publishes. Empty is the single,
+	// default-architecture build. Two or more means the build fanned out to one Job
+	// per architecture and its JobName is the index Job that joins them — which is
+	// why the list is stored rather than derived: the Jobs carry a TTL and finish
+	// far enough apart that the cluster stops being able to answer what was asked
+	// for.
+	Platforms []string
 	CreatedAt     int64
 	UpdatedAt     int64
 }
@@ -203,6 +210,7 @@ CREATE TABLE IF NOT EXISTS platform_builds (
   image          TEXT NOT NULL DEFAULT '',
   job_name       TEXT NOT NULL DEFAULT '',
   logs_ref       TEXT NOT NULL DEFAULT '',
+  platforms      TEXT NOT NULL DEFAULT '',
   created_at     INTEGER NOT NULL,
   updated_at     INTEGER NOT NULL
 );
@@ -237,6 +245,9 @@ CREATE INDEX IF NOT EXISTS ix_pf_domains_app ON platform_domains(org, app_id);
 		`ALTER TABLE platform_apps ADD COLUMN compute_metered_at INTEGER NOT NULL DEFAULT 0`,
 		// 0 means stateless, which is what every app predating this column is.
 		`ALTER TABLE platform_apps ADD COLUMN storage_gb INTEGER NOT NULL DEFAULT 0`,
+		// Empty means the single default-architecture build every row predating this
+		// column is.
+		`ALTER TABLE platform_builds ADD COLUMN platforms TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return fmt.Errorf("migrate scale: %w", err)
@@ -711,18 +722,20 @@ func (s *Store) ListBuildingDeployments(ctx context.Context) ([]Deployment, erro
 
 // ── builds ───────────────────────────────────────────────────────────────────
 
-const buildCols = `id,org,application_id,deployment_id,status,image,job_name,logs_ref,created_at,updated_at`
+const buildCols = `id,org,application_id,deployment_id,status,image,job_name,logs_ref,platforms,created_at,updated_at`
 
 func scanBuild(sc interface{ Scan(...any) error }) (Build, error) {
 	var b Build
-	err := sc.Scan(&b.ID, &b.Org, &b.ApplicationID, &b.DeploymentID, &b.Status, &b.Image, &b.JobName, &b.LogsRef, &b.CreatedAt, &b.UpdatedAt)
+	var platforms string
+	err := sc.Scan(&b.ID, &b.Org, &b.ApplicationID, &b.DeploymentID, &b.Status, &b.Image, &b.JobName, &b.LogsRef, &platforms, &b.CreatedAt, &b.UpdatedAt)
+	b.Platforms = strings.Fields(platforms)
 	return b, err
 }
 
 func (s *Store) InsertBuild(ctx context.Context, b Build) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO platform_builds (`+buildCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		b.ID, b.Org, b.ApplicationID, b.DeploymentID, b.Status, b.Image, b.JobName, b.LogsRef, b.CreatedAt, b.UpdatedAt)
+		`INSERT INTO platform_builds (`+buildCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		b.ID, b.Org, b.ApplicationID, b.DeploymentID, b.Status, b.Image, b.JobName, b.LogsRef, strings.Join(b.Platforms, " "), b.CreatedAt, b.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert build: %w", err)
 	}

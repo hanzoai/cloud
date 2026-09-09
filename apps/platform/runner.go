@@ -66,6 +66,11 @@ type runnerBuildReq struct {
 	// tag and the commit, and a caller that could overwrite them could make an
 	// image lie about which commit it is.
 	Args map[string]string `json:"args,omitempty" url:"-"`
+	// Platforms are the `<os>/<arch>` pairs the image is built for. Empty builds
+	// one image for the fleet's default architecture, which is what every caller
+	// gets today. Naming two builds each on a node of that architecture and
+	// publishes ONE manifest index over them, so a single tag serves both.
+	Platforms []string `json:"platforms,omitempty" url:"-"`
 	// OS is the target operating system for the artifact lane.
 	OS string `json:"os,omitempty" url:"-"`
 	// Arch is the target architecture for the artifact lane.
@@ -100,6 +105,8 @@ type runnerBuildResp struct {
 	Target string `json:"target,omitempty"`
 	// Index is the binaries.json URL the artifact lane will publish.
 	Index string `json:"index,omitempty"`
+	// Platforms are the architectures the image lane will publish, echoed back.
+	Platforms []string `json:"platforms,omitempty"`
 }
 
 // ownedRegistryHosts are the registry hosts the fabric operates. An image on any
@@ -392,6 +399,17 @@ func build(s *cloud.Service[state], ctx context.Context, org string, sudo bool, 
 	if imageExcluded(req.Image) {
 		return nil, zip.ErrForbidden(repository(req.Image) + " is versioned by its own release lane and is not published from this endpoint")
 	}
+	platforms, err := buildPlatforms(req.Platforms)
+	if err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
+	}
+	// A fan-out publishes each half at the requested tag plus its architecture, and
+	// then the index at the tag itself. A digest names an image that already exists
+	// and there is no tag to hang either on, so several platforms and a digest are
+	// not a combination that has an answer.
+	if len(platforms) > 1 && strings.Contains(req.Image, "@") {
+		return nil, zip.ErrBadRequest("several platforms need a tag to publish under, not a digest")
+	}
 
 	// H1 — bind the image's registry namespace to the org the CREDENTIAL names.
 	// imageAllowed proved the image targets a registry the fabric owns; this proves
@@ -406,7 +424,7 @@ func build(s *cloud.Service[state], ctx context.Context, org string, sudo bool, 
 
 	bldID := genID("bld")
 
-	jobName, err := s.State.k8s.launchDirectBuild(ctx, platformBuildOrg, req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), bldID, req.Args)
+	jobName, err := s.State.k8s.launchDirectBuild(ctx, platformBuildOrg, req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), bldID, req.Args, platforms)
 	if err != nil {
 		return nil, zip.Errorf(deployErrStatus(err), "launch build: %v", err)
 	}
@@ -415,14 +433,14 @@ func build(s *cloud.Service[state], ctx context.Context, org string, sudo bool, 
 	// "platform" when it named none (the fabric's own build). Best-effort: a record
 	// miss must not fail a launched build.
 	now := time.Now().Unix()
-	b := Build{ID: bldID, Org: cmp.Or(org, platformBuildOrg), Status: "queued", Image: req.Image, JobName: jobName, CreatedAt: now, UpdatedAt: now}
+	b := Build{ID: bldID, Org: cmp.Or(org, platformBuildOrg), Status: "queued", Image: req.Image, JobName: jobName, Platforms: platforms, CreatedAt: now, UpdatedAt: now}
 	if err := s.State.store.InsertBuild(ctx, b); err != nil {
 		s.Log.Warn("runner build record insert failed (build already launched)", "job", jobName, "err", err)
 	}
-	s.Log.Info("runner build launched", "job", jobName, "image", req.Image, "ref", ref, "repo", req.Repo)
+	s.Log.Info("runner build launched", "job", jobName, "image", req.Image, "ref", ref, "repo", req.Repo, "platforms", platforms)
 
 	return &runnerBuildResp{
-		BuildJobID: bldID, Status: "queued", RunnerPool: "32g", Image: req.Image, Target: strings.TrimSpace(req.DockerTarget),
+		BuildJobID: bldID, Status: "queued", RunnerPool: "32g", Image: req.Image, Target: strings.TrimSpace(req.DockerTarget), Platforms: platforms,
 	}, nil
 }
 
