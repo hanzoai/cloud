@@ -87,7 +87,28 @@ func say(t *testing.T, ws *websocket.Conn, id, method, params string) map[string
 	if err := ws.WriteMessage(websocket.TextMessage, []byte(frame)); err != nil {
 		t.Fatalf("write %s: %v", method, err)
 	}
-	return next(t, ws)
+	return awaited(t, ws, id)
+}
+
+// awaited reads until the response to id arrives, passing over events. A server
+// may say something unprompted at any moment — it opens with a challenge, and
+// it ticks — so a client that treated the next frame as its reply would be
+// reading whatever happened to arrive. Real clients correlate on the id, and so
+// does this one.
+func awaited(t *testing.T, ws *websocket.Conn, id string) map[string]any {
+	t.Helper()
+	for i := 0; i < 16; i++ {
+		frame := next(t, ws)
+		if frame["type"] == "event" {
+			continue
+		}
+		if frame["id"] != id {
+			t.Fatalf("answered %v, asked %q", frame["id"], id)
+		}
+		return frame
+	}
+	t.Fatalf("no answer to %q", id)
+	return nil
 }
 
 // next reads one frame, with a deadline so a silent server fails the test
@@ -268,8 +289,17 @@ func TestSocketRefusesABinaryFrame(t *testing.T) {
 	if err := ws.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
 		t.Fatalf("read deadline: %v", err)
 	}
-	if _, _, err := ws.ReadMessage(); err == nil {
-		t.Error("a binary frame left the socket open")
+	// Frames the server had already sent — the opening challenge, a tick — are
+	// still queued ahead of the close, so read past them. What is asserted is
+	// that the socket ends, not that it ends on the very next frame.
+	for i := 0; ; i++ {
+		if _, _, err := ws.ReadMessage(); err != nil {
+			break
+		}
+		if i == 8 {
+			t.Error("a binary frame left the socket open")
+			break
+		}
 	}
 }
 
