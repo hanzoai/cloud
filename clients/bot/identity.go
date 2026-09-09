@@ -127,19 +127,6 @@ func deviceOf(user, bot string) string {
 	return user + "/" + bot
 }
 
-// deviceStore opens the file the roster's labels live in: the org's own, never
-// a bot's. The list spans every connection the org has open, so a label on one
-// of them must not depend on which bot the operator's own connection happened
-// to be bound to.
-func deviceStore(c *Call) (*Store, error) {
-	st, err := c.svc.State.stores.For(c.Org(), "")
-	if err != nil {
-		c.Log().Error("open bot store", "org", c.Org(), "err", err)
-		return nil, Unavailable("the store could not be opened")
-	}
-	return st, nil
-}
-
 // devicePairList answers who is connected. Every row is a live client, so every
 // row reports connected, and an org with nobody on it answers with an empty
 // roster rather than with remembered names.
@@ -170,7 +157,7 @@ func devicePairList(c *Call) (any, error) {
 	// still between refreshes.
 	slices.SortFunc(out, func(a, b pairedDevice) int { return strings.Compare(a.DeviceID, b.DeviceID) })
 
-	st, err := deviceStore(c)
+	st, err := c.OrgStore()
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +197,7 @@ func devicePairRename(c *Call) (any, error) {
 	if sockets(c, id) == 0 {
 		return nil, Invalid("unknown deviceId")
 	}
-	st, err := deviceStore(c)
+	st, err := c.OrgStore()
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +244,7 @@ func devicePairRemove(c *Call) (any, error) {
 		return nil, Invalid("unknown deviceId")
 	}
 
-	st, err := deviceStore(c)
+	st, err := c.OrgStore()
 	if err != nil {
 		return nil, err
 	}

@@ -912,17 +912,6 @@ type secretAck struct {
 	Reloaded bool `json:"reloaded"`
 }
 
-// secretStore opens the org's own file. The store is a team's, so every bot of
-// an org draws on the same inventory even when the call is bound to one bot.
-func secretStore(c *Call) (*Store, error) {
-	st, err := c.svc.State.stores.For(c.Org(), "")
-	if err != nil {
-		c.Log().Error("open bot store", "org", c.Org(), "err", err)
-		return nil, Unavailable("the store could not be opened")
-	}
-	return st, nil
-}
-
 // vaultRef addresses one value in KMS: the org's own secrets when bot is
 // empty, a bot's when it is not, under a bot segment that keeps the store
 // clear of what an operator put at the org's root by other means.
@@ -966,7 +955,7 @@ func secretsList(c *Call) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	st, err := secretStore(c)
+	st, err := c.OrgStore()
 	if err != nil {
 		return nil, err
 	}
@@ -1047,7 +1036,7 @@ func secretsSet(c *Call) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	st, err := secretStore(c)
+	st, err := c.OrgStore()
 	if err != nil {
 		return nil, err
 	}
@@ -1099,7 +1088,7 @@ func secretsDelete(c *Call) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	st, err := secretStore(c)
+	st, err := c.OrgStore()
 	if err != nil {
 		return nil, err
 	}

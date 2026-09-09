@@ -363,3 +363,24 @@ func until(t *testing.T, in <-chan map[string]any, last string) []string {
 		}
 	}
 }
+
+// The first frame is a challenge, before the client has said anything. The
+// browser does not need it — it waits 750ms and connects either way — but the
+// iOS client blocks on one for six seconds and the Android client for two, and
+// closes the socket when none arrives. Nothing else here would notice its
+// absence, which is why it is asserted.
+func TestSocketOpensWithAChallenge(t *testing.T) {
+	ws := dial(t, serve(t), who{org: "acme"})
+
+	first := next(t, ws)
+	if first["event"] != "connect.challenge" {
+		t.Fatalf("the socket opened with %v; iOS and Android close a socket that is not challenged", first)
+	}
+	p, _ := first["payload"].(map[string]any)
+	if nonce, _ := p["nonce"].(string); nonce == "" {
+		t.Errorf("the challenge carries no nonce: %v", p)
+	}
+	if ts, _ := p["ts"].(float64); ts == 0 {
+		t.Errorf("the challenge carries no ts: %v", p)
+	}
+}

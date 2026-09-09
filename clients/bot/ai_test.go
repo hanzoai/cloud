@@ -1143,3 +1143,61 @@ func TestAReplyDoesNotOverwriteAQuestionThatArrivedWhileItRan(t *testing.T) {
 		}
 	}
 }
+
+// A reset empties the conversation. The transcript is addressed by the session
+// key, which a reset does not change, so a reset that only minted a new
+// transcript identity would answer ok, show the whole exchange back, and carry
+// it into the next prompt — while the screen that asked looked cleared.
+func TestResetEmptiesTheConversation(t *testing.T) {
+	ai := &aiFake{reply: "one"}
+	app := mount(t, aiServes(ai, "m"))
+	me := boss("acme")
+	if _, frame := ask(t, app, me, "1:a", "sessions.create", `{"key":"agent:main:red"}`); frame["ok"] != true {
+		t.Fatalf("create: %v", frame)
+	}
+	aiSend(t, app, me, "agent:main:red", "run-1", "first question")
+	aiSettled(t, app, me, "agent:main:red", 2)
+
+	if _, frame := ask(t, app, me, "2:a", "sessions.reset", `{"key":"agent:main:red"}`); frame["ok"] != true {
+		t.Fatalf("reset: %v", frame)
+	}
+
+	page := aiPage(t, app, me, `{"sessionKey":"agent:main:red"}`)
+	if messages, _ := page["messages"].([]any); len(messages) != 0 {
+		t.Errorf("the reset conversation still holds %d messages: %v", len(messages), page)
+	}
+
+	// And the model is asked as if nothing had been said, which is the half a
+	// cleared screen cannot show.
+	aiSend(t, app, me, "agent:main:red", "run-2", "second question")
+	aiSettled(t, app, me, "agent:main:red", 2)
+	if _, prompt := ai.asked(); strings.Contains(prompt, "first question") {
+		t.Errorf("the discarded exchange was sent to the model: %q", prompt)
+	}
+}
+
+// An incognito session keeps nothing, so a reset deletes its row. The
+// conversation is addressed by the key rather than the row, and re-creating the
+// key must not bring it back.
+func TestResetLeavesNothingBehindOnAnIncognitoSession(t *testing.T) {
+	app := mount(t, aiServes(&aiFake{reply: "one"}, "m"))
+	me := boss("acme")
+	const key = "agent:main:dashboard:incognito-42"
+	if _, frame := ask(t, app, me, "1:a", "sessions.create", `{"key":"`+key+`"}`); frame["ok"] != true {
+		t.Fatalf("create: %v", frame)
+	}
+	aiSend(t, app, me, key, "run-1", "a private question")
+	aiSettled(t, app, me, key, 2)
+
+	if _, frame := ask(t, app, me, "2:a", "sessions.reset", `{"key":"`+key+`"}`); frame["ok"] != true {
+		t.Fatalf("reset: %v", frame)
+	}
+	if _, frame := ask(t, app, me, "3:a", "sessions.create", `{"key":"`+key+`"}`); frame["ok"] != true {
+		t.Fatalf("re-create: %v", frame)
+	}
+
+	page := aiPage(t, app, me, `{"sessionKey":"`+key+`"}`)
+	if messages, _ := page["messages"].([]any); len(messages) != 0 {
+		t.Errorf("a session that persists nothing gave %d messages back: %v", len(messages), page)
+	}
+}

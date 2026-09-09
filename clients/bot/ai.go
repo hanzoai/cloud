@@ -395,6 +395,23 @@ func chatStop(org, bot, run, key string) (stopped string, ok bool) {
 	return t.run, true
 }
 
+// chatHaltBot stops every turn in flight on one bot. It is chatHaltAll's reason
+// narrowed to one partition: a bot being forgotten is about to lose the file
+// its turns write into and the connections they publish onto.
+func chatHaltBot(org, bot string) {
+	turns.Lock()
+	all := []*chatTurn{}
+	for _, t := range turns.byRun {
+		if t.org == org && t.bot == bot {
+			all = append(all, t)
+		}
+	}
+	turns.Unlock()
+	for _, t := range all {
+		t.halt()
+	}
+}
+
 // chatHaltAll stops every turn in flight. Shutdown calls it: a turn holds a
 // store the surface is about to close and publishes onto connections it is
 // about to end.

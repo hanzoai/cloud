@@ -938,11 +938,22 @@ func resetSession(c *Call) (any, error) {
 		s       *session
 		deleted bool
 	)
+	// A turn still running would write its answer into the conversation this
+	// call is emptying, and settle the row this call is clearing. It is stopped
+	// first, through the one stop path.
+	chatStop(c.Org(), c.Bot(), "", strings.TrimSpace(p.Key))
 	// Reading the row and disposing of it are one act: a reset that read a row
 	// another call has since rewritten would restore what that call removed.
 	err = st.Do(c.Context(), func(st *Store) error {
 		s, err = getSession(c, st, p.Key)
 		if err != nil {
+			return err
+		}
+		// The conversation goes with the row it belongs to. It is addressed by
+		// the key, so nothing else disposes of it: a reset that left it in
+		// place would answer ok, show the same history back, and carry the
+		// discarded exchange into the next prompt.
+		if err := st.Drop(c.Context(), chatAt(s.Key)); err != nil {
 			return err
 		}
 		// An incognito session has nowhere to keep a fresh transcript, so it is
@@ -951,10 +962,10 @@ func resetSession(c *Call) (any, error) {
 			deleted = true
 			return st.Delete(c.Context(), sessionsIn, s.Key)
 		}
-		// The key survives, the transcript identity does not. That split is the
+		// The key survives and the conversation does not. That split is the
 		// substance of a reset: everything addressed by the key — the sidebar
-		// row, its board, its settings — stays, and everything addressed by the
-		// session id starts again.
+		// row, its board, its settings — stays, and the exchange itself starts
+		// again under a session id nothing carries over.
 		now := time.Now().UnixMilli()
 		s.SessionID = mint("ses")
 		s.Status, s.LastRunID, s.LastRunError = "", "", ""

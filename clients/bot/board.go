@@ -409,18 +409,6 @@ func move(b *board, w *widget, id string, position *int, after string) error {
 	return nil
 }
 
-// strict decodes one arm of a union, refusing a field it does not declare. It
-// is the reading of a closed object that Call.Bind applies to a method's
-// parameters, applied one level down.
-func strict(raw []byte, v any) error {
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.DisallowUnknownFields()
-	if err := d.Decode(v); err != nil {
-		return Invalid("%v", err)
-	}
-	return nil
-}
-
 // ---- board.get ----
 
 func boardGet(c *Call) (any, error) {
@@ -634,7 +622,7 @@ func apply(b *board, raw []byte) (string, error) {
 			Title string `json:"title"`
 			Dock  string `json:"chatDock"`
 		}
-		if err := strict(raw, &op); err != nil {
+		if err := closed("op", raw, &op); err != nil {
 			return "", err
 		}
 		if !tabRE.MatchString(op.ID) {
@@ -662,7 +650,7 @@ func apply(b *board, raw []byte) (string, error) {
 			Dock     string `json:"chatDock"`
 			Position *int   `json:"position"`
 		}
-		if err := strict(raw, &op); err != nil {
+		if err := closed("op", raw, &op); err != nil {
 			return "", err
 		}
 		t := tabAt(b, op.ID)
@@ -705,7 +693,7 @@ func apply(b *board, raw []byte) (string, error) {
 			Kind string `json:"kind"`
 			ID   string `json:"tabId"`
 		}
-		if err := strict(raw, &op); err != nil {
+		if err := closed("op", raw, &op); err != nil {
 			return "", err
 		}
 		if tabAt(b, op.ID) == nil {
@@ -735,7 +723,7 @@ func apply(b *board, raw []byte) (string, error) {
 			Kind string   `json:"kind"`
 			IDs  []string `json:"tabIds"`
 		}
-		if err := strict(raw, &op); err != nil {
+		if err := closed("op", raw, &op); err != nil {
 			return "", err
 		}
 		wrong := Invalid("tabs_reorder must name every tab exactly once")
@@ -760,7 +748,7 @@ func apply(b *board, raw []byte) (string, error) {
 			Position *int   `json:"position"`
 			After    string `json:"after"`
 		}
-		if err := strict(raw, &op); err != nil {
+		if err := closed("op", raw, &op); err != nil {
 			return "", err
 		}
 		w := widgetAt(b, op.Name)
@@ -783,7 +771,7 @@ func apply(b *board, raw []byte) (string, error) {
 			SizeH  int    `json:"sizeH"`
 			Height string `json:"heightMode"`
 		}
-		if err := strict(raw, &op); err != nil {
+		if err := closed("op", raw, &op); err != nil {
 			return "", err
 		}
 		w := widgetAt(b, op.Name)
@@ -806,7 +794,7 @@ func apply(b *board, raw []byte) (string, error) {
 			Kind string `json:"kind"`
 			Name string `json:"name"`
 		}
-		if err := strict(raw, &op); err != nil {
+		if err := closed("op", raw, &op); err != nil {
 			return "", err
 		}
 		if widgetAt(b, op.Name) == nil {
@@ -1048,7 +1036,7 @@ func unpack(raw json.RawMessage) (string, arm, error) {
 			Kind string `json:"kind"`
 			HTML string `json:"html"`
 		}
-		if err := strict(raw, &it); err != nil {
+		if err := closed("content", raw, &it); err != nil {
 			return "", arm{}, err
 		}
 		if len(it.HTML) > maxHTML {
@@ -1061,7 +1049,7 @@ func unpack(raw json.RawMessage) (string, arm, error) {
 			PluginKind string          `json:"pluginKind"`
 			Props      json.RawMessage `json:"props"`
 		}
-		if err := strict(raw, &it); err != nil {
+		if err := closed("content", raw, &it); err != nil {
 			return "", arm{}, err
 		}
 		if !pluginRE.MatchString(it.PluginKind) {

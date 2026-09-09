@@ -3,6 +3,7 @@ package bot
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/zap-proto/zip"
@@ -132,5 +133,32 @@ func TestAGrantSurvivesConcurrentPuts(t *testing.T) {
 			t.Fatalf("board.widget.grant answered ok and the widget is %q: the person's approval was recorded into a board that was then replaced",
 				state)
 		}
+	}
+}
+
+// A closed object refuses a field it does not declare, and says which object it
+// was reading. Seven arms of BoardOpSchema and two of the content union are
+// decoded this way; a bare `unknown field "x"` leaves the client to work out
+// which of them produced it.
+func TestARefusedArmSaysWhatItWasReading(t *testing.T) {
+	app := mount(t)
+	me := who{org: "acme"}
+
+	_, frame := ask(t, app, me, "1:a", "board.update",
+		`{"sessionKey":"k","ops":[{"kind":"tab_create","tabId":"t1","title":"T","chatDock":"right","nope":1}]}`)
+	if frame["ok"] != false {
+		t.Fatalf("an op carrying a field no arm declares was accepted: %v", frame)
+	}
+	if msg, _ := wrong(t, frame)["message"].(string); !strings.HasPrefix(msg, "op: ") {
+		t.Errorf("the refusal is %q; it names neither the object it read nor where", msg)
+	}
+
+	_, frame = ask(t, app, me, "2:a", "board.widget.put",
+		`{"sessionKey":"k","name":"w","content":{"kind":"html","html":"<p>w</p>","nope":1}}`)
+	if frame["ok"] != false {
+		t.Fatalf("content carrying a field no arm declares was accepted: %v", frame)
+	}
+	if msg, _ := wrong(t, frame)["message"].(string); !strings.HasPrefix(msg, "content: ") {
+		t.Errorf("the refusal is %q; it names neither the object it read nor where", msg)
 	}
 }

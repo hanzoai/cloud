@@ -239,6 +239,20 @@ func (h *hub) reach(org string) []*conn {
 	return out
 }
 
+// closeBot ends the connections bound to one bot of an org, telling each one
+// why. A socket resolves its bot once, at the upgrade, so a connection outlives
+// the bot it bound to and goes on reading and writing that bot's file; ending
+// the socket is what makes the binding end with the bot.
+func (h *hub) closeBot(org, bot, reason string) {
+	for _, k := range h.reach(org) {
+		if k.me.bot != bot {
+			continue
+		}
+		k.send(&Event{Type: kindEvent, Event: "shutdown", Payload: ending{Reason: reason}})
+		k.stop()
+	}
+}
+
 // closeAll tells every connection why it is ending and then ends it.
 func (h *hub) closeAll(reason string) {
 	h.mu.Lock()
@@ -273,6 +287,11 @@ type ending struct {
 // the partition. Publish under a key only where a method establishes the
 // subscription; an event nobody can subscribe to reaches nobody.
 //
+// A key is a string the caller chose, so it narrows an audience and never seals
+// one: anyone in the partition may name the same key and be included. Address
+// what belongs to one person with PublishUser, which asks the socket who is on
+// it rather than what it asked for.
+//
 // It is a no-op before Mount and after Shutdown, so a background producer that
 // outlives the surface cannot panic on it.
 func Publish(org, bot, key, event string, payload any) {
@@ -282,11 +301,25 @@ func Publish(org, bot, key, event string, payload any) {
 // PublishOrg addresses the org rather than a partition of it: every connection
 // the org has open, whatever bot each one bound to. It is for the state a
 // family keeps in the org's own file however the caller reached it — the device
-// roster, a person's notification defaults — where a partition is the wrong
-// audience, because every connection of the org reads that one file and a
-// change to it is news to all of them.
+// roster — where a partition is the wrong audience, because every connection of
+// the org reads that one file and a change to it is news to all of them. State
+// in that file that belongs to one person is addressed with PublishUser.
 func PublishOrg(org, key, event string, payload any) {
 	emit(org, key, event, payload, func(*conn) bool { return true })
+}
+
+// PublishUser addresses one person: every connection they hold in the org,
+// whatever bot each one bound to.
+//
+// Who a connection belongs to is a fact about the socket, so it is an address
+// here in the same way the partition is — never a subscription key. A key is a
+// string any caller may name, and a person's own news must not be reachable by
+// naming one.
+func PublishUser(org, user, event string, payload any) {
+	if user == "" {
+		return
+	}
+	emit(org, "", event, payload, func(k *conn) bool { return k.me.user == user })
 }
 
 // watchers is who Publish would deliver to at this address. A method that
