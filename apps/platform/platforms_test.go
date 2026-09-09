@@ -9,9 +9,17 @@ package platform
 // either image says why.
 
 import (
+	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/cloud"
+	luxlog "github.com/luxfi/log"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // argvHas reports the value of the first `--opt <prefix>…` element, and whether
@@ -177,5 +185,111 @@ func TestEachArchitectureKeepsItsOwnLayerCache(t *testing.T) {
 	// already under.
 	if plain := strings.Join(cacheArgs("ghcr.io/hanzoai/x", cacheArch(nil)), " "); !strings.Contains(plain, "ghcr.io/hanzoai/x:buildcache,") && !strings.HasSuffix(plain, "ghcr.io/hanzoai/x:buildcache") {
 		t.Fatalf("a platformless build moved its cache: %s", plain)
+	}
+}
+
+// finishedJob is a Job the apiserver would report as terminal.
+func finishedJob(ns, name string, ok bool) *unstructured.Unstructured {
+	field := "failed"
+	if ok {
+		field = "succeeded"
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "batch/v1", "kind": "Job",
+		"metadata": map[string]any{"name": name, "namespace": ns},
+		"status":   map[string]any{field: int64(1)},
+	}}
+}
+
+func fanOutService(t *testing.T, objs ...runtime.Object) *cloud.Service[state] {
+	t.Helper()
+	return &cloud.Service[state]{
+		Base:  cloud.Base{Log: luxlog.New("test")},
+		State: state{k8s: fakeK8s(objs...)},
+	}
+}
+
+func TestTheIndexIsNotWrittenUntilEveryArchitectureHasLanded(t *testing.T) {
+	// An index naming an image that is not published is a broken tag. Half a
+	// fan-out is exactly that, and it is the state the reconciler sees on most of
+	// its ticks — the two halves run on different machines and do not finish
+	// together.
+	b := Build{ID: "bld_fan1", Org: "hanzo", Image: "ghcr.io/hanzoai/x:v1",
+		JobName: buildJobName("bld_fan1", indexJobSuffix), Platforms: []string{"linux/amd64", "linux/arm64"}}
+	s := fanOutService(t, finishedJob("hanzo", buildJobName(b.ID, "amd64"), true))
+
+	done, ok, err := directBuildResult(s, context.Background(), b)
+	if done || ok {
+		t.Fatalf("one architecture done reported the build finished (done=%v ok=%v err=%v)", done, ok, err)
+	}
+	if _, gErr := s.State.k8s.dyn.Resource(jobsGVR).Namespace("hanzo").
+		Get(context.Background(), buildJobName(b.ID, indexJobSuffix), metav1.GetOptions{}); gErr == nil {
+		t.Fatal("the index was written over an architecture that has not been published")
+	}
+}
+
+func TestEveryArchitectureLandingWritesTheIndex(t *testing.T) {
+	b := Build{ID: "bld_fan2", Org: "hanzo", Image: "ghcr.io/hanzoai/x:v1",
+		JobName: buildJobName("bld_fan2", indexJobSuffix), Platforms: []string{"linux/amd64", "linux/arm64"}}
+	s := fanOutService(t,
+		finishedJob("hanzo", buildJobName(b.ID, "amd64"), true),
+		finishedJob("hanzo", buildJobName(b.ID, "arm64"), true))
+
+	if done, ok, err := directBuildResult(s, context.Background(), b); done || ok || err != nil {
+		t.Fatalf("launching the index reported the build finished (done=%v ok=%v err=%v)", done, ok, err)
+	}
+	job, err := s.State.k8s.dyn.Resource(jobsGVR).Namespace("hanzo").
+		Get(context.Background(), buildJobName(b.ID, indexJobSuffix), metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("no index Job after every architecture landed: %v", err)
+	}
+	if !strings.Contains(fmt.Sprint(job.Object), "platform=linux/amd64,linux/arm64") {
+		t.Fatal("the index Job does not name both platforms")
+	}
+
+	// Its own result is the build's, once it exists.
+	s2 := fanOutService(t,
+		finishedJob("hanzo", buildJobName(b.ID, "amd64"), true),
+		finishedJob("hanzo", buildJobName(b.ID, "arm64"), true),
+		finishedJob("hanzo", buildJobName(b.ID, indexJobSuffix), true))
+	if done, ok, err := directBuildResult(s2, context.Background(), b); !done || !ok || err != nil {
+		t.Fatalf("a written index left the build unfinished (done=%v ok=%v err=%v)", done, ok, err)
+	}
+}
+
+func TestOneArchitectureFailingFailsTheBuildWithNoIndex(t *testing.T) {
+	// There is nothing honest to join. The half that did build stays at its own
+	// tag, where it can be looked at.
+	b := Build{ID: "bld_fan3", Org: "hanzo", Image: "ghcr.io/hanzoai/x:v1",
+		JobName: buildJobName("bld_fan3", indexJobSuffix), Platforms: []string{"linux/amd64", "linux/arm64"}}
+	s := fanOutService(t,
+		finishedJob("hanzo", buildJobName(b.ID, "amd64"), true),
+		finishedJob("hanzo", buildJobName(b.ID, "arm64"), false))
+
+	done, ok, err := directBuildResult(s, context.Background(), b)
+	if !done || ok || err != nil {
+		t.Fatalf("a failed architecture did not fail the build (done=%v ok=%v err=%v)", done, ok, err)
+	}
+	if _, gErr := s.State.k8s.dyn.Resource(jobsGVR).Namespace("hanzo").
+		Get(context.Background(), buildJobName(b.ID, indexJobSuffix), metav1.GetOptions{}); gErr == nil {
+		t.Fatal("an index was written over a failed architecture")
+	}
+}
+
+func TestASingleArchitectureBuildIsStillJustItsJob(t *testing.T) {
+	b := Build{ID: "bld_one", Org: "hanzo", Image: "ghcr.io/hanzoai/x:v1", JobName: buildJobName("bld_one", "")}
+	s := fanOutService(t, finishedJob("hanzo", b.JobName, true))
+	if done, ok, err := directBuildResult(s, context.Background(), b); !done || !ok || err != nil {
+		t.Fatalf("done=%v ok=%v err=%v", done, ok, err)
+	}
+}
+
+func TestAFanOutIsGivenTimeForBothOfItsPhases(t *testing.T) {
+	// One deadline for two phases calls a healthy index build a failure — in the
+	// record only, while the image it is writing publishes anyway.
+	one := stuckAfter(Build{Platforms: []string{"linux/amd64"}})
+	two := stuckAfter(Build{Platforms: []string{"linux/amd64", "linux/arm64"}})
+	if two <= one {
+		t.Fatalf("a two-phase build is allowed %s and a one-phase build %s", two, one)
 	}
 }
