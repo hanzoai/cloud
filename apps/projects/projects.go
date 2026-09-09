@@ -510,15 +510,21 @@ func init() {
 	}
 
 	// The shot is untyped for the same reason deploy is — it answers image bytes
-	// — so its sentence comes from here rather than from a typed op.
-	openapi.Describe("/v1/project/:slug/shot", http.MethodGet,
-		"Get a PNG of the project's live site",
-		"Returns a screenshot of what this project currently serves, as image/png. The capture is "+
-			"keyed by the deployment, so a redeploy invalidates it by construction rather than by "+
-			"anyone remembering to clear a cache. A project with nothing deployed answers 404 — "+
-			"that is a 404 about the PICTURE and not about the project, which is still right there "+
-			"in the list. Scoped to the caller's org: a validated principal is required, and a slug "+
-			"belonging to another org is not found rather than forbidden.")
+	// — so its sentence comes from here rather than from a typed op. All four
+	// aliases the wire serves, like deploy above: the router registers the same
+	// handler under project/projects/site/sites, and a declaration on one of them
+	// leaves the other three in the document with nothing to say, which is what
+	// `describe` refuses.
+	for _, p := range []string{"/v1/project/:slug/shot", "/v1/projects/:slug/shot", "/v1/site/:slug/shot", "/v1/sites/:slug/shot"} {
+		openapi.Describe(p, http.MethodGet,
+			"Get a PNG of the project's live site",
+			"Returns a screenshot of what this project currently serves, as image/png. The capture is "+
+				"keyed by the deployment, so a redeploy invalidates it by construction rather than by "+
+				"anyone remembering to clear a cache. A project with nothing deployed answers 404 — "+
+				"that is a 404 about the PICTURE and not about the project, which is still right there "+
+				"in the list. Scoped to the caller's org: a validated principal is required, and a slug "+
+				"belonging to another org is not found rather than forbidden.")
+	}
 }
 
 // routes registers the projects surface as TYPED ops, all of it under
