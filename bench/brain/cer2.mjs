@@ -107,7 +107,7 @@ for (const [name, o] of Object.entries(CONFIGS)) {
   const t = { 1: { n: 0, all: 0, any: 0 }, 4: { n: 0, all: 0, any: 0 } }; let ms = 0, n = 0
   store.forEach((c, ci) => { for (const q of c.qa) { if (!q.evidence.length) continue
     const t0 = process.hrtime.bigint(); const got = new Set(retrieve(ixs[ci], q, o)); ms += Number(process.hrtime.bigint() - t0) / 1e6; n++
-    const hits = q.evidence.filter((e) => got.has(e)).length, cell = t[q.category]; cell.n++
+    const hits = q.evidence.filter((e) => got.has(e)).length, cell = t[q.category]; if (!cell) continue; cell.n++
     if (hits === q.evidence.length) cell.all++; if (hits > 0) cell.any++ } })
   console.log(`${name.padEnd(26)} ${pct(t[4].all, t[4].n)} / ${pct(t[4].any, t[4].n)}       ${pct(t[1].all, t[1].n)} / ${pct(t[1].any, t[1].n)}      ${(ms / n).toFixed(2)}`)
 }
@@ -117,7 +117,7 @@ for (const k of KS) {
   const t = { 1: { n: 0, all: 0, any: 0 }, 4: { n: 0, all: 0, any: 0 } }
   store.forEach((c, ci) => { for (const q of c.qa) { if (!q.evidence.length) continue
     const got = new Set(retrieve(ixs[ci], q, SHIPPED).slice(0, k))
-    const hits = q.evidence.filter((e) => got.has(e)).length, cell = t[q.category]; cell.n++
+    const hits = q.evidence.filter((e) => got.has(e)).length, cell = t[q.category]; if (!cell) continue; cell.n++
     if (hits === q.evidence.length) cell.all++; if (hits > 0) cell.any++ } })
   console.log(`recall@${String(k).padEnd(2)}                             ${pct(t[4].all, t[4].n)} / ${pct(t[4].any, t[4].n)}       ${pct(t[1].all, t[1].n)} / ${pct(t[1].any, t[1].n)}`)
 }
