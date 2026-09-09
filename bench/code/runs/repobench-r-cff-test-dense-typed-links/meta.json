@@ -1,0 +1,7 @@
+{
+ "commit": "7fde622afa5d",
+ "embedder": "all-minilm",
+ "data": "tianyang/repobench-r data/python_cff.gz sha256 3ccc13b41807e061…",
+ "split": "test_easy[0:250] + test_hard[0:250]",
+ "when": "2026-09-09T12:40:42.793Z"
+}
