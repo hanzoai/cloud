@@ -22,9 +22,17 @@ import (
 // a plugin that answered while holding no store is the state that made a
 // deleted object store invisible.
 func main() {
-	if err := startStore(cloud.DataDir()); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	// Describing is not serving. `<binary> describe <dir>` projects the route set
+	// from the code alone — cloud.Listen answers it before it reads config or opens
+	// anything — so starting the store here would make the document a function of
+	// whether the machine happened to hold an admin credential. It does not: the
+	// gate ran without one and this app was the only one that could not describe
+	// itself, which stopped every release.
+	if _, describing := cloud.DescribeRequested(); !describing {
+		if err := startStore(cloud.DataDir()); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:       "s3",
