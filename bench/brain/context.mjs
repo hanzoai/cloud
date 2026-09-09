@@ -27,7 +27,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { execSync } from 'node:child_process'
-import { complete, embed } from './llm.mjs'
+import { complete, embed, pool } from './llm.mjs'
 import { rank as rankScore, ci, pct, quantile } from './metrics.mjs'
 
 const arg = (k, d) => { const m = process.argv.find((a) => a.startsWith(`--${k}=`)); return m ? m.slice(k.length + 3) : d }
@@ -259,7 +259,8 @@ const sha = (s) => createHash('sha256').update(s).digest('hex').slice(0, 16)
 const MAIN = process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop())
 if (MAIN) {
   const split = arg('split', 'dev'), want = arg('rows', 'all'), inSplit = SPLITS[split]
-  if (has('facets')) { let n = 0; for (const [ci, c] of store.entries()) { if (!inSplit(ci)) continue; for (const q of c.qa) { if (!q.evidence.length) continue; await facets(q.question); if (++n % 25 === 0) process.stderr.write(`\r  facets ${n}`) } } console.log(`\nfacets cached for ${n} questions (${split})`); process.exit(0) }
+  if (has('facets')) { const qs = []; for (const [ci, c] of store.entries()) { if (!inSplit(ci)) continue; for (const q of c.qa) if (q.evidence.length && !facetCache[q.question]) qs.push(q.question) }
+    let n = 0; await pool(qs, async (q) => { await facets(q); if (++n % 25 === 0) process.stderr.write(`\r  facets ${n}/${qs.length}`) }); console.log(`\nfacets cached for ${qs.length} more questions (${split})`); process.exit(0) }
   const names = want === 'all' ? Object.keys(ROWS) : want.split(',').map((s) => s.trim())
   // --frozen: every row takes the weights and budgets the dev sweep froze, so a test table is one configuration, ablated
   const frozenFile = new URL(`./ablations/frozen-${FACTS}.json`, import.meta.url)

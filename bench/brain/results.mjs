@@ -59,6 +59,17 @@ if (abl.length) {
 }
 writeFileSync(new URL('./RESULTS.md', here), md)
 
+// The retrieval runs, grouped for hanzo.ai/benchmarks: one table per split and embedding space, one row per configuration.
+const ROW_ORDER = ['semantic-only', 'lexical', 'facts', 'entities', 'timeline', 'adjacency', 'typed-graph', 'iterative-hops', 'full-facets', 'failed-prf', 'failed-multi-query-rrf', 'failed-chain-search', 'failed-surface-entities', 'failed-global-rrf']
+const groups2 = {}
+for (const d of runs) { const mm = d.match(/^locomo-retrieval-(dev|test|all)-(.+)-(locomo|ours|union)(?:-(\w+))?$/); if (!mm) continue
+  const m = read(`./runs/${d}/metrics.json`), s = m.summary, k = m.k ?? 20, key = `${mm[1]}|${mm[3]}|${mm[4] ?? 'zen'}|${k}`
+  const g = groups2[key] ??= { bench: 'locomo-retrieval', split: mm[1], facts: mm[3], embedding: mm[4] === 'minilm' ? 'all-MiniLM-L6-v2' : 'zen-embedding-0.6b', k, frozen: m.frozen?.commit ?? null, rows: [] }
+  const v = (cat, kk) => s[cat]?.[kk]?.mean ?? null
+  g.rows.push({ row: m.row, order: ROW_ORDER.indexOf(mm[2]), failed: mm[2].startsWith('failed'), mh_all: v('1', `all@${k}`), mh_any: v('1', `any@${k}`), sh_all: v('4', `all@${k}`), temporal_all: v('2', `all@${k}`), open_all: v('3', `all@${k}`), recall: v('all', `recall@${k}`), ndcg: v('all', `ndcg@${k}`), supported: v('all', 'supported'), examined: s.all?.examined ?? null, tokens: s.all?.tokens ?? null, p50: s.all?.p50 ?? null }) }
+for (const g of Object.values(groups2)) g.rows.sort((a, b) => a.order - b.order)
+writeFileSync(new URL('./benchmarks-retrieval.json', here), JSON.stringify({ generated: new Date().toISOString(), tables: Object.values(groups2) }, null, 1))
+
 // The same numbers as data, for hanzo.ai/benchmarks: one section per run.
 const sections = runs.map((d) => { const m = read(`./runs/${d}/metrics.json`), meta = existsSync(new URL(`./runs/${d}/meta.json`, here)) ? read(`./runs/${d}/meta.json`) : {}
   const key = ['summary', 'by_size', 'by_style', 'by_category', 'rows', 'table'].find((k) => m[k] && typeof m[k] === 'object')
