@@ -35,9 +35,17 @@ const (
 	// runnerNamespaceEnv overrides where runner Jobs go; the default is this
 	// process's own namespace, which is where its Role to create them lives.
 	runnerNamespaceEnv = "CLOUD_PLATFORM_RUNNER_NS"
-	// runnerRuntimeClass is the guest each job runs in. The VM is the sandbox —
-	// steps run on the host executor inside it — so no runtime nests in it.
-	runnerRuntimeClass = "kata-fc"
+	// runnerRuntimeClass is the boundary each job runs in. The sandbox is the
+	// boundary — steps run on the host executor inside it — so nothing nests.
+	//
+	// It says gvisor because kata-fc did not deliver a microVM. Kata derives its
+	// config from the name the shim was invoked as, so containerd-shim-kata-fc-v2
+	// looks for configuration-fc.toml; the package ships configuration-rs-fc.toml,
+	// the lookup misses, and it falls back to configuration.toml, whose path is
+	// qemu-system-x86_64. Sixteen runners on evo asked for Firecracker and got
+	// sixteen QEMU q35 machines — 9,048M of them, beside 4,763M of virtiofsd and
+	// 2,918M of shims, against 43M of runsc for the same fleet.
+	runnerRuntimeClass = "gvisor"
 	// runnerPullSecret is the registry credential the runner image pulls with.
 	runnerPullSecret = "oci-hanzo-ai"
 	// runnerDeadline bounds one job in seconds. The forge's own runner timeout
@@ -249,25 +257,23 @@ func launch(s *cloud.Service[state], ctx context.Context, ev cloud.JobEvent) (st
 						"name":  "runner",
 						"image": image,
 						"env":   env,
-						// REQUESTS EQUAL LIMITS, because this pod is a virtual
-						// machine. runtimeClassName is kata-fc, and a Kata guest is
-						// sized from the LIMIT at boot: with 6/12Gi declared, the
-						// hypervisor starts `-smp 7 -m 12320M` and holds it for the
-						// life of the job whether a step uses it or not.
+						// REQUESTS BELOW LIMITS, because this pod is no longer a
+						// virtual machine. Equal requests were correct while it was:
+						// a Kata guest is sized from the LIMIT at boot, so 6/12Gi
+						// started `-smp 7 -m 12320M` and held it for the life of the
+						// job, and asking for less described a smaller lie rather
+						// than a smaller workload.
 						//
-						// Requesting 1/2Gi therefore did not describe a smaller
-						// workload, it described a smaller LIE. The scheduler priced
-						// eight runners at 8 CPU and 16Gi while they had claimed 56
-						// vCPU and 96Gi, so it kept admitting more onto a node that
-						// was already full — and the pods that could not fit were
-						// ordinary workloads with honest requests, refused for
-						// capacity that had already been spent.
-						//
-						// Equal also makes the QoS class Guaranteed, which is the
-						// truth for a VM: guest memory is not reclaimable, so there
-						// is nothing for the kubelet to take back under pressure.
+						// gVisor pre-allocates neither. The sentry is a process, so
+						// the request is what the job needs to be admitted and the
+						// limit is the ceiling it may reach — the ordinary meaning,
+						// which was the wrong one only while a hypervisor was
+						// reading the limit at boot. Reserving six idle CPUs per
+						// runner is what filled the node: seventeen of them held
+						// seventeen of evo's twenty-nine, and the pods refused for
+						// that capacity were ordinary workloads asking honestly.
 						"resources": map[string]any{
-							"requests": map[string]any{"cpu": "6", "memory": "12Gi"},
+							"requests": map[string]any{"cpu": "1", "memory": "2Gi"},
 							"limits":   map[string]any{"cpu": "6", "memory": "12Gi"},
 						},
 					}},
