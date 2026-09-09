@@ -65,7 +65,7 @@ by local SQLite.
 | `/v1/base` | collections of JSON documents — the local store, and so also the local key/value and the local SQL |
 | `/v1/tasks` | durable queue with lease/ack |
 | `/v1/functions` | function registry and runner *(staged — see below)* |
-| `/v1/bot` | the bots that are running, and the protocol they speak |
+| `/v1/bot` | the protocol a control UI speaks, and under it the bot runs that are going |
 
 There is deliberately no `/v1/kv` and no `/v1/sql`. Base is already both: a
 document under a collection is the key/value store, and it is SQLite underneath.
@@ -74,16 +74,32 @@ Two more doors onto one room would be two more names to keep in agreement.
 `/v1/kms` is here too, serving from an embedded `luxfi/kms` — secrets belong in
 KMS locally exactly as they do in production, never in an env file.
 
-`/v1/bot` answers two questions on one path. Its verbs are the registry: which
-bots have announced themselves, where to reach each, and whether one is running,
-suspended or gone — a suspended bot hands back a token it needs to come back as
-itself, and the gateway holds that token without reading it. Upgrade the same
-path and it is a WebSocket speaking OpenClaw's gateway protocol, which is what
-lets their control UI run here unmodified. Asking to upgrade is a fact about the
-request, so one address serves both without a second name.
+A bot is a loop, and one instance of that loop is a run. `/v1/bot/runs` is where
+your runs are, wherever they happen to be: start one where you have a machine
+for it and that machine says so (`POST /v1/bot/runs` with `where: local`), and
+it is listed, reachable, and stoppable from the same place as a run in a
+sandbox. Nothing in this edition places a sandbox, so asking it to start a run
+in the cloud answers 501 and says what is absent rather than minting a run
+nobody is carrying out; a deployment that does have an executor hands it to the
+registry (`cloud.Deps.Runs`) and its runs join the same list.
+
+A run can park. Suspending one hands back whatever it needs to come back as
+itself — a checkpoint reference, opaque here — and the gateway holds that token
+without reading it, so the same run can resume on the machine it left or on
+another. That is the difference between a registry and a liveness ping, and it
+is why a run can move between a laptop and the cloud. Stopping is a separate
+door and there is only one of it: the heartbeat refuses the status and names
+`/stop`, and forgetting a run ends it through the same halt on its way to
+disposing of everything it held.
+
+`/v1/bot` itself is the protocol a control UI speaks — a WebSocket on the
+upgrade, one request frame on the POST. Asking to upgrade is a fact about the
+request rather than a flag beside it, so the socket needs no name of its own,
+and `/v1/bot/runs` is one segment down where it cannot collide with the other
+addresses published under `/v1/bot`.
 
 The protocol answers a subset and says so: `hello-ok` carries `features.methods`,
-and their UI hides any surface whose method is absent. Advertising exactly what
+and a UI hides any surface whose method is absent. Advertising exactly what
 works is therefore the growth path rather than a compromise — a method that is
 merely stubbed should not be listed at all, because a hidden palette reads as a
 small server and an empty one reads as a broken one.

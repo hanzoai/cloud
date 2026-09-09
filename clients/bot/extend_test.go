@@ -313,7 +313,7 @@ func TestSkillNamesAreChecked(t *testing.T) {
 // than answering as though something was refreshed.
 func TestNoSkillPackageSource(t *testing.T) {
 	app := mount(t)
-	_, frame := ask(t, app, boss("acme"), "1:a", "skills.update", `{"source":"clawhub","all":true}`)
+	_, frame := ask(t, app, boss("acme"), "1:a", "skills.update", `{"source":"hub","all":true}`)
 	if frame["ok"] != false {
 		t.Fatalf("a package refresh reported success: %v", frame)
 	}
@@ -362,19 +362,19 @@ func TestTheFamilyIsAdvertised(t *testing.T) {
 // else.
 func TestLooksSecret(t *testing.T) {
 	for name, want := range map[string]bool{
-		"API_TOKEN":       true,
-		"apiKey":          true,
-		"api_key":         true,
-		"PASSWORD":        true,
-		"clientSecret":    true,
-		"privateKey":      true,
-		"serviceAccount":  true,
-		"maxTokens":       false,
-		"tokenBudget":     false,
-		"passwordFile":    false,
-		"REGION":          false,
-		"tokenizer":       false,
-		"OPENCLAW_BRANCH": false,
+		"API_TOKEN":      true,
+		"apiKey":         true,
+		"api_key":        true,
+		"PASSWORD":       true,
+		"clientSecret":   true,
+		"privateKey":     true,
+		"serviceAccount": true,
+		"maxTokens":      false,
+		"tokenBudget":    false,
+		"passwordFile":   false,
+		"REGION":         false,
+		"tokenizer":      false,
+		"GIT_BRANCH":     false,
 	} {
 		if got := looksSecret(name); got != want {
 			t.Errorf("looksSecret(%q) = %v, want %v", name, got, want)
