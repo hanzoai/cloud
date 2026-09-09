@@ -322,8 +322,9 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 	f.StringVar(&br.Dockerfile, "dockerfile", "", "Dockerfile path")
 	f.StringVar(&br.Context, "context", "", "build context")
 	f.StringVar(&br.DockerTarget, "target", "", "Docker build stage (--target)")
-	f.StringVar(&br.OS, "os", "", "linux|darwin|windows (default linux)")
-	f.StringVar(&br.Arch, "arch", "", "amd64|arm64 (default amd64)")
+	f.StringSliceVar(&br.Platforms, "platform", nil, "image lane: platforms to build, e.g. linux/amd64,linux/arm64 (default: one, the fleet's own)")
+	f.StringVar(&br.OS, "os", "", "artifact lane: linux|darwin|windows (default linux)")
+	f.StringVar(&br.Arch, "arch", "", "artifact lane: amd64|arm64 (default amd64)")
 	f.StringVar(&br.Bucket, "bucket", "", "object-store bucket for artifacts (default: the contract's bucket:)")
 	f.StringVar(&br.Tag, "tag", "", "version segment artifacts publish under (default: the sha)")
 	return cmd
