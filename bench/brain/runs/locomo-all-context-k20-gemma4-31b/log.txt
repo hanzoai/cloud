@@ -1,0 +1,12 @@
+2026-09-09T10:05:25.830Z   25/282 asked, 25 answered, 10.3s each
+2026-09-09T10:09:20.693Z   50/282 asked, 50 answered, 9.8s each
+2026-09-09T10:13:20.424Z   75/282 asked, 75 answered, 9.7s each
+2026-09-09T10:21:22.399Z   25/184 asked, 25 answered, 9.5s each
+2026-09-09T10:25:07.875Z   50/184 asked, 50 answered, 9.3s each
+2026-09-09T10:28:54.952Z   75/184 asked, 75 answered, 9.2s each
+2026-09-09T10:32:14.033Z   100/184 asked, 100 answered, 8.9s each
+2026-09-09T10:35:38.968Z   125/184 asked, 125 answered, 8.7s each
+2026-09-09T10:39:19.391Z   150/184 asked, 150 answered, 8.8s each
+2026-09-09T10:43:03.573Z   175/184 asked, 175 answered, 8.8s each
+2026-09-09T10:44:24.975Z pass 1: asked 184, answered 184, failed 0 in 1620s
+2026-09-09T10:44:25.089Z done: 282/282 answered

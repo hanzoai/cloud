@@ -79,5 +79,7 @@ const sections = runs.map((d) => { const m = read(`./runs/${d}/metrics.json`), m
     metrics: Object.fromEntries(Object.entries(s).filter(([k, x]) => k !== 'n' && leaf(x)).map(([k, x]) => [k, x && typeof x === 'object' ? { mean: x.mean, lo: x.lo, hi: x.hi } : x])) }))
   return { bench: d.split('-')[0], run: d, row: m.row ?? null, split: m.split ?? meta.split ?? null, k: m.k ?? meta.k ?? null, reader: m.reader ?? meta.reader ?? null, facts: m.facts ?? meta.facts ?? null, commit: meta.commit ?? meta.commit ?? null,
     categories, table: typeof m.table === 'string' ? m.table : null } })
-writeFileSync(new URL('./benchmarks.json', here), JSON.stringify({ generated: new Date().toISOString(), sections }, null, 1))
+// a run with fewer than fifty questions in every row is a smoke test, not a table for the site
+const shown = sections.filter((x) => x.table || x.categories.some((c) => (c.n ?? 0) >= 50))
+writeFileSync(new URL('./benchmarks.json', here), JSON.stringify({ generated: new Date().toISOString(), sections: shown }, null, 1))
 console.log(md)

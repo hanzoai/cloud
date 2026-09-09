@@ -1,7 +1,7 @@
 /**
  * The FactConsolidation lane, end to end: plan → retrieve → resolve → read.
  *
- *   node run.mjs --split=dev|test --rows=semantic,lexical,... --reader=gemma4:31b|enso-flash [--workers=2] [--k=10]
+ *   node lane.mjs --split=dev|test --rows=semantic,lexical,... --reader=gemma4:31b|enso-flash [--workers=2] [--k=10]
  *
  * Every row hands the SAME reader the SAME prompt; rows differ only in which
  * facts reach it and in what order. The metric is the benchmark's own
@@ -68,12 +68,16 @@ const templateOf = (rel) => ({ capital: 'capital of', head_of_gov: 'head of the 
 
 /** One hop: the facts that answer (entity, relation), with every version, current first. */
 function hop(ix, find, entityKey, rel, o) {
+  // `origin` is the plan's virtual relation: a person comes from a country of citizenship, a sport or
+  // a club from the country it was created in. The facts the entity has decide, deterministically.
+  if (rel === 'origin') { for (const r of ['citizenship', 'country_origin']) { const h = hop(ix, find, entityKey, r, { ...o, bridge: false }); if (h.versions.length) return h } rel = 'country_origin' }
   const versions = ix.versions(entityKey, rel).slice()
   if (!versions.length && rel === 'spouse') for (const f of ix.byEntity.get(entityKey) ?? []) if (f.relation === 'spouse' && norm(f.object) === entityKey) versions.push({ ...f, object: f.subject, subject: f.object, mirrored: true })
-  if (!versions.length && o.fallback) { // no exact (entity, relation): the entity's other facts under this relation name by lexical hint, then dense over the whole store
-    const mine = (ix.byEntity.get(entityKey) ?? []).filter((f) => f.relation === rel)
-    if (mine.length) versions.push(...mine)
-    else { const hits = ix.lexical(`${entityKey} ${templateOf(rel)}`, 5).map(([i]) => ix.facts[i]).filter((f) => f.relation === rel); if (hits.length) versions.push(...hits) }
+  if (!versions.length && o.fallback && o.bridge !== false) {
+    // one typed bridge: a current fact of the entity whose object carries the missing relation
+    // ("the country of origin of a club" → its sport → where the sport was created). Bounded to one step.
+    for (const f of (ix.byEntity.get(entityKey) ?? []).filter((f) => f.current && norm(f.subject) === entityKey).sort((a, b) => a.serial - b.serial)) {
+      const via = hop(ix, find, norm(f.object), rel, { ...o, bridge: false }); if (via.versions.length) { via.versions.forEach((v) => (v.bridge = f.serial)); return via } }
   }
   versions.sort((a, b) => a.serial - b.serial)
   const current = o.timeline ? versions[versions.length - 1] : null
@@ -145,6 +149,6 @@ for (const rowName of ROWS) {
   const metrics = { row: rowName, split: SPLIT, reader: rowName === 'noreader' ? 'none' : READER, k: K, prompt_sha: sha(PROMPT), commit, n: preds.length, by_size: Object.fromEntries(Object.entries(per).map(([s, xs]) => [s, { n: xs.length, substring_em: +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(4), ci95: bootstrap(xs).map((x) => +x.toFixed(4)) }])),
     facts_per_q: +(preds.reduce((a, p) => a + p.facts, 0) / preds.length).toFixed(2), retrieval_ms_p50: +[...preds.map((p) => p.ms)].sort((a, b) => a - b)[Math.floor(preds.length / 2)].toFixed(3), retrieval_ms_p95: +[...preds.map((p) => p.ms)].sort((a, b) => a - b)[Math.floor(preds.length * 0.95)].toFixed(3), reader_calls: calls, context_tokens_per_q: calls ? Math.round(tokens / calls) : 0, wall_s: Math.round((Date.now() - t0) / 1000) }
   writeFileSync(dir + 'metrics.json', JSON.stringify(metrics, null, 1))
-  writeFileSync(dir + 'meta.json', JSON.stringify({ bench: 'MemoryAgentBench Conflict_Resolution (FactConsolidation)', dataset_sha256: sha(readFileSync(DATA + 'Conflict_Resolution-00000-of-00001.parquet')), split: SPLIT, row: rowName, reader: metrics.reader, planner: 'deepseek-v4-flash (compile.mjs)', embedding: 'zenlm/zen-embedding-0.6b', k: K, temperature: 0, max_tokens: 64, prompt: 'prompts/reader-mab.txt', prompt_sha256: sha(PROMPT), commit }, null, 1))
+  writeFileSync(dir + 'meta.json', JSON.stringify({ bench: 'MemoryAgentBench Conflict_Resolution (FactConsolidation)', dataset_sha256: sha(readFileSync(DATA + 'Conflict_Resolution-00000-of-00001.parquet')), split: SPLIT, row: rowName, reader: metrics.reader, planner: Object.entries(Object.values(plans).reduce((a, p) => (a[p.model] = (a[p.model] ?? 0) + 1, a), {})).map(([m, n]) => `${m}:${n}`).join(' '), embedding: 'zenlm/zen-embedding-0.6b', k: K, temperature: 0, max_tokens: 64, prompt: 'prompts/reader-mab.txt', prompt_sha256: sha(PROMPT), commit }, null, 1))
   console.log(`${rowName.padEnd(9)} ${Object.entries(metrics.by_size).map(([s, m]) => `${s} ${(m.substring_em * 100).toFixed(1)} [${(m.ci95[0] * 100).toFixed(0)}–${(m.ci95[1] * 100).toFixed(0)}] n=${m.n}`).join('  ')}   facts/q ${metrics.facts_per_q}  p50 ${metrics.retrieval_ms_p50}ms  calls ${calls}`)
 }
