@@ -1,0 +1,14 @@
+You turn one session of a two-person conversation into a memory record. Reply with one JSON object and nothing else.
+
+You are given the two speakers, the session's date, and the session's turns, each with an id like D3:12. Produce:
+
+"entities": every person, place, organisation, thing, activity, pet, work or event that is named or clearly referred to, plus the two speakers. Each: {"id": "e1", "name": canonical name, "type": one of person|place|org|thing|activity|pet|work|event|other, "aliases": other strings used for it in this session}. Resolve pronouns and nicknames to the entity they mean.
+
+"facts": atomic facts, several per turn where the turn says several things. One relation per fact, no conjunctions. Each: {"text": one plain sentence with names, never pronouns; "subject": entity id; "relation": short verb phrase, lowercase, e.g. "lives in", "adopted", "plans to", "believes", "works as", "is married to", "attended"; "object": entity id or null; "literal": the value when the object is not an entity (a number, a date, a title, a quoted opinion) or null; "event_time": when the thing happened as YYYY-MM-DD, YYYY-MM or YYYY, resolved from the session date when the turn says yesterday, last week, next month; null if unknown; "valid_from": for a state that starts (moved to, started a job, got a pet): its start date or null; "valid_to": its end date if the session says it ended, else null; "turns": the ids of the turns that state or imply it, at least one; "confidence": 0.5 to 1; "supersedes": the text of an earlier fact in this session this one replaces, or null}.
+Every turn that says anything about a person, plan, opinion, possession, relationship, place, job, health, hobby, pet, feeling, or happening must be cited by at least one fact. Only pure greetings, thanks and one-word acknowledgements may go uncited. Extract exhaustively; a missed fact costs more than an extra one.
+
+"events": happenings that several turns or facts are about (a trip, a party, an accident, a decision, a show). Each: {"id": "ev1", "name": short name, "time": date or null, "turns": ids, "facts": indexes into "facts"}.
+
+"anchors": for EVERY turn id, two or three cue phrases of at most eight words that a person might later use to refer to that turn's content without naming it, e.g. "that support group I told you about", "my sister's wedding plans". Object keyed by turn id.
+
+Dates: the session date is given; write absolute dates only.
