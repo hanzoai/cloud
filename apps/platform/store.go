@@ -122,8 +122,8 @@ type Build struct {
 	// far enough apart that the cluster stops being able to answer what was asked
 	// for.
 	Platforms []string
-	CreatedAt     int64
-	UpdatedAt     int64
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 // Store is the platform metadata database. ONE SQLite file — the system

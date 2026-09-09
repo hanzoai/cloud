@@ -50,3 +50,22 @@ func TestNoReceiptIsInventedWhereThereIsNone(t *testing.T) {
 		t.Errorf("a branch was stamped as revision %q", v)
 	}
 }
+
+// The artifact lane asks for no architecture. It cross-compiles (CGO_ENABLED=0
+// with GOOS/GOARCH from the request) on two images that are both manifest
+// indexes, so its output does not depend on the machine — and asking for amd64
+// put it on the one node that is congested and refuses CI work.
+func TestTheArtifactLaneAsksForNoArchitecture(t *testing.T) {
+	k := &k8sClient{buildNS: "hanzo-build"}
+	job := k.artifactJobSpec("pf-art-x", "https://git.example/x.git", "main", "v1",
+		"https://s3.example", "https://s3.example", []binarySpec{{Name: "x", Main: "."}})
+	spec := podSpec(job.Object)
+	// Prove the right map is being read before concluding anything from a missing
+	// key: an absent nodeSelector in the WRONG map passes without measuring.
+	if spec["restartPolicy"] != "Never" {
+		t.Fatalf("not the pod spec: restartPolicy = %v", spec["restartPolicy"])
+	}
+	if sel, ok := spec["nodeSelector"]; ok {
+		t.Errorf("artifact Job pins nodeSelector %v; it cross-compiles and needs none", sel)
+	}
+}

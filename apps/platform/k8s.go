@@ -1321,7 +1321,7 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 					// hanzo-money-critical, so a queue of them can never push a serving
 					// workload off a node, and raising a single run's class is how one
 					// build gets moved to the front without stopping the others.
-					"priorityClassName": "hanzo-ci",
+					"priorityClassName":            "hanzo-ci",
 					"tolerations":                  []any{map[string]any{"key": "dedicated", "operator": "Equal", "value": "ci-runner", "effect": "NoSchedule"}},
 					"automountServiceAccountToken": false,
 					// Pod-level: run the whole pod as the non-root buildkit user.
