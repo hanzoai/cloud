@@ -1003,12 +1003,20 @@ func buildFrontendCmdRev(buildCtx, dockerfile, image, push, revision string, pla
 	if _, tag := splitImageRef(image); tag != "" && tag != "latest" && !strings.Contains(tag, ":") {
 		cmd = append(cmd, "--opt", "build-arg:VERSION="+tag)
 		cmd = append(cmd, "--opt", "build-arg:GIT_VERSION="+strings.TrimPrefix(tag, "v"))
+		cmd = append(cmd, "--opt", "label:org.opencontainers.image.version="+tag)
 	}
+	// Each receipt goes out TWICE — once as a build-arg the Dockerfile may read,
+	// once as an image LABEL set from outside it. A build-arg reaches the image
+	// only where the Dockerfile declares the matching ARG and stamps a LABEL from
+	// it, and most do not: ci's declares neither, so its images name no commit at
+	// all and a reader has to diff layers to learn which one is inside. `--opt
+	// label:` needs nothing from the repository, so provenance stops being a
+	// property of how carefully a Dockerfile was written.
+	//
 	// A build context may name a BRANCH, and a branch is not a revision: stamping
 	// "main" here would make the label and the binary look populated while
 	// answering a different question than the one anybody reads them for. Empty
-	// only for callers that genuinely have no commit; a Dockerfile with no
-	// `ARG REVISION` ignores it either way.
+	// only for callers that genuinely have no commit.
 	//
 	// cloud.IsCommit, not a private copy, because this is one END of a wire whose
 	// other end applies the same rule to decide what it will REPORT (see
@@ -1017,6 +1025,7 @@ func buildFrontendCmdRev(buildCtx, dockerfile, image, push, revision string, pla
 	// same silent failure, one layer over.
 	if cloud.IsCommit(revision) {
 		cmd = append(cmd, "--opt", "build-arg:REVISION="+revision)
+		cmd = append(cmd, "--opt", "label:org.opencontainers.image.revision="+revision)
 	}
 	// REGISTRY LAYER CACHE, both directions. Every build job is a fresh pod with an
 	// empty local cache, so without this each one re-resolves and re-downloads its
@@ -1312,7 +1321,7 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 					// hanzo-money-critical, so a queue of them can never push a serving
 					// workload off a node, and raising a single run's class is how one
 					// build gets moved to the front without stopping the others.
-					"priorityClassName": "hanzo-ci",
+					"priorityClassName":            "hanzo-ci",
 					"tolerations":                  []any{map[string]any{"key": "dedicated", "operator": "Equal", "value": "ci-runner", "effect": "NoSchedule"}},
 					"automountServiceAccountToken": false,
 					// Pod-level: run the whole pod as the non-root buildkit user.

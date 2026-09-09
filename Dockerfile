@@ -62,11 +62,15 @@
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
 # GHCR mirror (ghcr.io/hanzoai/mirror/*), pinned by digest. WHY: public.ecr.aws
 # rate-limits anonymous pulls (HTTP 429) on shared CI runners and a 429 on ANY
-# base pull aborts the release. The mirror packages are 1:1 amd64 copies of the
-# upstream public images, digest-pinned for immutability; release.yml logs the
-# build into ghcr.io (GH_PAT) before building so they resolve. REFRESH on a
-# toolchain bump: crane/regctl copy the new upstream into
-# ghcr.io/hanzoai/mirror/<name>:<tag> and repoint the digest below. Canonical
+# base pull aborts the release. Each mirrored tag is a verbatim copy of the
+# upstream MANIFEST INDEX and the digest below names that index, so a build for
+# any architecture resolves the child for the machine it runs on. A digest that
+# names a CHILD pins an architecture instead, and a build for any other one then
+# has no base to resolve. release.yml logs the build into ghcr.io (GH_PAT) so
+# they resolve. REFRESH on a toolchain bump: `crane copy <upstream>:<tag>
+# ghcr.io/hanzoai/mirror/<name>:<tag>` — copy the tag, never a child — and
+# repoint the digest below. Check a refresh by reading manifests[].platform,
+# never the tag: a version carries no architecture. Canonical
 # long-term home is oci.hanzo.ai/hanzoai/mirror/* — repoint once the runners
 # carry its IAM pull credentials (follow-up).
 
@@ -473,7 +477,7 @@ RUN set -eu; \
 # and /bin/sh -> /bin/busybox), and it does not even carry the file. alpine-release
 # depends on alpine-keys alone, which is public signing keys and no program: five
 # data files, +78 KB, and the executable count stays at 56.
-FROM ghcr.io/hanzoai/mirror/alpine:3.22@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6 AS rootfs
+FROM ghcr.io/hanzoai/mirror/alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce AS rootfs
 # Runtime needs libsqlcipher (the codec the plugins link). It must NOT also carry
 # a plaintext libsqlite3 — the binary's -lsqlite3 DT_NEEDED would then bind to
 # plaintext sqlite and silently no-op PRAGMA key. sqlcipher-libs ships

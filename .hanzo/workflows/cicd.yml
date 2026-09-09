@@ -1011,7 +1011,7 @@ jobs:
           # is distroless and ships no shell and no wget, so the tools come from
           # outside it and the boot is watched from outside it. Same pinned mirror
           # digest the build stages use, so this pulls nothing new.
-          PROBER: ghcr.io/hanzoai/mirror/alpine:3.22@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6
+          PROBER: ghcr.io/hanzoai/mirror/alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
         run: |
           set -euo pipefail
           img="${{ steps.ver.outputs.image }}@${{ steps.img.outputs.digest }}"
