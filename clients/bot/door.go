@@ -3,6 +3,7 @@ package bot
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/fasthttp/websocket"
 	"github.com/hanzoai/cloud"
@@ -51,6 +52,18 @@ func stream(s *cloud.Service[state], c *zip.Ctx) error {
 
 		go k.pump(ws)
 		go k.beat(tickEvery)
+
+		// The first frame is a challenge, sent before anyone asks. A browser
+		// does not need it — it waits 750ms and connects anyway — but the iOS
+		// and Android clients block on one unconditionally and close the socket
+		// when none arrives, Android after two seconds. The nonce is not
+		// checked when it comes back: identity here is IAM's answer, and these
+		// clients do not require the server to have verified what they signed.
+		// It costs one frame and it is the whole of what those two need.
+		k.send(Event{Type: "event", Event: "connect.challenge", Payload: map[string]any{
+			"nonce": mint("nonce"),
+			"ts":    time.Now().UnixMilli(),
+		}})
 
 		ws.SetReadLimit(maxFrame)
 		for {
