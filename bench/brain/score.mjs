@@ -47,7 +47,13 @@ export function grade(row, store) {
   return { exact, supported, answered }
 }
 
-/** Metrics for a run: per category and overall, per split, with intervals and grades. */
+const quantile = (xs, p) => { if (!xs.length) return 0; const s = [...xs].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))] }
+
+/**
+ * Metrics for a run: per category and overall, per split, with intervals,
+ * grades and reader latency. `summary` repeats each split's overall row, which
+ * is what a table generator reads.
+ */
 export function scoreRows(rows, store, expected) {
   const out = {}
   for (const [split, keep] of Object.entries(SPLITS)) {
@@ -57,6 +63,7 @@ export function scoreRows(rows, store, expected) {
     for (const [name, rs] of Object.entries(groups)) {
       const g = rs.map((r) => grade(r, store))
       const n = rs.length, want = expected ? expected(split, name) : n
+      const ms = rs.map((r) => r.ms).filter((x) => typeof x === 'number')
       out[split][name] = {
         n, of: want,
         f1: bootstrap(rs.map((r) => r.f1)), em: bootstrap(rs.map((r) => Number(r.em))),
@@ -64,9 +71,11 @@ export function scoreRows(rows, store, expected) {
         supported: n ? g.filter((x) => x.supported).length / n : 0,
         answered: n ? g.filter((x) => x.answered).length / n : 0,
         tokens: n ? rs.reduce((a, r) => a + (r.tokens ?? 0), 0) / n : 0,
+        p50_ms: quantile(ms, 0.5), p95_ms: quantile(ms, 0.95),
       }
     }
   }
+  out.summary = Object.fromEntries(Object.keys(SPLITS).map((s) => [s, out[s].overall]))
   return out
 }
 
@@ -82,9 +91,9 @@ export function expectedCounts(store, cats) {
 
 const pct = (x) => (x * 100).toFixed(1).padStart(5)
 export function table(name, m, split = 'all') {
-  const lines = [`${name} · ${split}`, `  ${'category'.padEnd(12)} ${'n'.padStart(9)}   F1 [95% CI]          EM     EXACT  SUPP   ANSW   tok/q`]
+  const lines = [`${name} · ${split}`, `  ${'category'.padEnd(12)} ${'n'.padStart(9)}   F1 [95% CI]          EM     EXACT  SUPP   ANSW   tok/q  p50 s`]
   for (const [g, r] of Object.entries(m[split])) {
-    lines.push(`  ${g.padEnd(12)} ${String(r.n).padStart(4)}/${String(r.of).padEnd(4)}  ${pct(r.f1.mean)} [${pct(r.f1.lo)},${pct(r.f1.hi)}]  ${pct(r.em.mean)}  ${pct(r.exact)}  ${pct(r.supported)}  ${pct(r.answered)}  ${r.tokens.toFixed(0).padStart(5)}`)
+    lines.push(`  ${g.padEnd(12)} ${String(r.n).padStart(4)}/${String(r.of).padEnd(4)}  ${pct(r.f1.mean)} [${pct(r.f1.lo)},${pct(r.f1.hi)}]  ${pct(r.em.mean)}  ${pct(r.exact)}  ${pct(r.supported)}  ${pct(r.answered)}  ${r.tokens.toFixed(0).padStart(5)}  ${(r.p50_ms / 1000).toFixed(1).padStart(5)}`)
   }
   return lines.join('\n')
 }
