@@ -90,7 +90,9 @@ if (existsSync(CACHE)) {
   store = []
   for (const [n, conv] of corpus.entries()) {
     const rows = turns(conv.conversation)
-    const asked = conv.qa.filter((q) => q.category === 1 || q.category === 4)
+    // Categories 1–4 (multi-hop, temporal, open-domain, single-hop). 5 is
+    // adversarial: its answer is that there is no answer, so it has no evidence to recall.
+    const asked = conv.qa.filter((q) => q.category >= 1 && q.category <= 4)
     console.log(`conversation ${n + 1}/${corpus.length}: ${rows.length} turns, ${asked.length} questions`)
     const tv = await embedAll(rows.map((r) => r.text), 'turns')
     const qv = await embedAll(asked.map((q) => q.question), 'questions')
@@ -108,11 +110,8 @@ if (existsSync(CACHE)) {
 }
 
 // ── Score.
-const tally = {
-  1: { n: 0, all: {}, any: {} },
-  4: { n: 0, all: {}, any: {} },
-}
-for (const k of KS) for (const c of [1, 4]) (tally[c].all[k] = 0), (tally[c].any[k] = 0)
+const tally = {}
+for (const c of [1, 2, 3, 4]) { tally[c] = { n: 0, all: {}, any: {} }; for (const k of KS) (tally[c].all[k] = 0), (tally[c].any[k] = 0) }
 
 const latencies = []
 for (const conv of store) {
