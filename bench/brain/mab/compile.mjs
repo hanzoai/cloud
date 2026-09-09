@@ -12,12 +12,13 @@ import { load, DATA, TEMPLATES, parse, norm } from './parse.mjs'
 import { byLexicon } from './plan.mjs'
 const arg = (k, d) => { const m = process.argv.find((a) => a.startsWith(`--${k}=`)); return m ? m.split('=')[1] : d }
 const MODEL = arg('model', 'deepseek-v4-flash'), WORKERS = Number(arg('workers', 3)), BATCH = Number(arg('batch', 1))
-const LOCAL = MODEL.startsWith('gemma') || MODEL.startsWith('qwen')
-const API = LOCAL ? 'http://127.0.0.1:11434/v1' : (process.env.HANZO_API ?? 'https://api.hanzo.ai/v1')
+// --api=<base> names an OpenAI-compatible server (mlx_lm.server, vLLM on spark) that needs no key and takes chat_template_kwargs
+const API_BASE = arg('api', ''), LOCAL = !API_BASE && (MODEL.startsWith('gemma') || MODEL.startsWith('qwen'))
+const API = API_BASE || (LOCAL ? 'http://127.0.0.1:11434/v1' : (process.env.HANZO_API ?? 'https://api.hanzo.ai/v1'))
 const home = process.env.HOME, read = (f) => { try { return JSON.parse(readFileSync(`${home}/.hanzo/${f}`, 'utf8')) } catch { return {} } }
-const key = LOCAL ? 'ollama' : (process.env.HANZO_API_KEY ?? read('credentials.json').access_token)
-const PROMPT = readFileSync(new URL('../prompts/compile-mab.txt', import.meta.url), 'utf8')
-const RELS = new Set(TEMPLATES.map((t) => t[0]))
+const key = (LOCAL || API_BASE) ? 'local' : (process.env.HANZO_API_KEY ?? read('credentials.json').access_token)
+const PROMPT = readFileSync(new URL(arg('prompt', '../prompts/compile-mab.txt'), import.meta.url), 'utf8')
+const RELS = new Set([...TEMPLATES.map((t) => t[0]), 'origin', 'language', 'maker', 'leader', 'place', 'work'])
 
 // The single-hop questions the benchmark writes in one of a few fixed shapes need no model:
 // an anchored template names the relation and captures the entity. Everything else is compiled.
@@ -43,7 +44,7 @@ export function byRule(q) { for (const [relation, re] of RULES) { const m = q.ma
 let KNOWN = null
 function known(name) { if (!KNOWN) { KNOWN = new Set(); for (const r of load()) for (const f of parse(r.context).facts) { if (f.subject) KNOWN.add(norm(f.subject)); if (f.object) KNOWN.add(norm(f.object)) } } return KNOWN.has(norm(name.replace(/['’]s\b/g, ''))) || KNOWN.has(norm(name)) }
 
-const OUT = DATA + 'plans.json'
+const OUT = DATA + arg('out', 'plans.json'), TEMP = Number(arg('temperature', 0)), FORCE = process.argv.includes('--force')
 let plans = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : {}
 const fromDisk = () => { try { return existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : {} } catch { return {} } }
 const save = () => { plans = { ...fromDisk(), ...plans }; const tmp = OUT + '.' + process.pid; writeFileSync(tmp, JSON.stringify(plans, null, 1)); renameSync(tmp, OUT) }
@@ -70,8 +71,8 @@ async function compile(q, attempt = 0) {
   // Locally, Ollama's own endpoint: thinking off (the OpenAI-compatible one spends the budget on hidden
   // thinking and returns nothing) and JSON mode, so the reply is the object and nothing else.
   const r = LOCAL
-    ? await fetch('http://127.0.0.1:11434/api/chat', { method: 'POST', signal: ctl.signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: MODEL, stream: false, think: false, format: 'json', options: { temperature: 0, num_predict: 120 }, messages }) })
-    : await fetch(`${API}/chat/completions`, { method: 'POST', signal: ctl.signal, headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ model: MODEL, temperature: 0, max_tokens: 120, messages }) })
+    ? await fetch('http://127.0.0.1:11434/api/chat', { method: 'POST', signal: ctl.signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: MODEL, stream: false, think: false, format: 'json', options: { temperature: TEMP, num_predict: 120 }, messages }) })
+    : await fetch(`${API}/chat/completions`, { method: 'POST', signal: ctl.signal, headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ model: MODEL, temperature: TEMP, max_tokens: 120, messages, ...(API_BASE ? { chat_template_kwargs: { enable_thinking: false } } : {}) }) })
   const text = await r.text().finally(() => clearTimeout(timer)); let j = null; try { j = JSON.parse(text) } catch {}
   const content = LOCAL ? j?.message?.content : j?.choices?.[0]?.message?.content
   if (!r.ok || typeof content !== 'string') { if (attempt < 4) { await new Promise((z) => setTimeout(z, 3000 * (attempt + 1))); return compile(q, attempt + 1) } throw new Error(`${r.status} ${text.slice(0, 100)}`) }
@@ -86,7 +87,7 @@ const rows = load(); const every = [...new Set(rows.flatMap((r) => r.questions))
 // (The lexicon used to override the model. It fitted the 6k phrasings and not the test ones:
 // chains in surface order, spurious hops from repeated words — 126 of 209 multi-hop misses at 32k+.)
 let ruled = 0, lexed = 0, kept = 0
-for (const q of every) { const p = byRule(q); if (p) { plans[q] = p; ruled++ } else if (plans[q] && plans[q].model !== 'rules' && plans[q].model !== 'lexicon') kept++; else delete plans[q] }
+for (const q of every) { const p = byRule(q); if (p) { plans[q] = p; ruled++ } else if (!FORCE && plans[q] && plans[q].model !== 'rules' && plans[q].model !== 'lexicon') kept++; else delete plans[q] }
 { const tmp = OUT + '.' + process.pid; writeFileSync(tmp, JSON.stringify(plans, null, 1)); renameSync(tmp, OUT) }
 console.log(`${ruled} questions compiled by rule, ${lexed} by lexicon, ${kept} by a model where neither reads them`)
 if (process.argv.includes('--rules-only')) process.exit(0)
