@@ -16,9 +16,9 @@
  * the whole conversation in the prompt is a different result from "92%" with
  * twenty turns.
  *
- *   HANZO_API_KEY=… READER=openai/gpt-4o-mini node answer.mjs [--policy=cer|single] [--n=282] [--cat=1]
+ *   READER=openai/gpt-4o-mini node answer.mjs [--policy=cer|single] [--n=282] [--cat=1]
  *
- * The key is read from the environment, or from ~/.hanzo/config.json's apiKey.
+ * The credential is HANZO_API_KEY, else the token `hanzo auth login` saved.
  */
 import { readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
@@ -27,8 +27,12 @@ const arg = (k, d) => { const m = process.argv.find((a) => a.startsWith(`--${k}=
 const POLICY = arg('policy', 'cer'), CAT = Number(arg('cat', 1)), N = Number(arg('n', 0)), K = Number(arg('k', 20))
 const READER = process.env.READER ?? 'openai/gpt-4o-mini'
 const API = process.env.HANZO_API ?? 'https://api.hanzo.ai/v1'
-const key = process.env.HANZO_API_KEY ?? JSON.parse(readFileSync(process.env.HOME + '/.hanzo/config.json', 'utf8')).apiKey
-if (!key) { console.error('no key: set HANZO_API_KEY'); process.exit(1) }
+// A credential, in the order a person would reach for one: the environment,
+// then the token `hanzo auth login` left behind, then a minted key.
+const home = process.env.HOME
+const read = (f) => { try { return JSON.parse(readFileSync(`${home}/.hanzo/${f}`, 'utf8')) } catch { return {} } }
+const key = process.env.HANZO_API_KEY ?? read('credentials.json').access_token ?? read('config.json').apiKey
+if (!key) { console.error('no credential: run `hanzo auth login` or set HANZO_API_KEY'); process.exit(1) }
 
 // Retrieval comes from cer2.mjs; it is run as a module by asking it for one
 // configuration's ranked ids per question. Kept as a subprocess on purpose —
@@ -48,33 +52,50 @@ function f1(pred, gold) {
 }
 const em = (pred, gold) => norm(pred).join(' ') === norm(gold).join(' ')
 
-async function ask(context, question) {
-  const sys = 'You answer questions about a conversation between two people using only the excerpts given. Answer in as few words as possible: a name, a date, a place, a short phrase. If the excerpts do not say, answer "unknown".'
+const WORKERS = Number(process.env.WORKERS ?? 6)
+async function pool(items, fn) {
+  const out = new Array(items.length); let i = 0
+  await Promise.all(Array.from({ length: Math.min(WORKERS, items.length) }, async () => {
+    while (i < items.length) { const j = i++; out[j] = await fn(items[j], j) }
+  }))
+  return out
+}
+async function ask(context, question, attempt = 0) {
+  const sys = 'You answer questions about a conversation between two people using only the excerpts given. Reply with the shortest possible answer: a name, a date, a place, a number, or a noun phrase of a few words. No sentence, no explanation, nothing the question did not ask for. Infer from the excerpts when the answer is implied rather than stated; answer "unknown" only if nothing in them bears on the question.'
   const user = `Excerpts (each is "turn id [date] speaker: text"):\n\n${context}\n\nQuestion: ${question}\nAnswer:`
   const r = await fetch(`${API}/chat/completions`, { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({ model: READER, temperature: 0, max_tokens: 40, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }) })
-  if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 160)}`)
-  return (await r.json()).choices[0].message.content.trim()
+  if (!r.ok) {
+    if (attempt < 2 && (r.status === 429 || r.status >= 500)) { await new Promise((z) => setTimeout(z, 1500 * (attempt + 1))); return ask(context, question, attempt + 1) }
+    throw new Error(`${r.status} ${(await r.text()).slice(0, 160)}`)
+  }
+  const j = await r.json()
+  const content = j.choices?.[0]?.message?.content
+  if (typeof content !== 'string') throw new Error(`no content: ${JSON.stringify(j).slice(0, 120)}`)
+  return content.trim()
 }
 
 const dates = corpus.map((c) => Object.fromEntries(Object.entries(c.conversation).filter(([k]) => k.endsWith('_date_time')).map(([k, v]) => [k.replace('_date_time', ''), v])))
-const rows = []; let done = 0, sumF1 = 0, sumEM = 0, sumTok = 0
 const qs = []
 store.forEach((c, ci) => c.qa.forEach((q, qi) => { if (q.category === CAT && q.evidence.length) qs.push({ ci, qi, q }) }))
-const todo = N ? qs.slice(0, N) : qs
-console.log(`${todo.length} questions · category ${CAT} · policy ${POLICY} · k=${K} · reader ${READER}\n`)
-for (const { ci, qi, q } of todo) {
+const OUT = `answers-${POLICY}-cat${CAT}.json`
+const kept = process.argv.includes('--only-missing') && existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : []
+const have = new Set(kept.map((r) => r.q))
+const todo = (N ? qs.slice(0, N) : qs).filter(({ q }) => !have.has(q.question))
+if (kept.length) console.log(`keeping ${kept.length} answered; asking ${todo.length} again`)
+console.log(`${todo.length} questions · category ${CAT} · policy ${POLICY} · k=${K} · reader ${READER} · ${WORKERS} workers\n`)
+let done = 0, failed = 0
+const rows = kept.concat((await pool(todo, async ({ ci, qi, q }) => {
   const gold = corpus[ci].qa.find((x) => x.question === q.question)?.answer ?? ''
-  const ids = ranked[ci][qi]
   const byId = new Map(store[ci].turns.map((t) => [t.id, t]))
-  const context = ids.map((id) => { const t = byId.get(id); const sess = 'session_' + id.match(/^D(\d+):/)[1]; return `${id} [${dates[ci][sess] ?? ''}] ${t.text}` }).join('\n')
-  const tok = Math.round(context.length / 4)
-  let pred = ''
-  try { pred = await ask(context, q.question) } catch (e) { console.error(`\n${q.question}: ${e.message}`); continue }
-  const s = f1(pred, gold), x = em(pred, gold)
-  rows.push({ q: q.question, gold, pred, f1: s, em: x, tokens: tok }); done++; sumF1 += s; sumEM += x; sumTok += tok
-  if (done % 10 === 0) process.stdout.write(`\r  ${done}/${todo.length}  F1 ${(sumF1 / done * 100).toFixed(1)}  EM ${(sumEM / done * 100).toFixed(1)}  tokens/q ${(sumTok / done).toFixed(0)}   `)
-}
+  const context = ranked[ci][qi].map((id) => { const t = byId.get(id); const sess = 'session_' + id.match(/^D(\d+):/)[1]; return `${id} [${dates[ci][sess] ?? ''}] ${t.text}` }).join('\n')
+  const tokens = Math.round(context.length / 4)
+  let pred
+  try { pred = await ask(context, q.question) } catch (e) { failed++; process.stderr.write(`\n${q.question.slice(0, 60)}: ${e.message}\n`); return null }
+  done++; if (done % 10 === 0) process.stdout.write(`\r  ${done}/${todo.length}   `)
+  return { q: q.question, gold, pred, f1: f1(pred, gold), em: em(pred, gold), tokens }
+})).filter(Boolean))
+const sumF1 = rows.reduce((a, r) => a + r.f1, 0), sumEM = rows.reduce((a, r) => a + r.em, 0), sumTok = rows.reduce((a, r) => a + r.tokens, 0)
 console.log(`\n\n── LoCoMo answers · cat ${CAT} · ${POLICY}@${K} · ${READER} ──`)
-console.log(`questions ${done}   F1 ${(sumF1 / done * 100).toFixed(1)}%   exact ${(sumEM / done * 100).toFixed(1)}%   tokens delivered/q ${(sumTok / done).toFixed(0)}`)
-writeFileSync(`answers-${POLICY}-cat${CAT}.json`, JSON.stringify(rows, null, 1))
+console.log(`questions ${rows.length} (${failed} failed)   F1 ${(sumF1 / rows.length * 100).toFixed(1)}%   exact ${(sumEM / rows.length * 100).toFixed(1)}%   tokens delivered/q ${(sumTok / rows.length).toFixed(0)}`)
+writeFileSync(OUT, JSON.stringify(rows, null, 1))
