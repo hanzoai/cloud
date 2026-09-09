@@ -1,0 +1,30 @@
+{
+ "name": "locomo-all-single-k20-qwen3.6-35b-a3b",
+ "benchmark": "locomo",
+ "policy": "single",
+ "k": 20,
+ "reader": "qwen3.6:35b-a3b",
+ "api": "127.0.0.1:11434",
+ "cats": [
+  1,
+  2,
+  3,
+  4
+ ],
+ "workers": 1,
+ "prompt": "prompts/reader-locomo.txt",
+ "prompt_sha256": "afa0a591ae62c574",
+ "dataset_sha256": "79fa87e90f040813",
+ "store_sha256": "688cea6b889e484c",
+ "facts_sha256": "cc680d252a3538b9",
+ "commit": "bea5d0ad184462b76db19ad2d601f39c329b7c09",
+ "temperature": 0,
+ "max_tokens": 64,
+ "questions": 1536,
+ "started": "2026-09-09T12:54:38.083Z",
+ "finished": "2026-09-09T13:59:32.379Z",
+ "wall_seconds": 2390,
+ "answered": 1536,
+ "tokens_per_question": 840,
+ "reader_tokens": 1989142
+}

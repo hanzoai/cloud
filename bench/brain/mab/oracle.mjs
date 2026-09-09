@@ -15,7 +15,7 @@
 import { readFileSync } from 'node:fs'
 import { load, parse, norm, DATA } from './parse.mjs'
 const arg = (k, d) => { const m = process.argv.find((a) => a.startsWith(`--${k}=`)); return m ? m.split('=')[1] : d }
-const SIZES = arg('sizes', 'mh_6k,mh_32k,mh_64k,mh_262k').split(','), EX = Number(arg('examples', 3))
+const SIZES = arg('sizes', 'mh_6k,mh_32k,mh_64k,mh_262k').split(','), EX = Number(arg('examples', 3)), RUN = arg('run', 'noreader')
 const plans = JSON.parse(readFileSync(DATA + 'plans.json', 'utf8'))
 const clean = (s) => norm(String(s)).replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\b(a|an|the)\b/g, ' ').replace(/\s+/g, ' ').trim()
 const hit = (s, golds) => golds.some((g) => clean(s).includes(clean(g)))
@@ -34,7 +34,7 @@ for (const size of SIZES) {
     return null }
   const c = { n: 0, noPlan: 0, exact: 0, planPath: 0, planPathSameRels: 0, planPathOtherRels: 0, fromOtherEntity: 0, unreachable: 0 }
   const ex = { other: [], unreachable: [], entity: [] }
-  const preds = new Map(readFileSync(new URL('../runs/mab-test-noreader-none/predictions.jsonl', import.meta.url).pathname.replace('mab-test-noreader-none', size.endsWith('6k') ? 'mab-dev-noreader-none' : 'mab-test-noreader-none'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).map((p) => [p.qid, p]))
+  const preds = new Map(readFileSync(new URL(`../runs/mab-${size.endsWith('6k') ? 'dev' : 'test'}-${RUN}-none/predictions.jsonl`, import.meta.url).pathname, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).map((p) => [p.qid, p]))
   row.qa_ids.forEach((qid, i) => {
     const q = row.questions[i], golds = row.answers[i], plan = plans[q]; c.n++
     if (preds.get(qid)?.em) { c.exact++; return }

@@ -1,0 +1,72 @@
+2026-09-09T10:32:37.670Z   first network failure: network: AbortError
+2026-09-09T13:07:12.285Z   25/321 asked, 25 answered, 2.3s each
+2026-09-09T13:08:15.409Z   50/321 asked, 50 answered, 2.4s each
+2026-09-09T13:09:21.179Z   75/321 asked, 75 answered, 2.5s each
+2026-09-09T13:10:25.511Z   100/321 asked, 100 answered, 2.5s each
+2026-09-09T13:11:31.515Z   125/321 asked, 125 answered, 2.5s each
+2026-09-09T13:12:38.024Z   150/321 asked, 150 answered, 2.6s each
+2026-09-09T13:13:47.339Z   175/321 asked, 175 answered, 2.6s each
+2026-09-09T13:14:47.051Z   200/321 asked, 200 answered, 2.6s each
+2026-09-09T13:15:46.046Z   225/321 asked, 225 answered, 2.5s each
+2026-09-09T13:16:48.544Z   250/321 asked, 250 answered, 2.5s each
+2026-09-09T13:17:48.666Z   275/321 asked, 275 answered, 2.5s each
+2026-09-09T13:18:53.697Z   300/321 asked, 300 answered, 2.5s each
+2026-09-09T13:19:45.346Z pass 1: asked 321, answered 321, failed 0 in 810s
+2026-09-09T13:19:45.463Z done: 321/321 answered
+2026-09-09T13:29:42.898Z   25/92 asked, 25 answered, 2.4s each
+2026-09-09T13:30:42.141Z   50/92 asked, 50 answered, 2.4s each
+2026-09-09T13:31:40.952Z   75/92 asked, 75 answered, 2.4s each
+2026-09-09T13:32:21.546Z pass 1: asked 92, answered 92, failed 0 in 218s
+2026-09-09T13:32:21.703Z done: 413/92 answered
+2026-09-09T13:35:55.557Z   25/841 asked, 25 answered, 2.1s each
+2026-09-09T13:36:52.789Z   50/841 asked, 50 answered, 2.2s each
+2026-09-09T13:37:55.123Z   75/841 asked, 75 answered, 2.3s each
+2026-09-09T13:38:55.610Z   100/841 asked, 100 answered, 2.3s each
+2026-09-09T13:39:59.024Z   125/841 asked, 125 answered, 2.4s each
+2026-09-09T13:41:01.364Z   150/841 asked, 150 answered, 2.4s each
+2026-09-09T13:42:07.300Z   175/841 asked, 175 answered, 2.4s each
+2026-09-09T13:42:43.403Z   200/841 asked, 200 answered, 2.3s each
+2026-09-09T13:43:16.799Z   225/841 asked, 225 answered, 2.2s each
+2026-09-09T13:43:49.048Z   250/841 asked, 250 answered, 2.1s each
+2026-09-09T13:44:23.629Z   275/841 asked, 275 answered, 2.0s each
+2026-09-09T13:44:58.419Z   300/841 asked, 300 answered, 2.0s each
+2026-09-09T13:45:31.851Z   325/841 asked, 325 answered, 1.9s each
+2026-09-09T13:46:06.985Z   350/841 asked, 350 answered, 1.9s each
+2026-09-09T13:46:41.074Z   375/841 asked, 375 answered, 1.9s each
+2026-09-09T13:47:16.283Z   400/841 asked, 400 answered, 1.8s each
+2026-09-09T13:47:50.237Z   425/841 asked, 425 answered, 1.8s each
+2026-09-09T13:48:27.122Z   450/841 asked, 450 answered, 1.8s each
+2026-09-09T13:49:03.004Z   475/841 asked, 475 answered, 1.8s each
+2026-09-09T13:49:37.904Z   500/841 asked, 500 answered, 1.7s each
+2026-09-09T13:50:10.792Z   525/841 asked, 525 answered, 1.7s each
+2026-09-09T13:50:45.016Z   550/841 asked, 550 answered, 1.7s each
+2026-09-09T13:51:19.046Z   575/841 asked, 575 answered, 1.7s each
+2026-09-09T13:51:48.407Z   600/841 asked, 600 answered, 1.7s each
+2026-09-09T13:52:21.261Z   625/841 asked, 625 answered, 1.7s each
+2026-09-09T13:52:54.929Z   650/841 asked, 650 answered, 1.6s each
+2026-09-09T13:53:28.304Z   675/841 asked, 675 answered, 1.6s each
+2026-09-09T13:54:03.370Z   700/841 asked, 700 answered, 1.6s each
+2026-09-09T13:54:38.527Z   725/841 asked, 725 answered, 1.6s each
+2026-09-09T13:55:25.814Z   750/841 asked, 750 answered, 1.6s each
+2026-09-09T13:55:43.053Z   25/384 asked, 25 answered, 1.8s each
+2026-09-09T13:56:26.671Z   50/384 asked, 50 answered, 1.8s each
+2026-09-09T13:56:29.932Z   775/841 asked, 775 answered, 1.7s each
+2026-09-09T13:57:09.954Z   75/384 asked, 75 answered, 1.8s each
+2026-09-09T13:57:37.307Z   800/841 asked, 800 answered, 1.7s each
+2026-09-09T13:57:54.583Z   100/384 asked, 100 answered, 1.8s each
+2026-09-09T13:58:38.439Z   125/384 asked, 125 answered, 1.8s each
+2026-09-09T13:58:41.628Z   825/841 asked, 825 answered, 1.7s each
+2026-09-09T13:59:22.408Z   150/384 asked, 150 answered, 1.8s each
+2026-09-09T13:59:24.442Z pass 1: asked 841, answered 841, failed 0 in 1460s
+2026-09-09T13:59:24.901Z done: 1404/841 answered
+2026-09-09T13:59:51.106Z   175/384 asked, 175 answered, 1.7s each
+2026-09-09T14:00:16.767Z   200/384 asked, 200 answered, 1.6s each
+2026-09-09T14:00:42.910Z   225/384 asked, 225 answered, 1.5s each
+2026-09-09T14:01:09.954Z   250/384 asked, 250 answered, 1.5s each
+2026-09-09T14:01:37.212Z   275/384 asked, 275 answered, 1.5s each
+2026-09-09T14:02:04.498Z   300/384 asked, 300 answered, 1.4s each
+2026-09-09T14:02:32.281Z   325/384 asked, 325 answered, 1.4s each
+2026-09-09T14:02:59.846Z   350/384 asked, 350 answered, 1.4s each
+2026-09-09T14:03:27.419Z   375/384 asked, 375 answered, 1.4s each
+2026-09-09T14:03:37.204Z pass 1: asked 384, answered 384, failed 0 in 519s
+2026-09-09T14:03:37.745Z done: 1638/1536 answered
