@@ -25,7 +25,6 @@ package bot
 // same fact. There is no second identity to keep in step with the first.
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdh"
 	"crypto/ecdsa"
@@ -92,7 +91,7 @@ const (
 const (
 	pushMaxEndpoint = 2048
 	pushMaxKey      = 512
-	pushMaxLabel    = 80  // runes of a device pushLabel
+	pushMaxLabel    = 80  // runes of a device label
 	pushMaxAgents   = 128 // agent ids in a filter, and the length of each
 	wakeMaxText     = 16 << 10
 	pushMaxSubs     = 1000           // subscriptions one test may fan out to
@@ -104,19 +103,6 @@ const (
 
 // pushDetails is the closed set of detail levels a notification may carry.
 var pushDetails = map[string]bool{"private": true, "identified": true, "detailed": true}
-
-// notifyStore opens the org's own file. A browser subscription and a person's
-// notification defaults belong to the person and the tenant; a bot binding on
-// the connection that happens to be asking says nothing about where they live,
-// so this ignores it.
-func notifyStore(c *Call) (*Store, error) {
-	st, err := c.svc.State.stores.For(c.me.org, "")
-	if err != nil {
-		c.svc.Log.Error("open bot store", "org", c.me.org, "err", err)
-		return nil, Unavailable("the store could not be opened")
-	}
-	return st, nil
-}
 
 // ---- preferences ----
 //
@@ -173,7 +159,7 @@ type pushPrefs struct {
 // absent unless that browser said something about it, and absent inherits.
 type pushDevice struct {
 	Enabled bool        `json:"enabled"`
-	Label   string      `json:"pushLabel"`
+	Label   string      `json:"label"`
 	Cats    *pushCatsIn `json:"categories,omitempty"`
 	Detail  string      `json:"detailLevel,omitempty"`
 	Quiet   *pushQuiet  `json:"quietHours,omitempty"`
@@ -184,7 +170,7 @@ type pushDevice struct {
 // browser's overrides folded in, plus the two fields only a browser has.
 type pushEffective struct {
 	Enabled bool      `json:"enabled"`
-	Label   string    `json:"pushLabel"`
+	Label   string    `json:"label"`
 	Cats    pushCats  `json:"categories"`
 	Detail  string    `json:"detailLevel"`
 	Quiet   pushQuiet `json:"quietHours"`
@@ -205,7 +191,7 @@ func pushDefaults() pushPrefs {
 
 // pushResolve folds a browser's overrides onto a person's defaults. Categories
 // merge one key at a time; detail, quiet hours and the agent filter replace
-// whole. Enabled and the pushLabel have no default half — they exist only per
+// whole. Enabled and the label have no default half — they exist only per
 // browser.
 func pushResolve(user pushPrefs, dev pushDevice) pushEffective {
 	e := pushEffective{
@@ -262,7 +248,7 @@ type pushPrefsIn struct {
 // required; the rest are absent when unstated and stay absent when stored.
 type pushDeviceIn struct {
 	Enabled *bool       `json:"enabled"`
-	Label   *string     `json:"pushLabel"`
+	Label   *string     `json:"label"`
 	Cats    *pushCatsIn `json:"categories"`
 	Detail  *string     `json:"detailLevel"`
 	Quiet   *pushQuiet  `json:"quietHours"`
@@ -361,7 +347,7 @@ func pushCheckAgents(in *[]string) (*[]string, error) {
 }
 
 // pushLabel is what a person calls one of their browsers. Control and format
-// characters are dropped rather than shown: a pushLabel is read next to a
+// characters are dropped rather than shown: a label is read next to a
 // notification, and one that can hide or reorder its own text is a way to lie
 // about which browser is asking.
 func pushLabel(raw string) string {
@@ -441,10 +427,6 @@ func pushBound(c *Call, st *Store, endpoint string) (pushSub, error) {
 	return sub, nil
 }
 
-// pushWatch is the key a person's own connections listen on, so that a change
-// one browser makes reaches their other browsers and nobody else's.
-func pushWatch(user string) string { return "user:" + user }
-
 // ---- methods ----
 
 // vapidPublicKey answers with the public half of the gateway's signing key. A
@@ -500,7 +482,7 @@ func pushSubscribe(c *Call) (any, error) {
 		return nil, Invalid("an authenticated user is required")
 	}
 
-	st, err := notifyStore(c)
+	st, err := c.OrgStore()
 	if err != nil {
 		return nil, err
 	}
@@ -543,7 +525,7 @@ func pushUnsubscribe(c *Call) (any, error) {
 	if err := pushCheckEndpoint(p.Endpoint); err != nil {
 		return nil, err
 	}
-	st, err := notifyStore(c)
+	st, err := c.OrgStore()
 	if err != nil {
 		return nil, err
 	}
@@ -570,7 +552,7 @@ func pushPrefsGet(c *Call) (any, error) {
 	if err := pushCheckEndpoint(p.Endpoint); err != nil {
 		return nil, err
 	}
-	st, err := notifyStore(c)
+	st, err := c.OrgStore()
 	if err != nil {
 		return nil, err
 	}
@@ -582,9 +564,6 @@ func pushPrefsGet(c *Call) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	// From here on this connection hears when the person's defaults move,
-	// whichever of their browsers moved them.
-	c.Watch(pushWatch(c.User()))
 	return map[string]any{
 		"durableIdentity": c.User() != "",
 		"user":            user,
@@ -608,7 +587,7 @@ func pushPrefsSet(c *Call) (any, error) {
 	if err := pushCheckEndpoint(p.Endpoint); err != nil {
 		return nil, err
 	}
-	st, err := notifyStore(c)
+	st, err := c.OrgStore()
 	if err != nil {
 		return nil, err
 	}
@@ -621,7 +600,7 @@ func pushPrefsSet(c *Call) (any, error) {
 	switch p.Scope {
 	case "user":
 		var in pushPrefsIn
-		if err := pushClosed(p.Prefs, &in); err != nil {
+		if err := closed("preferences", p.Prefs, &in); err != nil {
 			return nil, err
 		}
 		if err := pushCheckQuiet(in.Quiet); err != nil {
@@ -648,11 +627,10 @@ func pushPrefsSet(c *Call) (any, error) {
 		if err := st.Put(c.Context(), prefDocs, c.User(), out); err != nil {
 			return nil, err
 		}
-		c.Watch(pushWatch(c.User()))
 		// The defaults are the person's and live in the org's own file, so
 		// every browser of theirs hears it — including one whose socket bound
 		// to a bot, which reads that same file.
-		PublishOrg(c.Org(), pushWatch(c.User()), "users.prefs.changed", map[string]any{
+		PublishUser(c.Org(), c.User(), "users.prefs.changed", map[string]any{
 			"profileId": c.User(),
 			"keys":      []string{prefsKey},
 		})
@@ -660,7 +638,7 @@ func pushPrefsSet(c *Call) (any, error) {
 
 	case "device":
 		var in pushDeviceIn
-		if err := pushClosed(p.Prefs, &in); err != nil {
+		if err := closed("preferences", p.Prefs, &in); err != nil {
 			return nil, err
 		}
 		if err := pushCheckQuiet(in.Quiet); err != nil {
@@ -670,7 +648,7 @@ func pushPrefsSet(c *Call) (any, error) {
 			return nil, err
 		}
 		if in.Enabled == nil || in.Label == nil {
-			return nil, Invalid("device preferences state enabled and pushLabel")
+			return nil, Invalid("device preferences state enabled and label")
 		}
 		agents, err := pushCheckAgents(in.Agents)
 		if err != nil {
@@ -730,7 +708,7 @@ func pushTest(c *Call) (any, error) {
 		body = "Web push test notification"
 	}
 
-	st, err := notifyStore(c)
+	st, err := c.OrgStore()
 	if err != nil {
 		return nil, err
 	}
@@ -858,10 +836,10 @@ func wake(c *Call) (any, error) {
 	if text == "" {
 		return map[string]bool{"ok": false}, nil
 	}
-	// A wakeSubagent session is a lane an agent opened for its own work. An
+	// A subagent session is a lane an agent opened for its own work. An
 	// operator wake belongs on the conversation, not inside one of its steps.
 	if wakeSubagent(session) {
-		return nil, Invalid("wake sessionKey cannot target a wakeSubagent session")
+		return nil, Invalid("wake sessionKey cannot target a subagent session")
 	}
 	// Two names for one target that disagree is a caller that has lost track of
 	// which one it meant. Rewriting one to match the other would pick for it.
@@ -869,7 +847,7 @@ func wake(c *Call) (any, error) {
 		return nil, Invalid("wake agentId contradicts the agent that owns sessionKey; pass a single canonical wake target")
 	}
 
-	st, err := notifyStore(c)
+	st, err := c.OrgStore()
 	if err != nil {
 		return nil, err
 	}
@@ -921,14 +899,16 @@ func wakeSplit(key string) (agent, rest string) {
 
 func wakeAgentOf(key string) string { agent, _ := wakeSplit(key); return agent }
 
-// wakeSubagent reports a session key that names a wakeSubagent lane, whether it says so
-// at the front or after the agent that owns it.
+// wakeSubagent reports a session key that names a subagent lane, whether it
+// says so at the front or after the agent that owns it. The trailing colon is
+// the boundary: a lane merely beginning with those letters is a lane of its own
+// (src/infra/state-migrations.session-store.ts:507).
 func wakeSubagent(key string) bool {
-	if strings.HasPrefix(strings.ToLower(key), "wakeSubagent:") {
+	if strings.HasPrefix(strings.ToLower(key), "subagent:") {
 		return true
 	}
 	_, rest := wakeSplit(key)
-	return strings.HasPrefix(strings.ToLower(rest), "wakeSubagent:")
+	return strings.HasPrefix(strings.ToLower(rest), "subagent:")
 }
 
 // ---- the gateway's signing key ----
@@ -1061,19 +1041,4 @@ func pushB64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
 func pushUnb64(s string) ([]byte, error) {
 	return base64.RawURLEncoding.DecodeString(strings.TrimRight(s, "="))
-}
-
-// pushClosed decodes a nested object and refuses a field it does not declare —
-// the same reading of the protocol's closed objects that Call.Bind applies to
-// the parameters themselves, applied one level down to the arm of a union.
-func pushClosed(raw []byte, v any) error {
-	if len(raw) == 0 {
-		return Invalid("preferences is required")
-	}
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.DisallowUnknownFields()
-	if err := d.Decode(v); err != nil {
-		return Invalid("preferences: %v", err)
-	}
-	return nil
 }

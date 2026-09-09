@@ -17,11 +17,11 @@ import (
 // before this method was reached.
 //
 // The client waits 750ms for a `connect.challenge` event before sending
-// connect (ui/src/api/gateway.ts:319, handshake mode "fallback"). This surface
-// sends no challenge. A challenge exists so a device can sign a server nonce,
-// and this surface verifies no device signature: identity is IAM's answer, and
-// a nonce nobody checks is a ritual. The cost is that first pause, once per
-// connection.
+// connect (ui/src/api/gateway.ts:319, handshake mode "fallback"). The socket
+// opens with one (door.go) — not for the browser, which connects either way,
+// but for the iOS and Android clients, which block on it unconditionally and
+// close the socket when none arrives. The nonce is not checked when it comes
+// back: identity is IAM's answer, so this is one frame and not a handshake.
 //
 // The `device` and `auth` blocks of ConnectParams are read and ignored for the
 // same reason.

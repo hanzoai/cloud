@@ -67,7 +67,6 @@ package bot
 
 import (
 	"errors"
-	"net/http"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -219,10 +218,9 @@ func resolve(s *cloud.Service[state], c *zip.Ctx) (caller, error) {
 	// IAM's. The bot is the client's until it is looked up in the org's own
 	// registry here, once, at the one place a binding is established.
 	if name != "" {
-		st, err := s.State.stores.For(org, "")
+		st, err := storeFor(s, org, "")
 		if err != nil {
-			s.Log.Error("open bot store", "org", org, "err", err)
-			return caller{}, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+			return caller{}, err
 		}
 		if _, err := readBot(c.Context(), st, name); err != nil {
 			return caller{}, zip.ErrForbidden("no such bot")
