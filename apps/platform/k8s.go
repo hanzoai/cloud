@@ -1528,6 +1528,11 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, im
 	// that joins them is composed FROM those tags (launchIndexBuild) once both have
 	// landed, which is also why a failed join leaves two working images behind
 	// instead of nothing.
+	//
+	// One admission, several Jobs: the ceiling counts BUILDS and a fan-out is one
+	// build asked for once. What it launches is still counted — countActiveBuilds
+	// selects the Jobs — so the next caller is admitted against what is really
+	// running rather than against how many times anyone asked.
 	for _, p := range platforms {
 		arch := nativeArch[p]
 		if _, err := k.launchBuild(ctx, org, buildJobName(buildID, arch), image, archTag(image, arch), buildCtx, cleanDockerfile, cleanRef, args, []string{p}, arch); err != nil {
