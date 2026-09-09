@@ -65,6 +65,7 @@ by local SQLite.
 | `/v1/base` | collections of JSON documents — the local store, and so also the local key/value and the local SQL |
 | `/v1/tasks` | durable queue with lease/ack |
 | `/v1/functions` | function registry and runner *(staged — see below)* |
+| `/v1/bot` | the bots that are running, and the protocol they speak |
 
 There is deliberately no `/v1/kv` and no `/v1/sql`. Base is already both: a
 document under a collection is the key/value store, and it is SQLite underneath.
@@ -72,6 +73,20 @@ Two more doors onto one room would be two more names to keep in agreement.
 
 `/v1/kms` is here too, serving from an embedded `luxfi/kms` — secrets belong in
 KMS locally exactly as they do in production, never in an env file.
+
+`/v1/bot` answers two questions on one path. Its verbs are the registry: which
+bots have announced themselves, where to reach each, and whether one is running,
+suspended or gone — a suspended bot hands back a token it needs to come back as
+itself, and the gateway holds that token without reading it. Upgrade the same
+path and it is a WebSocket speaking OpenClaw's gateway protocol, which is what
+lets their control UI run here unmodified. Asking to upgrade is a fact about the
+request, so one address serves both without a second name.
+
+The protocol answers a subset and says so: `hello-ok` carries `features.methods`,
+and their UI hides any surface whose method is absent. Advertising exactly what
+works is therefore the growth path rather than a compromise — a method that is
+merely stubbed should not be listed at all, because a hidden palette reads as a
+small server and an empty one reads as a broken one.
 
 Every operation is a **typed op**, which is why they need no separate
 integration work: one declaration projects into the OpenAPI document, the MCP

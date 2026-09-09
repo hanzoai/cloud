@@ -60,7 +60,7 @@ func Register(name string, need Scope, fn Func) {
 	surface.methods[name] = entry{need: need, fn: fn}
 }
 
-// Announce declares an event this surface may emit, so the handshake can list
+// Declare records an event this surface may emit, so the handshake can list
 // it. Declaring is separate from emitting because a client chooses what to
 // listen for from the list alone, before anything has happened.
 func Declare(events ...string) {
@@ -154,12 +154,37 @@ func (c *Call) Bind(v any) error {
 	return nil
 }
 
+// closed decodes a nested object of the protocol under the same reading Bind
+// gives a method's parameters, one level down — the arm of a union, an object
+// inside one. field names what is being read, so a refusal says where: a bare
+// `unknown field "b"` leaves a client to guess which of seven arms produced it.
+func closed(field string, raw []byte, v any) error {
+	if len(raw) == 0 {
+		return Invalid("%s is required", field)
+	}
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if err := d.Decode(v); err != nil {
+		return Invalid("%s: %v", field, err)
+	}
+	return nil
+}
+
 // Store opens the SQLite this call's state lives in: the bot's own file when
 // the call is bound to one, the org's otherwise.
-func (c *Call) Store() (*Store, error) {
-	st, err := c.svc.State.stores.For(c.me.org, c.me.bot)
+func (c *Call) Store() (*Store, error) { return c.open(c.me.bot) }
+
+// OrgStore opens the org's own file whatever bot the call is bound to. It is
+// for state that is the tenant's or the person's rather than one bot's — the
+// device roster, a browser's push subscription, a person's notification
+// defaults, the team's secret inventory. Which bot a connection happened to
+// bind to says nothing about where those live, so this ignores it.
+func (c *Call) OrgStore() (*Store, error) { return c.open("") }
+
+func (c *Call) open(bot string) (*Store, error) {
+	st, err := c.svc.State.stores.For(c.me.org, bot)
 	if err != nil {
-		c.svc.Log.Error("open bot store", "org", c.me.org, "bot", c.me.bot, "err", err)
+		c.svc.Log.Error("open bot store", "org", c.me.org, "bot", bot, "err", err)
 		return nil, Unavailable("the store could not be opened")
 	}
 	return st, nil

@@ -26,7 +26,7 @@ import (
 
 // A person's notification defaults follow them to every browser and are stored
 // in the org's own file: the bot a connection happens to be bound to says
-// nothing about where they live (notifyStore). So a change made in one browser
+// nothing about where they live (Call.OrgStore). So a change made in one browser
 // is news to every browser that person has open, whichever partition each one
 // bound to — and a change nobody hears about is a screen showing settings that
 // are no longer stored anywhere.
@@ -294,5 +294,112 @@ func TestPushDeliverReportsEachEndpointSeparately(t *testing.T) {
 	// pushTest drops that row, so the status has to survive as a status.
 	if results[2].Status != http.StatusGone {
 		t.Errorf("an abandoned subscription reported %d, want 410 so its row is dropped", results[2].Status)
+	}
+}
+
+// A person's own news is addressed to the person. Nothing a caller can name in
+// a request reaches it: a subscription key is a string any member of the org
+// may write down, and the keyspace is shared by every family that watches one.
+func TestPrefsChangedIsNotReachableByNamingAKey(t *testing.T) {
+	url := serve(t)
+	announceAt(t, url, "acme", "bot_shared1")
+	alice := dialAs(t, url, "acme", "alice@acme", "", false)
+	mallory := dialAs(t, url, "acme", "mallory@acme", "bot_shared1", false)
+
+	// Reading a board is how a connection says it is watching one, and the key
+	// it hands over is its own string. Here it is the one a person's defaults
+	// were addressed by.
+	if frame := reply(t, mallory, "1:m", "board.get",
+		`{"sessionKey":"user:alice@acme"}`); frame["ok"] != true {
+		t.Fatalf("board.get refused: %v", frame)
+	}
+
+	pushBrowser(t, alice, "1", "https://push.example.com/alice")
+	seen := listen(mallory)
+	frame := reply(t, alice, "2:a", "push.web.preferences.set",
+		`{"endpoint":"https://push.example.com/alice","scope":"user","preferences":{`+
+			`"categories":{"approvalRequested":true,"agentFinished":true,"agentQuestion":true,`+
+			`"humanMentioned":true,"scheduledTaskFailed":true,"backgroundTaskFailed":true},`+
+			`"detailLevel":"private",`+
+			`"quietHours":{"enabled":false,"startMinute":0,"endMinute":0,"timeZone":"UTC"},`+
+			`"agentIds":[]}}`)
+	if frame["ok"] != true {
+		t.Fatalf("push.web.preferences.set refused: %v", frame)
+	}
+
+	// A marker every connection of the org hears, raised after the change, so
+	// what did not arrive before it was not sent rather than not yet sent.
+	PublishOrg("acme", "", "probe.moved", map[string]any{"key": "marker"})
+	if got := until(t, seen, "probe.moved"); slices.Contains(got, "users.prefs.changed") {
+		t.Errorf("another member read one person's news by naming a key: %v", got)
+	}
+}
+
+// A browser names itself. The name is `label` in WebPushDevicePreferencesSchema
+// (packages/gateway-protocol/src/schema/push.ts:79), so the arm is written
+// against that spelling — and because the arm is closed, a spelling the schema
+// does not declare refuses the whole write rather than dropping the name.
+func TestDevicePreferencesRoundTripTheNameABrowserSends(t *testing.T) {
+	url := serve(t)
+	ws := dialAs(t, url, "acme", "op@acme", "", false)
+	pushBrowser(t, ws, "1", "https://push.example.com/mac")
+
+	set := func(id, prefs string) map[string]any {
+		return reply(t, ws, id, "push.web.preferences.set",
+			`{"endpoint":"https://push.example.com/mac","scope":"device","preferences":`+prefs+`}`)
+	}
+
+	if frame := set("2:set", `{"enabled":true,"label":"MacBook"}`); frame["ok"] != true {
+		t.Fatalf("the schema's own device payload was refused: %v", frame)
+	}
+	if frame := set("3:set", `{"enabled":true,"pushLabel":"MacBook"}`); frame["ok"] != false {
+		t.Errorf("a field no schema declares was accepted: %v", frame)
+	}
+
+	frame := reply(t, ws, "4:get", "push.web.preferences.get",
+		`{"endpoint":"https://push.example.com/mac"}`)
+	if frame["ok"] != true {
+		t.Fatalf("push.web.preferences.get refused: %v", frame)
+	}
+	got, _ := frame["payload"].(map[string]any)
+	for _, layer := range []string{"device", "effective"} {
+		l, _ := got[layer].(map[string]any)
+		if l["label"] != "MacBook" {
+			t.Errorf("%s reads back %v; the UI binds preferences.label", layer, l)
+		}
+	}
+}
+
+// ---- wake ----
+
+// A wake is for the conversation. A subagent lane is a step inside one, opened
+// by an agent for its own work, and an operator's line of text does not belong
+// in the middle of it — whether the key says so at the front or after the agent
+// that owns the lane.
+func TestWakeRefusesASubagentLane(t *testing.T) {
+	app := mount(t)
+	me := who{org: "acme"}
+	for i, key := range []string{
+		"subagent:task-abc",
+		"SUBAGENT:task-abc",
+		"agent:main:subagent:demo",
+		"agent:main:SubAgent:demo",
+	} {
+		id := strconv.Itoa(i) + ":a"
+		_, frame := ask(t, app, me, id, "wake",
+			`{"mode":"now","text":"hello","sessionKey":"`+key+`"}`)
+		if frame["ok"] != false {
+			t.Errorf("wake on %q was accepted: %v", key, frame)
+			continue
+		}
+		if code := wrong(t, frame)["code"]; code != "INVALID_REQUEST" {
+			t.Errorf("wake on %q refused with %v, want INVALID_REQUEST", key, code)
+		}
+	}
+	// A lane that merely begins with those letters is a lane of its own. The
+	// guard reads a prefix, so the boundary is what keeps it from over-reaching.
+	if _, frame := ask(t, app, me, "9:a", "wake",
+		`{"mode":"now","text":"hello","sessionKey":"agent:main:subagentry"}`); frame["ok"] != true {
+		t.Errorf("wake on an ordinary lane was refused: %v", frame)
 	}
 }

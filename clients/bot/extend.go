@@ -28,6 +28,7 @@ package bot
 // that surface against what the org already accepted. The rest follows it.
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -36,6 +37,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/hanzoai/cloud"
 )
 
 func init() {
@@ -141,6 +144,12 @@ func reloadUi(c *Call) (any, error) {
 const redactedMark = "__OPENCLAW_REDACTED__"
 
 const (
+	// skillDocs holds one document per skill: its settings, and the names of
+	// the credentials sealed for it. It is the only record of which
+	// coordinates in KMS a bot has written, so nothing that clears them can
+	// run after it is gone.
+	skillDocs = "skills"
+
 	skillEnvMax   = 64   // entries in one env map
 	skillValueMax = 4096 // bytes of one credential or env value
 )
@@ -262,11 +271,11 @@ func updateSkill(c *Call) (any, error) {
 
 	var s skillSettings
 	if err := st.Do(c.Context(), func(st *Store) error {
-		if err := st.Get(c.Context(), "skills", p.SkillKey, &s); err != nil && !errors.Is(err, ErrNoDoc) {
+		if err := st.Get(c.Context(), skillDocs, p.SkillKey, &s); err != nil && !errors.Is(err, ErrNoDoc) {
 			return Unavailable("the skill's settings could not be read")
 		}
 		edit.apply(&s)
-		if err := st.Put(c.Context(), "skills", p.SkillKey, s); err != nil {
+		if err := st.Put(c.Context(), skillDocs, p.SkillKey, s); err != nil {
 			return Unavailable("the skill's settings could not be written")
 		}
 		return nil
@@ -356,6 +365,50 @@ func seal(c *Call, key, field, value string) error {
 	if err := c.svc.KMS.PutSecret(c.Context(), ref, []byte(value)); err != nil {
 		c.Log().Error("seal skill secret", "org", c.Org(), "skill", key, "err", err)
 		return Unavailable("the credential could not be sealed")
+	}
+	return nil
+}
+
+// dropSecrets clears every credential a bot's skills sealed: an empty value
+// over each coordinate, which is what clearing one means here (see seal).
+//
+// The settings are the only record of which coordinates were written — KMS
+// answers a coordinate and does not enumerate one — so this runs while the file
+// naming them still exists. Afterwards there is nothing left to read them from,
+// and ciphertext nobody can name is ciphertext nobody can clear.
+//
+// A deployment with no KMS sealed nothing, so there is nothing to clear.
+func dropSecrets(ctx context.Context, s *cloud.Service[state], org, bot string, st *Store) error {
+	if s.KMS == nil {
+		return nil
+	}
+	docs, err := st.List(ctx, skillDocs, 0, 0)
+	if err != nil {
+		return err
+	}
+	for _, doc := range docs {
+		var held skillSettings
+		if err := json.Unmarshal(doc.Doc, &held); err != nil {
+			s.Log.Error("read skill settings", "org", org, "bot", bot, "skill", doc.ID, "err", err)
+			return Unavailable("the skill's settings could not be read")
+		}
+		fields := make([]string, 0, len(held.Sealed)+1)
+		if held.Key {
+			fields = append(fields, "apiKey")
+		}
+		for _, name := range held.Sealed {
+			fields = append(fields, "env/"+name)
+		}
+		for _, field := range fields {
+			ref, err := vaultRef(org, bot, "skills/"+doc.ID+"/"+field)
+			if err != nil {
+				return err
+			}
+			if err := s.KMS.PutSecret(ctx, ref, nil); err != nil {
+				s.Log.Error("clear skill secret", "org", org, "bot", bot, "skill", doc.ID, "err", err)
+				return Unavailable("the credential could not be cleared")
+			}
+		}
 	}
 	return nil
 }
