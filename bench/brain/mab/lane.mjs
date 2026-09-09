@@ -20,6 +20,10 @@ const SPLIT = arg('split', 'dev'), ROWS = arg('rows', 'noreader').split(','), RE
 const ROOT = new URL('../', import.meta.url).pathname
 const PROMPT = readFileSync(ROOT + 'prompts/reader-mab.txt', 'utf8').trim()
 const plans = JSON.parse(readFileSync(DATA + 'plans.json', 'utf8'))
+// every plan set on disk (plans.json first, then plans-<tag>.json): the search tries each plan a question has and keeps the best-scoring path
+import { readdirSync } from 'node:fs'
+const PLANSETS = ['plans.json', ...readdirSync(DATA).filter((f) => /^plans-.+\.json$/.test(f)).sort()].map((f) => ({ name: f === 'plans.json' ? 'default' : f.replace(/^plans-|\.json$/g, ''), plans: JSON.parse(readFileSync(DATA + f, 'utf8')) }))
+const plansFor = (q) => { const seen = new Set(), out = []; for (const set of PLANSETS) { const p = set.plans[q]; if (!p) continue; const k = JSON.stringify([p.entity, p.chain]); if (seen.has(k)) continue; seen.add(k); out.push({ ...p, set: set.name }) } return out }
 const sha = (s) => createHash('sha256').update(s).digest('hex')
 
 // ── readers: one call shape, two hosts. The key is never printed.
@@ -119,7 +123,12 @@ const ROW = {
   resolver:  async (ix, q, qv, plan, find) => { if (!plan) return { facts: [] }; const r = resolve(ix, find, plan, { timeline: true, fallback: false }); return { facts: bySerial(r.evidence), trace: r.trace, resolved: r.complete ? r.answer : null } },
   full:      async (ix, q, qv, plan, find) => { if (!plan) return { facts: ix.dense(qv, K).map(([i]) => ix.facts[i]) }; const r = resolve(ix, find, plan, { timeline: true, fallback: true })
     const facts = r.complete ? r.evidence : [...r.evidence, ...ix.dense(qv, K).map(([i]) => ix.facts[i]).filter((f) => f.current)]; return { facts: bySerial(facts), trace: r.trace, resolved: r.complete ? r.answer : null } },
-  beam:      async (ix, q, qv, plan, find) => { if (!plan) return { facts: [], direct: '' }; const r = beamResolve(ix, find, plan, q); return { facts: bySerial(r.evidence), trace: r.trace, direct: r.answer ?? '' } },
+  beam:      async (ix, q, qv, plan, find) => { const cands = plansFor(q); if (!cands.length) return { facts: [], direct: '' }
+    // every plan is executed; the record keeps each one's answer and score, so best-of-N and selected-of-N can be told apart afterwards
+    let best = null; const all = []
+    for (const p of cands) { const r = beamResolve(ix, find, p, q); all.push({ set: p.set, chain: p.chain, entity: p.entity, answer: r.answer, score: r.answer == null ? null : r.score }); if (r.answer != null && (!best || r.score > best.score)) best = { ...r, plan: p } }
+    if (!best) { const r = beamResolve(ix, find, cands[0], q); return { facts: bySerial(r.evidence), trace: [{ step: 'plans', candidates: all, chose: null }, ...r.trace], direct: '' } }
+    return { facts: bySerial(best.evidence), trace: [{ step: 'plans', candidates: all, chose: best.plan.set, chain: best.plan.chain, score: best.score }, ...best.trace], direct: best.answer } },
   noreader:  async (ix, q, qv, plan, find) => { if (!plan) return { facts: [], direct: '' }; const r = resolve(ix, find, plan, { timeline: true, fallback: true }); return { facts: bySerial(r.evidence), trace: r.trace, direct: r.complete ? r.answer : '' } },
 }
 
