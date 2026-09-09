@@ -1,0 +1,9 @@
+{
+ "commit": "885a21a63c32",
+ "embedding": "zenlm/zen-embedding-0.6b",
+ "facts": "locomo",
+ "k": 20,
+ "split": "all",
+ "store": "688cea6b889e484c",
+ "when": "2026-09-09T10:03:36.864Z"
+}

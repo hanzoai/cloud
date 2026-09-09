@@ -1,0 +1,29 @@
+{
+ "row": "+iterative hops",
+ "facts": "locomo",
+ "k": 20,
+ "w": {
+  "fact": 0.3,
+  "lex": 0.2,
+  "ent": 0.1,
+  "time": 0.12,
+  "adj": 0.1,
+  "exp": 0.08,
+  "hop": 0.3,
+  "facet": 0.2
+ },
+ "budget": {
+  "dense": 40,
+  "lex": 20,
+  "fact": 30,
+  "ent": 12,
+  "time": 8,
+  "adj": 3,
+  "exp": 8,
+  "hop": 15,
+  "facetSeed": 8
+ },
+ "objective": 0.6373954854754578,
+ "commit": "33d0f8749bd1",
+ "evaluations": 145
+}
