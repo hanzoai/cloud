@@ -1,0 +1,64 @@
+You compile a question into a lookup plan over a fact store. The store holds facts of these relations, each with the sentence template it was written in (S = subject, O = object):
+
+capital: "The capital of S is O."
+head_of_gov: "The name of the current head of the S government is O."
+head_of_state: "The name of the current head of state in S is O."
+official_lang: "The official language of S is O."
+author: "The author of S is O."
+chairperson: "The chairperson of S is O."
+director: "The director of S is O."   (director/manager of an organisation)
+ceo: "The chief executive officer of S is O."
+headquarters: "The headquarters of S is located in the city of O."
+educated_at: "The university where S was educated is O."
+employer: "S is employed by O."
+producer: "The company that produced S is O."   (manufacturer/producer of a product)
+broadcaster: "The original broadcaster of S is O."
+original_lang: "S was written in the language of O." / "The original language of S is O."
+founding_place: "S was founded in the city of O."
+genre: "The type of music that S plays is O."
+child: "S's child is O."
+occupation: "S works in the field of O."
+head_coach: "The head coach of S is O."
+office: "The <office name> is O."   (S is the whole office name, e.g. "Prime Minister of Sweden", "Illinois Attorney General")
+citizenship: "S is a citizen of O."
+continent: "S is located in the continent of O."
+spouse: "S is married to O."   (symmetric)
+performer: "S was performed by O."
+country_origin: "S was created in the country of O."   (country of origin of a sport, band, product, work)
+death_place: "S died in the city of O."
+birth_place: "S was born in the city of O."
+language: "S speaks the language of O."   (languages a person speaks, writes or signs)
+position: "S plays the position of O."
+work_location: "S worked in the city of O."
+founder: "S was founded by O."
+sport: "S is associated with the sport of O."   (the sport of a player, a team, a position, a competition)
+religion: "S is affiliated with the religion of O."
+notable_work: "S is famous for O."
+creator: "S was created by O."   (creator of a character or work)
+developer: "S was developed by O."
+
+A plan is the base entity named in the question, then the chain of relations to apply in order: the first relation is applied to the base entity, the next to that result, and so on. The last relation's object is the answer.
+
+Examples:
+Q: What is the capital of Japan?
+{"entity":"Japan","chain":["capital"]}
+Q: What is the country of citizenship of the spouse of the author of Our Mutual Friend?
+{"entity":"Our Mutual Friend","chain":["author","spouse","citizenship"]}
+Q: Which country is the birthplace of the sport associated with Steve Sax?
+{"entity":"Steve Sax","chain":["sport","country_origin"]}
+Q: Which city serves as the capital of the country of origin for the sport of the Tunisia national football team?
+{"entity":"Tunisia national football team","chain":["sport","country_origin","capital"]}
+Q: In what location did the person who founded Chanel pass away?
+{"entity":"Chanel","chain":["founder","death_place"]}
+Q: Who holds the position of chairperson in the organization where Joseph Story was employed?
+{"entity":"Joseph Story","chain":["employer","chairperson"]}
+Q: What is the name of the current head of the Italy government?
+{"entity":"Italy","chain":["head_of_gov"]}
+Q: In which languages can the author of "The Witcher" write, speak, or sign?
+{"entity":"The Witcher","chain":["author","language"]}
+Q: Who is the Prime Minister of Sweden?
+{"entity":"Prime Minister of Sweden","chain":["office"]}
+Q: What was the sport that Hines Ward competed in professionally?
+{"entity":"Hines Ward","chain":["sport"]}
+
+Reply with the JSON object only. Copy the entity exactly as the question writes it, without surrounding quotes. Use only relation names from the list.

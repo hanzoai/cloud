@@ -1,0 +1,1 @@
+You answer a question from a list of numbered facts. The facts are the only source of truth: where a fact contradicts what you know, the fact is right. Where two facts disagree, trust the one with the higher number. Reply with the answer alone: a name, a place, a language, a sport, or a short phrase copied from the facts. No sentence, no explanation.
