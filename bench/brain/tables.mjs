@@ -75,15 +75,23 @@ if (units && mini) {
   write('conv.tex', body, 'LoCoMo-Conv data is unreleased (github.com/MiuLab/LoCoMo-Conv answers 404); this is the paper\'s protocol on the original LoCoMo questions the rewrites came from')
 }
 
-// ── answers, MAB, coverage: when their runs carry metrics
-const answers = runs.filter((d) => /^locomo-(all|test)-/.test(d) && run(d))
+// ── answers: one row per (reader, policy) with a summary block; p50 is the reader's own latency
+const meta = (name) => { const p = new URL(`./runs/${name}/meta.json`, here); return existsSync(p) ? read(p) : {} }
+const POLICY = { single: 'cosine @k', cer: 'first cut @k', context: 'engine @k', oracle: 'oracle gold' }
+const ORDER = ['single', 'cer', 'context', 'oracle']
+const answers = runs.filter((d) => /^locomo-(all|test|dev)-(single|cer|context|oracle)-k\d+-/.test(d)).map((d) => ({ d, m: run(d), meta: meta(d) })).filter((x) => x.m?.summary?.all?.f1)
 if (answers.length) {
-  const rows = answers.map((d) => { const m = run(d); const s = m.summary?.all ?? m.by_category?.all ?? m.all ?? m; return `${esc(m.policy ?? d)} & ${esc(m.reader ?? '')} & ${pct(mean(s.f1))} & ${pct(mean(s.em))} & ${s.tokens?.toFixed?.(0) ?? m.context_tokens_per_q?.toFixed?.(0) ?? '\\ldots'} & ${m.retrieval_ms_p50?.toFixed?.(2) ?? '\\ldots'} & [${pct(s.f1?.lo)}, ${pct(s.f1?.hi)}] \\\\` })
-  write('locomo-answers.tex', `\\begin{tabular}{llrrrrr}\n\\toprule\nContext & Reader & F1 & EM & tokens/q & p50 ms & 95\\% CI (F1) \\\\\n\\midrule\n${rows.join('\n')}\n\\bottomrule\n\\end{tabular}\n`, 'runs/locomo-*')
+  answers.sort((a, b) => (a.meta.reader ?? '').localeCompare(b.meta.reader ?? '') || ORDER.indexOf(a.meta.policy) - ORDER.indexOf(b.meta.policy))
+  const rows = answers.map(({ d, m, meta: t }) => { const s = m.summary.all; const cats = String(t.cats ?? ''); return `${POLICY[t.policy] ?? t.policy}${t.policy === 'oracle' ? '' : t.k ? `=${t.k}` : ''} & ${esc(t.reader ?? '')} & ${cats.replace(/,/g, '') === '1' ? 'multi-hop' : 'all four'} & ${s.n} & ${pct(s.f1.mean)} & ${pct(s.em.mean)} & ${pct(s.exact)} & ${pct(s.answered)} & ${s.tokens?.toFixed(0)} & ${(s.p50_ms / 1000).toFixed(1)} & [${pct(s.f1.lo)}, ${pct(s.f1.hi)}] \\\\` })
+  write('locomo-answers.tex', `\\begin{tabular}{lllrrrrrrrr}\n\\toprule\nContext & Reader & Questions & n & F1 & EM & EXACT & ANSWERED & tokens/q & reader p50 s & 95\\% CI (F1) \\\\\n\\midrule\n${rows.join('\n')}\n\\bottomrule\n\\end{tabular}\n`, 'runs/locomo-*; EXACT = a gold turn in the context, ANSWERED = F1 ≥ 0.5 or exact; all ten conversations')
 }
-const mab = runs.filter((d) => /^mab-(test|dev)-/.test(d) && run(d))
+// ── MemoryAgentBench: one row per (configuration, reader) across sizes; dev (6k) and test merged into one line
+const mab = runs.filter((d) => /^mab-(test|dev)-/.test(d)).map((d) => run(d)).filter(Boolean)
 if (mab.length) {
-  const sizes = ['6k', '32k', '64k', '262k']
-  const rows = mab.map((d) => { const m = run(d); const b = m.by_size ?? {}; const cell = (k) => b[k] ? pct(b[k].substring_em) : '\\ldots'; return `${esc(m.row ?? d)} (${esc(m.reader ?? '')}) & ${sizes.map((z) => cell('sh_' + z)).join(' & ')} & ${sizes.map((z) => cell('mh_' + z)).join(' & ')} \\\\` })
-  write('mab-fc.tex', `\\begin{tabular}{lrrrrrrrr}\n\\toprule\n & \\multicolumn{4}{c}{FC-SH} & \\multicolumn{4}{c}{FC-MH} \\\\\n\\cmidrule(lr){2-5}\\cmidrule(lr){6-9}\nConfiguration (reader) & 6k & 32k & 64k & 262k & 6k & 32k & 64k & 262k \\\\\n\\midrule\n${rows.join('\n')}\n\\bottomrule\n\\end{tabular}\n`, 'runs/mab-*; substring exact match; 6k is dev')
+  const byKey = {}
+  for (const m of mab) { const key = `${m.row}|${m.reader}`; const b = byKey[key] ??= { row: m.row, reader: m.reader, sizes: {} }; for (const [k, v] of Object.entries(m.by_size ?? {})) if (v.n >= 50) b.sizes[k] = v }
+  const sizes = ['6k', '32k', '64k', '262k']; const cell = (b, k) => b.sizes[k] ? pct(b.sizes[k].substring_em) : '\\ldots'
+  const pooled = (b, kind) => { const xs = sizes.map((z) => b.sizes[`${kind}_${z}`]).filter(Boolean); return xs.length === 4 ? pct(xs.reduce((a, v) => a + v.substring_em, 0) / 4) : '\\ldots' }
+  const rows = Object.values(byKey).map((b) => `${esc(b.row)} (${esc(b.reader)}) & ${sizes.map((z) => cell(b, 'sh_' + z)).join(' & ')} & ${pooled(b, 'sh')} & ${sizes.map((z) => cell(b, 'mh_' + z)).join(' & ')} & ${pooled(b, 'mh')} \\\\`)
+  write('mab-fc.tex', `\\begin{tabular}{lrrrrrrrrrr}\n\\toprule\n & \\multicolumn{5}{c}{FC-SH} & \\multicolumn{5}{c}{FC-MH} \\\\\n\\cmidrule(lr){2-6}\\cmidrule(lr){7-11}\nConfiguration (reader) & 6k & 32k & 64k & 262k & pooled & 6k & 32k & 64k & 262k & pooled \\\\\n\\midrule\n${rows.join('\n')}\n\\midrule\n\\multicolumn{11}{l}{CAR (arXiv 2606.01435), pooled 6k--262k: 78.0 / 30.2 with gpt-4o-mini, 94.8 / 51.5 with gpt-4o; at 262k: 82 / 27 and 93 / 41} \\\\\n\\bottomrule\n\\end{tabular}\n`, 'runs/mab-*; substring exact match; 6k is the dev split, the rest test; pooled = mean of the four sizes as CAR reports')
 }

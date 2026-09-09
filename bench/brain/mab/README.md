@@ -9,7 +9,7 @@ replaces an earlier one, and nothing marks the update. Metric:
     node parse.mjs                       # extract typed facts, report coverage and update chains
     node index.mjs                       # dense (zen-embedding) + BM25 + entity + supersession indexes, cached
     node compile.mjs --model=...         # question → (entity, relation chain), once per question
-    node run.mjs --split=dev --rows=noreader,resolver,full,... --reader=gemma4:31b
+    node lane.mjs --split=dev --rows=noreader,resolver,full,... --reader=gemma4:31b
     node table.mjs                       # the table from runs/mab-*
 
 Dev = the two 6k haystacks; test = 32k, 64k, 262k. Every row hands the same
@@ -31,4 +31,15 @@ facts reach it and in what order.
 The write side is `parse.mjs`: every line becomes {serial, subject, relation,
 object}, and the supersession chain is keyed by (subject, relation). The read
 side is `compile.mjs` (query understanding, one model call per question,
-independent of any haystack) and `run.mjs` (retrieve, resolve, read).
+independent of any haystack) and `lane.mjs` (retrieve, resolve, read).
+
+## Reference numbers (verified from the CAR paper, arXiv 2606.01435)
+
+CAR pools its headline over the 6K–262K haystacks: **78.0 SH / 30.2 MH** with
+gpt-4o-mini, **94.8 / 51.5** with gpt-4o. At 262K alone the same pipelines
+score 82 / 27 (4o-mini) and 93 / 41 (4o). Baselines at 262K: HippoRAG-v2 54 / 5,
+gpt-4o whole-context 60 / 5, BM25 48 / 3, Cognee and MemGPT 28 / 3, Mem0 18 / 2,
+Zep 7 / 3. Pith claims 68.0 EM on MH 262K on a vendor page, not peer-reviewed.
+Naive's 91 / 57 is published without a protocol. `table.mjs` prints both the
+per-size cells and the pooled mean so either comparison can be made, and names
+the reader on every row; a row with a different reader is a different table.

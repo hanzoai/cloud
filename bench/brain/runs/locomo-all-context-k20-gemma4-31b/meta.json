@@ -1,0 +1,27 @@
+{
+ "name": "locomo-all-context-k20-gemma4-31b",
+ "benchmark": "locomo",
+ "policy": "context",
+ "k": 20,
+ "reader": "gemma4:31b",
+ "api": "127.0.0.1:11434",
+ "cats": [
+  1
+ ],
+ "workers": 2,
+ "prompt": "prompts/reader-locomo.txt",
+ "prompt_sha256": "afa0a591ae62c574",
+ "dataset_sha256": "79fa87e90f040813",
+ "store_sha256": "688cea6b889e484c",
+ "facts_sha256": "cc680d252a3538b9",
+ "commit": "ddc076f5dd0506ce50428416c336e45c4a7ada73",
+ "temperature": 0,
+ "max_tokens": 64,
+ "questions": 282,
+ "started": "2026-09-09T10:01:09.280Z",
+ "finished": "2026-09-09T10:44:25.089Z",
+ "wall_seconds": 1620,
+ "answered": 282,
+ "tokens_per_question": 971,
+ "reader_tokens": 402503
+}
