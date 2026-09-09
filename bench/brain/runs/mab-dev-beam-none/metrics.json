@@ -1,0 +1,33 @@
+{
+ "row": "beam",
+ "split": "dev",
+ "reader": "none",
+ "k": 10,
+ "prompt_sha": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
+ "commit": "12468828cf",
+ "n": 196,
+ "by_size": {
+  "mh_6k": {
+   "n": 100,
+   "substring_em": 0.82,
+   "ci95": [
+    0.73,
+    0.88
+   ]
+  },
+  "sh_6k": {
+   "n": 100,
+   "substring_em": 0.96,
+   "ci95": [
+    0.92,
+    0.99
+   ]
+  }
+ },
+ "facts_per_q": 1.6,
+ "retrieval_ms_p50": 0.128,
+ "retrieval_ms_p95": 0.313,
+ "reader_calls": 0,
+ "context_tokens_per_q": 0,
+ "wall_s": 0
+}

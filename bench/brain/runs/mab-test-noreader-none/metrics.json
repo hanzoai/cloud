@@ -1,0 +1,65 @@
+{
+ "row": "noreader",
+ "split": "test",
+ "reader": "none",
+ "k": 10,
+ "prompt_sha": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
+ "commit": "12468828cf",
+ "n": 589,
+ "by_size": {
+  "mh_32k": {
+   "n": 100,
+   "substring_em": 0.59,
+   "ci95": [
+    0.5,
+    0.68
+   ]
+  },
+  "mh_64k": {
+   "n": 100,
+   "substring_em": 0.59,
+   "ci95": [
+    0.49,
+    0.68
+   ]
+  },
+  "mh_262k": {
+   "n": 100,
+   "substring_em": 0.33,
+   "ci95": [
+    0.25,
+    0.42
+   ]
+  },
+  "sh_32k": {
+   "n": 100,
+   "substring_em": 0.97,
+   "ci95": [
+    0.94,
+    1
+   ]
+  },
+  "sh_64k": {
+   "n": 100,
+   "substring_em": 0.95,
+   "ci95": [
+    0.9,
+    0.99
+   ]
+  },
+  "sh_262k": {
+   "n": 100,
+   "substring_em": 0.94,
+   "ci95": [
+    0.89,
+    0.98
+   ]
+  }
+ },
+ "facts_per_q": 1.44,
+ "retrieval_ms_p50": 0.087,
+ "retrieval_ms_p95": 0.141,
+ "reader_calls": 0,
+ "context_tokens_per_q": 0,
+ "wall_s": 0
+}

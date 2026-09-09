@@ -12,8 +12,10 @@ import { createHash } from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { load, norm, DATA } from './parse.mjs'
 import { build, embed, dot } from './index.mjs'
+import { beamResolve } from './beam.mjs'
 
 const arg = (k, d) => { const m = process.argv.find((a) => a.startsWith(`--${k}=`)); return m ? m.split('=')[1] : d }
+const RESCORE = process.argv.includes('--rescore')
 const SPLIT = arg('split', 'dev'), ROWS = arg('rows', 'noreader').split(','), READER = arg('reader', 'gemma4:31b'), K = Number(arg('k', 10)), WORKERS = Number(arg('workers', READER.startsWith('gemma') ? 2 : 3))
 const ROOT = new URL('../', import.meta.url).pathname
 const PROMPT = readFileSync(ROOT + 'prompts/reader-mab.txt', 'utf8').trim()
@@ -117,6 +119,7 @@ const ROW = {
   resolver:  async (ix, q, qv, plan, find) => { if (!plan) return { facts: [] }; const r = resolve(ix, find, plan, { timeline: true, fallback: false }); return { facts: bySerial(r.evidence), trace: r.trace, resolved: r.complete ? r.answer : null } },
   full:      async (ix, q, qv, plan, find) => { if (!plan) return { facts: ix.dense(qv, K).map(([i]) => ix.facts[i]) }; const r = resolve(ix, find, plan, { timeline: true, fallback: true })
     const facts = r.complete ? r.evidence : [...r.evidence, ...ix.dense(qv, K).map(([i]) => ix.facts[i]).filter((f) => f.current)]; return { facts: bySerial(facts), trace: r.trace, resolved: r.complete ? r.answer : null } },
+  beam:      async (ix, q, qv, plan, find) => { if (!plan) return { facts: [], direct: '' }; const r = beamResolve(ix, find, plan, q); return { facts: bySerial(r.evidence), trace: r.trace, direct: r.answer ?? '' } },
   noreader:  async (ix, q, qv, plan, find) => { if (!plan) return { facts: [], direct: '' }; const r = resolve(ix, find, plan, { timeline: true, fallback: true }); return { facts: bySerial(r.evidence), trace: r.trace, direct: r.complete ? r.answer : '' } },
 }
 
@@ -125,11 +128,11 @@ const rows = load().filter((r) => (SPLIT === 'dev' ? r.id.endsWith('_6k') : !r.i
 const commit = execSync('git rev-parse --short HEAD', { cwd: ROOT }).toString().trim()
 const ixCache = new Map()
 for (const rowName of ROWS) {
-  const dir = ROOT + `runs/mab-${SPLIT}-${rowName}-${rowName === 'noreader' ? 'none' : READER.replace(/[^\w.-]/g, '_')}/`; mkdirSync(dir, { recursive: true })
+  const dir = ROOT + `runs/mab-${SPLIT}-${rowName}-${['noreader', 'beam'].includes(rowName) ? 'none' : READER.replace(/[^\w.-]/g, '_')}/`; mkdirSync(dir, { recursive: true })
   const predFile = dir + 'predictions.jsonl', traceFile = dir + 'traces.jsonl'
   const have = new Set(existsSync(predFile) ? readFileSync(predFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l).qid) : [])
   const per = {}, all = [], t0 = Date.now(); let calls = 0, tokens = 0
-  for (const r of rows) {
+  for (const r of rows) { if (RESCORE) break
     const ix = ixCache.get(r.context) ?? (ixCache.set(r.context, await build(r.context)), ixCache.get(r.context)); const find = finder(ix)
     const qv = await embed(r.questions); const items = r.questions.map((q, i) => ({ qid: r.qa_ids[i], q, qv: qv[i], gold: r.answers[i], size: r.id.replace('factconsolidation_', '') }))
     let n = 0
@@ -145,8 +148,11 @@ for (const rowName of ROWS) {
   }
   saveCache()
   const preds = readFileSync(predFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
-  for (const p of preds) (per[p.size] ??= []).push(p.em)
-  const metrics = { row: rowName, split: SPLIT, reader: rowName === 'noreader' ? 'none' : READER, k: K, prompt_sha: sha(PROMPT), commit, n: preds.length, by_size: Object.fromEntries(Object.entries(per).map(([s, xs]) => [s, { n: xs.length, substring_em: +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(4), ci95: bootstrap(xs).map((x) => +x.toFixed(4)) }])),
+  // The denominator is the benchmark's: every question of every haystack in the split. A question this
+  // row could not answer (no plan, a failed call) scores 0 here; it is not dropped from n.
+  const answered = new Map(preds.map((p) => [p.qid, p.em]))
+  for (const r of rows) { const size = r.id.replace('factconsolidation_', ''); for (const qid of r.qa_ids) (per[size] ??= []).push(answered.get(qid) ?? 0) }
+  const metrics = { row: rowName, split: SPLIT, reader: ['noreader', 'beam'].includes(rowName) ? 'none' : READER, k: K, prompt_sha: sha(PROMPT), commit, n: preds.length, by_size: Object.fromEntries(Object.entries(per).map(([s, xs]) => [s, { n: xs.length, substring_em: +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(4), ci95: bootstrap(xs).map((x) => +x.toFixed(4)) }])),
     facts_per_q: +(preds.reduce((a, p) => a + p.facts, 0) / preds.length).toFixed(2), retrieval_ms_p50: +[...preds.map((p) => p.ms)].sort((a, b) => a - b)[Math.floor(preds.length / 2)].toFixed(3), retrieval_ms_p95: +[...preds.map((p) => p.ms)].sort((a, b) => a - b)[Math.floor(preds.length * 0.95)].toFixed(3), reader_calls: calls, context_tokens_per_q: calls ? Math.round(tokens / calls) : 0, wall_s: Math.round((Date.now() - t0) / 1000) }
   writeFileSync(dir + 'metrics.json', JSON.stringify(metrics, null, 1))
   writeFileSync(dir + 'meta.json', JSON.stringify({ bench: 'MemoryAgentBench Conflict_Resolution (FactConsolidation)', dataset_sha256: sha(readFileSync(DATA + 'Conflict_Resolution-00000-of-00001.parquet')), split: SPLIT, row: rowName, reader: metrics.reader, planner: Object.entries(Object.values(plans).reduce((a, p) => (a[p.model] = (a[p.model] ?? 0) + 1, a), {})).map(([m, n]) => `${m}:${n}`).join(' '), embedding: 'zenlm/zen-embedding-0.6b', k: K, temperature: 0, max_tokens: 64, prompt: 'prompts/reader-mab.txt', prompt_sha256: sha(PROMPT), commit }, null, 1))
