@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-09T18:28:33.999Z",
+ "generated": "2026-09-09T18:29:45.651Z",
  "sections": [
   {
    "bench": "conv",
@@ -12273,33 +12273,6 @@
   },
   {
    "bench": "mab",
-   "run": "mab-dev-noreader-none-v0",
-   "row": "noreader",
-   "split": "dev",
-   "k": 10,
-   "reader": "none",
-   "facts": null,
-   "commit": "ddc076f5dd",
-   "categories": [
-    {
-     "name": "mh_6k",
-     "n": 98,
-     "metrics": {
-      "substring_em": 0.7755
-     }
-    },
-    {
-     "name": "sh_6k",
-     "n": 98,
-     "metrics": {
-      "substring_em": 0.9796
-     }
-    }
-   ],
-   "table": null
-  },
-  {
-   "bench": "mab",
    "run": "mab-test-beam-none",
    "row": "beam",
    "split": "test",
@@ -12341,61 +12314,6 @@
      "n": 100,
      "metrics": {
       "substring_em": 0.97
-     }
-    },
-    {
-     "name": "sh_262k",
-     "n": 100,
-     "metrics": {
-      "substring_em": 0.94
-     }
-    }
-   ],
-   "table": null
-  },
-  {
-   "bench": "mab",
-   "run": "mab-test-beam-none-v2",
-   "row": "beam",
-   "split": "test",
-   "k": 10,
-   "reader": "none",
-   "facts": null,
-   "commit": "12468828cf",
-   "categories": [
-    {
-     "name": "mh_32k",
-     "n": 100,
-     "metrics": {
-      "substring_em": 0.71
-     }
-    },
-    {
-     "name": "mh_64k",
-     "n": 100,
-     "metrics": {
-      "substring_em": 0.76
-     }
-    },
-    {
-     "name": "mh_262k",
-     "n": 100,
-     "metrics": {
-      "substring_em": 0.48
-     }
-    },
-    {
-     "name": "sh_32k",
-     "n": 100,
-     "metrics": {
-      "substring_em": 0.97
-     }
-    },
-    {
-     "name": "sh_64k",
-     "n": 100,
-     "metrics": {
-      "substring_em": 0.95
      }
     },
     {
@@ -12458,61 +12376,6 @@
      "n": 100,
      "metrics": {
       "substring_em": 0.94
-     }
-    }
-   ],
-   "table": null
-  },
-  {
-   "bench": "mab",
-   "run": "mab-test-noreader-none-v0",
-   "row": "noreader",
-   "split": "test",
-   "k": 10,
-   "reader": "none",
-   "facts": null,
-   "commit": "ced158ddb3",
-   "categories": [
-    {
-     "name": "mh_32k",
-     "n": 100,
-     "metrics": {
-      "substring_em": 0.32
-     }
-    },
-    {
-     "name": "mh_64k",
-     "n": 99,
-     "metrics": {
-      "substring_em": 0.3131
-     }
-    },
-    {
-     "name": "mh_262k",
-     "n": 98,
-     "metrics": {
-      "substring_em": 0.2551
-     }
-    },
-    {
-     "name": "sh_32k",
-     "n": 98,
-     "metrics": {
-      "substring_em": 0.9796
-     }
-    },
-    {
-     "name": "sh_64k",
-     "n": 99,
-     "metrics": {
-      "substring_em": 0.9293
-     }
-    },
-    {
-     "name": "sh_262k",
-     "n": 95,
-     "metrics": {
-      "substring_em": 0.9789
      }
     }
    ],

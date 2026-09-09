@@ -86,7 +86,8 @@ if (answers.length) {
   write('locomo-answers.tex', `\\begin{tabular}{lllrrrrrrrr}\n\\toprule\nContext & Reader & Questions & n & F1 & EM & EXACT & ANSWERED & tokens/q & reader p50 s & 95\\% CI (F1) \\\\\n\\midrule\n${rows.join('\n')}\n\\bottomrule\n\\end{tabular}\n`, 'runs/locomo-*; EXACT = a gold turn in the context, ANSWERED = F1 ≥ 0.5 or exact; all ten conversations')
 }
 // ── MemoryAgentBench: one row per (configuration, reader) across sizes; dev (6k) and test merged into one line
-const mab = runs.filter((d) => /^mab-(test|dev)-/.test(d)).map((d) => run(d)).filter(Boolean)
+// a run suffixed -v<n> is an earlier version kept for the record; the table carries the current one
+const mab = runs.filter((d) => /^mab-(test|dev)-/.test(d) && !/-v\d+$/.test(d)).map((d) => run(d)).filter(Boolean)
 if (mab.length) {
   const byKey = {}
   for (const m of mab) { const key = `${m.row}|${m.reader}`; const b = byKey[key] ??= { row: m.row, reader: m.reader, sizes: {} }; for (const [k, v] of Object.entries(m.by_size ?? {})) if (v.n >= 50) b.sizes[k] = v }
