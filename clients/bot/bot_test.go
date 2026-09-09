@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	gotoken "go/token"
 	"io"
 	"io/fs"
 	"net/http"
@@ -635,6 +638,54 @@ func TestShutdownIsIdempotent(t *testing.T) {
 	for range 3 {
 		if err := Shutdown(); err != nil {
 			t.Fatalf("Shutdown: %v", err)
+		}
+	}
+}
+
+// A doc comment on an exported declaration begins with the name it documents.
+// The convention is not decoration: `go doc` renders the comment beside the
+// name, so one that opens with a different identifier sends a reader looking
+// for a symbol that is not there — and a rename that misses the prose leaves
+// the two disagreeing with nothing to notice. go vet does not check this.
+func TestExportedDocsNameWhatTheyDocument(t *testing.T) {
+	pkgs, err := parser.ParseDir(gotoken.NewFileSet(), ".", func(f os.FileInfo) bool {
+		return !strings.HasSuffix(f.Name(), "_test.go")
+	}, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	named := func(doc *ast.CommentGroup, name string) {
+		t.Helper()
+		if doc == nil || !ast.IsExported(name) {
+			return
+		}
+		first, _, _ := strings.Cut(strings.TrimPrefix(doc.Text(), "// "), " ")
+		if first != name {
+			t.Errorf("the doc on exported %s opens with %q", name, first)
+		}
+	}
+	for _, pkg := range pkgs {
+		for _, file := range pkg.Files {
+			for _, decl := range file.Decls {
+				switch d := decl.(type) {
+				case *ast.FuncDecl:
+					named(d.Doc, d.Name.Name)
+				case *ast.GenDecl:
+					// A doc on a group covers the group; a doc on the one spec
+					// inside it covers that spec, and is the case here.
+					if len(d.Specs) != 1 {
+						continue
+					}
+					switch spec := d.Specs[0].(type) {
+					case *ast.TypeSpec:
+						named(d.Doc, spec.Name.Name)
+					case *ast.ValueSpec:
+						if len(spec.Names) == 1 {
+							named(d.Doc, spec.Names[0].Name)
+						}
+					}
+				}
+			}
 		}
 	}
 }

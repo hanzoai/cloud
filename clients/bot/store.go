@@ -219,5 +219,14 @@ func (s *Store) Drop(ctx context.Context, collection string) error {
 	return err
 }
 
+// Empty forgets every document in the file, leaving it as it was before
+// anything was written to it. It is how a partition stops being one tenant's:
+// the file survives the emptying, so the handle a caller already holds stays
+// good and the schema does not have to be reinstalled.
+func (s *Store) Empty(ctx context.Context) error {
+	_, err := s.run.ExecContext(ctx, `DELETE FROM docs`)
+	return err
+}
+
 // Close releases the file. cloud.OrgStore requires it.
 func (s *Store) Close() error { return s.db.Close() }

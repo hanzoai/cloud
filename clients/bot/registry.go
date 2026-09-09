@@ -244,9 +244,20 @@ func matches(c *zip.Ctx, x Bot) bool {
 
 func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
-// storeFor opens the org's own file, which is where the roster lives.
-func storeFor(s *cloud.Service[state], org string) (*Store, error) {
-	return s.State.stores.For(org, "")
+// storeFor opens one SQLite for a caller that has no *Call: the org's own file,
+// where the roster lives, when bot is empty, and a bot's own file when it is
+// not. It is Call.Store's counterpart on the REST half, and the only difference
+// between the two is the shape of the refusal — a Fault there, an HTTP error
+// here — so the failure is logged and answered in one place either way. What
+// went wrong opening a file is this deployment's business; the caller is told
+// that it did.
+func storeFor(s *cloud.Service[state], org, bot string) (*Store, error) {
+	st, err := s.State.stores.For(org, bot)
+	if err != nil {
+		s.Log.Error("open bot store", "org", org, "bot", bot, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store")
+	}
+	return st, nil
 }
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
@@ -297,9 +308,9 @@ func announce(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("edition must be plain, computer or browser")
 	}
 
-	st, err := storeFor(s, o)
+	st, err := storeFor(s, o, "")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return err
 	}
 	now := time.Now().UnixMilli()
 	x := Bot{
@@ -336,9 +347,9 @@ func list(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("a validated org is required")
 	}
-	st, err := storeFor(s, o)
+	st, err := storeFor(s, o, "")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return err
 	}
 	xs, err := bots(c.Context(), st)
 	if err != nil {
@@ -358,9 +369,9 @@ func get(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("a validated org is required")
 	}
-	st, err := storeFor(s, o)
+	st, err := storeFor(s, o, "")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return err
 	}
 	x, err := readBot(c.Context(), st, idParam(c))
 	if err != nil {
@@ -390,9 +401,9 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("use POST /v1/bot/:id/suspend")
 	}
 
-	st, err := storeFor(s, o)
+	st, err := storeFor(s, o, "")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return err
 	}
 	var x Bot
 	err = st.Do(c.Context(), func(st *Store) error {
@@ -433,17 +444,27 @@ func forget(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("a validated org is required")
 	}
-	st, err := storeFor(s, o)
+	st, err := storeFor(s, o, "")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return err
+	}
+	id := idParam(c)
+	if _, err := readBot(c.Context(), st, id); err != nil {
+		return missing(err)
+	}
+	// A bot has four homes and the row is only one of them: a file of its own,
+	// coordinates in KMS, the turns running for it and the sockets bound to it.
+	// All of that goes first (empty) and the row goes last, because the row is
+	// what makes an id announceable again — a bot that took the id while the
+	// last one was still being cleared would have its own state cleared
+	// instead. A step that fails answers a failure: a 204 over state still in
+	// place is how a forgotten bot comes back as somebody else's.
+	if err := empty(c.Context(), s, o, id); err != nil {
+		return err
 	}
 	// A bot and everything it reported go together: a report of a bot nobody
 	// has is a row no console can ask about and nothing will ever delete.
 	err = st.Do(c.Context(), func(st *Store) error {
-		id := idParam(c)
-		if _, err := readBot(c.Context(), st, id); err != nil {
-			return missing(err)
-		}
 		if err := st.Delete(c.Context(), colBot, id); err != nil {
 			return err
 		}
@@ -453,6 +474,29 @@ func forget(s *cloud.Service[state], c *zip.Ctx) error {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// empty disposes of everything one bot holds, leaving its partition as it was
+// before the bot announced itself.
+//
+// The turns stop first: a turn writes into the file this is about to empty and
+// publishes onto the connections it is about to end. The sockets go next, for
+// the same reason and one of its own — a socket resolves its bot once, at the
+// upgrade, so a client that bound to this bot goes on reading and writing its
+// file until the socket ends. The credentials go before the file, because the
+// file is the only record of which coordinates were sealed. The file is emptied
+// rather than removed: the handle stays good, so nothing has to notice.
+func empty(ctx context.Context, s *cloud.Service[state], org, bot string) error {
+	chatHaltBot(org, bot)
+	s.State.hub.closeBot(org, bot, "bot forgotten")
+	st, err := storeFor(s, org, bot)
+	if err != nil {
+		return err
+	}
+	if err := dropSecrets(ctx, s, org, bot, st); err != nil {
+		return err
+	}
+	return st.Empty(ctx)
 }
 
 // suspend parks a bot. The resume token is whatever the bot needs to come back
@@ -467,9 +511,9 @@ func suspend(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	st, err := storeFor(s, o)
+	st, err := storeFor(s, o, "")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return err
 	}
 	var x Bot
 	err = st.Do(c.Context(), func(st *Store) error {
@@ -509,9 +553,9 @@ func resume(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	st, err := storeFor(s, o)
+	st, err := storeFor(s, o, "")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return err
 	}
 	var x Bot
 	var held string
@@ -556,9 +600,9 @@ func record(s *cloud.Service[state], c *zip.Ctx) error {
 	if !kinds[kind] {
 		return zip.ErrBadRequest("unknown kind")
 	}
-	st, err := storeFor(s, o)
+	st, err := storeFor(s, o, "")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return err
 	}
 	r := Report{
 		ID: mint("report"), Kind: kind,
@@ -584,9 +628,9 @@ func reports(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("a validated org is required")
 	}
-	st, err := storeFor(s, o)
+	st, err := storeFor(s, o, "")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return err
 	}
 	limit := maxReports
 	if n, err := strconv.Atoi(c.Query("limit")); err == nil && n > 0 && n < maxReports {
