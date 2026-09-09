@@ -88,7 +88,7 @@ func over(status string) bool { return status == "stopped" || status == "error" 
 // kinds is what a run may report.
 var kinds = map[string]bool{
 	"notification": true, "log": true, "error": true,
-	"suspend": true, "resume": true, "stop": true,
+	"suspend": true, "resume": true, "stop": true, "wake": true,
 }
 
 // Run is one bot instance this org has: a loop running somewhere — on a
@@ -110,24 +110,37 @@ var kinds = map[string]bool{
 // checkpoint reference, opaque here. The gateway does not read it; it holds it,
 // so that a run suspended on one machine can come back on another. It is empty
 // for a run that has never suspended, and it is the one field view withholds.
+//
+// Wake is the standing reason a parked run has to come back: the events that
+// call it. WokenAt and WokenBy are what happened when one of them arrived. The
+// three are meaningful only while the run is suspended, which is why view shows
+// them only then and suspend writes all three afresh. See sleep.go.
 type Run struct {
-	ID          string `json:"id"`
-	Project     string `json:"project,omitempty"`
-	User        string `json:"user,omitempty"`
-	Name        string `json:"name,omitempty"`
-	Task        string `json:"task,omitempty"`
-	Where       string `json:"where"`
-	Surface     string `json:"surface"`
-	Model       string `json:"model,omitempty"`
-	Host        string `json:"host,omitempty"`
-	SessionURL  string `json:"sessionUrl,omitempty"`
-	Status      string `json:"status"`
-	Resume      string `json:"resume,omitempty"`
-	StartedAt   int64  `json:"startedAt"`
-	UpdatedAt   int64  `json:"updatedAt"`
-	SuspendedAt int64  `json:"suspendedAt,omitempty"`
-	StoppedAt   int64  `json:"stoppedAt,omitempty"`
+	ID          string   `json:"id"`
+	Project     string   `json:"project,omitempty"`
+	User        string   `json:"user,omitempty"`
+	Name        string   `json:"name,omitempty"`
+	Task        string   `json:"task,omitempty"`
+	Where       string   `json:"where"`
+	Surface     string   `json:"surface"`
+	Model       string   `json:"model,omitempty"`
+	Host        string   `json:"host,omitempty"`
+	SessionURL  string   `json:"sessionUrl,omitempty"`
+	Status      string   `json:"status"`
+	Resume      string   `json:"resume,omitempty"`
+	Wake        []string `json:"wake,omitempty"`
+	StartedAt   int64    `json:"startedAt"`
+	UpdatedAt   int64    `json:"updatedAt"`
+	SuspendedAt int64    `json:"suspendedAt,omitempty"`
+	WokenAt     int64    `json:"wokenAt,omitempty"`
+	WokenBy     string   `json:"wokenBy,omitempty"`
+	StoppedAt   int64    `json:"stoppedAt,omitempty"`
 }
+
+// parked reports a run that is resting and expected back. It is the state in
+// which a wake reason means anything: the run is holding a token, nothing of it
+// is running, and the events it named are what bring it back.
+func (x Run) parked() bool { return x.Status == "suspended" }
 
 // Report is something a run said about itself: a notification it raised, a
 // suspension, a resumption, a stop, an error. They are kept so a console can
@@ -166,8 +179,9 @@ type updateReq struct {
 }
 
 type suspendReq struct {
-	Resume  string `json:"resume"`  // opaque; held so the run can come back
-	Message string `json:"message"` // why, for the record
+	Resume  string   `json:"resume"`  // opaque; held so the run can come back
+	Wake    []string `json:"wake"`    // the events that call it back
+	Message string   `json:"message"` // why, for the record
 }
 
 type resumeReq struct {
@@ -191,32 +205,44 @@ type reportReq struct {
 //
 // Resume is deliberately absent: it is the run's to hold and the gateway's to
 // keep, and a list of runs is not the place to hand it out.
+//
+// Wake, WokenAt and WokenBy are shown only while the run is parked, because that
+// is the only state in which they say anything: a run that has come back is
+// waiting for nothing, and rendering the reasons it once had would read as a
+// standing appointment it no longer holds.
 type view struct {
-	RunID       string `json:"runId"`
-	Name        string `json:"name,omitempty"`
-	Task        string `json:"task,omitempty"`
-	Where       string `json:"where"`
-	Surface     string `json:"surface"`
-	Model       string `json:"model,omitempty"`
-	Host        string `json:"host,omitempty"`
-	Project     string `json:"project,omitempty"`
-	User        string `json:"user,omitempty"`
-	SessionURL  string `json:"sessionUrl,omitempty"`
-	Status      string `json:"status"`
-	StartedAt   string `json:"startedAt"`
-	UpdatedAt   string `json:"updatedAt,omitempty"`
-	SuspendedAt string `json:"suspendedAt,omitempty"`
-	StoppedAt   string `json:"stoppedAt,omitempty"`
+	RunID       string   `json:"runId"`
+	Name        string   `json:"name,omitempty"`
+	Task        string   `json:"task,omitempty"`
+	Where       string   `json:"where"`
+	Surface     string   `json:"surface"`
+	Model       string   `json:"model,omitempty"`
+	Host        string   `json:"host,omitempty"`
+	Project     string   `json:"project,omitempty"`
+	User        string   `json:"user,omitempty"`
+	SessionURL  string   `json:"sessionUrl,omitempty"`
+	Status      string   `json:"status"`
+	Wake        []string `json:"wake,omitempty"`
+	StartedAt   string   `json:"startedAt"`
+	UpdatedAt   string   `json:"updatedAt,omitempty"`
+	SuspendedAt string   `json:"suspendedAt,omitempty"`
+	WokenAt     string   `json:"wokenAt,omitempty"`
+	WokenBy     string   `json:"wokenBy,omitempty"`
+	StoppedAt   string   `json:"stoppedAt,omitempty"`
 }
 
 func viewOf(x Run) view {
-	return view{
+	v := view{
 		RunID: x.ID, Name: x.Name, Task: x.Task, Where: x.Where, Surface: x.Surface,
 		Model: x.Model, Host: x.Host, Project: x.Project, User: x.User,
 		SessionURL: x.SessionURL, Status: x.Status,
 		StartedAt: stamp(x.StartedAt), UpdatedAt: stamp(x.UpdatedAt),
 		SuspendedAt: stamp(x.SuspendedAt), StoppedAt: stamp(x.StoppedAt),
 	}
+	if x.parked() {
+		v.Wake, v.WokenAt, v.WokenBy = x.Wake, stamp(x.WokenAt), x.WokenBy
+	}
+	return v
 }
 
 // runs is what a list answers. The key is "bots" because that is the key the
@@ -459,6 +485,7 @@ func begin(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
+	asleep.mind(o, x)
 	return c.JSON(http.StatusCreated, viewOf(x))
 }
 
@@ -603,6 +630,7 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
+	asleep.mind(o, x)
 	return c.JSON(http.StatusOK, viewOf(x))
 }
 
@@ -647,6 +675,9 @@ func stop(s *cloud.Service[state], c *zip.Ctx) error {
 		if !over(cur.Status) {
 			now := time.Now().UnixMilli()
 			cur.Status, cur.StoppedAt, cur.UpdatedAt = "stopped", now, now
+			// A run that has ended is waiting for nothing. Stopping is the one
+			// end there is, so this is where the standing reasons go.
+			cur.Wake, cur.WokenAt, cur.WokenBy = nil, 0, ""
 			if err := st.Put(c.Context(), colRun, id, cur); err != nil {
 				return err
 			}
@@ -661,6 +692,7 @@ func stop(s *cloud.Service[state], c *zip.Ctx) error {
 	switch {
 	case err == nil:
 		halt(o, id)
+		asleep.mind(o, x)
 		return c.JSON(http.StatusOK, stopped{RunID: id, Status: x.Status})
 	case !errors.Is(err, ErrNoDoc):
 		return err
@@ -733,6 +765,9 @@ func forget(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
+	// The row is gone, so the reasons on it are too: a run nobody has cannot be
+	// called back.
+	asleep.mind(o, Run{ID: id})
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -766,6 +801,11 @@ func empty(ctx context.Context, s *cloud.Service[state], org, run string) error 
 // It is not a stop and never becomes one: a suspended run is expected back, and
 // what it is holding is the reason it can come back somewhere else — a laptop
 // that closes and a sandbox that opens are the same run either side of this.
+//
+// A run may also name the events it should be called back for. Those are its
+// standing reason to come back and are written afresh here, so a run that parks
+// naming nothing is waiting on nothing rather than on whatever it said last
+// time. What happens when one arrives is sleep.go.
 func suspend(s *cloud.Service[state], c *zip.Ctx) error {
 	o, ok := org(c)
 	if !ok {
@@ -773,6 +813,10 @@ func suspend(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	var req suspendReq
 	if err := bind(c, &req); err != nil {
+		return err
+	}
+	wake, err := wakes(req.Wake)
+	if err != nil {
 		return err
 	}
 	st, err := storeFor(s, o, "")
@@ -792,6 +836,7 @@ func suspend(s *cloud.Service[state], c *zip.Ctx) error {
 		now := time.Now().UnixMilli()
 		cur.Status = "suspended"
 		cur.Resume = clip(req.Resume, maxResume)
+		cur.Wake, cur.WokenAt, cur.WokenBy = wake, 0, ""
 		cur.SuspendedAt, cur.UpdatedAt = now, now
 		x = cur
 		if err := st.Put(c.Context(), colRun, id, cur); err != nil {
@@ -803,11 +848,17 @@ func suspend(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
+	asleep.mind(o, x)
 	return c.JSON(http.StatusOK, viewOf(x))
 }
 
 // resume hands a suspended run back its token and marks it going. The token
 // leaves through this one door and no other, which is why it is not on view.
+//
+// It is the one way a run comes back, whether a person asked for it or an event
+// the run named called it back: a wake makes a run due (sleep.go) and leaves the
+// suspension standing, because this is where the token is collected and a run
+// that had already been moved to running could never collect it.
 func resume(s *cloud.Service[state], c *zip.Ctx) error {
 	o, ok := org(c)
 	if !ok {
@@ -835,6 +886,7 @@ func resume(s *cloud.Service[state], c *zip.Ctx) error {
 		now := time.Now().UnixMilli()
 		token = cur.Resume
 		cur.Status = "running"
+		cur.Wake, cur.WokenAt, cur.WokenBy = nil, 0, ""
 		cur.Host = pick(clip(req.Host, maxField), cur.Host)
 		cur.SessionURL = pick(clip(req.SessionURL, maxURL), cur.SessionURL)
 		cur.UpdatedAt = now
@@ -848,6 +900,7 @@ func resume(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
+	asleep.mind(o, x)
 	return c.JSON(http.StatusOK, resumeView{Run: viewOf(x), Resume: token})
 }
 

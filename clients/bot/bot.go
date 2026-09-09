@@ -19,7 +19,8 @@
 //	PATCH  /v1/bot/runs/:id            heartbeat: status, sessionUrl, model -> Run
 //	POST   /v1/bot/runs/:id/stop       stop a run                -> {runId,status}
 //	DELETE /v1/bot/runs/:id            forget a run and all it holds
-//	POST   /v1/bot/runs/:id/suspend    park it, holding a resume token -> Run
+//	POST   /v1/bot/runs/:id/suspend    park it, holding a resume token and
+//	                                   naming what calls it back        -> Run
 //	POST   /v1/bot/runs/:id/resume     bring it back with that token   -> Run
 //	POST   /v1/bot/runs/:id/events     record something it reported -> Report (201)
 //	GET    /v1/bot/runs/:id/events     what it has reported      -> [Report]
@@ -31,6 +32,12 @@
 // there is: the heartbeat refuses the status and names that door, suspension is
 // a rest rather than an end, and forgetting a run ends it through the same halt
 // on its way to disposing of everything it held.
+//
+// A parked run may name the events that should call it back, and then it waits
+// for nothing: no goroutine, no timer, no connection, nothing scanning for it.
+// When one of those events is published in its org the run is marked due and the
+// org hears it, and the run comes back through the same resume as ever, holding
+// the same token. See sleep.go.
 //
 // /v1/bot/runs is the roster's whole address, so the addresses beside it stay
 // their owners': /v1/bot/members projects these runs into an org's spaces and
@@ -180,6 +187,9 @@ func Shutdown() error {
 	}
 	chatHaltAll()
 	s.State.hub.closeAll("gateway stopping")
+	// What is waiting is on the rows; the index only says where it was read
+	// from, and those files are about to close.
+	asleep.forget()
 	return s.State.stores.CloseAll()
 }
 
