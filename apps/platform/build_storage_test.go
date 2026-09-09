@@ -33,6 +33,35 @@ func TestBuildDeclaresItsDiskNeed(t *testing.T) {
 	}
 }
 
+// A build's stages run in PARALLEL, and the namespace quota names
+// requests.cpu/memory and limits.cpu/memory — a quota that names them REFUSES
+// any container omitting them at pod creation, on the Job's backoff, forever.
+// This container passed only because a LimitRange beside it supplies defaults,
+// which put the build's real size in a file this code does not own: 2 CPU
+// shared by two Go cross-compiles and an `npm ci`. Measured on hanzoai/team at
+// that default, same commit and same builder, the install died at 1127s with
+// ECONNRESET while the amd64 stage held a core to 1064s; at 8 it finished in
+// 396s and the two-platform build completed.
+func TestBuildDeclaresItsComputeNeed(t *testing.T) {
+	k := fakeK8s()
+	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
+	cs, _, _ := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "containers")
+	res, ok := cs[0].(map[string]any)["resources"].(map[string]any)
+	if !ok {
+		t.Fatal("the build container declares no resources")
+	}
+	req, _ := res["requests"].(map[string]any)
+	lim, _ := res["limits"].(map[string]any)
+	for _, r := range []string{"cpu", "memory"} {
+		if req[r] == nil {
+			t.Errorf("no %s REQUEST: the quota refuses a container that omits it", r)
+		}
+		if lim[r] == nil {
+			t.Errorf("no %s LIMIT: the build inherits whatever the namespace defaults to", r)
+		}
+	}
+}
+
 // The request has to reflect what a build actually uses. At 20Gi it was declared
 // but still short: the kubelet evicted a build that had exceeded its request off
 // a node already at its threshold, ten minutes in.
