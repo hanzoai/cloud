@@ -29,6 +29,7 @@ import (
 	"github.com/hanzoai/cloud/clients/auditlog"
 	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/bot"
+	"github.com/hanzoai/cloud/clients/claw"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/dns"
 	"github.com/hanzoai/cloud/clients/do"
@@ -81,6 +82,10 @@ func Wire() []cloud.MountSpec {
 		// The gateway a Hanzo Bot announces itself to: /v1/bot, and the registry
 		// of which bots are live, suspended, or gone.
 		{Name: "bot", Mount: bot.Mount, Shutdown: ctxShutdown(bot.Shutdown)},
+		// The OpenClaw gateway protocol at /v1/claw: the envelope, the method
+		// registry and the connection set an OpenClaw web UI drives this cloud
+		// through.
+		{Name: "claw", Mount: claw.Mount, Shutdown: ctxShutdown(claw.Shutdown)},
 		{Name: "zero-trust", Mount: zt.Mount},
 		// ngrok-native public sharing: /v1/share/* provisions a per-org zrok account.
 		{Name: "share", Mount: share.Mount},

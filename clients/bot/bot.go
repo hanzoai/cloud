@@ -25,6 +25,7 @@
 package bot
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -32,6 +33,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -79,7 +81,10 @@ type state struct {
 	stores *cloud.OrgStore[*Store] // one bot.db per org, opened once each
 }
 
-var mounted *cloud.Service[state]
+// mounted is the live surface. Has reads it from whatever goroutine asked, and
+// Shutdown clears it, so it is held atomically rather than as a plain package
+// variable.
+var mounted atomic.Pointer[cloud.Service[state]]
 
 // Mount wires /v1/bot onto app.
 func Mount(app *zip.App, deps cloud.Deps) error {
@@ -95,7 +100,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "bot"), State: state{
 		stores: cloud.NewOrgStore(deps.DataDir, "bot", openStore),
 	}}
-	mounted = s
+	mounted.Store(s)
 	routes(app, s)
 	s.Log.Info("bot gateway mounted", "brand", s.Brand)
 	return nil
@@ -103,12 +108,34 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // Shutdown closes every open per-org store. Idempotent.
 func Shutdown() error {
-	if mounted == nil {
+	s := mounted.Swap(nil)
+	if s == nil {
 		return nil
 	}
-	err := mounted.State.stores.CloseAll()
-	mounted = nil
-	return err
+	return s.State.stores.CloseAll()
+}
+
+// Has reports whether id names a bot of org. It is the registry's answer to
+// the one question another subsystem asks of it: a caller handed a bot id has
+// to know it is this org's bot before that id is allowed to choose anything —
+// a file, a partition, a scope. The registry is the only place that knows, and
+// it stays here rather than being copied.
+//
+// An unmounted registry answers no. Without it nothing knows which bots exist,
+// and a caller that treated silence as yes would be back to trusting the id it
+// was handed.
+func Has(ctx context.Context, org, id string) bool {
+	s := mounted.Load()
+	if s == nil || org == "" || !idRE.MatchString(id) {
+		return false
+	}
+	st, err := storeFor(s, org)
+	if err != nil {
+		s.Log.Error("open bot store", "org", org, "err", err)
+		return false
+	}
+	_, err = st.Get(ctx, org, id)
+	return err == nil
 }
 
 // routes registers the surface. The collection registers before its :id
