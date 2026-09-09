@@ -248,9 +248,20 @@ func launch(s *cloud.Service[state], ctx context.Context, ev cloud.JobEvent) (st
 			"template": map[string]any{
 				"metadata": map[string]any{"labels": map[string]any{"hanzo.ai/runner": ev.Provider}},
 				"spec": map[string]any{
-					"restartPolicy":                "Never",
-					"runtimeClassName":             runnerRuntimeClass,
-					"nodeSelector":                 map[string]any{"kubernetes.io/arch": arch},
+					"restartPolicy":    "Never",
+					"runtimeClassName": runnerRuntimeClass,
+					"nodeSelector":     map[string]any{"kubernetes.io/arch": arch},
+					// evo is the only node with a gvisor runtime, and it carries
+					// the taint hanzo.ai/no-ci — applied by hand, declared nowhere
+					// in the universe. Without this a runner Job matches the
+					// RuntimeClass selector, finds the one node that satisfies it
+					// untolerated, and sits Pending forever: 12 Jobs queued and
+					// 585 tasks stuck "running" behind them, with no error anywhere
+					// that names a taint. Scoped to runner Jobs, so tolerating it
+					// admits CI to that node and nothing else on the cluster.
+					"tolerations": []any{map[string]any{
+						"key": "hanzo.ai/no-ci", "operator": "Exists", "effect": "NoSchedule",
+					}},
 					"automountServiceAccountToken": false,
 					"imagePullSecrets":             []any{map[string]any{"name": runnerPullSecret}},
 					"containers": []any{map[string]any{
