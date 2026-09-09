@@ -140,7 +140,8 @@ func reloadUi(c *Call) (any, error) {
 
 // redactedMark stands for a value the server holds and will not send back. A
 // client that echoes it is repeating what it was shown rather than setting
-// anything, so it means keep what is stored.
+// anything, so it means keep what is stored. The spelling is the protocol's own
+// and travels on the wire verbatim, so it is quoted here rather than chosen.
 const redactedMark = "__OPENCLAW_REDACTED__"
 
 const (
