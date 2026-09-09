@@ -59,7 +59,9 @@ export async function ask({ api, key, reader, system, context, question, maxToke
   const local = api.startsWith(OLLAMA)
   const url = local ? `${OLLAMA.replace(/\/v1$/, '')}/api/chat` : `${api}/chat/completions`
   const body = local
-    ? { model: reader, messages, stream: false, think: false, options: { temperature: 0, num_predict: maxTokens } }
+    // num_ctx: a prompt here is under 2k tokens; left unset, Ollama reserves the
+    // model's whole 262k window and prompt processing crawls under the cache
+    ? { model: reader, messages, stream: false, think: false, options: { temperature: 0, num_predict: maxTokens, num_ctx: 8192 } }
     : { model: reader, temperature: 0, max_tokens: maxTokens, messages }
   const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), timeoutMs)
   const t0 = Date.now()
