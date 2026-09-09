@@ -95,3 +95,16 @@ if (mab.length) {
   const rows = Object.values(byKey).map((b) => `${esc(b.row)} (${esc(b.reader)}) & ${sizes.map((z) => cell(b, 'sh_' + z)).join(' & ')} & ${pooled(b, 'sh')} & ${sizes.map((z) => cell(b, 'mh_' + z)).join(' & ')} & ${pooled(b, 'mh')} \\\\`)
   write('mab-fc.tex', `\\begin{tabular}{lrrrrrrrrrr}\n\\toprule\n & \\multicolumn{5}{c}{FC-SH} & \\multicolumn{5}{c}{FC-MH} \\\\\n\\cmidrule(lr){2-6}\\cmidrule(lr){7-11}\nConfiguration (reader) & 6k & 32k & 64k & 262k & pooled & 6k & 32k & 64k & 262k & pooled \\\\\n\\midrule\n${rows.join('\n')}\n\\midrule\n\\multicolumn{11}{l}{CAR (arXiv 2606.01435), pooled 6k--262k: 78.0 / 30.2 with gpt-4o-mini, 94.8 / 51.5 with gpt-4o; at 262k: 82 / 27 and 93 / 41} \\\\\n\\bottomrule\n\\end{tabular}\n`, 'runs/mab-*; substring exact match; 6k is the dev split, the rest test; pooled = mean of the four sizes as CAR reports')
 }
+
+// ── the code lane: RepoBench-R, both settings, test split, one row per configuration
+{
+  const codeDir = new URL('../code/runs/', here)
+  const CODE_ROWS = ['dense-only', 'bm25-only', 'typed-links-only-no-model', 'dense-bm25', 'dense-typed-links', 'bm25-typed-links-no-model', 'full-dense-bm25-typed-links']
+  const CODE_LABEL = { 'dense-only': 'dense only', 'bm25-only': 'BM25 only', 'typed-links-only-no-model': 'typed links only (no model)', 'dense-bm25': 'dense + BM25', 'dense-typed-links': 'dense + typed links', 'bm25-typed-links-no-model': 'BM25 + typed links (no model)', 'full-dense-bm25-typed-links': 'full: dense + BM25 + typed links' }
+  const cell = (setting, split, r) => { const p = new URL(`../code/runs/repobench-r-${setting}-${split}-${r}/metrics.json`, here); if (!existsSync(p)) return null; const s = read(p).summary; return s }
+  const rows = []
+  for (const r of CODE_ROWS) { const a = cell('cff', 'test', r), b = cell('cfr', 'test', r); if (!a && !b) continue
+    const c = (s, grp, k) => s ? pct(mean(s[grp]?.[k])) : '\\ldots'
+    rows.push(`${CODE_LABEL[r]} & ${c(a, 'all', 'recall@1')} & ${c(a, 'all', 'recall@5')} & ${c(a, 'all', 'mrr')} & ${c(a, 'hard', 'recall@1')} & ${c(b, 'all', 'recall@1')} & ${c(b, 'all', 'recall@5')} & ${c(b, 'all', 'mrr')} & ${c(b, 'hard', 'recall@1')} \\\\`) }
+  if (rows.length) write('code-repobench.tex', `\\begin{tabular}{lrrrrrrrr}\n\\toprule\n & \\multicolumn{4}{c}{cross-file-first (500)} & \\multicolumn{4}{c}{cross-file-random (500)} \\\\\n\\cmidrule(lr){2-5}\\cmidrule(lr){6-9}\nConfiguration & R@1 & R@5 & MRR & hard R@1 & R@1 & R@5 & MRR & hard R@1 \\\\\n\\midrule\n${rows.join('\n')}\n\\bottomrule\n\\end{tabular}\n`, 'RepoBench-R Python, test split (test_easy[0:250] + test_hard[0:250] per setting), all-MiniLM-L6-v2 for the dense generator, weights frozen on dev')
+}

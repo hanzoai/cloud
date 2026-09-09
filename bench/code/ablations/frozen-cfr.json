@@ -1,0 +1,13 @@
+{
+ "setting": "cfr",
+ "row": "full: dense + BM25 + typed links",
+ "embed": "all-minilm",
+ "w": {
+  "lex": 1,
+  "unused": -1,
+  "used": 0
+ },
+ "objective": 0.5041781081405696,
+ "commit": "ddc076f5dd05",
+ "evaluations": 180
+}

@@ -70,6 +70,19 @@ for (const d of runs) { const mm = d.match(/^locomo-retrieval-(dev|test|all)-(.+
 for (const g of Object.values(groups2)) g.rows.sort((a, b) => a.order - b.order)
 writeFileSync(new URL('./benchmarks-retrieval.json', here), JSON.stringify({ generated: new Date().toISOString(), tables: Object.values(groups2) }, null, 1))
 
+// The code lane (../code/runs): one table per setting and split, one row per configuration.
+const codeDir = new URL('../code/runs/', here)
+const codeRuns = existsSync(codeDir) ? readdirSync(codeDir).filter((d) => existsSync(new URL(`../code/runs/${d}/metrics.json`, here))).sort() : []
+const CODE_ORDER = ['dense-only', 'bm25-only', 'typed-links-only-no-model', 'dense-bm25', 'dense-typed-links', 'bm25-typed-links-no-model', 'full-dense-bm25-typed-links']
+const codeGroups = {}
+for (const d of codeRuns) { const mm = d.match(/^repobench-r-(cff|cfr)-(dev|test)-(.+)$/); if (!mm) continue
+  const m = JSON.parse(readFileSync(new URL(`../code/runs/${d}/metrics.json`, here), 'utf8')), s = m.summary
+  const g = codeGroups[`${mm[1]}|${mm[2]}`] ??= { bench: 'repobench-r', setting: mm[1] === 'cff' ? 'cross-file-first' : 'cross-file-random', split: mm[2], embedding: m.embed ?? 'all-MiniLM-L6-v2', frozen: m.frozen?.commit ?? null, rows: [] }
+  const v = (grp, k) => s[grp]?.[k]?.mean ?? null
+  g.rows.push({ row: m.row, order: CODE_ORDER.indexOf(mm[3]), r1: v('all', 'recall@1'), r3: v('all', 'recall@3'), r5: v('all', 'recall@5'), mrr: v('all', 'mrr'), ndcg5: v('all', 'ndcg@5'), easy_r1: v('easy', 'recall@1'), hard_r1: v('hard', 'recall@1'), examined: s.all?.examined ?? null, p50: s.all?.p50 ?? null, n: s.all?.n ?? null }) }
+for (const g of Object.values(codeGroups)) g.rows.sort((a, b) => a.order - b.order)
+writeFileSync(new URL('./benchmarks-code.json', here), JSON.stringify({ generated: new Date().toISOString(), tables: Object.values(codeGroups) }, null, 1))
+
 // The same numbers as data, for hanzo.ai/benchmarks: one section per run.
 const sections = runs.map((d) => { const m = read(`./runs/${d}/metrics.json`), meta = existsSync(new URL(`./runs/${d}/meta.json`, here)) ? read(`./runs/${d}/meta.json`) : {}
   const key = ['summary', 'by_size', 'by_style', 'by_category', 'rows', 'table'].find((k) => m[k] && typeof m[k] === 'object')
