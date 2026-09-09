@@ -1348,8 +1348,22 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 							// cordoned another. The shortage feeds itself. 12Gi schedules
 							// against a busy node and is ample for a clone plus a module
 							// cache. The limit stays 80Gi so a big build still bursts.
-							"requests": map[string]any{"ephemeral-storage": "12Gi"},
-							"limits":   map[string]any{"ephemeral-storage": "80Gi"},
+							//
+							// CPU and memory are DECLARED for the same reason and a different
+							// failure. The build namespace carries a LimitRange, so a container
+							// that names neither takes its 2-CPU default — and a multi-stage
+							// Dockerfile runs its stages in PARALLEL, so two cross-compiles and
+							// an `npm ci` share those two cores. The install then leaves its
+							// pooled sockets idle past the package registry's keep-alive window,
+							// measured between 360s and 420s, and ends on ECONNRESET, which
+							// reads as a broken build network and is a starved one. Measured on
+							// hanzoai/team, same commit and same builder: the install died at
+							// 1130s under the default and finished in 396s at 8 CPU, the whole
+							// two-platform build in fifteen minutes. Requests sit well under the
+							// limits because CPU is compressible — a build bursts into an idle
+							// node and yields when one is busy.
+							"requests": map[string]any{"cpu": "2", "memory": "4Gi", "ephemeral-storage": "12Gi"},
+							"limits":   map[string]any{"cpu": "8", "memory": "16Gi", "ephemeral-storage": "80Gi"},
 						},
 						"securityContext": map[string]any{
 							"privileged":      false,
