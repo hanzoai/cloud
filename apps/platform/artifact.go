@@ -532,19 +532,17 @@ func (k *k8sClient) artifactJobSpec(jobName, repoURL, ref, tag, base, putBase st
 					"hanzo.ai/org": platformBuildOrg, "hanzo.ai/build": "true", "hanzo.ai/publish": "artifact",
 				}},
 				"spec": map[string]any{
-					"restartPolicy":                "Never",
+					"restartPolicy": "Never",
 					// Builds yield. hanzo-ci sits below hanzo-infra-critical and
 					// hanzo-money-critical, so a queue of them can never push a serving
 					// workload off a node, and raising a single run's class is how one
 					// build gets moved to the front without stopping the others.
-					"priorityClassName":            "hanzo-ci",
-					// The builder runs where the ARCHITECTURE it builds for actually is. This
-					// pinned a pool name, and the only node carrying it is arm64 — so every
-					// linux/amd64 image the door produces was built under emulation on the
-					// wrong machine. Selecting the arch is also what makes a second platform
-					// possible later: the node is chosen by what is being built, not by a
-					// label that happens to name one box.
-					"nodeSelector":                 map[string]any{"kubernetes.io/arch": "amd64"},
+					"priorityClassName": "hanzo-ci",
+					// No architecture is asked for, because none is needed. This lane
+					// cross-compiles — CGO_ENABLED=0 with GOOS and GOARCH from the request —
+					// and both images it runs, the golang toolchain and the curl publisher,
+					// are manifest indexes. The output is byte-identical whichever machine
+					// produced it, so the pod belongs on whichever one has room.
 					"tolerations":                  []any{map[string]any{"key": "dedicated", "operator": "Equal", "value": "ci-runner", "effect": "NoSchedule"}},
 					"automountServiceAccountToken": false,
 					"securityContext": map[string]any{
