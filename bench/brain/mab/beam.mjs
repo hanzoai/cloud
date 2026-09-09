@@ -90,7 +90,8 @@ export function beamResolve(ix, find, plan, question, o = {}) {
   for (let h = 0; h <= plan.chain.length; h++) {
     const next = []
     for (const s of beam) {
-      const rels = h < plan.chain.length ? alternatives(plan.chain[h]) : (want ? Object.keys(TYPE).filter((r) => typeOk(r, want)) : [])
+      let rels = h < plan.chain.length ? alternatives(plan.chain[h]) : (want ? Object.keys(TYPE).filter((r) => typeOk(r, want)) : [])
+      if (h === plan.chain.length - 1 && want && !typeOk(plan.chain[h], want)) rels = [...new Set([...rels, ...Object.keys(TYPE).filter((r) => typeOk(r, want))])]
       if (h === plan.chain.length) consider(s, 0) // the plan's own length
       else if (h > 0 && want && typeOk(s.evidence[s.evidence.length - 1]?.relation, want) && !typeOk(plan.chain[plan.chain.length - 1], want)) consider(s, -1) // stop early: the type is already right and the plan's tail would break it
       const expand = (rel, relScore, via) => {
@@ -103,9 +104,12 @@ export function beamResolve(ix, find, plan, question, o = {}) {
       }
       let direct = false
       for (const rel of rels) { const relScore = h < plan.chain.length ? (rel === plan.chain[h] || (plan.chain[h] === 'origin' && CLASS.origin.includes(rel)) ? 3 : 1) : -1; if (expand(rel, relScore, null)) direct = true }
+      let bridged = false
       if (!direct && h < plan.chain.length) { // the bridge: the entity's own current facts, one step, then the relation
         const own = (ix.byEntity.get(s.entity) ?? []).filter((f) => f.current && norm(f.subject) === s.entity).sort((a, b) => a.serial - b.serial)
-        for (const via of own) for (const rel of rels) { const relScore = rel === plan.chain[h] || (plan.chain[h] === 'origin' && CLASS.origin.includes(rel)) ? 2 : 0.5; expand(rel, relScore, via) } }
+        for (const via of own) for (const rel of rels) { const relScore = rel === plan.chain[h] || (plan.chain[h] === 'origin' && CLASS.origin.includes(rel)) ? 2 : 0.5; if (expand(rel, relScore, via)) bridged = true } }
+      if (!direct && !bridged && h < plan.chain.length - 1 && s.evidence.length) { // the skip: a planned relation nothing satisfies is dropped and the chain goes on from here
+        const skipped = { ...s, hop: h + 1, path: [...s.path, `(skip ${plan.chain[h]})`], score: s.score - 2 }; next.push(skipped) }
     }
     beam = next.sort((a, b) => b.score - a.score).slice(0, WIDTH); if (!beam.length) break
   }
