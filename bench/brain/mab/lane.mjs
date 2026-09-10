@@ -166,7 +166,7 @@ for (const rowName of ROWS) {
     const qv = await embed(r.questions); const items = r.questions.map((q, i) => ({ qid: r.qa_ids[i], q, qv: qv[i], gold: r.answers[i], size: r.id.replace('factconsolidation_', '') }))
     let n = 0
     await Promise.all(Array.from({ length: WORKERS }, async () => { while (n < items.length) { const it = items[n++]; if (have.has(it.qid)) continue
-      if (!plans[it.q] && !['semantic', 'lexical'].includes(rowName)) continue // no plan yet: leave the question for a later pass
+      if (!plans[it.q] && !['semantic', 'lexical'].includes(rowName) && !(['beam', 'beamx', 'beamr'].includes(rowName) && plansFor(it.q).length)) continue // no plan yet: leave the question for a later pass
       const t1 = process.hrtime.bigint(); const sel = await ROW[rowName](ix, it.q, it.qv, plans[it.q], find); const ms = Number(process.hrtime.bigint() - t1) / 1e6
       const shown = sel.facts.map((f) => `${f.serial}. ${f.text}`).join('\n'); let pred
       if (sel.direct != null) pred = sel.direct

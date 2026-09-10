@@ -42,18 +42,19 @@ export function answerType(q) {
   // "what is the name of the <role>": the role decides
   const named = l.match(/^what (?:is|was) the name of (?:the |an? )?(?:current |present )?(head of state|head of (?:the )?government|chief of state|leader|person|individual|chairperson|chief executive|ceo|director|founder|author|creator|performer|spouse|head coach|city|capital|country|continent|language|sport|religion|genre|university|company|organi[sz]ation|institution)\b/)
   if (named) { const r = named[1]; if (/city|capital/.test(r)) return 'city'; if (/country/.test(r)) return 'country'; if (r === 'continent') return 'continent'; if (r === 'language') return 'language'; if (r === 'sport') return 'sport'; if (r === 'religion') return 'religion'; if (r === 'genre') return 'genre'; if (/university|company|organi|institution/.test(r)) return 'org'; return 'person' }
-  if (/^(who|which (person|individual|political leader))/.test(l) || /\bwho (is|was|holds|currently)\b/.test(l)) return 'person'
+  if (/^(who|whom|to whom|which (person|individual|political leader))\b/.test(l) || /\bwho (is|was|holds|currently)\b/.test(l)) return 'person'
+  // a leading "where" asks for a place whatever nouns follow it
+  if (/^(where|in which (place|location))\b/.test(l)) return 'place'
   if (/\bcontinent\b/.test(l)) return 'continent'
   if (/\b(capital|birthplace|place of (birth|death|work|employment)|head office|headquarter)/.test(l) || /\b(which|what)\s+(city|town)\b/.test(l)) return 'city'
   if (/\bcountry\b|\bnationality\b/.test(l)) return 'country'
   if (/\blanguage|\btongue\b/.test(l)) return 'language'
   if (/\bsport\b/.test(l)) return 'sport'
   if (/\breligio/.test(l)) return 'religion'
-  if (/\bgenre\b|\btype of music\b/.test(l)) return 'genre'
+  if (/\bgenre\b|\b(type|style|kind) of music\b|\bmusic(al)? (style|genre)\b/.test(l)) return 'genre'
   if (/\b(occupation|profession|field)\b/.test(l)) return 'occupation'
   if (/\bposition\b/.test(l)) return 'position'
   if (/\bfamous for\b|\bnotable work|\bcontribution\b/.test(l)) return 'work'
-  if (/^(where|in which (place|location))\b/.test(l)) return 'place'
   return null
 }
 // 'who' may be answered by an organisation (a developer, an employer, a producer), and 'where' by any place
@@ -129,7 +130,7 @@ export function beamResolve(ix, find, plan, question, o = {}) {
   for (const f of finals) f.score -= plan.penalty ?? 0
   finals.sort((a, b) => b.score - a.score || b.evidence[b.evidence.length - 1].serial - a.evidence[a.evidence.length - 1].serial)
   const best = finals[0]
-  return { answer: best.evidence[best.evidence.length - 1].object, evidence: best.evidence, score: best.score, complete: true,
+  return { answer: best.evidence[best.evidence.length - 1].object, evidence: best.evidence, score: best.score, complete: true, finals: o.debug ? finals.slice(0, 8).map((f) => ({ score: +f.score.toFixed(2), path: f.evidence.map((e) => `${norm(e.subject)} -${e.relation}-> ${e.object}`).join(' ; ') })) : undefined,
     trace: [{ step: 'entity', entity: plan.entity, found: base.key, how: base.how }, ...best.evidence.map((f, i) => ({ step: 'hop', entity: norm(f.subject), relation: f.relation, planned: plan.chain[i] ?? null, serial: f.serial, object: f.object })), { step: 'type', want, finals: finals.length, runner_up: finals[1] ? { answer: finals[1].evidence[finals[1].evidence.length - 1].object, score: finals[1].score } : null }] }
 }
 

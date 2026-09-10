@@ -1034,7 +1034,16 @@ split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6
 
 ### mab-dev-beamx-none
 
-split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `b2bb961938b` · prompt sha: `prompts/reader-mab.txt`
+split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `c687fd6500` · prompt sha: `prompts/reader-mab.txt`
+
+| size | n | substring_em |
+|---|---|---|
+| mh_6k | 100 | 93.0 |
+| sh_6k | 100 | 100.0 |
+
+### mab-dev-beamx-none-v1
+
+split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `c687fd6500` · prompt sha: `prompts/reader-mab.txt`
 
 | size | n | substring_em |
 |---|---|---|
@@ -1100,16 +1109,16 @@ split: `test` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.
 
 ### mab-test-beamx-none
 
-split: `test` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `b2bb961938` · prompt sha: `prompts/reader-mab.txt`
+split: `test` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `c687fd6500` · prompt sha: `prompts/reader-mab.txt`
 
 | size | n | substring_em |
 |---|---|---|
-| mh_32k | 100 | 87.0 |
-| mh_64k | 100 | 88.0 |
-| mh_262k | 100 | 65.0 |
-| sh_32k | 100 | 97.0 |
-| sh_64k | 100 | 97.0 |
-| sh_262k | 100 | 94.0 |
+| mh_32k | 100 | 89.0 |
+| mh_64k | 100 | 89.0 |
+| mh_262k | 100 | 67.0 |
+| sh_32k | 100 | 98.0 |
+| sh_64k | 100 | 98.0 |
+| sh_262k | 100 | 97.0 |
 
 ### mab-test-beamx-none-v5
 
@@ -1133,6 +1142,19 @@ split: `test` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.
 | mh_32k | 100 | 86.0 |
 | mh_64k | 100 | 87.0 |
 | mh_262k | 100 | 64.0 |
+| sh_32k | 100 | 97.0 |
+| sh_64k | 100 | 97.0 |
+| sh_262k | 100 | 94.0 |
+
+### mab-test-beamx-none-v7
+
+split: `test` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `b2bb961938` · prompt sha: `prompts/reader-mab.txt`
+
+| size | n | substring_em |
+|---|---|---|
+| mh_32k | 100 | 87.0 |
+| mh_64k | 100 | 88.0 |
+| mh_262k | 100 | 65.0 |
 | sh_32k | 100 | 97.0 |
 | sh_64k | 100 | 97.0 |
 | sh_262k | 100 | 94.0 |

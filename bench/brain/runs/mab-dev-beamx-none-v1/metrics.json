@@ -5,28 +5,28 @@
  "k": 10,
  "prompt_sha": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
  "commit": "c687fd6500",
- "n": 200,
+ "n": 196,
  "by_size": {
   "mh_6k": {
    "n": 100,
-   "substring_em": 0.93,
+   "substring_em": 0.9,
    "ci95": [
-    0.87,
-    0.97
+    0.83,
+    0.95
    ]
   },
   "sh_6k": {
    "n": 100,
-   "substring_em": 1,
+   "substring_em": 0.98,
    "ci95": [
-    1,
+    0.95,
     1
    ]
   }
  },
  "facts_per_q": 1.75,
- "retrieval_ms_p50": 0.324,
- "retrieval_ms_p95": 8.298,
+ "retrieval_ms_p50": 0.468,
+ "retrieval_ms_p95": 9.05,
  "reader_calls": 0,
  "context_tokens_per_q": 0,
  "wall_s": 0

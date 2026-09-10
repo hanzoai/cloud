@@ -11,5 +11,5 @@
  "max_tokens": 64,
  "prompt": "prompts/reader-mab.txt",
  "prompt_sha256": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
- "commit": "b2bb961938"
+ "commit": "c687fd6500"
 }

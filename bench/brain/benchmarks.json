@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-10T19:55:06.877Z",
+ "generated": "2026-09-10T20:17:01.268Z",
  "sections": [
   {
    "bench": "conv",
@@ -12443,20 +12443,20 @@
    "k": 10,
    "reader": "none",
    "facts": null,
-   "commit": "b2bb961938b",
+   "commit": "c687fd6500",
    "categories": [
     {
      "name": "mh_6k",
      "n": 100,
      "metrics": {
-      "substring_em": 0.9
+      "substring_em": 0.93
      }
     },
     {
      "name": "sh_6k",
      "n": 100,
      "metrics": {
-      "substring_em": 0.98
+      "substring_em": 1
      }
     }
    ],
@@ -12552,48 +12552,48 @@
    "k": 10,
    "reader": "none",
    "facts": null,
-   "commit": "b2bb961938",
+   "commit": "c687fd6500",
    "categories": [
     {
      "name": "mh_32k",
      "n": 100,
      "metrics": {
-      "substring_em": 0.87
+      "substring_em": 0.89
      }
     },
     {
      "name": "mh_64k",
      "n": 100,
      "metrics": {
-      "substring_em": 0.88
+      "substring_em": 0.89
      }
     },
     {
      "name": "mh_262k",
      "n": 100,
      "metrics": {
-      "substring_em": 0.65
+      "substring_em": 0.67
      }
     },
     {
      "name": "sh_32k",
      "n": 100,
      "metrics": {
-      "substring_em": 0.97
+      "substring_em": 0.98
      }
     },
     {
      "name": "sh_64k",
      "n": 100,
      "metrics": {
-      "substring_em": 0.97
+      "substring_em": 0.98
      }
     },
     {
      "name": "sh_262k",
      "n": 100,
      "metrics": {
-      "substring_em": 0.94
+      "substring_em": 0.97
      }
     }
    ],
