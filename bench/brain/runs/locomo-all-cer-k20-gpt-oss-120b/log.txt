@@ -1,0 +1,83 @@
+2026-09-09T09:22:11.322Z   25/270 asked, 25 answered, 15.6s each
+2026-09-09T09:25:41.648Z   50/270 asked, 50 answered, 12.0s each
+2026-09-09T09:26:45.134Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23623 seconds.","type":"quota_error","code":429}}
+2026-09-09T09:48:12.546Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 22336 seconds.","type":"quota_error","code":429}}
+2026-09-09T10:55:58.890Z pass 1: asked 217, answered 0, failed 217 {"quota":217} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 22336 seconds.","type":"quota_error","code":429}} in 4119s
+2026-09-09T10:55:58.910Z waiting 60s before the next pass
+2026-09-09T10:57:47.557Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18157 seconds.","type":"quota_error","code":429}}
+2026-09-09T12:03:21.862Z pass 2: asked 217, answered 0, failed 217 {"quota":217} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18157 seconds.","type":"quota_error","code":429}} in 3983s
+2026-09-09T12:03:21.880Z waiting 120s before the next pass
+2026-09-09T12:06:11.502Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 14053 seconds.","type":"quota_error","code":429}}
+2026-09-09T13:09:03.142Z pass 3: asked 217, answered 0, failed 217 {"quota":217} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 14053 seconds.","type":"quota_error","code":429}} in 3821s
+2026-09-09T13:09:03.157Z waiting 240s before the next pass
+2026-09-09T13:14:15.776Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 9993 seconds.","type":"quota_error","code":429}}
+2026-09-09T14:18:40.831Z pass 4: asked 217, answered 0, failed 217 {"quota":217} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 9993 seconds.","type":"quota_error","code":429}} in 3938s
+2026-09-09T14:18:40.860Z waiting 480s before the next pass
+2026-09-09T14:27:29.662Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 5575 seconds.","type":"quota_error","code":429}}
+2026-09-09T15:33:29.725Z pass 5: asked 217, answered 0, failed 217 {"quota":217} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 5575 seconds.","type":"quota_error","code":429}} in 4009s
+2026-09-09T15:33:29.756Z waiting 960s before the next pass
+2026-09-09T15:50:37.033Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 587 seconds.","type":"quota_error","code":429}}
+2026-09-09T16:04:22.403Z   61/217 asked, 25 answered, 35.7s each
+2026-09-09T16:07:12.592Z   86/217 asked, 50 answered, 21.3s each
+2026-09-09T16:11:55.160Z   111/217 asked, 75 answered, 17.9s each
+2026-09-09T16:15:15.654Z   136/217 asked, 100 answered, 15.5s each
+2026-09-09T16:17:52.980Z   161/217 asked, 125 answered, 13.6s each
+2026-09-09T16:20:23.888Z   186/217 asked, 150 answered, 12.4s each
+2026-09-09T16:26:07.197Z pass 6: asked 217, answered 168, failed 49 {"quota":49} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 587 seconds.","type":"quota_error","code":429}} in 2197s
+2026-09-09T16:26:07.260Z waiting 15s before the next pass
+2026-09-09T16:27:11.829Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 27193 seconds.","type":"quota_error","code":429}}
+2026-09-09T16:40:32.976Z pass 7: asked 49, answered 0, failed 49 {"quota":49} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 27193 seconds.","type":"quota_error","code":429}} in 851s
+2026-09-09T16:40:33.046Z waiting 60s before the next pass
+2026-09-09T16:42:22.775Z   first quota failure: 429 {"error":{"message":"Rate limit exceeded. Retry after 1 seconds.","type":"rate_limit_error","code":429}}
+2026-09-09T16:56:03.087Z pass 8: asked 49, answered 0, failed 49 {"quota":49} e.g. 429 {"error":{"message":"Rate limit exceeded. Retry after 1 seconds.","type":"rate_limit_error","code":429}} in 870s
+2026-09-09T16:56:03.149Z waiting 120s before the next pass
+2026-09-09T16:59:11.418Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 25292 seconds.","type":"quota_error","code":429}}
+2026-09-09T17:15:48.160Z pass 9: asked 49, answered 0, failed 49 {"quota":49} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 25292 seconds.","type":"quota_error","code":429}} in 1065s
+2026-09-09T17:15:48.218Z waiting 240s before the next pass
+2026-09-09T17:20:43.106Z   first server failure: 502 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html class="no-js ie7 oldie" 
+2026-09-09T17:31:11.893Z   28/49 asked, 25 answered, 27.3s each
+2026-09-09T17:32:48.266Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23256 seconds.","type":"quota_error","code":429}}
+2026-09-09T17:36:54.510Z pass 10: asked 49, answered 32, failed 17 {"server":3,"quota":14} e.g. 502 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html clas in 1026s
+2026-09-09T17:36:54.578Z waiting 15s before the next pass
+2026-09-09T17:37:58.776Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 22946 seconds.","type":"quota_error","code":429}}
+2026-09-09T17:42:34.968Z pass 11: asked 17, answered 0, failed 17 {"quota":17} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 22946 seconds.","type":"quota_error","code":429}} in 325s
+2026-09-09T17:42:35.040Z waiting 60s before the next pass
+2026-09-09T17:44:28.448Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 22559 seconds.","type":"quota_error","code":429}}
+2026-09-09T17:48:49.157Z pass 12: asked 17, answered 0, failed 17 {"quota":17} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 22559 seconds.","type":"quota_error","code":429}} in 314s
+2026-09-09T17:48:49.224Z waiting 120s before the next pass
+2026-09-09T17:51:46.664Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 22126 seconds.","type":"quota_error","code":429}}
+2026-09-09T17:56:14.497Z pass 13: asked 17, answered 0, failed 17 {"quota":17} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 22126 seconds.","type":"quota_error","code":429}} in 325s
+2026-09-09T17:56:14.558Z waiting 240s before the next pass
+2026-09-09T18:01:06.170Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21561 seconds.","type":"quota_error","code":429}}
+2026-09-09T18:06:33.649Z pass 14: asked 17, answered 0, failed 17 {"quota":17} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21561 seconds.","type":"quota_error","code":429}} in 379s
+2026-09-09T18:06:33.702Z waiting 480s before the next pass
+2026-09-09T18:15:27.011Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 20698 seconds.","type":"quota_error","code":429}}
+2026-09-09T18:20:45.912Z pass 15: asked 17, answered 0, failed 17 {"quota":17} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 20698 seconds.","type":"quota_error","code":429}} in 372s
+2026-09-09T18:20:46.009Z waiting 960s before the next pass
+2026-09-09T18:37:36.750Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 19368 seconds.","type":"quota_error","code":429}}
+2026-09-09T18:41:52.510Z pass 16: asked 17, answered 0, failed 17 {"quota":17} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 19368 seconds.","type":"quota_error","code":429}} in 306s
+2026-09-09T18:41:52.636Z waiting 1800s before the next pass
+2026-09-09T19:12:41.737Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 17263 seconds.","type":"quota_error","code":429}}
+2026-09-09T19:16:58.139Z pass 17: asked 17, answered 0, failed 17 {"quota":17} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 17263 seconds.","type":"quota_error","code":429}} in 306s
+2026-09-09T19:16:58.197Z waiting 1800s before the next pass
+2026-09-09T19:47:58.331Z   first server failure: 502 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html class="no-js ie7 oldie" 
+2026-09-09T19:55:25.713Z pass 18: asked 17, answered 0, failed 17 {"server":17} e.g. 502 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html clas in 507s
+2026-09-09T19:55:25.777Z waiting 1800s before the next pass
+2026-09-09T22:55:59.671Z   first server failure: 500 {"status":"error","msg":"failed to verify account balance: plane balance read: balance: read hanzo/hanzo: org: read lease orgs/hanzo/.ow
+2026-09-09T23:07:00.970Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 3274 seconds.","type":"quota_error","code":429}}
+2026-09-09T23:11:30.966Z pass 19: asked 17, answered 9, failed 8 {"server":1,"quota":7} e.g. 500 {"status":"error","msg":"failed to verify account balance: plane balance read: balance: read hanzo/hanzo: org: read  in 1413s
+2026-09-09T23:11:31.082Z waiting 15s before the next pass
+2026-09-09T23:20:24.546Z   first server failure: 524 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html class="no-js ie7 oldie" 
+2026-09-09T23:28:50.927Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 1894 seconds.","type":"quota_error","code":429}}
+2026-09-09T23:49:20.291Z pass 20: asked 8, answered 0, failed 8 {"server":3,"quota":5} e.g. 524 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html clas in 2254s
+2026-09-09T23:49:23.271Z waiting 60s before the next pass
+2026-09-09T23:53:32.624Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 412 seconds.","type":"quota_error","code":429}}
+2026-09-10T00:08:16.146Z   first server failure: 503 {"error":{"message":"Unable to verify your balance right now. Please retry in a moment.","type":"billing_error","code":"balance_unavaila
+2026-09-10T00:16:03.204Z pass 21: asked 8, answered 2, failed 6 {"quota":3,"server":3} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 412 seconds.","type":"quota_error","code":429}} in 1530s
+2026-09-10T00:16:03.311Z waiting 15s before the next pass
+2026-09-10T01:06:58.482Z   first network failure: network: AbortError
+2026-09-10T01:15:37.275Z   first server failure: 500 {"status":"error","msg":"failed to verify account balance: plane balance read: balance: read hanzo/hanzo: org: read lease orgs/hanzo/.ow
+2026-09-10T01:15:37.275Z pass 22: asked 6, answered 2, failed 4 {"network":3,"server":1} e.g. network: AbortError in 2599s
+2026-09-10T01:15:37.342Z waiting 15s before the next pass
+2026-09-10T01:16:15.982Z pass 23: asked 4, answered 4, failed 0 in 21s
+2026-09-10T01:16:16.096Z done: 282/282 answered

@@ -596,9 +596,9 @@ k: `20` · reader: `enso-flash` · commit: `9eab30f73493a28244d1cd00b3fa53b83fdf
 
 | category | n | of | f1 | em | exact | supported | answered | tokens | p50_ms | p95_ms |
 |---|---|---|---|---|---|---|---|---|---|---|
-| all | 57.00 | 1536 | 54.6 [45.2, 63.7] | 26.3 [15.8, 38.6] | 86.0 | 22.8 | 57.9 | 981 | 4546 | 154013 |
-| dev | 3.00 | 383 | 88.9 [66.7, 100.0] | 66.7 [0.0, 100.0] | 66.7 | 33.3 | 100.0 | 1091 | 4257 | 13074 |
-| test | 54.00 | 1153 | 52.7 [42.6, 63.3] | 24.1 [13.0, 37.0] | 87.0 | 22.2 | 55.6 | 975 | 4630 | 154013 |
+| all | 282 | 1536 | 45.1 [41.2, 49.1] | 13.8 [9.9, 18.1] | 87.9 | 13.5 | 47.5 | 971 | 5048 | 25064 |
+| dev | 74.00 | 383 | 50.9 [42.8, 58.6] | 14.9 [6.8, 23.0] | 87.8 | 13.5 | 55.4 | 984 | 4516 | 13074 |
+| test | 208 | 1153 | 43.1 [37.9, 47.5] | 13.5 [9.1, 18.3] | 88.0 | 13.5 | 44.7 | 967 | 5627 | 31554 |
 
 ### locomo-all-context-k20-gemma4-31b
 
@@ -619,9 +619,9 @@ k: `20` · reader: `gpt-oss-120b` · commit: `9eab30f73493a28244d1cd00b3fa53b83f
 
 | category | n | of | f1 | em | exact | supported | answered | tokens | p50_ms | p95_ms |
 |---|---|---|---|---|---|---|---|---|---|---|
-| all | 181 | 1536 | 45.4 [40.5, 50.7] | 14.4 [9.4, 19.9] | 87.8 | 11.6 | 47.5 | 993 | 2182 | 28949 |
-| dev | 69.00 | 383 | 51.5 [42.8, 59.5] | 15.9 [8.7, 24.6] | 88.4 | 14.5 | 55.1 | 994 | 2217 | 35269 |
-| test | 112 | 1153 | 41.7 [35.2, 48.5] | 13.4 [8.0, 20.5] | 87.5 | 9.8 | 42.9 | 992 | 2154 | 5760 |
+| all | 282 | 1536 | 45.3 [41.6, 49.5] | 13.5 [9.9, 17.4] | 87.9 | 13.5 | 47.9 | 971 | 2726 | 31152 |
+| dev | 74.00 | 383 | 51.5 [42.9, 59.4] | 14.9 [6.8, 23.0] | 87.8 | 13.5 | 55.4 | 984 | 2358 | 35269 |
+| test | 208 | 1153 | 43.1 [38.4, 47.8] | 13.0 [8.7, 17.3] | 88.0 | 13.5 | 45.2 | 967 | 2843 | 15562 |
 
 ### locomo-all-context-k20-qwen3.6-35b-a3b
 
@@ -1034,7 +1034,7 @@ split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6
 
 ### mab-dev-beamx-none
 
-split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `c687fd6500` · prompt sha: `prompts/reader-mab.txt`
+split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `2bce2e8f3e1` · prompt sha: `prompts/reader-mab.txt`
 
 | size | n | substring_em |
 |---|---|---|
@@ -1109,7 +1109,7 @@ split: `test` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.
 
 ### mab-test-beamx-none
 
-split: `test` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `c687fd6500` · prompt sha: `prompts/reader-mab.txt`
+split: `test` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `2bce2e8f3e1` · prompt sha: `prompts/reader-mab.txt`
 
 | size | n | substring_em |
 |---|---|---|
