@@ -1,0 +1,15 @@
+{
+ "bench": "MemoryAgentBench Conflict_Resolution (FactConsolidation)",
+ "dataset_sha256": "24d5c3f09ce0ce15625cb9f8a98f44f0d864ca6c94d7b4ad04eb697ca3a5ff45",
+ "split": "dev",
+ "row": "beamx",
+ "reader": "none",
+ "planner": "rules:304 lexicon:442",
+ "embedding": "zenlm/zen-embedding-0.6b",
+ "k": 10,
+ "temperature": 0,
+ "max_tokens": 64,
+ "prompt": "prompts/reader-mab.txt",
+ "prompt_sha256": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
+ "commit": "2bce2e8f3e1"
+}

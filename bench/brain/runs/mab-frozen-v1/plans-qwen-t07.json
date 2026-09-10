@@ -1,0 +1,5750 @@
+{
+ "Which sport is goaltender associated with?": {
+  "entity": "goaltender",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is Nobuhiro Watsuki famous for?": {
+  "entity": "Nobuhiro Watsuki",
+  "chain": [
+   "notable_work"
+  ],
+  "model": "rules"
+ },
+ "Which country was rugby union created in?": {
+  "entity": "rugby union",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "What is Ferdowsi famous for?": {
+  "entity": "Ferdowsi",
+  "chain": [
+   "notable_work"
+  ],
+  "model": "rules"
+ },
+ "Which university was Joan Didion educated at?": {
+  "entity": "Joan Didion",
+  "chain": [
+   "educated_at"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of The Marriage of Figaro?": {
+  "entity": "The Marriage of Figaro",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Tunisia national football team associated with?": {
+  "entity": "Tunisia national football team",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Which sport is quarterback associated with?": {
+  "entity": "quarterback",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the official language of Japan?": {
+  "entity": "Japan",
+  "chain": [
+   "official_lang"
+  ],
+  "model": "rules"
+ },
+ "What is the name of the current head of the Tucson government?": {
+  "entity": "Tucson",
+  "chain": [
+   "head_of_gov"
+  ],
+  "model": "rules"
+ },
+ "What is the name of the current head of the Italy government?": {
+  "entity": "Italy",
+  "chain": [
+   "head_of_gov"
+  ],
+  "model": "rules"
+ },
+ "Who performed Meredith Grey?": {
+  "entity": "Meredith Grey",
+  "chain": [
+   "performer"
+  ],
+  "model": "rules"
+ },
+ "What position does Robert Parish play?": {
+  "entity": "Robert Parish",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Cédric Klapisch?": {
+  "entity": "Cédric Klapisch",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of Sidereus Nuncius?": {
+  "entity": "Sidereus Nuncius",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "Which continent is Germany located in?": {
+  "entity": "Germany",
+  "chain": [
+   "continent"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Kingdom of Ireland affiliated with?": {
+  "entity": "Kingdom of Ireland",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "Which country was association football created in?": {
+  "entity": "association football",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "Who is the chief executive officer of Microsoft?": {
+  "entity": "Microsoft",
+  "chain": [
+   "ceo"
+  ],
+  "model": "rules"
+ },
+ "Who is the chairperson of Harvard University?": {
+  "entity": "Harvard University",
+  "chain": [
+   "chairperson"
+  ],
+  "model": "rules"
+ },
+ "Who founded Church of Scotland?": {
+  "entity": "Church of Scotland",
+  "chain": [
+   "founder"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Galwegians RFC associated with?": {
+  "entity": "Galwegians RFC",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Who is the director of American Broadcasting Company?": {
+  "entity": "American Broadcasting Company",
+  "chain": [
+   "director"
+  ],
+  "model": "rules"
+ },
+ "What is the capital of Tang Empire?": {
+  "entity": "Tang Empire",
+  "chain": [
+   "capital"
+  ],
+  "model": "rules"
+ },
+ "Who is the director of British Broadcasting Corporation?": {
+  "entity": "British Broadcasting Corporation",
+  "chain": [
+   "director"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Benjamin Mazar?": {
+  "entity": "Benjamin Mazar",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What type of music does Michael Mantler play?": {
+  "entity": "Michael Mantler",
+  "chain": [
+   "genre"
+  ],
+  "model": "rules"
+ },
+ "Which country was baseball created in?": {
+  "entity": "baseball",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Ernst Heinkel?": {
+  "entity": "Ernst Heinkel",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which country was rap rock created in?": {
+  "entity": "rap rock",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "What is the official language of United States of America?": {
+  "entity": "United States of America",
+  "chain": [
+   "official_lang"
+  ],
+  "model": "rules"
+ },
+ "Who performed Past Masters?": {
+  "entity": "Past Masters",
+  "chain": [
+   "performer"
+  ],
+  "model": "rules"
+ },
+ "What is the capital of Japan?": {
+  "entity": "Japan",
+  "chain": [
+   "capital"
+  ],
+  "model": "rules"
+ },
+ "What is the capital of France?": {
+  "entity": "France",
+  "chain": [
+   "capital"
+  ],
+  "model": "rules"
+ },
+ "Which sport is wide receiver associated with?": {
+  "entity": "wide receiver",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What position does Hines Ward play?": {
+  "entity": "Hines Ward",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "What is the capital of Australia?": {
+  "entity": "Australia",
+  "chain": [
+   "capital"
+  ],
+  "model": "rules"
+ },
+ "Which continent is Malaysia located in?": {
+  "entity": "Malaysia",
+  "chain": [
+   "continent"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of A Wizard of Earthsea?": {
+  "entity": "A Wizard of Earthsea",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "Who performed Free as a Bird?": {
+  "entity": "Free as a Bird",
+  "chain": [
+   "performer"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of Our Mutual Friend?": {
+  "entity": "Our Mutual Friend",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "Which country was basketball created in?": {
+  "entity": "basketball",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Hal Needham?": {
+  "entity": "Hal Needham",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which continent is Bengaluru located in?": {
+  "entity": "Bengaluru",
+  "chain": [
+   "continent"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Slovakia national football team associated with?": {
+  "entity": "Slovakia national football team",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the name of the current head of state in United States of America?": {
+  "entity": "United States of America",
+  "chain": [
+   "head_of_state"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Imelda Marcos affiliated with?": {
+  "entity": "Imelda Marcos",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "What type of music does Dana International play?": {
+  "entity": "Dana International",
+  "chain": [
+   "genre"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Sable?": {
+  "entity": "Sable",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which country was Charlie Hebdo created in?": {
+  "entity": "Charlie Hebdo",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "Who is Elvis Presley married to?": {
+  "entity": "Elvis Presley",
+  "chain": [
+   "spouse"
+  ],
+  "model": "rules"
+ },
+ "Who performed Hermione Granger?": {
+  "entity": "Hermione Granger",
+  "chain": [
+   "performer"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Bo Ryan associated with?": {
+  "entity": "Bo Ryan",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What type of music does John McVie play?": {
+  "entity": "John McVie",
+  "chain": [
+   "genre"
+  ],
+  "model": "rules"
+ },
+ "What position does Rogério Ceni play?": {
+  "entity": "Rogério Ceni",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "Who is the chief executive officer of Twitter?": {
+  "entity": "Twitter",
+  "chain": [
+   "ceo"
+  ],
+  "model": "rules"
+ },
+ "What language does Kylie Minogue speak?": {
+  "entity": "Kylie Minogue",
+  "chain": [
+   "language"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Darryl Strawberry associated with?": {
+  "entity": "Darryl Strawberry",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Which sport is placekicker associated with?": {
+  "entity": "placekicker",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Which continent is San Francisco located in?": {
+  "entity": "San Francisco",
+  "chain": [
+   "continent"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Ayumi Hamasaki?": {
+  "entity": "Ayumi Hamasaki",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What position does Blair Walsh play?": {
+  "entity": "Blair Walsh",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "Who is Tony Blair married to?": {
+  "entity": "Tony Blair",
+  "chain": [
+   "spouse"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of Endymion?": {
+  "entity": "Endymion",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of Lady Windermere's Fan?": {
+  "entity": "Lady Windermere's Fan",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "What is the name of the current head of the Japan government?": {
+  "entity": "Japan",
+  "chain": [
+   "head_of_gov"
+  ],
+  "model": "rules"
+ },
+ "Who is the chairperson of Congolese Party of Labour?": {
+  "entity": "Congolese Party of Labour",
+  "chain": [
+   "chairperson"
+  ],
+  "model": "rules"
+ },
+ "Which sport is flanker associated with?": {
+  "entity": "flanker",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the capital of Czech Republic?": {
+  "entity": "Czech Republic",
+  "chain": [
+   "capital"
+  ],
+  "model": "rules"
+ },
+ "What position does Lisa Leslie play?": {
+  "entity": "Lisa Leslie",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "What is the name of the current head of state in Soviet Union?": {
+  "entity": "Soviet Union",
+  "chain": [
+   "head_of_state"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Ferdinand von Richthofen?": {
+  "entity": "Ferdinand von Richthofen",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Karen Armstrong affiliated with?": {
+  "entity": "Karen Armstrong",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "What is the capital of Romania?": {
+  "entity": "Romania",
+  "chain": [
+   "capital"
+  ],
+  "model": "rules"
+ },
+ "Which continent is India located in?": {
+  "entity": "India",
+  "chain": [
+   "continent"
+  ],
+  "model": "rules"
+ },
+ "Who founded Sasanian Empire?": {
+  "entity": "Sasanian Empire",
+  "chain": [
+   "founder"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Surrey Senior Cup associated with?": {
+  "entity": "Surrey Senior Cup",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Narendra Modi?": {
+  "entity": "Narendra Modi",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who is Victoria Beckham married to?": {
+  "entity": "Victoria Beckham",
+  "chain": [
+   "spouse"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Charles Messier?": {
+  "entity": "Charles Messier",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What position does Mike D'Antoni play?": {
+  "entity": "Mike D'Antoni",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Colin Irwin?": {
+  "entity": "Colin Irwin",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who is Walter Chrysler's child?": {
+  "entity": "Walter Chrysler",
+  "chain": [
+   "child"
+  ],
+  "model": "rules"
+ },
+ "Who is Charles Darwin married to?": {
+  "entity": "Charles Darwin",
+  "chain": [
+   "spouse"
+  ],
+  "model": "rules"
+ },
+ "What position does Irving Fryar play?": {
+  "entity": "Irving Fryar",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Salem-Keizer Volcanoes associated with?": {
+  "entity": "Salem-Keizer Volcanoes",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What position does Nick Rimando play?": {
+  "entity": "Nick Rimando",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "Which sport is power forward associated with?": {
+  "entity": "power forward",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Morris Iemma affiliated with?": {
+  "entity": "Morris Iemma",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "Which sport is FC Slutsk associated with?": {
+  "entity": "FC Slutsk",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the capital of United Kingdom?": {
+  "entity": "United Kingdom",
+  "chain": [
+   "capital"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Dan Christensen?": {
+  "entity": "Dan Christensen",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who founded Montanism?": {
+  "entity": "Montanism",
+  "chain": [
+   "founder"
+  ],
+  "model": "rules"
+ },
+ "What is the capital of Papal States?": {
+  "entity": "Papal States",
+  "chain": [
+   "capital"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Edmund Burke?": {
+  "entity": "Edmund Burke",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Gary SouthShore RailCats associated with?": {
+  "entity": "Gary SouthShore RailCats",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Rick Remender?": {
+  "entity": "Rick Remender",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Jeff Hornacek associated with?": {
+  "entity": "Jeff Hornacek",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of David Copperfield?": {
+  "entity": "David Copperfield",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Maria Amalia of Naples and Sicily affiliated with?": {
+  "entity": "Maria Amalia of Naples and Sicily",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "What position does Tony Parker play?": {
+  "entity": "Tony Parker",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "What language does Federico García Lorca speak?": {
+  "entity": "Federico García Lorca",
+  "chain": [
+   "language"
+  ],
+  "model": "rules"
+ },
+ "What is Stephen Crane famous for?": {
+  "entity": "Stephen Crane",
+  "chain": [
+   "notable_work"
+  ],
+  "model": "rules"
+ },
+ "Who is Igor of Kiev married to?": {
+  "entity": "Igor of Kiev",
+  "chain": [
+   "spouse"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Robert Wisdom?": {
+  "entity": "Robert Wisdom",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Renaud Lavillenie?": {
+  "entity": "Renaud Lavillenie",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which sport is midfielder associated with?": {
+  "entity": "midfielder",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of James Badge Dale?": {
+  "entity": "James Badge Dale",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Catholic bishop affiliated with?": {
+  "entity": "Catholic bishop",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Travis Barker?": {
+  "entity": "Travis Barker",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Burleigh Grimes associated with?": {
+  "entity": "Burleigh Grimes",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Which university was Hrishikesh Mukherjee educated at?": {
+  "entity": "Hrishikesh Mukherjee",
+  "chain": [
+   "educated_at"
+  ],
+  "model": "rules"
+ },
+ "What is the capital of Iran?": {
+  "entity": "Iran",
+  "chain": [
+   "capital"
+  ],
+  "model": "rules"
+ },
+ "Who is the chief executive officer of Apple Inc.?": {
+  "entity": "Apple Inc.",
+  "chain": [
+   "ceo"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Lionel Richie?": {
+  "entity": "Lionel Richie",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Tom Cruise affiliated with?": {
+  "entity": "Tom Cruise",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of Inuyasha?": {
+  "entity": "Inuyasha",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Terry Collins associated with?": {
+  "entity": "Terry Collins",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Which sport is 2009 Six Nations Championship associated with?": {
+  "entity": "2009 Six Nations Championship",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What position does Vernon Davis play?": {
+  "entity": "Vernon Davis",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "What is the name of the current head of state in Ireland?": {
+  "entity": "Ireland",
+  "chain": [
+   "head_of_state"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Imran Khan associated with?": {
+  "entity": "Imran Khan",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Tomoyasu Hotei?": {
+  "entity": "Tomoyasu Hotei",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What language does Matti Vanhanen speak?": {
+  "entity": "Matti Vanhanen",
+  "chain": [
+   "language"
+  ],
+  "model": "rules"
+ },
+ "Who founded Transcendental Meditation movement?": {
+  "entity": "Transcendental Meditation movement",
+  "chain": [
+   "founder"
+  ],
+  "model": "rules"
+ },
+ "Which continent is Philippines located in?": {
+  "entity": "Philippines",
+  "chain": [
+   "continent"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of The Great Movies?": {
+  "entity": "The Great Movies",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "Which university was Chicago Boys educated at?": {
+  "entity": "Chicago Boys",
+  "chain": [
+   "educated_at"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Andrew Carnegie?": {
+  "entity": "Andrew Carnegie",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who is Kristen Bell married to?": {
+  "entity": "Kristen Bell",
+  "chain": [
+   "spouse"
+  ],
+  "model": "rules"
+ },
+ "What is William Gibson famous for?": {
+  "entity": "William Gibson",
+  "chain": [
+   "notable_work"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Bahawalpur State affiliated with?": {
+  "entity": "Bahawalpur State",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "Who is the chief executive officer of Advanced Micro Devices?": {
+  "entity": "Advanced Micro Devices",
+  "chain": [
+   "ceo"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Sue Grafton?": {
+  "entity": "Sue Grafton",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of The Age of Reason?": {
+  "entity": "The Age of Reason",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "What language does Daphne du Maurier speak?": {
+  "entity": "Daphne du Maurier",
+  "chain": [
+   "language"
+  ],
+  "model": "rules"
+ },
+ "What type of music does Nat King Cole play?": {
+  "entity": "Nat King Cole",
+  "chain": [
+   "genre"
+  ],
+  "model": "rules"
+ },
+ "Which country was heartland rock created in?": {
+  "entity": "heartland rock",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "Who founded Jaguar Cars?": {
+  "entity": "Jaguar Cars",
+  "chain": [
+   "founder"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Sports Interactive associated with?": {
+  "entity": "Sports Interactive",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Which country was Sigur Rós created in?": {
+  "entity": "Sigur Rós",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "Which country was pesäpallo created in?": {
+  "entity": "pesäpallo",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Madame du Barry?": {
+  "entity": "Madame du Barry",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who is the head coach of Los Angeles FC?": {
+  "entity": "Los Angeles FC",
+  "chain": [
+   "head_coach"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Natalie Portman affiliated with?": {
+  "entity": "Natalie Portman",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "What position does Artur Boruc play?": {
+  "entity": "Artur Boruc",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Ada Wong?": {
+  "entity": "Ada Wong",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who is Lalu Prasad Yadav married to?": {
+  "entity": "Lalu Prasad Yadav",
+  "chain": [
+   "spouse"
+  ],
+  "model": "rules"
+ },
+ "Which country was Orkneyinga saga created in?": {
+  "entity": "Orkneyinga saga",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "Which sport is shooting guard associated with?": {
+  "entity": "shooting guard",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Henri Grégoire?": {
+  "entity": "Henri Grégoire",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Wilhelm von Humboldt?": {
+  "entity": "Wilhelm von Humboldt",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is the name of the current head of the South Korea government?": {
+  "entity": "South Korea",
+  "chain": [
+   "head_of_gov"
+  ],
+  "model": "rules"
+ },
+ "What position does David Seaman play?": {
+  "entity": "David Seaman",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of Hard Times?": {
+  "entity": "Hard Times",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of David Farragut?": {
+  "entity": "David Farragut",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who founded Death Eater?": {
+  "entity": "Death Eater",
+  "chain": [
+   "founder"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Joseph Mitchell?": {
+  "entity": "Joseph Mitchell",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What type of music does Aki Takase play?": {
+  "entity": "Aki Takase",
+  "chain": [
+   "genre"
+  ],
+  "model": "rules"
+ },
+ "Which country was Shaman King created in?": {
+  "entity": "Shaman King",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Henry of Blois affiliated with?": {
+  "entity": "Henry of Blois",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "What is the original language of The Sky at Night?": {
+  "entity": "The Sky at Night",
+  "chain": [
+   "original_lang"
+  ],
+  "model": "rules"
+ },
+ "Who is Prince Andrew, Duke of York married to?": {
+  "entity": "Prince Andrew, Duke of York",
+  "chain": [
+   "spouse"
+  ],
+  "model": "rules"
+ },
+ "Who performed Day Tripper?": {
+  "entity": "Day Tripper",
+  "chain": [
+   "performer"
+  ],
+  "model": "rules"
+ },
+ "Who is the director of CERN?": {
+  "entity": "CERN",
+  "chain": [
+   "director"
+  ],
+  "model": "rules"
+ },
+ "Who performed Jane Foster?": {
+  "entity": "Jane Foster",
+  "chain": [
+   "performer"
+  ],
+  "model": "rules"
+ },
+ "Who is the head coach of Burnley F.C.?": {
+  "entity": "Burnley F.C.",
+  "chain": [
+   "head_coach"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of Red Storm Rising?": {
+  "entity": "Red Storm Rising",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "What is the official language of Soviet Union?": {
+  "entity": "Soviet Union",
+  "chain": [
+   "official_lang"
+  ],
+  "model": "rules"
+ },
+ "Which continent is Great Britain located in?": {
+  "entity": "Great Britain",
+  "chain": [
+   "continent"
+  ],
+  "model": "rules"
+ },
+ "Who founded Sōtō?": {
+  "entity": "Sōtō",
+  "chain": [
+   "founder"
+  ],
+  "model": "rules"
+ },
+ "Which country was The Orange County Register created in?": {
+  "entity": "The Orange County Register",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "Which sport is racing video game associated with?": {
+  "entity": "racing video game",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Philip II of Spain?": {
+  "entity": "Philip II of Spain",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is Luís de Camões famous for?": {
+  "entity": "Luís de Camões",
+  "chain": [
+   "notable_work"
+  ],
+  "model": "rules"
+ },
+ "Who is Wilma Flintstone's child?": {
+  "entity": "Wilma Flintstone",
+  "chain": [
+   "child"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Erik Spoelstra associated with?": {
+  "entity": "Erik Spoelstra",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Which country was Die Gartenlaube created in?": {
+  "entity": "Die Gartenlaube",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Sher Bahadur Deuba?": {
+  "entity": "Sher Bahadur Deuba",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who is the chief executive officer of Toshiba?": {
+  "entity": "Toshiba",
+  "chain": [
+   "ceo"
+  ],
+  "model": "rules"
+ },
+ "Which university was Ilir Meta educated at?": {
+  "entity": "Ilir Meta",
+  "chain": [
+   "educated_at"
+  ],
+  "model": "rules"
+ },
+ "What is Richard Adams famous for?": {
+  "entity": "Richard Adams",
+  "chain": [
+   "notable_work"
+  ],
+  "model": "rules"
+ },
+ "Who is the chairperson of General Motors?": {
+  "entity": "General Motors",
+  "chain": [
+   "chairperson"
+  ],
+  "model": "rules"
+ },
+ "Which continent is Zürich located in?": {
+  "entity": "Zürich",
+  "chain": [
+   "continent"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of The Andromeda Strain?": {
+  "entity": "The Andromeda Strain",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "What is the name of the current head of the India government?": {
+  "entity": "India",
+  "chain": [
+   "head_of_gov"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Bibi Andersson?": {
+  "entity": "Bibi Andersson",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Felix Aylmer?": {
+  "entity": "Felix Aylmer",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Kim Tae-hee?": {
+  "entity": "Kim Tae-hee",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is the official language of Kingdom of the Netherlands?": {
+  "entity": "Kingdom of the Netherlands",
+  "chain": [
+   "official_lang"
+  ],
+  "model": "rules"
+ },
+ "What is Colleen McCullough famous for?": {
+  "entity": "Colleen McCullough",
+  "chain": [
+   "notable_work"
+  ],
+  "model": "rules"
+ },
+ "Which religion is John Paul I affiliated with?": {
+  "entity": "John Paul I",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "Who performed Taxman?": {
+  "entity": "Taxman",
+  "chain": [
+   "performer"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Texas Legends associated with?": {
+  "entity": "Texas Legends",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Jaime Alguersuari?": {
+  "entity": "Jaime Alguersuari",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Alassane Dramane Ouattara affiliated with?": {
+  "entity": "Alassane Dramane Ouattara",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "What position does Andrea Pirlo play?": {
+  "entity": "Andrea Pirlo",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "What type of music does Big Sean play?": {
+  "entity": "Big Sean",
+  "chain": [
+   "genre"
+  ],
+  "model": "rules"
+ },
+ "Which country was bluegrass music created in?": {
+  "entity": "bluegrass music",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "Which sport is North East Stars associated with?": {
+  "entity": "North East Stars",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Who is the chief executive officer of Tesla?": {
+  "entity": "Tesla",
+  "chain": [
+   "ceo"
+  ],
+  "model": "rules"
+ },
+ "Who founded Omidyar Network?": {
+  "entity": "Omidyar Network",
+  "chain": [
+   "founder"
+  ],
+  "model": "rules"
+ },
+ "What is the capital of Czechoslovakia?": {
+  "entity": "Czechoslovakia",
+  "chain": [
+   "capital"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Ellen Pompeo?": {
+  "entity": "Ellen Pompeo",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Alan Blyth?": {
+  "entity": "Alan Blyth",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of Satyricon?": {
+  "entity": "Satyricon",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "Which university was Stewart Udall educated at?": {
+  "entity": "Stewart Udall",
+  "chain": [
+   "educated_at"
+  ],
+  "model": "rules"
+ },
+ "Who is the chairperson of Aam Aadmi Party?": {
+  "entity": "Aam Aadmi Party",
+  "chain": [
+   "chairperson"
+  ],
+  "model": "rules"
+ },
+ "Who performed Beatles for Sale?": {
+  "entity": "Beatles for Sale",
+  "chain": [
+   "performer"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Philippine Basketball Association Draft associated with?": {
+  "entity": "Philippine Basketball Association Draft",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What type of music does Archie Shepp play?": {
+  "entity": "Archie Shepp",
+  "chain": [
+   "genre"
+  ],
+  "model": "rules"
+ },
+ "What is the capital of El Salvador?": {
+  "entity": "El Salvador",
+  "chain": [
+   "capital"
+  ],
+  "model": "rules"
+ },
+ "Which university was James Dashner educated at?": {
+  "entity": "James Dashner",
+  "chain": [
+   "educated_at"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of Areopagitica?": {
+  "entity": "Areopagitica",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "Who performed Dear Prudence?": {
+  "entity": "Dear Prudence",
+  "chain": [
+   "performer"
+  ],
+  "model": "rules"
+ },
+ "What language does George Boole speak?": {
+  "entity": "George Boole",
+  "chain": [
+   "language"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Altrincham F.C. associated with?": {
+  "entity": "Altrincham F.C.",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Which continent is São Paulo located in?": {
+  "entity": "São Paulo",
+  "chain": [
+   "continent"
+  ],
+  "model": "rules"
+ },
+ "Which sport is three-point field goal associated with?": {
+  "entity": "three-point field goal",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Paul Morley?": {
+  "entity": "Paul Morley",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who is Reese Witherspoon's child?": {
+  "entity": "Reese Witherspoon",
+  "chain": [
+   "child"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Lisbon Lions associated with?": {
+  "entity": "Lisbon Lions",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Who performed Born This Way Ball?": {
+  "entity": "Born This Way Ball",
+  "chain": [
+   "performer"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Denis Thatcher affiliated with?": {
+  "entity": "Denis Thatcher",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of Rerum Novarum?": {
+  "entity": "Rerum Novarum",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "What position does Manuel Neuer play?": {
+  "entity": "Manuel Neuer",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of Lonesome Dove?": {
+  "entity": "Lonesome Dove",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "What is the official language of Helsinki?": {
+  "entity": "Helsinki",
+  "chain": [
+   "official_lang"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Mads Mikkelsen?": {
+  "entity": "Mads Mikkelsen",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of The Vagina Monologues?": {
+  "entity": "The Vagina Monologues",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Montreal Royals associated with?": {
+  "entity": "Montreal Royals",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Estelle Getty?": {
+  "entity": "Estelle Getty",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which university was Adam Putnam educated at?": {
+  "entity": "Adam Putnam",
+  "chain": [
+   "educated_at"
+  ],
+  "model": "rules"
+ },
+ "What type of music does Tito Nieves play?": {
+  "entity": "Tito Nieves",
+  "chain": [
+   "genre"
+  ],
+  "model": "rules"
+ },
+ "What language does Jasper Fforde speak?": {
+  "entity": "Jasper Fforde",
+  "chain": [
+   "language"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Benedict XIII affiliated with?": {
+  "entity": "Benedict XIII",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "What language does Shane Meadows speak?": {
+  "entity": "Shane Meadows",
+  "chain": [
+   "language"
+  ],
+  "model": "rules"
+ },
+ "What position does Lou Gehrig play?": {
+  "entity": "Lou Gehrig",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "Who founded Shingon Buddhism?": {
+  "entity": "Shingon Buddhism",
+  "chain": [
+   "founder"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Cy Young?": {
+  "entity": "Cy Young",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Davina McCall?": {
+  "entity": "Davina McCall",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which country was Witches of East End created in?": {
+  "entity": "Witches of East End",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "Who is the chief executive officer of Oculus VR, LLC?": {
+  "entity": "Oculus VR, LLC",
+  "chain": [
+   "ceo"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Albert of Saxony affiliated with?": {
+  "entity": "Albert of Saxony",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "What language does Queen Victoria I speak?": {
+  "entity": "Queen Victoria I",
+  "chain": [
+   "language"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Indiana Mr. Basketball associated with?": {
+  "entity": "Indiana Mr. Basketball",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Laura Bush?": {
+  "entity": "Laura Bush",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of C. S. Forester?": {
+  "entity": "C. S. Forester",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Tom Simpson?": {
+  "entity": "Tom Simpson",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Diego Simeone associated with?": {
+  "entity": "Diego Simeone",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Which country was go-go created in?": {
+  "entity": "go-go",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Arthur Miller?": {
+  "entity": "Arthur Miller",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Who is the Prime Minister of Albania?": {
+  "entity": "Prime Minister of Albania",
+  "chain": [
+   "office"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Liz Lochhead?": {
+  "entity": "Liz Lochhead",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Texas Collegiate League associated with?": {
+  "entity": "Texas Collegiate League",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Who performed Vogue?": {
+  "entity": "Vogue",
+  "chain": [
+   "performer"
+  ],
+  "model": "rules"
+ },
+ "Who founded Armani?": {
+  "entity": "Armani",
+  "chain": [
+   "founder"
+  ],
+  "model": "rules"
+ },
+ "What position does Mathieu Flamini play?": {
+  "entity": "Mathieu Flamini",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Pius IX affiliated with?": {
+  "entity": "Pius IX",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "Who is Herodias's child?": {
+  "entity": "Herodias",
+  "chain": [
+   "child"
+  ],
+  "model": "rules"
+ },
+ "Which country was Jeune Afrique created in?": {
+  "entity": "Jeune Afrique",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Anna Ancher?": {
+  "entity": "Anna Ancher",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What type of music does Andy Griffith play?": {
+  "entity": "Andy Griffith",
+  "chain": [
+   "genre"
+  ],
+  "model": "rules"
+ },
+ "What language does William Shakespeare speak?": {
+  "entity": "William Shakespeare",
+  "chain": [
+   "language"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Joseph Lyons affiliated with?": {
+  "entity": "Joseph Lyons",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "Which sport is 2014 CollegeInsider.com Postseason Tournament associated with?": {
+  "entity": "2014 CollegeInsider.com Postseason Tournament",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Harry Judd?": {
+  "entity": "Harry Judd",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Grêmio Barueri Futebol associated with?": {
+  "entity": "Grêmio Barueri Futebol",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Pius VI affiliated with?": {
+  "entity": "Pius VI",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "Which university was Frank Norris educated at?": {
+  "entity": "Frank Norris",
+  "chain": [
+   "educated_at"
+  ],
+  "model": "rules"
+ },
+ "What language does Theodor Herzl speak?": {
+  "entity": "Theodor Herzl",
+  "chain": [
+   "language"
+  ],
+  "model": "rules"
+ },
+ "What is the official language of Spain?": {
+  "entity": "Spain",
+  "chain": [
+   "official_lang"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Glenn L. Martin?": {
+  "entity": "Glenn L. Martin",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which continent is Kingdom of Italy located in?": {
+  "entity": "Kingdom of Italy",
+  "chain": [
+   "continent"
+  ],
+  "model": "rules"
+ },
+ "Which sport is squeeze play associated with?": {
+  "entity": "squeeze play",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Worksop Town F.C. associated with?": {
+  "entity": "Worksop Town F.C.",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What is the original language of Gunsmoke?": {
+  "entity": "Gunsmoke",
+  "chain": [
+   "original_lang"
+  ],
+  "model": "rules"
+ },
+ "What is Helen Fielding famous for?": {
+  "entity": "Helen Fielding",
+  "chain": [
+   "notable_work"
+  ],
+  "model": "rules"
+ },
+ "Which continent is Cuba located in?": {
+  "entity": "Cuba",
+  "chain": [
+   "continent"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Gianni Morbidelli?": {
+  "entity": "Gianni Morbidelli",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is the name of the current head of the Nova Scotia government?": {
+  "entity": "Nova Scotia",
+  "chain": [
+   "head_of_gov"
+  ],
+  "model": "rules"
+ },
+ "Which country was The Unit created in?": {
+  "entity": "The Unit",
+  "chain": [
+   "country_origin"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Jason Motte?": {
+  "entity": "Jason Motte",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is the official language of Nokia?": {
+  "entity": "Nokia",
+  "chain": [
+   "official_lang"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of George R. R. Martin?": {
+  "entity": "George R. R. Martin",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What position does Shay Given play?": {
+  "entity": "Shay Given",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Glenn Miller?": {
+  "entity": "Glenn Miller",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Florentino Pérez associated with?": {
+  "entity": "Florentino Pérez",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "What position does Jerzy Dudek play?": {
+  "entity": "Jerzy Dudek",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Lonnie Mack?": {
+  "entity": "Lonnie Mack",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What language does Néstor Kirchner speak?": {
+  "entity": "Néstor Kirchner",
+  "chain": [
+   "language"
+  ],
+  "model": "rules"
+ },
+ "Which sport is Larry Bird associated with?": {
+  "entity": "Larry Bird",
+  "chain": [
+   "sport"
+  ],
+  "model": "rules"
+ },
+ "Who performed Jessica Jones?": {
+  "entity": "Jessica Jones",
+  "chain": [
+   "performer"
+  ],
+  "model": "rules"
+ },
+ "What is Alexander Hamilton famous for?": {
+  "entity": "Alexander Hamilton",
+  "chain": [
+   "notable_work"
+  ],
+  "model": "rules"
+ },
+ "Which university was Pablo Neruda educated at?": {
+  "entity": "Pablo Neruda",
+  "chain": [
+   "educated_at"
+  ],
+  "model": "rules"
+ },
+ "Who is the Minister for Home Affairs?": {
+  "entity": "Minister for Home Affairs",
+  "chain": [
+   "office"
+  ],
+  "model": "rules"
+ },
+ "Who is Chiang Kai-shek's child?": {
+  "entity": "Chiang Kai-shek",
+  "chain": [
+   "child"
+  ],
+  "model": "rules"
+ },
+ "Who is the author of Micrographia?": {
+  "entity": "Micrographia",
+  "chain": [
+   "author"
+  ],
+  "model": "rules"
+ },
+ "Who is the head coach of San Francisco Giants?": {
+  "entity": "San Francisco Giants",
+  "chain": [
+   "head_coach"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of Lorenzo Lamas?": {
+  "entity": "Lorenzo Lamas",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "rules"
+ },
+ "What is Charaka famous for?": {
+  "entity": "Charaka",
+  "chain": [
+   "notable_work"
+  ],
+  "model": "rules"
+ },
+ "Which religion is Jadranka Kosor affiliated with?": {
+  "entity": "Jadranka Kosor",
+  "chain": [
+   "religion"
+  ],
+  "model": "rules"
+ },
+ "What position does Sam Cassell play?": {
+  "entity": "Sam Cassell",
+  "chain": [
+   "position"
+  ],
+  "model": "rules"
+ },
+ "What is the official language of Tampere?": {
+  "entity": "Tampere",
+  "chain": [
+   "official_lang"
+  ],
+  "model": "rules"
+ },
+ "What is the country of citizenship of the spouse of the author of Our Mutual Friend?": {
+  "entity": "our mutual friend",
+  "chain": [
+   "author",
+   "spouse",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "In which location did the spouse of Igor of Kiev pass away?": {
+  "entity": "igor of kiev",
+  "chain": [
+   "spouse",
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "Which country is the birthplace of the sport associated with Steve Sax?": {
+  "entity": "steve sax",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country of origin for the sport of the Tunisia national football team?": {
+  "entity": "tunisia national football team",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the sport that Blair Walsh plays in which he is known for his position on the team?": {
+  "entity": "blair walsh",
+  "chain": [
+   "sport",
+   "notable_work",
+   "position"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the educational institution where the partner of Nicolae Ceaușescu was educated?": {
+  "entity": "nicolae ceaușescu",
+  "chain": [
+   "spouse",
+   "educated_at"
+  ],
+  "model": "lexicon"
+ },
+ "Which country does the current CEO of Twitter hold citizenship of?": {
+  "entity": "twitter",
+  "chain": [
+   "ceo",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "On which continent was the place of birth of Thomas Arne located?": {
+  "entity": "thomas arne",
+  "chain": [
+   "birth_place",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "To which continent does the country of citizenship of Colin Irwin pertain?": {
+  "entity": "colin irwin",
+  "chain": [
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the location of work of the founder of the religion to which John Walsh belongs?": {
+  "entity": "john walsh",
+  "chain": [
+   "religion",
+   "founder",
+   "work_location"
+  ],
+  "model": "lexicon"
+ },
+ "What is the religious affiliation of the person who founded the Transcendental Meditation movement?": {
+  "entity": "transcendental meditation movement",
+  "chain": [
+   "founder",
+   "religion"
+  ],
+  "model": "lexicon"
+ },
+ "What was the religion of the person with the citizenship of the country to which Edmund Burke belonged?": {
+  "entity": "edmund burke",
+  "chain": [
+   "citizenship",
+   "religion"
+  ],
+  "model": "lexicon"
+ },
+ "What is the capital city of the country where the sport associated with John Harkes has its origin?": {
+  "entity": "john harkes",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which faith is the partner of Laura Bush associated with?": {
+  "entity": "laura bush",
+  "chain": [
+   "spouse",
+   "religion"
+  ],
+  "model": "lexicon"
+ },
+ "What was the name of the head of state in the country where Andrew Carnegie was a citizen?": {
+  "entity": "andrew carnegie",
+  "chain": [
+   "citizenship",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "From which capital city did the Surrey Senior Cup, a sports competition, originate?": {
+  "entity": "surrey senior cup",
+  "chain": [
+   "capital",
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "From which country does the sport, with which Carlos Gómez is associated, come from?": {
+  "entity": "carlos gómez",
+  "chain": [
+   "origin",
+   "sport"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the capital of the country where Madame du Barry held a citizenship?": {
+  "entity": "madame du barry",
+  "chain": [
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the job title of the chairperson of the political organization Fatah?": {
+  "entity": "fatah",
+  "chain": [
+   "chairperson",
+   "occupation"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the capital of the country where the performer of \"Free as a Bird\"'s director/manager comes from?": {
+  "entity": "free as a bird",
+  "chain": [
+   "performer",
+   "director",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the language of the work that was created by the individual who created Rand al'Thor?": {
+  "entity": "rand althor",
+  "chain": [
+   "creator",
+   "original_lang"
+  ],
+  "model": "lexicon"
+ },
+ "What is the work location of the person who founded the religion Karen Armstrong belongs to?": {
+  "entity": "karen armstrong",
+  "chain": [
+   "religion",
+   "founder",
+   "work_location"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the child category of \"Categories\" created by the author?": {
+  "entity": "categories",
+  "chain": [
+   "child",
+   "creator",
+   "author"
+  ],
+  "model": "lexicon"
+ },
+ "Where is the country of origin of FC Vorskla Poltava?": {
+  "entity": "fc vorskla poltava",
+  "chain": [
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the capital of the country where the CEO of the developer of SteamOS holds a citizenship?": {
+  "entity": "steamos",
+  "chain": [
+   "developer",
+   "ceo",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the person who is the chief executive officer of the developer of F-22 Raptor?": {
+  "entity": "f-22 raptor",
+  "chain": [
+   "developer",
+   "ceo"
+  ],
+  "model": "lexicon"
+ },
+ "Who holds the position of chairperson in the organization where Joseph Story was employed?": {
+  "entity": "joseph story",
+  "chain": [
+   "employer",
+   "chairperson"
+  ],
+  "model": "lexicon"
+ },
+ "What city serves as the capital of the country where the performer who is the spouse of Derek Shepherd holds citizenship?": {
+  "entity": "derek shepherd",
+  "chain": [
+   "spouse",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the city that serves as the capital of the country to which Sable belongs?": {
+  "entity": "sable",
+  "chain": [
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "In which city serves as the capital of the country of citizenship of Country Joe McDonald?": {
+  "entity": "country joe mcdonald",
+  "chain": [
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What city or town is the headquarters of the educational institution, where the performer of the album \"Blood on the Tracks\" received education, located in?": {
+  "entity": "blood on the tracks",
+  "chain": [
+   "performer",
+   "educated_at",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the chief executive of the country where the sport associated with Bo Ryan was first developed?": {
+  "entity": "bo ryan",
+  "chain": [
+   "sport",
+   "head_of_gov",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "What is the continent of origin of the chief executive officer for the developer of Windows Phone?": {
+  "entity": "windows phone",
+  "chain": [
+   "developer",
+   "ceo",
+   "origin",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "Which continent does the country where the sport played by the Slovakia national football team originated come from?": {
+  "entity": "slovakia national football team",
+  "chain": [
+   "sport",
+   "origin",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "Which religion was the partner of Ferdinand Marcos associated with?": {
+  "entity": "ferdinand marcos",
+  "chain": [
+   "spouse",
+   "religion"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the significant creation associated with the creator of Vito Corleone?": {
+  "entity": "vito corleone",
+  "chain": [
+   "creator",
+   "notable_work"
+  ],
+  "model": "lexicon"
+ },
+ "To which country does the performer who goes by the name Rocket Man hold citizenship?": {
+  "entity": "rocket man",
+  "chain": [
+   "performer",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "Which language does the performer of Hermione Granger know how to speak, write or sign?": {
+  "entity": "hermione granger",
+  "chain": [
+   "performer",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "From which country does the musical genre Michael Mantler is associated with come from?": {
+  "entity": "michael mantler",
+  "chain": [
+   "genre",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "Which sport is associated with the position played by Robert Parish on a team or his specialty?": {
+  "entity": "robert parish",
+  "chain": [
+   "position",
+   "sport"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the person who founded the organization that Benjamin Mazar was part of?": {
+  "entity": "benjamin mazar",
+  "chain": [
+   "employer",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Which language is recognized as the official language of the place where Gennady Rozhdestvensky took his last breath?": {
+  "entity": "gennady rozhdestvensky",
+  "chain": [
+   "death_place",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the author of \"The Marriage of Figaro\"?": {
+  "entity": "the marriage of figaro",
+  "chain": [
+   "author",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "In which country was Darryl Strawberry's sport developed, and who is the head of government in that nation?": {
+  "entity": "darryl strawberry",
+  "chain": [
+   "sport",
+   "origin",
+   "head_of_gov"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country where the sport that Mike D'Antoni specialized in hails from?": {
+  "entity": "mike dantoni",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "At what location did the author of \"Sketches by Boz\" breathe his last?": {
+  "entity": "sketches by boz",
+  "chain": [
+   "author",
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "What is the capital city of the country from which the sport of Daniele De Rossi originated?": {
+  "entity": "daniele de rossi",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "To which continent is the country of citizenship of Ferdinand von Richthofen located?": {
+  "entity": "ferdinand von richthofen",
+  "chain": [
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the capital of the country where the sport played by Galwegians RFC was originated?": {
+  "entity": "galwegians rfc",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What languages are spoken, written or signed by the founder of Shingon Buddhism?": {
+  "entity": "shingon buddhism",
+  "chain": [
+   "founder",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "What is the professional role of the chairperson of the Congolese Party of Labour?": {
+  "entity": "congolese party of labour",
+  "chain": [
+   "chairperson"
+  ],
+  "model": "lexicon"
+ },
+ "Where did the religion associated with the Bagratuni Dynasty come into existence?": {
+  "entity": "bagratuni dynasty",
+  "chain": [
+   "religion"
+  ],
+  "model": "lexicon"
+ },
+ "What country does the genre of music associated with the spouse of Roy Rogers originate from?": {
+  "entity": "roy rogers",
+  "chain": [
+   "spouse",
+   "genre",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the capital located of the country where the director/producer of \"666 Park Avenue\" is a citizen?": {
+  "entity": "666 park avenue",
+  "chain": [
+   "producer",
+   "director",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "In what place was the organization that Ron Dennis works for, first established?": {
+  "entity": "ron dennis",
+  "chain": [
+   "employer",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "On which continent was Le Petit Parisien originally made?": {
+  "entity": "le petit parisien",
+  "chain": [
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital city of the country where the sport played by the partner of Victoria Beckham originated?": {
+  "entity": "victoria beckham",
+  "chain": [
+   "spouse",
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the political entity that was established from the successor of the Sasanian Empire?": {
+  "entity": "sasanian empire",
+  "chain": [
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the capital of the country that FC Irtysh Omsk originates from located?": {
+  "entity": "fc irtysh omsk",
+  "chain": [
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the place of death of the performer of the song collection \"Back to Black\"?": {
+  "entity": "back to black",
+  "chain": [
+   "performer",
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "What was the sport that Hines Ward competed in professionally?": {
+  "entity": "hines ward",
+  "chain": [
+   "sport"
+  ],
+  "model": "lexicon"
+ },
+ "In which position did the person related to the original broadcaster of \"The Brady Bunch\" serve?": {
+  "entity": "the brady bunch",
+  "chain": [
+   "broadcaster",
+   "position"
+  ],
+  "model": "lexicon"
+ },
+ "In what location did the person who founded Chanel pass away?": {
+  "entity": "chanel",
+  "chain": [
+   "founder",
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "What is the country of citizenship of the author of \"Starship Troopers\"?": {
+  "entity": "starship troopers",
+  "chain": [
+   "author",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "Which individual holds the position of director/manager at the company that employs Dave Filoni?": {
+  "entity": "dave filoni",
+  "chain": [
+   "employer",
+   "director"
+  ],
+  "model": "lexicon"
+ },
+ "In what language is the notable work associated with Hugh Hefner written?": {
+  "entity": "hugh hefner",
+  "chain": [
+   "notable_work",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country that gave rise to the sport played by Rogério Ceni?": {
+  "entity": "rogério ceni",
+  "chain": [
+   "sport",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "From which educational institution did the author of 'Sidereus Nuncius' receive their education?": {
+  "entity": "sidereus nuncius",
+  "chain": [
+   "author",
+   "educated_at"
+  ],
+  "model": "lexicon"
+ },
+ "What is the place of death of the author of Endymion?": {
+  "entity": "endymion",
+  "chain": [
+   "author",
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "In which city can the headquarters of the educational institution attended by the spouse of Sophia Hawthorne be found?": {
+  "entity": "sophia hawthorne",
+  "chain": [
+   "spouse",
+   "educated_at",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the chief of state of the country where Leo Stein holds citizenship?": {
+  "entity": "leo stein",
+  "chain": [
+   "citizenship",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the chief of state of the country that Hal Needham belongs to?": {
+  "entity": "hal needham",
+  "chain": [
+   "citizenship",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "Who serves as the head of government in the location where the AP1000 was made by its manufacturer?": {
+  "entity": "ap1000",
+  "chain": [
+   "producer",
+   "head_of_gov"
+  ],
+  "model": "lexicon"
+ },
+ "In what place did the author of \"A Wizard of Earthsea\" breathe his last?": {
+  "entity": "a wizard of earthsea",
+  "chain": [
+   "author",
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "Which religion does the partner of the performer of \"Aladdin Sane\" follow?": {
+  "entity": "aladdin sane",
+  "chain": [
+   "performer",
+   "spouse",
+   "religion"
+  ],
+  "model": "lexicon"
+ },
+ "At which location does the Prime Minister of Sweden spend most of their work hours?": {
+  "entity": "prime minister of sweden",
+  "chain": [
+   "work_location"
+  ],
+  "model": "lexicon"
+ },
+ "What is the capital city of the country whose citizenship is held by the CEO of the developer of AppleScript?": {
+  "entity": "applescript",
+  "chain": [
+   "developer",
+   "ceo",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which continent is the country of origin for Gala RFC located in?": {
+  "entity": "gala rfc",
+  "chain": [
+   "origin",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What sport is associated with the position played by Irving Fryar on a team/specialty?": {
+  "entity": "irving fryar",
+  "chain": [
+   "position",
+   "sport"
+  ],
+  "model": "lexicon"
+ },
+ "In which continent is the country to which Cédric Klapisch holds citizenship located?": {
+  "entity": "cédric klapisch",
+  "chain": [
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the location of the headquarters of the company where Leonte Răutu worked?": {
+  "entity": "leonte răutu",
+  "chain": [
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "To whom does the head of government of the country of origin of Club Nouveau report to?": {
+  "entity": "club nouveau",
+  "chain": [
+   "origin",
+   "head_of_gov"
+  ],
+  "model": "lexicon"
+ },
+ "Which individual is responsible for founding the organization that has its headquarters in the same location where Bill Frisell received his education?": {
+  "entity": "bill frisell",
+  "chain": [
+   "educated_at",
+   "headquarters",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "In which city of the country where Charles Messier held citizenship is the capital located?": {
+  "entity": "charles messier",
+  "chain": [
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which country does the sportsperson who specializes in Lisa Leslie's position originally come from?": {
+  "entity": "lisa leslie",
+  "chain": [
+   "sport",
+   "position",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the capital city of the country where the founder of the manufacturer of Ford F-Series hailed from?": {
+  "entity": "ford f-series",
+  "chain": [
+   "producer",
+   "founder",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country where the sport that Sandy Alderson is associated with originated?": {
+  "entity": "sandy alderson",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which language is the official language of the country whose citizenship is held by the director/manager of \"Past Masters\"?": {
+  "entity": "past masters",
+  "chain": [
+   "director",
+   "citizenship",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "Which nation is the birthplace of the sport that features the split-finger fastball?": {
+  "entity": "split-finger fastball",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "In which languages can the author of \"The Witcher\" write, speak, or sign?": {
+  "entity": "the witcher",
+  "chain": [
+   "author",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the capital of the country, where the book \"The Birth of Tragedy\" first came from, located?": {
+  "entity": "the birth of tragedy",
+  "chain": [
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "In what language are communications in the headquarters location of the manufacturer of Il-2 Shturmovik conducted officially?": {
+  "entity": "il-2 shturmovik",
+  "chain": [
+   "producer",
+   "headquarters",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country where the spouse of the performer of \"Viva Las Vegas\" is a citizen?": {
+  "entity": "viva las vegas",
+  "chain": [
+   "performer",
+   "spouse",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the country of origin of the sport that the New Firm is related to?": {
+  "entity": "new firm",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "Which religious leader is responsible for founding the religion to which Sarit Thanarat belongs?": {
+  "entity": "sarit thanarat",
+  "chain": [
+   "religion",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "what kind of music does \"Born in the U.S.A.\" fall under according to its performer?": {
+  "entity": "born in the u.s.a.",
+  "chain": [
+   "performer",
+   "genre"
+  ],
+  "model": "lexicon"
+ },
+ "What is the capital city of the country where the founder of the manufacturer of Ford Transit Connect holds citizenship?": {
+  "entity": "ford transit connect",
+  "chain": [
+   "producer",
+   "founder",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "In what language are the official documents of the country where Alta IF originates written?": {
+  "entity": "alta if",
+  "chain": [
+   "origin",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "From which continent does the sport of Haverfordwest County A.F.C. originally hail?": {
+  "entity": "haverfordwest county a.f.c.",
+  "chain": [
+   "sport",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the person who founded the religion that Clemens August of Bavaria believed in?": {
+  "entity": "clemens august of bavaria",
+  "chain": [
+   "religion",
+   "founder",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the current head of state of the country where the sport Phoenix Inferno came from?": {
+  "entity": "phoenix inferno",
+  "chain": [
+   "sport",
+   "origin",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "What is the occupation of the chairperson of the Palestine Liberation Organization?": {
+  "entity": "palestine liberation organization",
+  "chain": [
+   "chairperson",
+   "occupation"
+  ],
+  "model": "lexicon"
+ },
+ "In which continent was the sport originated in the country where Andrea Pirlo's speciality derived from?": {
+  "entity": "andrea pirlo",
+  "chain": [
+   "origin",
+   "sport",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "Which language is used as the official language in the country where The Indianapolis Star comes from?": {
+  "entity": "the indianapolis star",
+  "chain": [
+   "origin",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "Who holds the title of chief public representative in the country where Jason Motte is a citizen?": {
+  "entity": "jason motte",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "Which language is recognized as the official language of the country that the child of the performer of \"Heartbreak Hotel\" has citizenship of?": {
+  "entity": "heartbreak hotel",
+  "chain": [
+   "performer",
+   "child",
+   "citizenship",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the capital of the country where the sport associated with the founder of Pakistan Tehreek-e-Insaf originates from?": {
+  "entity": "pakistan tehreek-e-insaf",
+  "chain": [
+   "founder",
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What was the place of death of the author of \"Theaetetus\"?": {
+  "entity": "theaetetus",
+  "chain": [
+   "author",
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "What is the location of the headquarters of the company that originally broadcasted Perfect Strangers?": {
+  "entity": "perfect strangers",
+  "chain": [
+   "broadcaster",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Which country did the work that was made famous by the author of \"The Andromeda Strain\" originate in?": {
+  "entity": "the andromeda strain",
+  "chain": [
+   "author",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "What is the country of citizenship of the chairperson of the Patriotic Union of Kurdistan?": {
+  "entity": "patriotic union of kurdistan",
+  "chain": [
+   "chairperson",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "What was the location of the work of the person who founded the Kingdom of Etruria?": {
+  "entity": "kingdom of etruria",
+  "chain": [
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Which country is connected with the founding of Aiginiakos F.C.?": {
+  "entity": "aiginiakos f.c.",
+  "chain": [
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Who directed or managed \"China Beach\" during its original broadcast?": {
+  "entity": "china beach",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "Which sports discipline did Jim Kelly specialize in?": {
+  "entity": "jim kelly",
+  "chain": [
+   "sport"
+  ],
+  "model": "lexicon"
+ },
+ "In which country is the head of state responsible for the sport originated by S.C. Salgueiros?": {
+  "entity": "s.c. salgueiros",
+  "chain": [
+   "origin",
+   "sport",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "Which language is recognized as the official tongue of the country where Arthur comes from?": {
+  "entity": "arthur",
+  "chain": [
+   "origin",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "What country is associated as the origin of the sport played by Shawn Bradley?": {
+  "entity": "shawn bradley",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "What is the country of origin of the sport to which the head coach of Western Sydney Wanderers FC belongs?": {
+  "entity": "western sydney wanderers fc",
+  "chain": [
+   "head_coach",
+   "citizenship",
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the originating country of the music genre of \"Unforgettable\" currently headquartered?": {
+  "entity": "unforgettable",
+  "chain": [
+   "genre",
+   "origin",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Which languages were used by the author of the Aubrey-Maturin series in their writing and communication?": {
+  "entity": "aubrey-maturin series",
+  "chain": [
+   "author",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "What continent is associated with the country of citizenship of Emil Constantinescu?": {
+  "entity": "emil constantinescu",
+  "chain": [
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the person responsible for founding the religion that Michael Patrick Carroll follows?": {
+  "entity": "michael patrick carroll",
+  "chain": [
+   "religion",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the center of government in the country where Augustinas Voldemaras holds a citizenship?": {
+  "entity": "augustinas voldemaras",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the partner of the President of Azerbaijan?": {
+  "entity": "president of azerbaijan",
+  "chain": [
+   "spouse"
+  ],
+  "model": "lexicon"
+ },
+ "In which city was the person who founded St. Bonaventure University born?": {
+  "entity": "st. bonaventure university",
+  "chain": [
+   "founder",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the person who directed or managed the broadcaster that originally aired \"Soap\"?": {
+  "entity": "soap",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country where the sport played by Brook Lopez originates?": {
+  "entity": "brook lopez",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "The chairperson of the Liberal Democratic Party belongs to a religion. In what city or country was it founded?": {
+  "entity": "liberal democratic party",
+  "chain": [
+   "chairperson",
+   "citizenship",
+   "religion",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Which language is recognized as the official language in the country where \"Little Miss Sunshine\" comes from?": {
+  "entity": "little miss sunshine",
+  "chain": [
+   "origin",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "In which language proceedings of the sport associated with Aris Thessaloniki F.C. are conducted in the country of its origin?": {
+  "entity": "aris thessaloniki f.c.",
+  "chain": [
+   "sport",
+   "language",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "In which city did the individual who established Blériot pass away?": {
+  "entity": "blériot",
+  "chain": [
+   "founder",
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "Who is currently the chairperson of the institution where the Chicago Boys received their education?": {
+  "entity": "chicago boys",
+  "chain": [
+   "educated_at",
+   "chairperson"
+  ],
+  "model": "lexicon"
+ },
+ "At which educational organization did the author of the Lorentz ether theory receive their education?": {
+  "entity": "lorentz ether theory",
+  "chain": [
+   "author",
+   "educated_at"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the birthplace of the founder associated with Niagara University's religion?": {
+  "entity": "niagara university",
+  "chain": [
+   "founder",
+   "birth_place",
+   "religion"
+  ],
+  "model": "lexicon"
+ },
+ "What is the location of the headquarters of the company that employed Ward Kimball?": {
+  "entity": "ward kimball",
+  "chain": [
+   "employer",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the founder of the religion followed by Leo I the Thracian?": {
+  "entity": "leo i the thracian",
+  "chain": [
+   "religion",
+   "founder",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "What is the sport in which Tyrone Willingham specializes and plays a special position on the team?": {
+  "entity": "tyrone willingham",
+  "chain": [
+   "position",
+   "sport"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the writer of \"L.A. Confidential\"?": {
+  "entity": "l.a. confidential",
+  "chain": [
+   "author",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "Which continent does the country where François Furet holds citizenship belong to?": {
+  "entity": "françois furet",
+  "chain": [
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "Which city acts as the capital of the country of origin of the musical genre that is associated with Garth Brooks' spouse?": {
+  "entity": "garth brooks",
+  "chain": [
+   "genre",
+   "spouse",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "In which country did the sport associated with the Philippine Basketball Association Draft originate?": {
+  "entity": "philippine basketball association draft",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the person who created Indiana Jones?": {
+  "entity": "indiana jones",
+  "chain": [
+   "creator",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "What is the capital city of the country whose country of origin of the author of the notable work \"Beyond Good and Evil\"?": {
+  "entity": "beyond good and evil",
+  "chain": [
+   "notable_work",
+   "author",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the person who wrote \"1984\"?": {
+  "entity": "1984",
+  "chain": [
+   "author",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "What language did the author of \"A Passage to India\" speak, write or sign in?": {
+  "entity": "a passage to india",
+  "chain": [
+   "author",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "What city serves as the capital of the country where \"The Undead\" came from?": {
+  "entity": "the undead",
+  "chain": [
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which language is considered as the official language of the religion associated with the partner of the individual who performed \"Hunky Dory\"?": {
+  "entity": "hunky dory",
+  "chain": [
+   "performer",
+   "spouse",
+   "religion",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "What languages does Amber Heard's significant other know how to speak, write, or sign?": {
+  "entity": "amber heard",
+  "chain": [
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "What continent is the birthplace of the CEO of the developer of \"Windows Communication Foundation\" located in?": {
+  "entity": "windows communication foundation",
+  "chain": [
+   "developer",
+   "ceo",
+   "birth_place",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What was the work location of the person who founded the religion associated with Edmund Ignatius Rice?": {
+  "entity": "edmund ignatius rice",
+  "chain": [
+   "religion",
+   "founder",
+   "work_location"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the individual serving as the chief of state of the country where Maccabi Ironi Ashdod F.C. originated?": {
+  "entity": "maccabi ironi ashdod f.c.",
+  "chain": [
+   "origin",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "Which person was the founder of the company that manufactured the Ford Fairmont?": {
+  "entity": "ford fairmont",
+  "chain": [
+   "producer",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Who is responsible for the foundation of the location where Kittilä's official language is spoken?": {
+  "entity": "kittilä",
+  "chain": [
+   "official_lang",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "Who currently holds the title of head of state of the country where David Graveney was born?": {
+  "entity": "david graveney",
+  "chain": [
+   "birth_place",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "What is the city where the manufacturer of Mercedes-Benz W126 has its headquarters?": {
+  "entity": "mercedes-benz w126",
+  "chain": [
+   "producer",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the individual who manages the network that first broadcasted \"General Hospital\"?": {
+  "entity": "general hospital",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the capital of the country where the sport coached by the head coach of the Cleveland Indians was invented?": {
+  "entity": "cleveland indians",
+  "chain": [
+   "head_coach",
+   "sport",
+   "creator",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which language or languages are spoken, written or signed by the creator of the TV series \"24\"?": {
+  "entity": "24",
+  "chain": [
+   "creator",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "What is the capital city of the country where Pepe Reina's sport originates from?": {
+  "entity": "pepe reina",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the seat of government of the country whose head of government formed the Monti Cabinet?": {
+  "entity": "monti cabinet",
+  "chain": [
+   "head_of_gov"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the headquarters location of the educational institution where the spouse of Federico Fellini studied?": {
+  "entity": "federico fellini",
+  "chain": [
+   "spouse",
+   "educated_at",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the capital city of the country that the author of \"Sin City\" comes from?": {
+  "entity": "sin city",
+  "chain": [
+   "author",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Where was the birthplace of the founder of the institution that created Cardinal Stritch University?": {
+  "entity": "cardinal stritch university",
+  "chain": [
+   "creator",
+   "founder",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "What was the place of work of the individual who founded the religion that Justus Lipsius believed in?": {
+  "entity": "justus lipsius",
+  "chain": [
+   "religion",
+   "founder",
+   "work_location"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the current head of government of the country where Leo Gordon holds citizenship?": {
+  "entity": "leo gordon",
+  "chain": [
+   "citizenship",
+   "head_of_gov"
+  ],
+  "model": "lexicon"
+ },
+ "In which continent is the location of the headquarters of Airbnb situated?": {
+  "entity": "airbnb",
+  "chain": [
+   "headquarters",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the place of death of the partner of Katherine Mansfield?": {
+  "entity": "katherine mansfield",
+  "chain": [
+   "spouse",
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the highest-ranking official of the country that Władysław Anders holds a citizenship of?": {
+  "entity": "władysław anders",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "Which company, organization, or institution was responsible for the author of the Luther Bible?": {
+  "entity": "luther bible",
+  "chain": [
+   "author"
+  ],
+  "model": "lexicon"
+ },
+ "What city serves as the capital of the country that Kelly McGillis is a citizen of?": {
+  "entity": "kelly mcgillis",
+  "chain": [
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the political leader of the country where the sport associated with Terry Collins was first practiced?": {
+  "entity": "terry collins",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "In which city was the person who founded the religion of Joseph de Maistre born?": {
+  "entity": "joseph de maistre",
+  "chain": [
+   "religion",
+   "founder",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the person who directed/managed the original broadcaster of Agents of S.H.I.E.L.D.?": {
+  "entity": "agents of s.h.i.e.l.d.",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "In what city is located the capital of the country where the director/producer of the original broadcaster of \"The Addams Family\" holds a citizenship?": {
+  "entity": "the addams family",
+  "chain": [
+   "broadcaster",
+   "producer",
+   "director",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "In which continent is the country of citizenship of Shaun Udal located?": {
+  "entity": "shaun udal",
+  "chain": [
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What was the work location of the creator of Claude Frollo?": {
+  "entity": "claude frollo",
+  "chain": [
+   "creator",
+   "work_location"
+  ],
+  "model": "lexicon"
+ },
+ "In which language does the government of the country of citizenship of W. G. Sebald conduct official business?": {
+  "entity": "w. g. sebald",
+  "chain": [
+   "citizenship",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "Which music style is performed by the artist who goes by the name of Will Schuester?": {
+  "entity": "will schuester",
+  "chain": [
+   "performer"
+  ],
+  "model": "lexicon"
+ },
+ "What is the country of origin of the sport associated with Gary SouthShore RailCats?": {
+  "entity": "gary southshore railcats",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "To which continent does the country of citizenship of the CEO of Telmex belong?": {
+  "entity": "telmex",
+  "chain": [
+   "ceo",
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "In which capital is the headquarters of the company where the CEO of QuickTime developer holds the citizenship?": {
+  "entity": "quicktime",
+  "chain": [
+   "ceo",
+   "developer",
+   "citizenship",
+   "headquarters",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which profession is associated with the partner/spouse of Lalu Prasad Yadav?": {
+  "entity": "lalu prasad yadav",
+  "chain": [
+   "spouse",
+   "occupation"
+  ],
+  "model": "lexicon"
+ },
+ "From which country does the sport that Kenley Jansen specializes in originate?": {
+  "entity": "kenley jansen",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "In which language are the official documents written in the country of citizenship of Nate \"Tiny\" Archibald?": {
+  "entity": "nate tiny archibald",
+  "chain": [
+   "citizenship",
+   "original_lang",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "Which sport was Dennis Erickson associated with due to his position on a team?": {
+  "entity": "dennis erickson",
+  "chain": [
+   "sport",
+   "position"
+  ],
+  "model": "lexicon"
+ },
+ "From which continent does the country of citizenship of the director / manager who worked with the performer of Anthology 1 belong to?": {
+  "entity": "anthology 1",
+  "chain": [
+   "performer",
+   "director",
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What genre of music is associated with the spouse of Blake Shelton?": {
+  "entity": "blake shelton",
+  "chain": [
+   "spouse",
+   "genre"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the current chairperson of the institution where Harry Markowitz received his education?": {
+  "entity": "harry markowitz",
+  "chain": [
+   "educated_at",
+   "chairperson"
+  ],
+  "model": "lexicon"
+ },
+ "In which location did the person who established the religion that Henri Grégoire followed work?": {
+  "entity": "henri grégoire",
+  "chain": [
+   "religion",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "From which continent does the country of citizenship of the creator of Ju 87 come from?": {
+  "entity": "ju 87",
+  "chain": [
+   "creator",
+   "citizenship",
+   "continent",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "In which sport does Giovani dos Santos play the position he is known for?": {
+  "entity": "giovani dos santos",
+  "chain": [
+   "sport",
+   "position",
+   "notable_work"
+  ],
+  "model": "lexicon"
+ },
+ "What is the country of citizenship of the performer of the song \"God Bless the Child\"?": {
+  "entity": "god bless the child",
+  "chain": [
+   "performer",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "What is the capital of the country where the sport played by the Washington Wizards was first developed?": {
+  "entity": "washington wizards",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the capital of the country that Dino Meneghin holds citizenship in?": {
+  "entity": "dino meneghin",
+  "chain": [
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the religious affiliation of the author of The Divine Comedy?": {
+  "entity": "the divine comedy",
+  "chain": [
+   "author",
+   "religion"
+  ],
+  "model": "lexicon"
+ },
+ "What country did the sport associated with FNB Stadium originate in?": {
+  "entity": "fnb stadium",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "In which continent is the country whose citizenship was held by Erich Koch situated?": {
+  "entity": "erich koch",
+  "chain": [
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the capital city of the home country of the director/manager who worked with the performer of \"Tomorrow Never Knows\"?": {
+  "entity": "tomorrow never knows",
+  "chain": [
+   "performer",
+   "director",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the sport that Rich Harden was associated with based on the position he played on a team?": {
+  "entity": "rich harden",
+  "chain": [
+   "sport",
+   "headquarters",
+   "position"
+  ],
+  "model": "lexicon"
+ },
+ "In which country does the head of government that governs Paddy Keenan's nationality reside?": {
+  "entity": "paddy keenan",
+  "chain": [
+   "head_of_gov",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "What language is recognized as the official language in the country where Dale Bumpers holds citizenship?": {
+  "entity": "dale bumpers",
+  "chain": [
+   "citizenship",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "From which city of the country of origin of the musical genre of \"All Shook Up\" does the genre trace its roots?": {
+  "entity": "all shook up",
+  "chain": [
+   "genre",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "What is the capital city of the country to which Travis Tritt holds citizenship?": {
+  "entity": "travis tritt",
+  "chain": [
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Where is the headquarters location of the institution where Louis Zamperini received his education?": {
+  "entity": "louis zamperini",
+  "chain": [
+   "educated_at",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "What city serves as the headquarters of the educational institution attended by Siim Kallas?": {
+  "entity": "siim kallas",
+  "chain": [
+   "educated_at",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "What is the country of origin of the sport in which Darren Fletcher participated?": {
+  "entity": "darren fletcher",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "Which continent is the location of formation of the Master of Puppets performer?": {
+  "entity": "master of puppets",
+  "chain": [
+   "continent",
+   "performer"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the person who created the country that Fyodor Ushakov is a citizen?": {
+  "entity": "fyodor ushakov",
+  "chain": [
+   "citizenship",
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "Which continent is the birthplace of the CEO of the developer of Windows Update located in?": {
+  "entity": "windows update",
+  "chain": [
+   "developer",
+   "ceo",
+   "birth_place",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the religion of the officeholder commonly known as the pope?": {
+  "entity": "pope",
+  "chain": [
+   "office",
+   "religion"
+  ],
+  "model": "lexicon"
+ },
+ "In which sport did Vinny Testaverde play the position associated with the term \"position played on team / speciality\"?": {
+  "entity": "vinny testaverde",
+  "chain": [
+   "sport",
+   "position"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the city that is the capital of the country where the sport Hope Solo played was developed?": {
+  "entity": "hope solo",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "To which continent is the country where \"The Phenomenology of Spirit\" originated belongs?": {
+  "entity": "the phenomenology of spirit",
+  "chain": [
+   "origin",
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "In which language do people communicate officially in the country where Louis Henri Loison holds his citizenship?": {
+  "entity": "louis henri loison",
+  "chain": [
+   "citizenship",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "What is the place of death of the individual who established the 2nd Ukrainian Front?": {
+  "entity": "2nd ukrainian front",
+  "chain": [
+   "founder",
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the government of the country of origin of the sport played by Matt Harrison located?": {
+  "entity": "matt harrison",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "Which country does the creator of Kinsey Millhone belong to?": {
+  "entity": "kinsey millhone",
+  "chain": [
+   "creator",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "What continent does the country of origin of the sport represented by the Israel Football Association belong to?": {
+  "entity": "israel football association",
+  "chain": [
+   "sport",
+   "origin",
+   "continent",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the capital located, where the spouse of the author of \"Tender Is the Night\" holds citizenship?": {
+  "entity": "tender is the night",
+  "chain": [
+   "author",
+   "spouse",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What language was used to write the notable work of Luís de Camões?": {
+  "entity": "luís de camões",
+  "chain": [
+   "notable_work",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "Which continent does Monty Norman's birthplace belong to?": {
+  "entity": "monty norman",
+  "chain": [
+   "continent",
+   "birth_place",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "In which language do people from the country of origin of the music genre associated with Cleo Laine conduct official business?": {
+  "entity": "cleo laine",
+  "chain": [
+   "genre",
+   "origin",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "Which political leader holds the title of head of state of the country where Santiago Morning, the sports organization started?": {
+  "entity": "santiago morning",
+  "chain": [
+   "sport",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "Who founded the religious movement that Lakhdar Brahimi is affiliated with?": {
+  "entity": "lakhdar brahimi",
+  "chain": [
+   "religion",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Which continent is the birthplace of the country where the Scottish Cup originated?": {
+  "entity": "scottish cup",
+  "chain": [
+   "origin",
+   "birth_place",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the capital city of the country from which the head coach of Germany national football team hails?": {
+  "entity": "germany national football team",
+  "chain": [
+   "head_coach",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What was the place of work of the individual who founded the religion of Henri Breuil?": {
+  "entity": "henri breuil",
+  "chain": [
+   "religion",
+   "founder",
+   "work_location"
+  ],
+  "model": "lexicon"
+ },
+ "From which city in the country of citizenship of the manufacturer of Colt Single Action Army does the company hail?": {
+  "entity": "colt single action army",
+  "chain": [
+   "producer",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "Which sport is Ian Kennedy associated with based on the position he plays on the team?": {
+  "entity": "ian kennedy",
+  "chain": [
+   "sport",
+   "headquarters",
+   "position"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the person responsible for the founding of the Bahawalpur State?": {
+  "entity": "bahawalpur state",
+  "chain": [
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "What continent does the country from which 1. FK Příbram originated belong to?": {
+  "entity": "1. fk příbram",
+  "chain": [
+   "origin",
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the language used by the manager/director, who is a citizen of a country where \"Free as a Bird\" performer holds citizenship?": {
+  "entity": "free as a bird",
+  "chain": [
+   "performer",
+   "citizenship",
+   "director",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country where the genre performed by Billy Walker originated from?": {
+  "entity": "billy walker",
+  "chain": [
+   "performer",
+   "genre",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which sport is associated with the position played by Rajon Rondo on his team?": {
+  "entity": "rajon rondo",
+  "chain": [
+   "position",
+   "sport"
+  ],
+  "model": "lexicon"
+ },
+ "From which country did the sport, in which Mel Daniels participates, originate?": {
+  "entity": "mel daniels",
+  "chain": [
+   "origin",
+   "sport"
+  ],
+  "model": "lexicon"
+ },
+ "From what location did the original broadcaster of \"The Monkees\" operate from during the formation of the band?": {
+  "entity": "the monkees",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the office of the company that developed Crysis 2 situated?": {
+  "entity": "crysis 2",
+  "chain": [
+   "origin",
+   "office"
+  ],
+  "model": "lexicon"
+ },
+ "Which individual is credited with creating the language which is the official language of the HQ location of Housemarque?": {
+  "entity": "housemarque",
+  "chain": [
+   "official_lang",
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the founder of the religion that influenced Giordano Bruno?": {
+  "entity": "giordano bruno",
+  "chain": [
+   "religion",
+   "founder",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the seat of government of the country of citizenship of Parambrata Chatterjee?": {
+  "entity": "parambrata chatterjee",
+  "chain": [
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the company that founded the manufacturer of Jaguar Mark 2?": {
+  "entity": "jaguar mark 2",
+  "chain": [
+   "producer",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the chief of state of the nation of which Tomáš Berdych is a citizen?": {
+  "entity": "tomáš berdych",
+  "chain": [
+   "citizenship",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "From which continent does the country of origin of the notable work that features Troilus and Criseyde belong?": {
+  "entity": "troilus and criseyde",
+  "chain": [
+   "citizenship",
+   "notable_work",
+   "origin",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "Which music genre is associated with João Gilberto's notable work?": {
+  "entity": "joão gilberto",
+  "chain": [
+   "genre",
+   "notable_work"
+  ],
+  "model": "lexicon"
+ },
+ "What language does the spouse of Maksim Chmerkovskiy speak, write or use to communicate?": {
+  "entity": "maksim chmerkovskiy",
+  "chain": [
+   "spouse",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country of citizenship of the CEO of the developer of the iPad Pro?": {
+  "entity": "ipad pro",
+  "chain": [
+   "developer",
+   "ceo",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "To what continent does the country that originated the sport coached by the head coach of Sydney FC belong?": {
+  "entity": "head coach",
+  "chain": [
+   "sport",
+   "origin",
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the country of origin of the sport represented by Liga Profesional de Baloncesto?": {
+  "entity": "liga profesional de baloncesto",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "To what continent does the country where Home United FC originated belong to?": {
+  "entity": "home united fc",
+  "chain": [
+   "origin",
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "To which continent does the country where Steve Lamacq holds his citizenship belong?": {
+  "entity": "steve lamacq",
+  "chain": [
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "In which continent is the headquarters location of Gazeta Wyborcza situated?": {
+  "entity": "gazeta wyborcza",
+  "chain": [
+   "headquarters",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the educational institution that the founder of Dravida Munnetra Kazhagam was associated with?": {
+  "entity": "dravida munnetra kazhagam",
+  "chain": [
+   "founder",
+   "educated_at"
+  ],
+  "model": "lexicon"
+ },
+ "From which language did the country of citizenship of the spouse of the creator of WWE Main Event borrow its official language?": {
+  "entity": "wwe main event",
+  "chain": [
+   "creator",
+   "spouse",
+   "citizenship",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "What is the continent where the headquarters of the institution where Rodney Peete received education is located?": {
+  "entity": "rodney peete",
+  "chain": [
+   "educated_at",
+   "headquarters",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What continent is the country of citizenship of the director/manager of the developer of Gran Turismo 5 associated with?": {
+  "entity": "gran turismo 5",
+  "chain": [
+   "developer",
+   "director",
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the country of origin of the sport that the Libya national football team plays?": {
+  "entity": "libya national football team",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "Which language is the official language of the country where the partner of the author of Executive Order 6102 is a citizen?": {
+  "entity": "executive order 6102",
+  "chain": [
+   "author",
+   "spouse",
+   "citizenship",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country that Michael Feinstein is a citizen of?": {
+  "entity": "michael feinstein",
+  "chain": [
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the founder of the religion associated with Maria Christina of Austria?": {
+  "entity": "maria christina of austria",
+  "chain": [
+   "religion",
+   "founder",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "From which country does the sport of the position played on team / speciality of Dele Alli originate?": {
+  "entity": "dele alli",
+  "chain": [
+   "position",
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country of citizenship of the creator of Eddard Stark's partner?": {
+  "entity": "eddard stark",
+  "chain": [
+   "creator",
+   "citizenship",
+   "capital",
+   "spouse"
+  ],
+  "model": "lexicon"
+ },
+ "From which university did the partner of Harald V of Norway receive their education?": {
+  "entity": "harald v of norway",
+  "chain": [
+   "spouse",
+   "educated_at"
+  ],
+  "model": "lexicon"
+ },
+ "What language is used as the official language of the country where the genre that Archie Shepp is associated with originally came from?": {
+  "entity": "archie shepp",
+  "chain": [
+   "genre",
+   "origin",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "What city serves as the capital of the country where the spouse of Jude Law holds citizenship?": {
+  "entity": "jude law",
+  "chain": [
+   "spouse",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "On which continent is the country associated with the citizenship of Maurice Strong located?": {
+  "entity": "maurice strong",
+  "chain": [
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What were the languages spoken, written or signed by the creator of Blandings Castle?": {
+  "entity": "blandings castle",
+  "chain": [
+   "creator",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "With which sport is the position played by Sebastian Janikowski on a team associated?": {
+  "entity": "sebastian janikowski",
+  "chain": [
+   "position",
+   "sport"
+  ],
+  "model": "lexicon"
+ },
+ "In which city did the author of \"The Cask of Amontillado\" breathe his last?": {
+  "entity": "the cask of amontillado",
+  "chain": [
+   "author",
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "In what genre would you categorize The Who's Tommy?": {
+  "entity": "the who",
+  "chain": [
+   "genre"
+  ],
+  "model": "lexicon"
+ },
+ "What is the capital city of the country where the director/manager of \"The Rookies\" is a citizen?": {
+  "entity": "the rookies",
+  "chain": [
+   "director",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the location of the headquarters of the employer of the creator of Jabberwocky?": {
+  "entity": "jabberwocky",
+  "chain": [
+   "creator",
+   "employer",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Who holds the position of the head of state of the country that Jessi Colter is a citizen of?": {
+  "entity": "jessi colter",
+  "chain": [
+   "citizenship",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "The capital city of which country is the birthplace of the sport that Timofey Mozgov specialized in?": {
+  "entity": "timofey mozgov",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the country of origin of the sport played by Christian Abbiati?": {
+  "entity": "christian abbiati",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "Which religion is the country of citizenship of Karl Lueger predominantly associated with?": {
+  "entity": "karl lueger",
+  "chain": [
+   "citizenship",
+   "religion"
+  ],
+  "model": "lexicon"
+ },
+ "The continent where the country of citizenship of the spouse of the author of \"American Pastoral\" is related to is what?": {
+  "entity": "american pastoral",
+  "chain": [
+   "author",
+   "spouse",
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the place of origin for the broadcaster who first aired \"Your Hit Parade\"?": {
+  "entity": "your hit parade",
+  "chain": [
+   "broadcaster",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the language in which Valmiki wrote his notable works?": {
+  "entity": "valmiki",
+  "chain": [
+   "author",
+   "notable_work",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "What is the language officially spoken in the country where the spouse of the Chief Executive Officer of CBS Corporation holds citizenship?": {
+  "entity": "cbs corporation",
+  "chain": [
+   "ceo",
+   "spouse",
+   "citizenship",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "Which language was the one in which Melvil Dewey produced their notable work?": {
+  "entity": "melvil dewey",
+  "chain": [
+   "producer",
+   "notable_work",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "In which language does the director/manager, who is affiliated with \"Revolver\", communicate officially in their country of citizenship?": {
+  "entity": "revolver",
+  "chain": [
+   "director",
+   "citizenship",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "In which school did the author of \"Measure for Measure\" receive their education?": {
+  "entity": "measure for measure",
+  "chain": [
+   "author",
+   "educated_at"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the person who created the language used as the official language of the headquarters of FC Viikingit?": {
+  "entity": "fc viikingit",
+  "chain": [
+   "headquarters",
+   "official_lang",
+   "language",
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "What continent does the place of birth of the chief executive officer of Visual Basic .NET belong to?": {
+  "entity": "visual basic .net",
+  "chain": [
+   "ceo",
+   "birth_place",
+   "continent",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "Where was the person who created the religion that Giulio Alberoni was associated with born?": {
+  "entity": "giulio alberoni",
+  "chain": [
+   "religion",
+   "birth_place",
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "What is the location of the head office of the broadcaster that originally aired \"Adventures in Paradise\"?": {
+  "entity": "adventures in paradise",
+  "chain": [
+   "broadcaster",
+   "office"
+  ],
+  "model": "lexicon"
+ },
+ "What is the notable work of the performer associated with Miley Stewart?": {
+  "entity": "miley stewart",
+  "chain": [
+   "performer",
+   "notable_work"
+  ],
+  "model": "lexicon"
+ },
+ "To which continent does Fernando Lugo belong based on his citizenship?": {
+  "entity": "fernando lugo",
+  "chain": [
+   "continent",
+   "citizenship",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "What is the place of the headquarters of the educational institution where Stewart Udall received his education?": {
+  "entity": "stewart udall",
+  "chain": [
+   "educated_at",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "What is the continent of the country of citizenship of the person who founded International Judo Federation?": {
+  "entity": "international judo federation",
+  "chain": [
+   "founder",
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "In which country was the individual who founded Duquesne University born?": {
+  "entity": "duquesne university",
+  "chain": [
+   "founder",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country where the manufacturer which created Ford Ranger was founded?": {
+  "entity": "ford ranger",
+  "chain": [
+   "creator",
+   "producer",
+   "founder",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the capital of the country that created the sport associated with Peter Schmeichel's position?": {
+  "entity": "peter schmeichel",
+  "chain": [
+   "sport",
+   "creator",
+   "position",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Who holds the title of head of state in the country where the sport that Halifax Town A.F.C. is associated with was originated?": {
+  "entity": "halifax town a.f.c.",
+  "chain": [
+   "sport",
+   "origin",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "Which continent is the country of citizenship of Gustav Vigeland located in?": {
+  "entity": "gustav vigeland",
+  "chain": [
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the country of origin of the sport associated with John Beilein's occupation?": {
+  "entity": "john beilein",
+  "chain": [
+   "sport",
+   "origin",
+   "occupation"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the employer of Lynn Margulis' spouse?": {
+  "entity": "lynn margulis",
+  "chain": [
+   "employer",
+   "spouse"
+  ],
+  "model": "lexicon"
+ },
+ "What kind of sports is Tina Charles into, based on the position she plays in her team?": {
+  "entity": "tina charles",
+  "chain": [
+   "headquarters",
+   "position",
+   "sport"
+  ],
+  "model": "lexicon"
+ },
+ "What is the continent of the country where the director / manager of \"Please Please Me\" holds citizenship?": {
+  "entity": "please please me",
+  "chain": [
+   "director",
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the spouse of Bianca Jagger?": {
+  "entity": "bianca jagger",
+  "chain": [
+   "spouse",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "What city served as the capital of the country to which the founder of the sport played in the 2014 World Judo Championships belonged?": {
+  "entity": "2014 world judo championships",
+  "chain": [
+   "sport",
+   "founder",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the seat of government located in the country where Family Force 5 came from?": {
+  "entity": "family force 5",
+  "chain": [
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "What location was the place of death of the author of Carmilla?": {
+  "entity": "carmilla",
+  "chain": [
+   "author",
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "From what country does the music genre of Dave Matthews Band originate?": {
+  "entity": "dave matthews band",
+  "chain": [
+   "genre",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "Who holds the position of chairperson at the organization where Stephen Greenblatt is employed?": {
+  "entity": "stephen greenblatt",
+  "chain": [
+   "employer",
+   "chairperson"
+  ],
+  "model": "lexicon"
+ },
+ "Who is responsible for the founding of the religious group that has its roots in the institution where James Michael Curley received his education?": {
+  "entity": "james michael curley",
+  "chain": [
+   "educated_at",
+   "religion",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "In what city did the individual who established Metz Cathedral have their occupation?": {
+  "entity": "metz cathedral",
+  "chain": [
+   "founder",
+   "occupation"
+  ],
+  "model": "lexicon"
+ },
+ "What is the capital city of the country which Sumie Sakai's sport founder holds citizenship in?": {
+  "entity": "sumie sakai",
+  "chain": [
+   "sport",
+   "founder",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the city which is the capital of the country where the director/manager of \"Back in the U.S.S.R.\" holds citizenship?": {
+  "entity": "back in the u.s.s.r.",
+  "chain": [
+   "director",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What was the name of the person who founded the religion that Gabriel Narutowicz belonged to?": {
+  "entity": "gabriel narutowicz",
+  "chain": [
+   "religion",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the school where the author of \"La Celestina\" studied?": {
+  "entity": "la celestina",
+  "chain": [
+   "author",
+   "educated_at"
+  ],
+  "model": "lexicon"
+ },
+ "Which language is considered the official language of the religion that Malik Kafur practiced?": {
+  "entity": "malik kafur",
+  "chain": [
+   "religion",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the individual who both directed and managed the performer on \"Yesterday and Today\"?": {
+  "entity": "yesterday and today",
+  "chain": [
+   "performer"
+  ],
+  "model": "lexicon"
+ },
+ "What city serves as the capital of the country where the sport played by Derek Holland originated?": {
+  "entity": "derek holland",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What are the languages that the chairperson of Muttahida Qaumi Movement is fluent in when speaking, writing, or signing?": {
+  "entity": "muttahida qaumi movement",
+  "chain": [
+   "chairperson",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "What city serves as the capital of the country that Ragini Dwivedi belongs to?": {
+  "entity": "ragini dwivedi",
+  "chain": [
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the place of demise of the author of the book \"Dubliners\"?": {
+  "entity": "dubliners",
+  "chain": [
+   "author"
+  ],
+  "model": "lexicon"
+ },
+ "Where is the headquarters of the company that developed Sailfish OS located?": {
+  "entity": "sailfish os",
+  "chain": [
+   "origin",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country of origin of the sport that David Price plays?": {
+  "entity": "david price",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which language is the official language of the country where the spouse of the artist who sang \"All of Me\" comes from?": {
+  "entity": "all of me",
+  "chain": [
+   "performer",
+   "origin",
+   "spouse",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the person who leads the company that produces the Chevrolet Chevelle?": {
+  "entity": "chevrolet chevelle",
+  "chain": [
+   "producer"
+  ],
+  "model": "lexicon"
+ },
+ "Which profession does the chairperson of the Economic Freedom Fighters belong to?": {
+  "entity": "economic freedom fighters",
+  "chain": [
+   "chairperson",
+   "occupation",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "Which continent is the place of birth of the CEO of the developer of Windows Aero located in?": {
+  "entity": "windows aero",
+  "chain": [
+   "developer",
+   "ceo",
+   "birth_place",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "Who currently holds the position of head of government in the country where the genre of Julian Lennon was founded?": {
+  "entity": "julian lennon",
+  "chain": [
+   "genre",
+   "founder",
+   "head_of_gov"
+  ],
+  "model": "lexicon"
+ },
+ "In which city did the founder of the religion of Steve Cooley have their work location?": {
+  "entity": "steve cooley",
+  "chain": [
+   "religion",
+   "founder",
+   "work_location"
+  ],
+  "model": "lexicon"
+ },
+ "Which city serves as the capital of the country where the director/manager of the original broadcaster of The Partridge Family is a citizen of?": {
+  "entity": "the partridge family",
+  "chain": [
+   "broadcaster",
+   "director",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the person who was in charge of the organization that Philip Agee worked for?": {
+  "entity": "philip agee",
+  "chain": [
+   "employer"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the person who established the religion of Saint Eligius?": {
+  "entity": "saint eligius",
+  "chain": [
+   "religion",
+   "founder",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the current holder of the Illinois Attorney General's office?": {
+  "entity": "illinois attorney general",
+  "chain": [
+   "office",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "Which historical or religious figure established the religion that Nicholas V is affiliated with?": {
+  "entity": "nicholas v",
+  "chain": [
+   "religion",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the author of Ivanhoe?": {
+  "entity": "ivanhoe",
+  "chain": [
+   "author",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the child of the person who created Feluda?": {
+  "entity": "feluda",
+  "chain": [
+   "creator",
+   "child"
+  ],
+  "model": "lexicon"
+ },
+ "In what city does the director/manager of the original broadcaster of \"NHL on ABC\" hold their citizenship?": {
+  "entity": "nhl on abc",
+  "chain": [
+   "broadcaster",
+   "director",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "Which language is considered the official language of the country to which Yip Harburg belongs?": {
+  "entity": "yip harburg",
+  "chain": [
+   "citizenship",
+   "official_lang"
+  ],
+  "model": "lexicon"
+ },
+ "What is the literary genre of the book \"Dune\" written by the author?": {
+  "entity": "dune",
+  "chain": [
+   "genre",
+   "author"
+  ],
+  "model": "lexicon"
+ },
+ "What is the continent of origin of Thomas Dolby, a musician?": {
+  "entity": "thomas dolby",
+  "chain": [
+   "origin",
+   "continent",
+   "performer"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the school where the founder of House of Bonaparte studied?": {
+  "entity": "house of bonaparte",
+  "chain": [
+   "founder",
+   "educated_at"
+  ],
+  "model": "lexicon"
+ },
+ "In which place was the manufacturing company of Chevrolet Caprice founded?": {
+  "entity": "chevrolet caprice",
+  "chain": [
+   "producer",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the capital of the country where the genre, which Benjamin Sisko performed, originated?": {
+  "entity": "benjamin sisko",
+  "chain": [
+   "genre",
+   "performer",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What country is the nationality of the spouse of the author of \"David Copperfield\"?": {
+  "entity": "david copperfield",
+  "chain": [
+   "author",
+   "spouse",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "In which organization did Francis Parkman work as an employee and who is its chairperson?": {
+  "entity": "francis parkman",
+  "chain": [
+   "employer",
+   "chairperson"
+  ],
+  "model": "lexicon"
+ },
+ "What is the capital of the country where the director/manager of \"Good Morning America\" holds a citizenship?": {
+  "entity": "good morning america",
+  "chain": [
+   "director",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "In which language does the government of the country Pee Wee King holds citizenship conduct its official business?": {
+  "entity": "pee wee king",
+  "chain": [
+   "language",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "In what language do official government documents get written in the country that Tomokazu Seki is a citizen of?": {
+  "entity": "tomokazu seki",
+  "chain": [
+   "citizenship",
+   "original_lang"
+  ],
+  "model": "lexicon"
+ },
+ "What continent is the country of citizenship of the manager/director of Taxman located in?": {
+  "entity": "taxman",
+  "chain": [
+   "director",
+   "citizenship",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "In which city was the person who created the centrifugal governor born?": {
+  "entity": "centrifugal governor",
+  "chain": [
+   "creator",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the capital city of the country to which the spouse of the author of Star Trek canon holds citizenship?": {
+  "entity": "star trek canon",
+  "chain": [
+   "author",
+   "spouse",
+   "citizenship",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "Which language is considered the official language of Eric Weissberg's country of citizenship?": {
+  "entity": "eric weissberg",
+  "chain": [
+   "official_lang",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "Where is the educational institution located where Tom Selleck was educated and its headquarters also situated?": {
+  "entity": "tom selleck",
+  "chain": [
+   "educated_at",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Which language was used by Mario Puzo in writing his famous work?": {
+  "entity": "mario puzo",
+  "chain": [
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "Which continent is the country of origin of Teenage Fanclub located in?": {
+  "entity": "teenage fanclub",
+  "chain": [
+   "origin",
+   "continent"
+  ],
+  "model": "lexicon"
+ },
+ "Where was the work location of the individual who founded the religion practiced by Edward Mooney?": {
+  "entity": "edward mooney",
+  "chain": [
+   "religion",
+   "founder",
+   "work_location"
+  ],
+  "model": "lexicon"
+ },
+ "What is the professional background of the spouse of Lalu Prasad Yadav?": {
+  "entity": "lalu prasad yadav",
+  "chain": [
+   "spouse"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the capital city of the country that is the origin of the sport played by Enrico Villanueva?": {
+  "entity": "enrico villanueva",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "In what field did the author, who is known for Julius Caesar, work in?": {
+  "entity": "julius caesar",
+  "chain": [
+   "notable_work",
+   "author",
+   "occupation"
+  ],
+  "model": "lexicon"
+ },
+ "Which faith is the partner of Benigno Aquino Jr. affiliated with?": {
+  "entity": "benigno aquino jr.",
+  "chain": [
+   "spouse",
+   "religion"
+  ],
+  "model": "lexicon"
+ },
+ "From which country does the spouse of the creator of WWE Tough Enough hold citizenship?": {
+  "entity": "wwe tough enough",
+  "chain": [
+   "creator",
+   "spouse",
+   "citizenship"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the current head of state of the country where \"Outsourced\" came from?": {
+  "entity": "outsourced",
+  "chain": [
+   "origin",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the headquarters of the TV network that originally broadcasted NBA on ABC?": {
+  "entity": "nba on abc",
+  "chain": [
+   "broadcaster",
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the founder of the religion associated with Dzhokhar Dudayev?": {
+  "entity": "dzhokhar dudayev",
+  "chain": [
+   "religion",
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Which political figure holds the role of head of state for the country that Brad Stevens' sport is associated with?": {
+  "entity": "brad stevens",
+  "chain": [
+   "sport",
+   "head_of_state"
+  ],
+  "model": "lexicon"
+ },
+ "What is the name of the leader of the government in the country where the sport related to the 1985 NBA Draft originated?": {
+  "entity": "1985 nba draft",
+  "chain": [
+   "sport",
+   "origin"
+  ],
+  "model": "lexicon"
+ },
+ "In which city is the capital located of the country where the sport that Ricky Rubio plays originated?": {
+  "entity": "ricky rubio",
+  "chain": [
+   "sport",
+   "origin",
+   "capital"
+  ],
+  "model": "lexicon"
+ },
+ "What is the primary language spoken in the country where Flogging Molly comes from?": {
+  "entity": "flogging molly",
+  "chain": [
+   "origin",
+   "language"
+  ],
+  "model": "lexicon"
+ },
+ "Which company did the employer of the creator of Link work for?": {
+  "entity": "link",
+  "chain": [
+   "creator",
+   "employer"
+  ],
+  "model": "lexicon"
+ },
+ "What is the country of origin of the sport associated with Dave Dombrowski's employer?": {
+  "entity": "dave dombrowski",
+  "chain": [
+   "sport",
+   "origin",
+   "employer"
+  ],
+  "model": "lexicon"
+ },
+ "Which sport is associated with the position played by Bobby Hurley?": {
+  "entity": "bobby hurley",
+  "chain": [
+   "position",
+   "sport"
+  ],
+  "model": "lexicon"
+ },
+ "What is the place of employment of the individual who founded the religion practiced by Jacqueline Kennedy Onassis?": {
+  "entity": "jacqueline kennedy onassis",
+  "chain": [
+   "religion",
+   "founder",
+   "employer"
+  ],
+  "model": "lexicon"
+ },
+ "What is the birthplace of the person who founded the religion that Ferdinando I de' Medici professes?": {
+  "entity": "ferdinando i de medici",
+  "chain": [
+   "religion",
+   "founder",
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of Windows Phone?": {
+  "entity": "windows phone",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Which city did Gennady Rozhdestvensky die in?": {
+  "entity": "gennady rozhdestvensky",
+  "chain": [
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "Which city did Oscar Wilde die in?": {
+  "entity": "oscar wilde",
+  "chain": [
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the headquarter of The University of the Arts located in?": {
+  "entity": "the university of the arts",
+  "chain": [
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Where was Christianity founded?": {
+  "entity": "christianity",
+  "chain": [
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of SteamOS?": {
+  "entity": "steamos",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the headquarter of University of Bucharest located in?": {
+  "entity": "university of bucharest",
+  "chain": [
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the employer of Dave Filoni?": {
+  "entity": "dave filoni",
+  "chain": [
+   "employer"
+  ],
+  "model": "lexicon"
+ },
+ "Where was Canadair founded?": {
+  "entity": "canadair",
+  "chain": [
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Which company is AP1000 produced by?": {
+  "entity": "ap1000",
+  "chain": [
+   "producer"
+  ],
+  "model": "lexicon"
+ },
+ "Who was Vito Corleone created by?": {
+  "entity": "vito corleone",
+  "chain": [
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "Which city did Olga of Kiev die in?": {
+  "entity": "olga of kiev",
+  "chain": [
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "Who was Rand al'Thor created by?": {
+  "entity": "rand althor",
+  "chain": [
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of Apple DOS?": {
+  "entity": "apple dos",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Which city was Bachir Gemayel born in?": {
+  "entity": "bachir gemayel",
+  "chain": [
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "Which company is Apple TV produced by?": {
+  "entity": "apple tv",
+  "chain": [
+   "producer"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the headquarter of Microsoft located in?": {
+  "entity": "microsoft",
+  "chain": [
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Which city did William Holman Hunt die in?": {
+  "entity": "william holman hunt",
+  "chain": [
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the original broadcaster of Parenthood?": {
+  "entity": "parenthood",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the original broadcaster of The Drew Carey Show?": {
+  "entity": "the drew carey show",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "Which company is Ford F-Series produced by?": {
+  "entity": "ford f-series",
+  "chain": [
+   "producer"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of AppleScript?": {
+  "entity": "applescript",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of Internet Explorer 5?": {
+  "entity": "internet explorer 5",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the headquarter of MTV located in?": {
+  "entity": "mtv",
+  "chain": [
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Who was Malvolio created by?": {
+  "entity": "malvolio",
+  "chain": [
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of Unreal Tournament 2004?": {
+  "entity": "unreal tournament 2004",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Who was Kinsey Millhone created by?": {
+  "entity": "kinsey millhone",
+  "chain": [
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "Which language was The Thorn Birds written in?": {
+  "entity": "the thorn birds",
+  "chain": [
+   "original_lang"
+  ],
+  "model": "lexicon"
+ },
+ "Which company is Buick Regal produced by?": {
+  "entity": "buick regal",
+  "chain": [
+   "producer"
+  ],
+  "model": "lexicon"
+ },
+ "Who was Finnish created by?": {
+  "entity": "finnish",
+  "chain": [
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "Which company is Ford S-Max produced by?": {
+  "entity": "ford s-max",
+  "chain": [
+   "producer"
+  ],
+  "model": "lexicon"
+ },
+ "Which city was Constantine VII born in?": {
+  "entity": "constantine vii",
+  "chain": [
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "Which language was The New York Times written in?": {
+  "entity": "the new york times",
+  "chain": [
+   "original_lang"
+  ],
+  "model": "lexicon"
+ },
+ "Who was Kermit the Frog created by?": {
+  "entity": "kermit the frog",
+  "chain": [
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "Which city was Monty Norman born in?": {
+  "entity": "monty norman",
+  "chain": [
+   "birth_place"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the original broadcaster of One Life to Live?": {
+  "entity": "one life to live",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the original broadcaster of General Hospital?": {
+  "entity": "general hospital",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of PowerBook G4?": {
+  "entity": "powerbook g4",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Which language was Os Lusíadas written in?": {
+  "entity": "os lusíadas",
+  "chain": [
+   "original_lang"
+  ],
+  "model": "lexicon"
+ },
+ "Which city did Martin Luther King Jr. die in?": {
+  "entity": "martin luther king jr.",
+  "chain": [
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "Where was Finnair founded?": {
+  "entity": "finnair",
+  "chain": [
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of Mortal Kombat X?": {
+  "entity": "mortal kombat x",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of Windows Server 2008?": {
+  "entity": "windows server 2008",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the headquarter of University of Manchester located in?": {
+  "entity": "university of manchester",
+  "chain": [
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the headquarter of Berklee College of Music located in?": {
+  "entity": "berklee college of music",
+  "chain": [
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the original broadcaster of Revenge?": {
+  "entity": "revenge",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the employer of Larry Page?": {
+  "entity": "larry page",
+  "chain": [
+   "employer"
+  ],
+  "model": "lexicon"
+ },
+ "Which language was Shahnameh written in?": {
+  "entity": "shahnameh",
+  "chain": [
+   "original_lang"
+  ],
+  "model": "lexicon"
+ },
+ "Which city did Allan Pinkerton die in?": {
+  "entity": "allan pinkerton",
+  "chain": [
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of iPad Pro?": {
+  "entity": "ipad pro",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Where was The Kinks founded?": {
+  "entity": "the kinks",
+  "chain": [
+   "founder"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of AppleWorks?": {
+  "entity": "appleworks",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of Extensible Markup Language?": {
+  "entity": "extensible markup language",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Who was Bart Simpson created by?": {
+  "entity": "bart simpson",
+  "chain": [
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "Who was The IT Crowd created by?": {
+  "entity": "the it crowd",
+  "chain": [
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "Which company is Windows Vista produced by?": {
+  "entity": "windows vista",
+  "chain": [
+   "producer"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the employer of Helen Vendler?": {
+  "entity": "helen vendler",
+  "chain": [
+   "employer"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the original broadcaster of The Wonder Years?": {
+  "entity": "the wonder years",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "Which company is M1895 Colt-Browning machine gun produced by?": {
+  "entity": "m1895 colt-browning machine gun",
+  "chain": [
+   "producer"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the original broadcaster of Morning Joe?": {
+  "entity": "morning joe",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "Who was The Dark Knight created by?": {
+  "entity": "the dark knight",
+  "chain": [
+   "creator"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the employer of Milan Stojadinović?": {
+  "entity": "milan stojadinović",
+  "chain": [
+   "employer"
+  ],
+  "model": "lexicon"
+ },
+ "Which language was 9/11 Commission Report written in?": {
+  "entity": "9/11 commission report",
+  "chain": [
+   "original_lang"
+  ],
+  "model": "lexicon"
+ },
+ "Which city did Lucan die in?": {
+  "entity": "lucan",
+  "chain": [
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of Windows XP?": {
+  "entity": "windows xp",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the employer of Aldrich Ames?": {
+  "entity": "aldrich ames",
+  "chain": [
+   "employer"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the original broadcaster of Fantasy Island?": {
+  "entity": "fantasy island",
+  "chain": [
+   "broadcaster"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the headquarter of University of Washington located in?": {
+  "entity": "university of washington",
+  "chain": [
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Which city did Gordon Jackson die in?": {
+  "entity": "gordon jackson",
+  "chain": [
+   "death_place"
+  ],
+  "model": "lexicon"
+ },
+ "Who is the developer of Purification Rundown?": {
+  "entity": "purification rundown",
+  "chain": [
+   "developer"
+  ],
+  "model": "lexicon"
+ },
+ "Which city is the headquarter of Canadian Broadcasting Corporation located in?": {
+  "entity": "canadian broadcasting corporation",
+  "chain": [
+   "headquarters"
+  ],
+  "model": "lexicon"
+ },
+ "Which company is Big Mac produced by?": {
+  "entity": "big mac",
+  "chain": [
+   "producer"
+  ],
+  "model": "lexicon"
+ }
+}
