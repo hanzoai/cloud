@@ -4,15 +4,15 @@
  "reader": "none",
  "k": 10,
  "prompt_sha": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
- "commit": "9eab30f734",
+ "commit": "bea5d0ad18",
  "n": 196,
  "by_size": {
   "mh_6k": {
    "n": 100,
-   "substring_em": 0.88,
+   "substring_em": 0.83,
    "ci95": [
-    0.81,
-    0.93
+    0.75,
+    0.89
    ]
   },
   "sh_6k": {
@@ -24,9 +24,9 @@
    ]
   }
  },
- "facts_per_q": 1.71,
- "retrieval_ms_p50": 0.179,
- "retrieval_ms_p95": 0.669,
+ "facts_per_q": 1.63,
+ "retrieval_ms_p50": 0.234,
+ "retrieval_ms_p95": 0.656,
  "reader_calls": 0,
  "context_tokens_per_q": 0,
  "wall_s": 0

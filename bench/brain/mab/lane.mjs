@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { load, norm, DATA } from './parse.mjs'
 import { build, embed, dot } from './index.mjs'
-import { beamResolve } from './beam.mjs'
+import { beamResolve, lattice } from './beam.mjs'
 
 const arg = (k, d) => { const m = process.argv.find((a) => a.startsWith(`--${k}=`)); return m ? m.split('=')[1] : d }
 const RESCORE = process.argv.includes('--rescore')
@@ -126,8 +126,14 @@ const ROW = {
   beam:      async (ix, q, qv, plan, find) => { const cands = plansFor(q); if (!cands.length) return { facts: [], direct: '' }
     // every plan is executed; the record keeps each one's answer and score, so best-of-N and selected-of-N can be told apart afterwards
     let best = null; const all = []
+    if (cands.length > 1) cands.push(lattice(cands)) // the merged sketch competes with the plans it came from
     for (const p of cands) { const r = beamResolve(ix, find, p, q); all.push({ set: p.set, chain: p.chain, entity: p.entity, answer: r.answer, score: r.answer == null ? null : r.score }); if (r.answer != null && (!best || r.score > best.score)) best = { ...r, plan: p } }
     if (!best) { const r = beamResolve(ix, find, cands[0], q); return { facts: bySerial(r.evidence), trace: [{ step: 'plans', candidates: all, chose: null }, ...r.trace], direct: '' } }
+    return { facts: bySerial(best.evidence), trace: [{ step: 'plans', candidates: all, chose: best.plan.set, chain: best.plan.chain, score: best.score }, ...best.trace], direct: best.answer } },
+  beamx:     async (ix, q, qv, plan, find) => { const cands = plansFor(q); if (!cands.length) return { facts: [], direct: '' }; if (cands.length > 1) cands.push(lattice(cands))
+    let best = null; const all = []
+    for (const p of cands) { const r = beamResolve(ix, find, p, q, { exhaustive: true }); all.push({ set: p.set, chain: p.chain, entity: p.entity, answer: r.answer, score: r.answer == null ? null : r.score }); if (r.answer != null && (!best || r.score > best.score)) best = { ...r, plan: p } }
+    if (!best) return { facts: [], trace: [{ step: 'plans', candidates: all, chose: null }], direct: '' }
     return { facts: bySerial(best.evidence), trace: [{ step: 'plans', candidates: all, chose: best.plan.set, chain: best.plan.chain, score: best.score }, ...best.trace], direct: best.answer } },
   noreader:  async (ix, q, qv, plan, find) => { if (!plan) return { facts: [], direct: '' }; const r = resolve(ix, find, plan, { timeline: true, fallback: true }); return { facts: bySerial(r.evidence), trace: r.trace, direct: r.complete ? r.answer : '' } },
 }
@@ -137,7 +143,7 @@ const rows = load().filter((r) => (SPLIT === 'dev' ? r.id.endsWith('_6k') : !r.i
 const commit = execSync('git rev-parse --short HEAD', { cwd: ROOT }).toString().trim()
 const ixCache = new Map()
 for (const rowName of ROWS) {
-  const dir = ROOT + `runs/mab-${SPLIT}-${rowName}-${['noreader', 'beam'].includes(rowName) ? 'none' : READER.replace(/[^\w.-]/g, '_')}/`; mkdirSync(dir, { recursive: true })
+  const dir = ROOT + `runs/mab-${SPLIT}-${rowName}-${['noreader', 'beam', 'beamx'].includes(rowName) ? 'none' : READER.replace(/[^\w.-]/g, '_')}/`; mkdirSync(dir, { recursive: true })
   const predFile = dir + 'predictions.jsonl', traceFile = dir + 'traces.jsonl'
   const have = new Set(existsSync(predFile) ? readFileSync(predFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l).qid) : [])
   const per = {}, all = [], t0 = Date.now(); let calls = 0, tokens = 0
@@ -161,7 +167,7 @@ for (const rowName of ROWS) {
   // row could not answer (no plan, a failed call) scores 0 here; it is not dropped from n.
   const answered = new Map(preds.map((p) => [p.qid, p.em]))
   for (const r of rows) { const size = r.id.replace('factconsolidation_', ''); for (const qid of r.qa_ids) (per[size] ??= []).push(answered.get(qid) ?? 0) }
-  const metrics = { row: rowName, split: SPLIT, reader: ['noreader', 'beam'].includes(rowName) ? 'none' : READER, k: K, prompt_sha: sha(PROMPT), commit, n: preds.length, by_size: Object.fromEntries(Object.entries(per).map(([s, xs]) => [s, { n: xs.length, substring_em: +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(4), ci95: bootstrap(xs).map((x) => +x.toFixed(4)) }])),
+  const metrics = { row: rowName, split: SPLIT, reader: ['noreader', 'beam', 'beamx'].includes(rowName) ? 'none' : READER, k: K, prompt_sha: sha(PROMPT), commit, n: preds.length, by_size: Object.fromEntries(Object.entries(per).map(([s, xs]) => [s, { n: xs.length, substring_em: +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(4), ci95: bootstrap(xs).map((x) => +x.toFixed(4)) }])),
     facts_per_q: +(preds.reduce((a, p) => a + p.facts, 0) / preds.length).toFixed(2), retrieval_ms_p50: +[...preds.map((p) => p.ms)].sort((a, b) => a - b)[Math.floor(preds.length / 2)].toFixed(3), retrieval_ms_p95: +[...preds.map((p) => p.ms)].sort((a, b) => a - b)[Math.floor(preds.length * 0.95)].toFixed(3), reader_calls: calls, context_tokens_per_q: calls ? Math.round(tokens / calls) : 0, wall_s: Math.round((Date.now() - t0) / 1000) }
   writeFileSync(dir + 'metrics.json', JSON.stringify(metrics, null, 1))
   writeFileSync(dir + 'meta.json', JSON.stringify({ bench: 'MemoryAgentBench Conflict_Resolution (FactConsolidation)', dataset_sha256: sha(readFileSync(DATA + 'Conflict_Resolution-00000-of-00001.parquet')), split: SPLIT, row: rowName, reader: metrics.reader, planner: Object.entries(Object.values(plans).reduce((a, p) => (a[p.model] = (a[p.model] ?? 0) + 1, a), {})).map(([m, n]) => `${m}:${n}`).join(' '), embedding: 'zenlm/zen-embedding-0.6b', k: K, temperature: 0, max_tokens: 64, prompt: 'prompts/reader-mab.txt', prompt_sha256: sha(PROMPT), commit }, null, 1))

@@ -1,5 +1,5 @@
 {
- "row": "beam",
+ "row": "beamx",
  "split": "dev",
  "reader": "none",
  "k": 10,
@@ -9,10 +9,10 @@
  "by_size": {
   "mh_6k": {
    "n": 100,
-   "substring_em": 0.88,
+   "substring_em": 0.9,
    "ci95": [
-    0.81,
-    0.93
+    0.83,
+    0.95
    ]
   },
   "sh_6k": {
@@ -24,9 +24,9 @@
    ]
   }
  },
- "facts_per_q": 1.71,
- "retrieval_ms_p50": 0.179,
- "retrieval_ms_p95": 0.669,
+ "facts_per_q": 1.74,
+ "retrieval_ms_p50": 0.221,
+ "retrieval_ms_p95": 1.11,
  "reader_calls": 0,
  "context_tokens_per_q": 0,
  "wall_s": 0
