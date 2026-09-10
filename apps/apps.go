@@ -78,9 +78,10 @@ func Wire() []cloud.MountSpec {
 		{Name: "validators", Mount: validators.Mount, Shutdown: ctxShutdown(validators.Shutdown)},
 		{Name: "code", Mount: code.Mount, Shutdown: code.Shutdown},
 		{Name: "session", Mount: session.Mount, Shutdown: ctxShutdown(session.Shutdown)},
-		// /v1/bot: the registry of which bots are live, suspended or gone, and —
-		// on the WebSocket upgrade of the same path — the gateway protocol an
-		// OpenClaw control UI drives this cloud through.
+		// /v1/bot: the gateway protocol a control UI drives this cloud through,
+		// on the WebSocket upgrade and on the POST of the same path; and one
+		// segment under it, /v1/bot/runs, the roster of which bot runs are going,
+		// parked or stopped, wherever each one is running.
 		{Name: "bot", Mount: bot.Mount, Shutdown: ctxShutdown(bot.Shutdown)},
 		{Name: "zero-trust", Mount: zt.Mount},
 		// ngrok-native public sharing: /v1/share/* provisions a per-org zrok account.

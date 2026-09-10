@@ -3,7 +3,8 @@ package bot
 // Identity is Hanzo IAM's answer, reported here — never minted, approved or
 // revoked.
 //
-// OpenClaw pairs a device: the client mints an Ed25519 key, asks to be let in,
+// The upstream gateway pairs a device: the client mints an Ed25519 key, asks to
+// be let in,
 // an operator approves the request, and the gateway issues that device a token.
 // None of that happens in this cloud. A client arrives carrying a credential
 // the identity boundary has already validated, or it is refused before a frame

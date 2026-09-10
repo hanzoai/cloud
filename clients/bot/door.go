@@ -19,17 +19,17 @@ import (
 // fasthttp's synthetic ResponseWriter is not hijackable, so an adaptor-based
 // upgrade answers 404.
 
-// door answers GET /v1/bot, which is one path with two answers. Asking to
-// upgrade is a fact about the request rather than a flag beside it, so a client
-// that asked for the protocol gets the socket and every other GET gets the
-// roster. A browser asking for a page at this path is neither, and gets the
-// roster's answer rather than a refusal it cannot read: pages are served by
-// whatever serves pages, not from here.
+// door answers GET /v1/bot. Asking to upgrade is a fact about the request
+// rather than a flag beside it, so a client that asked for the protocol gets
+// the socket. Every other GET is passed along: a browser asking for a page here
+// is asking whatever serves pages, and the roster it might have meant has its
+// own address at /v1/bot/runs. Refusing it instead would take an address this
+// surface has no answer for.
 func door(s *cloud.Service[state], c *zip.Ctx) error {
 	if websocket.FastHTTPIsWebSocketUpgrade(c.Fiber().RequestCtx()) {
 		return stream(s, c)
 	}
-	return list(s, c)
+	return c.Next()
 }
 
 // stream upgrades to the protocol socket. The caller is resolved BEFORE the
@@ -100,8 +100,9 @@ func stream(s *cloud.Service[state], c *zip.Ctx) error {
 	})(c)
 }
 
-// call runs one request frame over plain HTTP. The envelope carries the
-// outcome of the method, so a method that refuses still answers 200 with
+// call answers POST /v1/bot: one request frame over plain HTTP, for a caller
+// with one thing to ask and no reason to hold a connection open. The envelope
+// carries the outcome of the method, so a method that refuses still answers 200 with
 // ok:false — the status says only whether the method was reached. A caller
 // with no validated identity is refused before any frame is read, which is the
 // one thing HTTP answers for.

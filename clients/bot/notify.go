@@ -19,7 +19,8 @@ package bot
 // and tells the bot's open connections, so an agent already listening acts on
 // it now rather than at its next turn.
 //
-// OpenClaw binds a subscription to its own paired-device key. That handshake is
+// The upstream gateway binds a subscription to its own paired-device key. That
+// handshake is
 // not implemented here and the binding is the IAM principal instead: the caller
 // IAM validated owns the row, and every later read, write and delete checks the
 // same fact. There is no second identity to keep in step with the first.

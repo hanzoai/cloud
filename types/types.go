@@ -366,3 +366,54 @@ var (
 	ErrK8sAlreadyExists = errors.New("k8s: resource already exists")
 	ErrK8sForbidden     = errors.New("k8s: forbidden (RBAC)")
 )
+
+// ── the run executor ─────────────────────────────────────────────────────────
+//
+// RunClient is the interface to the service that executes bot runs. A run is a
+// bot instance: a loop doing somebody's work, either on their own machine or in
+// a sandbox this cloud placed it in. The ones on people's own machines announce
+// themselves to the registry in clients/bot and are held there. The ones in
+// sandboxes are held by whatever placed them, and this is how the registry asks
+// about those, so one roster answers for both.
+//
+// Nil means this deployment places no sandboxes, and the roster is then exactly
+// what has announced itself. That is the whole of the OSS build: there is no
+// executor here, and the registry says so rather than pretending a run could be
+// started.
+type RunClient interface {
+	// Runs lists one org's live runs. The org is the caller's validated org and
+	// never a value the caller chose, so one tenant cannot enumerate another's.
+	//
+	// An error is an error and never an empty list: "this org has no runs" and
+	// "we could not ask" are different answers, and a console shows a different
+	// thing for each.
+	Runs(ctx context.Context, org string) ([]Run, error)
+	// Stop terminates one of an org's runs. ErrNoRun means this org has no run
+	// by that id — the same answer an id that never existed gets, so the address
+	// tells nobody which ids another tenant holds. Any other error means the
+	// executor did not answer, and the caller must not report a stop it cannot
+	// know happened.
+	Stop(ctx context.Context, org, run string) error
+}
+
+// Run is one run as the executor reports it. Every field is the executor's, and
+// the registry adds nothing to it beyond saying that a run held out there is
+// running in the cloud rather than on somebody's own machine.
+type Run struct {
+	// ID is the run's id, and the id its live session is registered under.
+	ID string
+	// Task is the instruction the run is carrying out.
+	Task string
+	// Surface is what the run drives: the desktop or terminal it has.
+	Surface string
+	// Status is the run's state in the executor's own words.
+	Status string
+	// SessionURL is the live session a console embeds to watch or attach.
+	SessionURL string
+	// StartedAt is when the run began, RFC 3339, as the executor stamped it.
+	StartedAt string
+}
+
+// ErrNoRun is the sentinel a WORKING executor returns when an org has no run by
+// that id. Every other error means the executor could not be asked.
+var ErrNoRun = errors.New("run: no such run")

@@ -89,6 +89,16 @@ func eventNames() []string {
 	return slices.Sorted(maps.Keys(surface.events))
 }
 
+// emits reports whether this surface says it may raise an event. It is
+// eventNames answered one name at a time, for a caller that names the events it
+// wants rather than reading the list — a suspended run naming what should call
+// it back (sleep.go). One vocabulary, whether it is listed or asked about.
+func emits(event string) bool {
+	surface.mu.RLock()
+	defer surface.mu.RUnlock()
+	return surface.events[event]
+}
+
 // Call is one method invocation: the caller, what it asked for, and the
 // handles it needs to answer.
 type Call struct {

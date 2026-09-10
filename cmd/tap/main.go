@@ -88,7 +88,7 @@ type tap struct {
 }
 
 func main() {
-	url := flag.String("url", "ws://127.0.0.1:8910/v1/claw", "protocol socket")
+	url := flag.String("url", "ws://127.0.0.1:8899/v1/bot", "protocol socket")
 	path := flag.String("frames", "frames.jsonl", "where to write the captured frames")
 	drain := flag.Duration("drain", 8*time.Second, "how long to keep reading after the last request")
 	flag.Parse()
@@ -212,7 +212,7 @@ func firstMessageID(frame []byte) string {
 	var r struct {
 		Payload struct {
 			Messages []struct {
-				OpenClaw struct {
+				Mark struct {
 					ID string `json:"id"`
 				} `json:"__openclaw"`
 			} `json:"messages"`
@@ -221,7 +221,7 @@ func firstMessageID(frame []byte) string {
 	if frame == nil || json.Unmarshal(frame, &r) != nil || len(r.Payload.Messages) == 0 {
 		return ""
 	}
-	return r.Payload.Messages[0].OpenClaw.ID
+	return r.Payload.Messages[0].Mark.ID
 }
 
 // plan orders the advertised floor: the session first, the turn last.

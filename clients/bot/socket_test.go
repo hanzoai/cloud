@@ -39,8 +39,8 @@ func serve(t *testing.T, shape ...func(*cloud.Deps)) string {
 // the registry that owns bots has one.
 func announceAt(t *testing.T, url, org, id string) {
 	t.Helper()
-	at := "http" + strings.TrimSuffix(strings.TrimPrefix(url, "ws"), "/bot") + "/bot"
-	req, err := http.NewRequest(http.MethodPost, at, strings.NewReader(`{"id":"`+id+`","where":"cloud"}`))
+	at := "http" + strings.TrimSuffix(strings.TrimPrefix(url, "ws"), "/bot") + "/bot/runs"
+	req, err := http.NewRequest(http.MethodPost, at, strings.NewReader(`{"runId":"`+id+`","where":"cloud"}`))
 	if err != nil {
 		t.Fatalf("announce %s: %v", id, err)
 	}

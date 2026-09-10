@@ -125,8 +125,8 @@ func mount(t *testing.T, shape ...func(*cloud.Deps)) *zip.App {
 // announces itself at. A protocol call binds to a bot only once it is there.
 func announced(t *testing.T, app *zip.App, org, id string) {
 	t.Helper()
-	if code, body := as(t, app, org, http.MethodPost, "/v1/bot",
-		`{"id":"`+id+`","where":"cloud"}`); code != http.StatusCreated {
+	if code, body := as(t, app, org, http.MethodPost, "/v1/bot/runs",
+		`{"runId":"`+id+`","where":"cloud"}`); code != http.StatusCreated {
 		t.Fatalf("announce %s: %d %s", id, code, body)
 	}
 }
@@ -180,7 +180,7 @@ func asking(w who, id, method, params string) *http.Request {
 	}
 	frame += `}`
 
-	path := "/v1/bot/call"
+	path := "/v1/bot"
 	if w.bot != "" {
 		path += "?bot=" + w.bot
 	}
@@ -351,11 +351,11 @@ func TestUnvalidatedCallerIsRefused(t *testing.T) {
 		org     bool
 		upgrade bool
 	}{
-		{"the roster", http.MethodGet, "/v1/bot", "", false, false},
-		{"announcing a bot", http.MethodPost, "/v1/bot", `{"where":"cloud"}`, false, false},
-		{"the roster, from a forged org", http.MethodGet, "/v1/bot", "", true, false},
+		{"the roster", http.MethodGet, "/v1/bot/runs", "", false, false},
+		{"beginning a run", http.MethodPost, "/v1/bot/runs", `{"where":"cloud"}`, false, false},
+		{"the roster, from a forged org", http.MethodGet, "/v1/bot/runs", "", true, false},
 		{"the socket", http.MethodGet, "/v1/bot", "", true, true},
-		{"one frame", http.MethodPost, "/v1/bot/call", `{"type":"req","id":"1:a","method":"connect"}`, true, false},
+		{"one frame", http.MethodPost, "/v1/bot", `{"type":"req","id":"1:a","method":"connect"}`, true, false},
 	} {
 		req := httptest.NewRequest(probe.method, probe.path, strings.NewReader(probe.body))
 		if probe.org {

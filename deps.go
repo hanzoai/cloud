@@ -78,8 +78,8 @@ type Deps struct {
 
 	// Subsystem clients — populated by BuildDeps based on enabled subsystems.
 	// Each is an interface with both in-process and ZAP-RPC implementations.
-	IAM      IAMClient
-	KMS      KMSClient
+	IAM IAMClient
+	KMS KMSClient
 	// K8s is the cluster control plane, absent by default. platform and validators
 	// are the only consumers; both fail closed with the reason from Ready().
 	K8s      K8sClient
@@ -99,6 +99,14 @@ type Deps struct {
 	O11y  O11yClient
 	VFS   VFSClient
 	MQ    MQClient
+	// Runs is the executor that places bot runs in sandboxes. The bot registry
+	// asks it for the runs it holds so that one roster answers for both halves
+	// of the same question — the runs on people's own machines, which announce
+	// themselves here, and the runs out there, which do not. Nil means this
+	// deployment places none, which is the OSS default: /v1/bot/runs then lists
+	// exactly what announced itself, and asking to start a run says plainly
+	// that there is nothing here to start one in.
+	Runs RunClient
 
 	// Payments + Vault stay out-of-process (PCI scope isolation per
 	// HIP-0106). These clients always resolve to ZAP-RPC implementations,
@@ -141,6 +149,7 @@ type MQClient = types.MQClient
 type PaymentsClient = types.PaymentsClient
 type VaultClient = types.VaultClient
 type K8sClient = types.K8sClient
+type RunClient = types.RunClient
 
 // --- placeholder types (replaced by ZAP-generated types per subsystem) ---
 //

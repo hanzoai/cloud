@@ -31,8 +31,8 @@ import (
 // ticket answers which widget of that org's board is asking, and it stops
 // answering the moment that widget changes: it is a secret held beside the
 // board, checked against the revision and the instance it was minted for and
-// replaced whenever the widget is written. OpenClaw binds the same claim to the
-// lifetime of one process; here the row is the authority, which keeps the
+// replaced whenever the widget is written. The upstream gateway binds the same
+// claim to the lifetime of one process; here the row is the authority, which keeps the
 // property and drops the coupling to a single replica.
 //
 // A read a widget asks for is a method this surface already answers. So
