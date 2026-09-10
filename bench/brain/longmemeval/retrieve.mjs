@@ -17,7 +17,8 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 const EMBED = process.env.EMBED ?? 'all-minilm', OLLAMA = process.env.OLLAMA ?? 'http://127.0.0.1:11434'
 const DATA = new URL('../data/longmemeval/', import.meta.url).pathname
 const items = JSON.parse(readFileSync(DATA + 'longmemeval_s', 'utf8'))
-const CACHE = DATA + `vec-${EMBED.replace(/[^a-z0-9.-]/gi, '_')}.json`
+// vectors cached as float32, turns then questions: a JSON string of 200k vectors is longer than V8 allows
+const CACHE = DATA + `vec-${EMBED.replace(/[^a-z0-9.-]/gi, '_')}.f32`
 
 // every unique session, once
 const sessions = new Map()
@@ -37,12 +38,15 @@ async function embed(batch) {
 const unit = (v) => { let n = 0; for (const x of v) n += x * x; n = Math.sqrt(n) || 1; return v.map((x) => x / n) }
 const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s }
 let vec
-if (existsSync(CACHE)) { vec = JSON.parse(readFileSync(CACHE, 'utf8')); console.log('cached vectors') }
+const views = (buf, n, d) => Array.from({ length: n }, (_, i) => buf.subarray(i * d, (i + 1) * d))
+if (existsSync(CACHE)) { const h = JSON.parse(readFileSync(CACHE + '.json', 'utf8')); const b = readFileSync(CACHE); const f = new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4)
+  vec = { turns: views(f.subarray(0, h.turns * h.dim), h.turns, h.dim), questions: views(f.subarray(h.turns * h.dim), h.questions, h.dim) }; console.log('cached vectors') }
 else {
   vec = { turns: [], questions: [] }; const B = 64, t0 = Date.now()
   for (let i = 0; i < texts.length; i += B) { vec.turns.push(...(await embed(texts.slice(i, i + B))).map(unit)); if ((i / B) % 50 === 0) process.stdout.write(`\r  turns ${i}/${texts.length}  ${((Date.now() - t0) / 1000).toFixed(0)}s   `) }
   for (let i = 0; i < items.length; i += B) vec.questions.push(...(await embed(items.slice(i, i + B).map((q) => q.question))).map(unit))
-  writeFileSync(CACHE, JSON.stringify(vec)); console.log(`\n  embedded in ${((Date.now() - t0) / 1000).toFixed(0)}s`)
+  const dim = vec.turns[0].length, f = new Float32Array((vec.turns.length + vec.questions.length) * dim); [...vec.turns, ...vec.questions].forEach((v, i) => f.set(v, i * dim))
+  writeFileSync(CACHE, Buffer.from(f.buffer)); writeFileSync(CACHE + '.json', JSON.stringify({ turns: vec.turns.length, questions: vec.questions.length, dim })); console.log(`\n  embedded in ${((Date.now() - t0) / 1000).toFixed(0)}s`)
 }
 // per-session views
 const idx = new Map(); owner.forEach((sid, i) => (idx.get(sid) ?? idx.set(sid, []).get(sid)).push(i))
