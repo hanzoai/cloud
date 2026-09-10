@@ -83,6 +83,22 @@ func AuditTrail(rec *audit.Recorder) zip.Handler {
 
 		err := c.Next()
 
+		// WHICH OPERATION RAN, not which door it came through. Everything above
+		// reads the path the TRANSPORT carried, and for a typed op that is only
+		// the operation over REST: over MCP it is /mcp and over the call plane it
+		// is /.well-known/zip/op/<name>. Rule notes the operation as it passes
+		// (note.go), so when the matched route is not the operation's own, the
+		// operation is what the record is judged and written from.
+		//
+		// The concrete request path is left alone below. Method and Path describe
+		// the REQUEST and are still true; Action and Resource describe what was
+		// DONE, and only those move. Over REST nothing moves at all — the matched
+		// route IS the operation's route — so no existing record changes shape.
+		did, didPath := method, path
+		if op, ok := Noted(c); ok && matched(c) != op.Path {
+			did, didPath = op.Method, op.Path
+		}
+
 		// Resolve the EFFECTIVE status. A handler may set it on the response
 		// directly (c.Status(...).JSON(...)) OR return a *zip.HTTPError that the
 		// framework's error handler renders AFTER this middleware unwinds — in the
@@ -91,14 +107,14 @@ func AuditTrail(rec *audit.Recorder) zip.Handler {
 		// carries one; this is what makes admin-guard denials (which return
 		// ErrForbidden) get audited as 403.
 		status := effectiveStatus(c.Fiber().Response().StatusCode(), err)
-		if !isSecurityRelevant(method, path, status) {
+		if !isSecurityRelevant(did, didPath, status) {
 			return err // not an audited event; pass the handler result through.
 		}
 
 		record := audit.Record{
 			Actor:    actorFromCtx(c),
-			Action:   method + " " + routeFamily(path),
-			Resource: resourceFromPath(path),
+			Action:   did + " " + routeFamily(didPath),
+			Resource: resourceFromPath(didPath),
 			Auth:     authFromCtx(c),
 			Outcome:  outcomeOf(status, err),
 			SourceIP: ClientIP(c),
@@ -293,7 +309,12 @@ func routeFamily(path string) string {
 	// Keep the leading "v1/<subsystem>/<noun>" and stop before an id-looking tail.
 	out := make([]string, 0, len(segs))
 	for _, s := range segs {
-		if looksLikeID(s) {
+		// A ":name" segment is the SAME segment an id fills at request time — a
+		// route pattern is what an operation carries, and a concrete path is what
+		// a request carries, so both have to reduce to one family or the trail
+		// spells the same action two ways depending on the door it came through.
+		// A concrete path never contains a colon, so this costs REST nothing.
+		if looksLikeID(s) || strings.HasPrefix(s, ":") {
 			break
 		}
 		out = append(out, s)

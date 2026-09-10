@@ -293,6 +293,10 @@ func Serve(specs []MountSpec, enable []string) error {
 		return fmt.Errorf("audit: %w", err)
 	}
 	deps.Audit = auditRec
+	// The request, on its own context, so the op-invoke seam can find it — the
+	// seam is handed a context and not a *zip.Ctx. It has to precede the trail:
+	// what the trail reads is written through this.
+	app.Use(Carry())
 	app.Use(AuditTrail(auditRec))
 
 	// Per-scope rate limit (issue #70). Runs AFTER identity (needs the validated
@@ -393,6 +397,14 @@ func Serve(specs []MountSpec, enable []string) error {
 	// into ai (long github/crawl/s3 ingests run as durable workflows; upload stays
 	// inline). Fail-soft — inline fallback if the engine can't start. See durable.go.
 	wireDurableIngest(ctx, deps)
+
+	// The rule every operation answers to, installed once and here because this
+	// is where composition ends: a rule declared after the leaves still covers
+	// them, but it has to be in force before anything is served. Today it states
+	// one fact — which operation an invoke is — and it is the only place that
+	// can, because zip.Op is the same value on every door while the request path
+	// is not (note.go).
+	app.Authorize(Rule())
 
 	// Health/metrics listener (HealthListenAddr, default :9090). Serves the
 	// liveness/readiness contract the platform probes hit (/healthz, /readyz)
