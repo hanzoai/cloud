@@ -59,8 +59,9 @@ const t0 = process.hrtime.bigint(); let latency = []
 items.forEach((q, qi) => {
   const qv = vec.questions[qi], gold = new Set(q.answer_session_ids)
   const t1 = process.hrtime.bigint()
-  const tm = q.haystack_session_ids.map((sid) => [sid, Math.max(...idx.get(sid).map((i) => dot(qv, vec.turns[i])))]).sort((a, b) => b[1] - a[1]).map(([s]) => s)
-  const sm = q.haystack_session_ids.map((sid) => [sid, dot(qv, mean.get(sid))]).sort((a, b) => b[1] - a[1]).map(([s]) => s)
+  // a session with no turns (an empty one in the release) has no vector and ranks last
+  const tm = q.haystack_session_ids.map((sid) => [sid, idx.has(sid) ? Math.max(...idx.get(sid).map((i) => dot(qv, vec.turns[i]))) : -Infinity]).sort((a, b) => b[1] - a[1]).map(([s]) => s)
+  const sm = q.haystack_session_ids.map((sid) => [sid, mean.has(sid) ? dot(qv, mean.get(sid)) : -Infinity]).sort((a, b) => b[1] - a[1]).map(([s]) => s)
   latency.push(Number(process.hrtime.bigint() - t1) / 1e6)
   for (const type of ['ALL', q.question_type]) { const c = cell(type); c.n++
     for (const [r, ranked] of [['tm', tm], ['sm', sm]]) {
@@ -69,7 +70,8 @@ items.forEach((q, qi) => {
 })
 latency.sort((a, b) => a - b)
 const pct = (a, b) => ((a / b) * 100).toFixed(1).padStart(5)
-console.log(`\n── LongMemEval-S · session recall · ${EMBED} ──`)
+const empty = new Set(items.flatMap((q) => q.haystack_session_ids.filter((sid) => !idx.has(sid)))).size
+console.log(`\n── LongMemEval-S · session recall · ${EMBED} · ${empty} haystack sessions carry no turns ──`)
 console.log(`type                        n    turn-max  R@5 all/any  R@10 all/any  MRR   session-mean R@5 all/any  R@10 all/any  MRR`)
 for (const [type, c] of Object.entries(tally)) console.log(`${type.padEnd(26)} ${String(c.n).padStart(4)}    ${pct(c.all['tm@5'], c.n)}/${pct(c.any['tm@5'], c.n)}   ${pct(c.all['tm@10'], c.n)}/${pct(c.any['tm@10'], c.n)}  ${(c.mrr.tm / c.n).toFixed(3)}        ${pct(c.all['sm@5'], c.n)}/${pct(c.any['sm@5'], c.n)}   ${pct(c.all['sm@10'], c.n)}/${pct(c.any['sm@10'], c.n)}  ${(c.mrr.sm / c.n).toFixed(3)}`)
 console.log(`retrieval latency p50 ${latency[Math.floor(latency.length * 0.5)].toFixed(2)} ms · p95 ${latency[Math.floor(latency.length * 0.95)].toFixed(2)} ms · sessions per haystack ${(items.reduce((a, q) => a + q.haystack_session_ids.length, 0) / items.length).toFixed(0)}`)
