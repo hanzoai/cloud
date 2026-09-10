@@ -21,13 +21,17 @@ package bot
 //	sessions.groups.list      the catalog the sidebar's sections come from
 //	sessions.groups.defaults  the same catalog with its paths on it
 //
-// sessions.messages.subscribe and its unsubscribe are not registered. They
-// narrow which sessions a connection hears message events for, and this surface
-// delivers a session's events to every connection on the same bot — which is
-// what the control UI expects, since it declares none of the capabilities that
-// opt a client into scoped delivery (ui/src/api/gateway.ts, ConnectParams.caps).
-// A subscription that narrowed nothing would be a declaration this surface
-// records and never reads.
+//	sessions.messages.subscribe   hear one session's messages
+//	sessions.messages.unsubscribe stop hearing them
+//
+// Those last two narrow nothing here, and answer that they succeeded anyway,
+// because they have. This surface delivers a session's events to every
+// connection on the same bot, and the control UI declares none of the
+// capabilities that would opt it into narrower delivery (ConnectParams.caps),
+// so a connection that asks to hear one session already hears it. Answering
+// true is the fact; refusing would say the messages will not arrive, which is
+// the one thing that is not true — and the client holds a lease per session and
+// shows the refusal on every chat pane it opens.
 
 import (
 	"crypto/sha256"
@@ -41,6 +45,8 @@ import (
 
 func init() {
 	Register("sessions.subscribe", Read, subscribeSessions)
+	Register("sessions.messages.subscribe", Read, subscribeMessages)
+	Register("sessions.messages.unsubscribe", Read, unsubscribeMessages)
 	Register("sessions.describe", Read, describeSession)
 	Register("sessions.resolve", Read, resolveSession)
 	Register("sessions.create", Write, createSession)
@@ -78,6 +84,43 @@ const (
 // connection is subscribed by being connected, and what this reports is
 // whether there is a connection at all. On the single-frame door there is
 // nowhere to deliver an event, and it says so rather than claiming otherwise.
+// subscribeMessages answers the lease the chat pane takes on one session. It
+// echoes the key it was given rather than a canonical one: the client adopts
+// whatever comes back and holds its lease under that name, and since nothing
+// here is narrowed by key, every name for a session works equally. Returning a
+// different one would imply a mapping this surface does not apply.
+func subscribeMessages(c *Call) (any, error) {
+	var p struct {
+		Key   string `json:"key"`
+		Agent string `json:"agentId"`
+	}
+	if err := c.Bind(&p); err != nil {
+		return nil, err
+	}
+	key := strings.TrimSpace(p.Key)
+	if key == "" {
+		return nil, Invalid("a subscription names a session key")
+	}
+	return map[string]any{"subscribed": true, "key": key}, nil
+}
+
+// unsubscribeMessages releases that lease. Nothing was narrowed, so nothing
+// widens; what it answers is that the client may stop tracking it.
+func unsubscribeMessages(c *Call) (any, error) {
+	var p struct {
+		Key   string `json:"key"`
+		Agent string `json:"agentId"`
+	}
+	if err := c.Bind(&p); err != nil {
+		return nil, err
+	}
+	key := strings.TrimSpace(p.Key)
+	if key == "" {
+		return nil, Invalid("an unsubscribe names a session key")
+	}
+	return map[string]any{"subscribed": false, "key": key}, nil
+}
+
 func subscribeSessions(c *Call) (any, error) {
 	sent, err := sentFields(c.Params())
 	if err != nil {

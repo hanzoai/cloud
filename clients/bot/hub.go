@@ -352,6 +352,15 @@ func audience(org, key string, admits func(*conn) bool) []*conn {
 	return out
 }
 
+// emit is the one path from a raised event to the sockets that hear it, and so
+// it is also where a suspended run that named this event is called back
+// (sleep.go). Waking is driven by the event's own delivery rather than by
+// anything watching for it, which is what lets a run wait for nothing at all
+// while it waits.
+//
+// The listeners are served first. They are the audience the publisher had in
+// mind, and a wake reads and writes a file; a client waiting on an event should
+// not wait on a store to answer somebody else's run.
 func emit(org, key, event string, payload any, admits func(*conn) bool) {
 	if event == "" {
 		return
@@ -359,4 +368,5 @@ func emit(org, key, event string, payload any, admits func(*conn) bool) {
 	for _, k := range audience(org, key, admits) {
 		k.send(&Event{Type: kindEvent, Event: event, Payload: payload})
 	}
+	rouse(org, event)
 }

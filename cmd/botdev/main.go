@@ -1,8 +1,8 @@
 // botdev runs the /v1/bot surface behind a real listener for a live drive of
 // the protocol. It stands in for exactly two things a production deployment has
 // and a laptop does not: hanzoai/gateway, which stamps the validated identity
-// headers the surface reads, and a static origin for OpenClaw's built control
-// UI. Everything else is the real mount.
+// headers the surface reads, and a static origin for the built control UI.
+// Everything else is the real mount.
 package main
 
 import (
@@ -81,10 +81,10 @@ func main() {
 	})
 
 	// The control UI's own origin, registered BEFORE the mount so a page keeps
-	// the paths a bot id would otherwise claim. The bundle reads its base path
-	// from the document and asks for ws://{host}{basePath}, so the pages sit
+	// the paths the registry would otherwise claim. The bundle reads its base
+	// path from the document and asks for ws://{host}{basePath}, so the pages sit
 	// beneath the surface they drive and the socket is the same address.
-	serveUI(app, *ui)
+	shell := serveUI(app, *ui)
 
 	deps := cloud.Deps{
 		Logger:         luxlog.NewWriter(os.Stderr),
@@ -97,18 +97,32 @@ func main() {
 		die(err)
 	}
 
-	fmt.Println("bot ws:     ws://" + *addr + "/v1/bot")
+	// The document again, at the address the protocol holds, registered AFTER
+	// the mount: a GET that did not ask to upgrade falls through the socket's
+	// door, and a browser that typed the address without its trailing slash is
+	// one of those. This is what the door falls through to.
+	if shell != "" {
+		app.Get("/v1/bot", func(c *zip.Ctx) error {
+			return send(c, "text/html; charset=utf-8", []byte(shell))
+		})
+	}
+
+	fmt.Println("protocol:   ws://" + *addr + "/v1/bot")
+	fmt.Println("runs:       http://" + *addr + "/v1/bot/runs")
 	fmt.Println("control ui: http://" + *addr + "/v1/bot/")
 	if err := app.Fiber().Listen(*addr, fiber.ListenConfig{DisableStartupMessage: true}); err != nil {
 		die(err)
 	}
 }
 
-func serveUI(app *zip.App, root string) {
+// serveUI mounts the built control UI and returns the document it serves, so
+// the caller can put the same page behind the protocol's own address once that
+// is mounted.
+func serveUI(app *zip.App, root string) string {
 	index, err := os.ReadFile(filepath.Join(root, "index.html"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "no control UI at", root, "-", err)
-		return
+		return ""
 	}
 	// The bundle infers its base path from the document's own, and asks for the
 	// boot config beside it.
@@ -130,11 +144,12 @@ func serveUI(app *zip.App, root string) {
 	// The document, and only the document. A router that folds a trailing slash
 	// sends /v1/bot/ and /v1/bot to the same handler, and they are two different
 	// questions: the page is what a browser asked for by naming the directory,
-	// and /v1/bot itself is the surface — the roster, or the socket. So the page
-	// answers the one and passes the other along to what mounts after it.
+	// and /v1/bot itself is the protocol — the socket, or one frame. So the page
+	// answers the one and passes the other along to what mounts after it, which
+	// is also how a plain GET of /v1/bot arrives back here as the page.
 	//
-	// The client-side routes below it are not served: /v1/bot/:id is the
-	// registry's, and a stand-in for a static origin does not get to take it.
+	// The routes below it are not served: /v1/bot/runs is the registry's, and a
+	// stand-in for a static origin does not get to take it.
 	app.Get("/v1/bot/", func(c *zip.Ctx) error {
 		if !strings.HasSuffix(c.Path(), "/") {
 			return c.Next()
@@ -147,6 +162,7 @@ func serveUI(app *zip.App, root string) {
 	for _, f := range []string{"favicon.svg", "favicon.ico", "favicon-32.png", "apple-touch-icon.png", "manifest.webmanifest", "sw.js", "social-card.png", "asset-manifest.json"} {
 		app.Get("/v1/bot/"+f, fileAt(root, shell))
 	}
+	return shell
 }
 
 func fileAt(root, shell string) zip.Handler {
