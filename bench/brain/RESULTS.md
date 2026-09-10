@@ -1007,7 +1007,7 @@ split: `test` · k: `20` · facts: `locomo` · embedding: `zenlm/zen-embedding-0
 
 ### mab-dev-beam-none
 
-split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `9eab30f734` · prompt sha: `prompts/reader-mab.txt`
+split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `b2bb961938b` · prompt sha: `prompts/reader-mab.txt`
 
 | size | n | substring_em |
 |---|---|---|
@@ -1023,9 +1023,18 @@ split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6
 | mh_6k | 100 | 83.0 |
 | sh_6k | 100 | 98.0 |
 
+### mab-dev-beamr-none
+
+split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `b2bb961938` · prompt sha: `prompts/reader-mab.txt`
+
+| size | n | substring_em |
+|---|---|---|
+| mh_6k | 100 | 89.0 |
+| sh_6k | 100 | 98.0 |
+
 ### mab-dev-beamx-none
 
-split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `9eab30f734` · prompt sha: `prompts/reader-mab.txt`
+split: `dev` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `b2bb961938b` · prompt sha: `prompts/reader-mab.txt`
 
 | size | n | substring_em |
 |---|---|---|
@@ -1085,6 +1094,45 @@ split: `test` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.
 | mh_32k | 100 | 76.0 |
 | mh_64k | 100 | 76.0 |
 | mh_262k | 100 | 51.0 |
+| sh_32k | 100 | 97.0 |
+| sh_64k | 100 | 97.0 |
+| sh_262k | 100 | 94.0 |
+
+### mab-test-beamx-none
+
+split: `test` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `b2bb961938` · prompt sha: `prompts/reader-mab.txt`
+
+| size | n | substring_em |
+|---|---|---|
+| mh_32k | 100 | 87.0 |
+| mh_64k | 100 | 88.0 |
+| mh_262k | 100 | 65.0 |
+| sh_32k | 100 | 97.0 |
+| sh_64k | 100 | 97.0 |
+| sh_262k | 100 | 94.0 |
+
+### mab-test-beamx-none-v5
+
+split: `test` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `b2bb961938b` · prompt sha: `prompts/reader-mab.txt`
+
+| size | n | substring_em |
+|---|---|---|
+| mh_32k | 100 | 86.0 |
+| mh_64k | 100 | 87.0 |
+| mh_262k | 100 | 64.0 |
+| sh_32k | 100 | 97.0 |
+| sh_64k | 100 | 97.0 |
+| sh_262k | 100 | 94.0 |
+
+### mab-test-beamx-none-v6
+
+split: `test` · k: `10` · reader: `none` · embedding: `zenlm/zen-embedding-0.6b` · commit: `b2bb961938b` · prompt sha: `prompts/reader-mab.txt`
+
+| size | n | substring_em |
+|---|---|---|
+| mh_32k | 100 | 86.0 |
+| mh_64k | 100 | 87.0 |
+| mh_262k | 100 | 64.0 |
 | sh_32k | 100 | 97.0 |
 | sh_64k | 100 | 97.0 |
 | sh_262k | 100 | 94.0 |

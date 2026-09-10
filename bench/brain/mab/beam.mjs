@@ -12,7 +12,7 @@
  * path wins by a fixed score; ties go to the more literal plan and the later
  * version. Nothing reads the gold. Nothing calls a model.
  */
-import { norm } from './parse.mjs'
+import { norm, TEMPLATES } from './parse.mjs'
 
 /** Relations that answer the same kind of question, so a sketch that says one may mean another. */
 export const CLASS = {
@@ -75,6 +75,13 @@ const versionsOf = (ix, entity, rel) => {
   if (!v.length && rel === 'spouse') for (const f of ix.byEntity.get(entity) ?? []) if (f.relation === 'spouse' && norm(f.object) === entity) v.push({ ...f, object: f.subject, subject: f.object })
   return v.sort((a, b) => a.serial - b.serial)
 }
+/** The words a relation's own template uses, so a question that uses them supports that relation at some hop. */
+const STOP = new Set('the of in is was a an s o to by for and name current where that with'.split(' '))
+// the sentence each relation is written in, from the compiler prompt's own list (`rel: "S ... O."`)
+import { readFileSync } from 'node:fs'
+const PROMPT_TEMPLATES = readFileSync(new URL('../prompts/compile-mab.txt', import.meta.url), 'utf8').split('\n').map((l) => l.match(/^(\w+):\s+"([^"]+)"/)).filter(Boolean)
+const WORDS = Object.fromEntries(PROMPT_TEMPLATES.map(([, rel, tpl]) => [rel, new Set(tpl.toLowerCase().replace(/\b[so]\b/g, ' ').replace(/[^a-z ]+/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w)))]))
+export function lexical(rel, question) { const ws = WORDS[rel]; if (!ws || !ws.size) return 0; const q = new Set(question.toLowerCase().replace(/[^a-z ]+/g, ' ').split(/\s+/)); let n = 0; for (const w of ws) if (q.has(w) || q.has(w + 's') || q.has(w.replace(/s$/, ''))) n++; return n / ws.size }
 const alternatives = (rel) => { if (CLASS[rel] && rel !== 'origin') return [...CLASS[rel]] // a family name: every member, equally
   const s = new Set([rel]); for (const c of classOf[rel] ?? []) for (const r of CLASS[c]) s.add(r); if (rel === 'origin') for (const r of CLASS.origin) s.add(r); return [...s] }
 const FAMILY_TYPE = { language: 'language', origin: 'country', maker: 'person', leader: 'person', place: 'city', work: 'work' }
@@ -100,7 +107,7 @@ export function beamResolve(ix, find, plan, question, o = {}) {
       const expand = (rel, relScore, via) => {
         const vs = versionsOf(ix, via ? norm(via.object) : s.entity, rel); if (!vs.length) return false
         vs.slice().reverse().forEach((f, back) => { const nk = find(f.object)
-          const st = { entity: nk?.key ?? null, hop: h + 1, path: [...s.path, rel], score: s.score + relScore - 0.5 * back, evidence: [...s.evidence, ...(via ? [via] : []), f] }
+          const st = { entity: nk?.key ?? null, hop: h + 1, path: [...s.path, rel], score: s.score + relScore - 0.5 * back + (o.lexical ?? 0) * lexical(rel, question), evidence: [...s.evidence, ...(via ? [via] : []), f] }
           if (h + 1 >= plan.chain.length) { if (h + 1 === plan.chain.length) consider(st, 0); else consider(st, -1) }
           if (st.entity && h + 1 < plan.chain.length + 1) next.push(st) })
         return true
@@ -119,6 +126,7 @@ export function beamResolve(ix, find, plan, question, o = {}) {
     beam = next.sort((a, b) => b.score - a.score).slice(0, WIDTH); if (!beam.length) break
   }
   if (!finals.length) return { answer: null, evidence: [], trace: [{ step: 'entity', entity: plan.entity, found: base.key, how: base.how }, { step: 'dead', chain: plan.chain }], score: -Infinity, complete: false }
+  for (const f of finals) f.score -= plan.penalty ?? 0
   finals.sort((a, b) => b.score - a.score || b.evidence[b.evidence.length - 1].serial - a.evidence[a.evidence.length - 1].serial)
   const best = finals[0]
   return { answer: best.evidence[best.evidence.length - 1].object, evidence: best.evidence, score: best.score, complete: true,

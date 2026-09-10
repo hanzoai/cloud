@@ -13,6 +13,7 @@ import { execSync } from 'node:child_process'
 import { load, norm, DATA } from './parse.mjs'
 import { build, embed, dot } from './index.mjs'
 import { beamResolve, lattice } from './beam.mjs'
+import { repair, suspicious } from './repair.mjs'
 
 const arg = (k, d) => { const m = process.argv.find((a) => a.startsWith(`--${k}=`)); return m ? m.split('=')[1] : d }
 const RESCORE = process.argv.includes('--rescore')
@@ -24,6 +25,11 @@ const plans = JSON.parse(readFileSync(DATA + 'plans.json', 'utf8'))
 import { readdirSync } from 'node:fs'
 const PLANSETS = ['plans.json', ...readdirSync(DATA).filter((f) => /^plans-.+\.json$/.test(f)).sort()].map((f) => ({ name: f === 'plans.json' ? 'default' : f.replace(/^plans-|\.json$/g, ''), plans: JSON.parse(readFileSync(DATA + f, 'utf8')) }))
 const plansFor = (q) => { const seen = new Set(), out = []; for (const set of PLANSETS) { const p = set.plans[q]; if (!p) continue; const k = JSON.stringify([p.entity, p.chain]); if (seen.has(k)) continue; seen.add(k); out.push({ ...p, set: set.name }) } return out }
+// the order of a compiled chain is a hypothesis too: every permutation of a 2–4 hop chain is a candidate, at a cost
+const permutations = (xs) => xs.length <= 1 ? [xs] : xs.flatMap((x, i) => permutations([...xs.slice(0, i), ...xs.slice(i + 1)]).map((rest) => [x, ...rest]))
+const withOrders = (cands) => { const seen = new Set(cands.map((p) => JSON.stringify([p.entity, p.chain]))), out = [...cands]
+  for (const p of cands) if (p.chain.length >= 2 && p.chain.length <= 4) for (const chain of permutations(p.chain)) { const k = JSON.stringify([p.entity, chain]); if (seen.has(k)) continue; seen.add(k); out.push({ ...p, chain, set: `${p.set}~order`, penalty: 1 }) }
+  return out }
 const sha = (s) => createHash('sha256').update(s).digest('hex')
 
 // ── readers: one call shape, two hosts. The key is never printed.
@@ -123,18 +129,26 @@ const ROW = {
   resolver:  async (ix, q, qv, plan, find) => { if (!plan) return { facts: [] }; const r = resolve(ix, find, plan, { timeline: true, fallback: false }); return { facts: bySerial(r.evidence), trace: r.trace, resolved: r.complete ? r.answer : null } },
   full:      async (ix, q, qv, plan, find) => { if (!plan) return { facts: ix.dense(qv, K).map(([i]) => ix.facts[i]) }; const r = resolve(ix, find, plan, { timeline: true, fallback: true })
     const facts = r.complete ? r.evidence : [...r.evidence, ...ix.dense(qv, K).map(([i]) => ix.facts[i]).filter((f) => f.current)]; return { facts: bySerial(facts), trace: r.trace, resolved: r.complete ? r.answer : null } },
-  beam:      async (ix, q, qv, plan, find) => { const cands = plansFor(q); if (!cands.length) return { facts: [], direct: '' }
+  beam:      async (ix, q, qv, plan, find) => { const cands = withOrders(plansFor(q)); if (!cands.length) return { facts: [], direct: '' }
     // every plan is executed; the record keeps each one's answer and score, so best-of-N and selected-of-N can be told apart afterwards
     let best = null; const all = []
     if (cands.length > 1) cands.push(lattice(cands)) // the merged sketch competes with the plans it came from
     for (const p of cands) { const r = beamResolve(ix, find, p, q); all.push({ set: p.set, chain: p.chain, entity: p.entity, answer: r.answer, score: r.answer == null ? null : r.score }); if (r.answer != null && (!best || r.score > best.score)) best = { ...r, plan: p } }
     if (!best) { const r = beamResolve(ix, find, cands[0], q); return { facts: bySerial(r.evidence), trace: [{ step: 'plans', candidates: all, chose: null }, ...r.trace], direct: '' } }
     return { facts: bySerial(best.evidence), trace: [{ step: 'plans', candidates: all, chose: best.plan.set, chain: best.plan.chain, score: best.score }, ...best.trace], direct: best.answer } },
-  beamx:     async (ix, q, qv, plan, find) => { const cands = plansFor(q); if (!cands.length) return { facts: [], direct: '' }; if (cands.length > 1) cands.push(lattice(cands))
+  beamx:     async (ix, q, qv, plan, find) => { const cands = withOrders(plansFor(q)); if (!cands.length) return { facts: [], direct: '' }; if (cands.length > 1) cands.push(lattice(cands))
     let best = null; const all = []
-    for (const p of cands) { const r = beamResolve(ix, find, p, q, { exhaustive: true }); all.push({ set: p.set, chain: p.chain, entity: p.entity, answer: r.answer, score: r.answer == null ? null : r.score }); if (r.answer != null && (!best || r.score > best.score)) best = { ...r, plan: p } }
+    for (const p of cands) { const r = beamResolve(ix, find, p, q, { exhaustive: true, lexical: Number(process.env.LEXICAL ?? 0) }); all.push({ set: p.set, chain: p.chain, entity: p.entity, answer: r.answer, score: r.answer == null ? null : r.score }); if (r.answer != null && (!best || r.score > best.score)) best = { ...r, plan: p } }
     if (!best) return { facts: [], trace: [{ step: 'plans', candidates: all, chose: null }], direct: '' }
     return { facts: bySerial(best.evidence), trace: [{ step: 'plans', candidates: all, chose: best.plan.set, chain: best.plan.chain, score: best.score }, ...best.trace], direct: best.answer } },
+  beamr:     async (ix, q, qv, plan, find) => { const cands = withOrders(plansFor(q)); if (!cands.length) return { facts: [], direct: '' }; if (cands.length > 1) cands.push(lattice(cands))
+    const run = (p) => { const r = beamResolve(ix, find, p, q, { exhaustive: true, lexical: Number(process.env.LEXICAL ?? 0) }); return { ...r, plan: p } }
+    let best = null; const all = []
+    for (const p of cands) { const r = run(p); all.push({ set: p.set, chain: p.chain, entity: p.entity, answer: r.answer, score: r.answer == null ? null : r.score }); if (r.answer != null && (!best || r.score > best.score)) best = r }
+    let repaired = null
+    if (suspicious(best)) { const p = await repair(ix, q, best, find); if (p) { const r = run(p); all.push({ set: 'repair', chain: p.chain, entity: p.entity, answer: r.answer, score: r.answer == null ? null : r.score }); if (r.answer != null && (!best || r.score > best.score)) { best = r; repaired = p.chain } } }
+    if (!best) return { facts: [], trace: [{ step: 'plans', candidates: all, chose: null, repaired }], direct: '' }
+    return { facts: bySerial(best.evidence), trace: [{ step: 'plans', candidates: all, chose: best.plan.set, chain: best.plan.chain, score: best.score, repaired }, ...best.trace], direct: best.answer } },
   noreader:  async (ix, q, qv, plan, find) => { if (!plan) return { facts: [], direct: '' }; const r = resolve(ix, find, plan, { timeline: true, fallback: true }); return { facts: bySerial(r.evidence), trace: r.trace, direct: r.complete ? r.answer : '' } },
 }
 
@@ -143,7 +157,7 @@ const rows = load().filter((r) => (SPLIT === 'dev' ? r.id.endsWith('_6k') : !r.i
 const commit = execSync('git rev-parse --short HEAD', { cwd: ROOT }).toString().trim()
 const ixCache = new Map()
 for (const rowName of ROWS) {
-  const dir = ROOT + `runs/mab-${SPLIT}-${rowName}-${['noreader', 'beam', 'beamx'].includes(rowName) ? 'none' : READER.replace(/[^\w.-]/g, '_')}/`; mkdirSync(dir, { recursive: true })
+  const dir = ROOT + `runs/mab-${SPLIT}-${rowName}-${['noreader', 'beam', 'beamx', 'beamr'].includes(rowName) ? 'none' : READER.replace(/[^\w.-]/g, '_')}/`; mkdirSync(dir, { recursive: true })
   const predFile = dir + 'predictions.jsonl', traceFile = dir + 'traces.jsonl'
   const have = new Set(existsSync(predFile) ? readFileSync(predFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l).qid) : [])
   const per = {}, all = [], t0 = Date.now(); let calls = 0, tokens = 0
@@ -167,7 +181,7 @@ for (const rowName of ROWS) {
   // row could not answer (no plan, a failed call) scores 0 here; it is not dropped from n.
   const answered = new Map(preds.map((p) => [p.qid, p.em]))
   for (const r of rows) { const size = r.id.replace('factconsolidation_', ''); for (const qid of r.qa_ids) (per[size] ??= []).push(answered.get(qid) ?? 0) }
-  const metrics = { row: rowName, split: SPLIT, reader: ['noreader', 'beam', 'beamx'].includes(rowName) ? 'none' : READER, k: K, prompt_sha: sha(PROMPT), commit, n: preds.length, by_size: Object.fromEntries(Object.entries(per).map(([s, xs]) => [s, { n: xs.length, substring_em: +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(4), ci95: bootstrap(xs).map((x) => +x.toFixed(4)) }])),
+  const metrics = { row: rowName, split: SPLIT, reader: ['noreader', 'beam', 'beamx', 'beamr'].includes(rowName) ? 'none' : READER, k: K, prompt_sha: sha(PROMPT), commit, n: preds.length, by_size: Object.fromEntries(Object.entries(per).map(([s, xs]) => [s, { n: xs.length, substring_em: +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(4), ci95: bootstrap(xs).map((x) => +x.toFixed(4)) }])),
     facts_per_q: +(preds.reduce((a, p) => a + p.facts, 0) / preds.length).toFixed(2), retrieval_ms_p50: +[...preds.map((p) => p.ms)].sort((a, b) => a - b)[Math.floor(preds.length / 2)].toFixed(3), retrieval_ms_p95: +[...preds.map((p) => p.ms)].sort((a, b) => a - b)[Math.floor(preds.length * 0.95)].toFixed(3), reader_calls: calls, context_tokens_per_q: calls ? Math.round(tokens / calls) : 0, wall_s: Math.round((Date.now() - t0) / 1000) }
   writeFileSync(dir + 'metrics.json', JSON.stringify(metrics, null, 1))
   writeFileSync(dir + 'meta.json', JSON.stringify({ bench: 'MemoryAgentBench Conflict_Resolution (FactConsolidation)', dataset_sha256: sha(readFileSync(DATA + 'Conflict_Resolution-00000-of-00001.parquet')), split: SPLIT, row: rowName, reader: metrics.reader, planner: Object.entries(Object.values(plans).reduce((a, p) => (a[p.model] = (a[p.model] ?? 0) + 1, a), {})).map(([m, n]) => `${m}:${n}`).join(' '), embedding: 'zenlm/zen-embedding-0.6b', k: K, temperature: 0, max_tokens: 64, prompt: 'prompts/reader-mab.txt', prompt_sha256: sha(PROMPT), commit }, null, 1))

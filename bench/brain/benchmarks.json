@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-10T19:45:50.860Z",
+ "generated": "2026-09-10T19:55:06.877Z",
  "sections": [
   {
    "bench": "conv",
@@ -12389,7 +12389,7 @@
    "k": 10,
    "reader": "none",
    "facts": null,
-   "commit": "9eab30f734",
+   "commit": "b2bb961938b",
    "categories": [
     {
      "name": "mh_6k",
@@ -12410,13 +12410,40 @@
   },
   {
    "bench": "mab",
+   "run": "mab-dev-beamr-none",
+   "row": "beamr",
+   "split": "dev",
+   "k": 10,
+   "reader": "none",
+   "facts": null,
+   "commit": "b2bb961938",
+   "categories": [
+    {
+     "name": "mh_6k",
+     "n": 100,
+     "metrics": {
+      "substring_em": 0.89
+     }
+    },
+    {
+     "name": "sh_6k",
+     "n": 100,
+     "metrics": {
+      "substring_em": 0.98
+     }
+    }
+   ],
+   "table": null
+  },
+  {
+   "bench": "mab",
    "run": "mab-dev-beamx-none",
    "row": "beamx",
    "split": "dev",
    "k": 10,
    "reader": "none",
    "facts": null,
-   "commit": "9eab30f734",
+   "commit": "b2bb961938b",
    "categories": [
     {
      "name": "mh_6k",
@@ -12491,6 +12518,61 @@
      "n": 100,
      "metrics": {
       "substring_em": 0.64
+     }
+    },
+    {
+     "name": "sh_32k",
+     "n": 100,
+     "metrics": {
+      "substring_em": 0.97
+     }
+    },
+    {
+     "name": "sh_64k",
+     "n": 100,
+     "metrics": {
+      "substring_em": 0.97
+     }
+    },
+    {
+     "name": "sh_262k",
+     "n": 100,
+     "metrics": {
+      "substring_em": 0.94
+     }
+    }
+   ],
+   "table": null
+  },
+  {
+   "bench": "mab",
+   "run": "mab-test-beamx-none",
+   "row": "beamx",
+   "split": "test",
+   "k": 10,
+   "reader": "none",
+   "facts": null,
+   "commit": "b2bb961938",
+   "categories": [
+    {
+     "name": "mh_32k",
+     "n": 100,
+     "metrics": {
+      "substring_em": 0.87
+     }
+    },
+    {
+     "name": "mh_64k",
+     "n": 100,
+     "metrics": {
+      "substring_em": 0.88
+     }
+    },
+    {
+     "name": "mh_262k",
+     "n": 100,
+     "metrics": {
+      "substring_em": 0.65
      }
     },
     {
