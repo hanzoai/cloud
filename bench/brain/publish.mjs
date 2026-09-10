@@ -61,7 +61,7 @@ if (!ONLY || ONLY === 'mab') {
   const { load } = await import('./mab/parse.mjs')
   const rows = load().flatMap((r) => r.qa_ids.map((qid, i) => ({ id: qid, input: { question: r.questions[i], haystack: r.id.replace('factconsolidation_', ''), tokens_in_haystack: Math.round(r.context.length / 4) }, expectedOutput: { answers: Array.from(r.answers[i]) }, metadata: { split: r.id.endsWith('_6k') ? 'dev' : 'test' } })))
   await items(name, rows)
-  for (const d of readdirSync(runsDir).filter((d) => /^mab-(dev|test)-(beam|noreader)-none(-v\d+)?$/.test(d))) {
+  for (const d of readdirSync(runsDir).filter((d) => /^mab-(dev|test)-(beam|beamx|beamr|noreader)-none(-v\d+)?$/.test(d))) {
     const preds = jsonl(new URL(`./runs/${d}/predictions.jsonl`, here))
     await scores(name, d, preds.map((p) => ({ id: p.qid, metric: 'substring_em', value: p.em ? 1 : 0, comment: String(p.pred ?? '') })))
   }
