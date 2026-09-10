@@ -1,0 +1,196 @@
+{"qid":"factconsolidation_mh_6k_no0","size":"mh_6k","q":"What is the country of citizenship of the spouse of the author of Our Mutual Friend?","gold":["Belgium"],"pred":"Belgium","em":1,"facts":3,"ms":2.771}
+{"qid":"factconsolidation_mh_6k_no1","size":"mh_6k","q":"In which location did the spouse of Igor of Kiev pass away?","gold":["Rodez"],"pred":"Rodez","em":1,"facts":2,"ms":2.53}
+{"qid":"factconsolidation_mh_6k_no2","size":"mh_6k","q":"Which country is the birthplace of the sport associated with Steve Sax?","gold":["Italy"],"pred":"Italy","em":1,"facts":2,"ms":1.955}
+{"qid":"factconsolidation_mh_6k_no3","size":"mh_6k","q":"Which city serves as the capital of the country of origin for the sport of the Tunisia national football team?","gold":["Russellville"],"pred":"Russellville","em":1,"facts":3,"ms":1.579}
+{"qid":"factconsolidation_mh_6k_no4","size":"mh_6k","q":"What is the sport that Blair Walsh plays in which he is known for his position on the team?","gold":["rugby"],"pred":"rugby","em":1,"facts":2,"ms":1.937}
+{"qid":"factconsolidation_mh_6k_no5","size":"mh_6k","q":"What is the name of the educational institution where the partner of Nicolae Ceaușescu was educated?","gold":["Baldwin Wallace University"],"pred":"Baldwin Wallace University","em":1,"facts":2,"ms":1.923}
+{"qid":"factconsolidation_mh_6k_no6","size":"mh_6k","q":"Which country does the current CEO of Twitter hold citizenship of?","gold":["France"],"pred":"France","em":1,"facts":2,"ms":0.38}
+{"qid":"factconsolidation_mh_6k_no7","size":"mh_6k","q":"On which continent was the place of birth of Thomas Arne located?","gold":["Oceania"],"pred":"Oceania","em":1,"facts":2,"ms":0.325}
+{"qid":"factconsolidation_mh_6k_no8","size":"mh_6k","q":"To which continent does the country of citizenship of Colin Irwin pertain?","gold":["North America"],"pred":"North America","em":1,"facts":2,"ms":0.435}
+{"qid":"factconsolidation_mh_6k_no9","size":"mh_6k","q":"What is the location of work of the founder of the religion to which John Walsh belongs?","gold":["Berlin"],"pred":"Berlin","em":1,"facts":3,"ms":0.371}
+{"qid":"factconsolidation_mh_6k_no10","size":"mh_6k","q":"What is the religious affiliation of the person who founded the Transcendental Meditation movement?","gold":["atheism"],"pred":"atheism","em":1,"facts":2,"ms":0.283}
+{"qid":"factconsolidation_mh_6k_no11","size":"mh_6k","q":"What was the religion of the person with the citizenship of the country to which Edmund Burke belonged?","gold":["Zoroastrianism"],"pred":"Zoroastrianism","em":1,"facts":2,"ms":0.473}
+{"qid":"factconsolidation_mh_6k_no12","size":"mh_6k","q":"What is the capital city of the country where the sport associated with John Harkes has its origin?","gold":["Duluth"],"pred":"Duluth","em":1,"facts":3,"ms":0.443}
+{"qid":"factconsolidation_mh_6k_no13","size":"mh_6k","q":"Which faith is the partner of Laura Bush associated with?","gold":["Anglicanism"],"pred":"Anglicanism","em":1,"facts":2,"ms":0.635}
+{"qid":"factconsolidation_mh_6k_no14","size":"mh_6k","q":"What was the name of the head of state in the country where Andrew Carnegie was a citizen?","gold":["Emmerson Mnangagwa"],"pred":"Emmerson Mnangagwa","em":1,"facts":2,"ms":1.113}
+{"qid":"factconsolidation_mh_6k_no15","size":"mh_6k","q":"From which capital city did the Surrey Senior Cup, a sports competition, originate?","gold":["Russellville"],"pred":"Russellville","em":1,"facts":3,"ms":1.058}
+{"qid":"factconsolidation_mh_6k_no16","size":"mh_6k","q":"From which country does the sport, with which Carlos Gómez is associated, come from?","gold":["Soviet Union"],"pred":"Soviet Union","em":1,"facts":2,"ms":0.651}
+{"qid":"factconsolidation_mh_6k_no17","size":"mh_6k","q":"In which city is the capital of the country where Madame du Barry held a citizenship?","gold":["London"],"pred":"London","em":1,"facts":2,"ms":0.298}
+{"qid":"factconsolidation_mh_6k_no18","size":"mh_6k","q":"What is the job title of the chairperson of the political organization Fatah?","gold":["soldier"],"pred":"soldier","em":1,"facts":2,"ms":0.802}
+{"qid":"factconsolidation_mh_6k_no19","size":"mh_6k","q":"Which city is the capital of the country where the performer of \"Free as a Bird\"'s director/manager comes from?","gold":["Duluth"],"pred":"Duluth","em":1,"facts":4,"ms":0.94}
+{"qid":"factconsolidation_mh_6k_no20","size":"mh_6k","q":"What is the language of the work that was created by the individual who created Rand al'Thor?","gold":["Persian"],"pred":"Persian","em":1,"facts":3,"ms":0.623}
+{"qid":"factconsolidation_mh_6k_no21","size":"mh_6k","q":"What is the work location of the person who founded the religion Karen Armstrong belongs to?","gold":["Edinburgh"],"pred":"Edinburgh","em":1,"facts":3,"ms":0.622}
+{"qid":"factconsolidation_mh_6k_no22","size":"mh_6k","q":"What is the name of the child category of \"Categories\" created by the author?","gold":["George Alexander Kohut"],"pred":"George Alexander Kohut","em":1,"facts":2,"ms":0.373}
+{"qid":"factconsolidation_mh_6k_no23","size":"mh_6k","q":"Where is the country of origin of FC Vorskla Poltava?","gold":["Soviet Union"],"pred":"Soviet Union","em":1,"facts":2,"ms":0.529}
+{"qid":"factconsolidation_mh_6k_no24","size":"mh_6k","q":"Which city is the capital of the country where the CEO of the developer of SteamOS holds a citizenship?","gold":["Harare"],"pred":"Harare","em":1,"facts":4,"ms":0.579}
+{"qid":"factconsolidation_mh_6k_no25","size":"mh_6k","q":"What is the name of the person who is the chief executive officer of the developer of F-22 Raptor?","gold":["Adel al-Jubeir"],"pred":"Adel al-Jubeir","em":1,"facts":2,"ms":0.361}
+{"qid":"factconsolidation_mh_6k_no26","size":"mh_6k","q":"Who holds the position of chairperson in the organization where Joseph Story was employed?","gold":["Peter Diamandis"],"pred":"Peter Diamandis","em":1,"facts":2,"ms":0.312}
+{"qid":"factconsolidation_mh_6k_no27","size":"mh_6k","q":"What city serves as the capital of the country where the performer who is the spouse of Derek Shepherd holds citizenship?","gold":["Harrisville"],"pred":"Harrisville","em":1,"facts":4,"ms":0.476}
+{"qid":"factconsolidation_mh_6k_no28","size":"mh_6k","q":"What is the name of the city that serves as the capital of the country to which Sable belongs?","gold":["Prague"],"pred":"Prague","em":1,"facts":2,"ms":0.551}
+{"qid":"factconsolidation_mh_6k_no29","size":"mh_6k","q":"In which city serves as the capital of the country of citizenship of Country Joe McDonald?","gold":["Rajanpur"],"pred":"Rajanpur","em":1,"facts":2,"ms":0.391}
+{"qid":"factconsolidation_mh_6k_no30","size":"mh_6k","q":"What city or town is the headquarters of the educational institution, where the performer of the album \"Blood on the Tracks\" received education, located in?","gold":["New York City"],"pred":"New York City","em":1,"facts":3,"ms":1.4}
+{"qid":"factconsolidation_mh_6k_no31","size":"mh_6k","q":"What is the name of the chief executive of the country where the sport associated with Bo Ryan was first developed?","gold":["Giuseppe Conte"],"pred":"Giuseppe Conte","em":1,"facts":3,"ms":1.412}
+{"qid":"factconsolidation_mh_6k_no32","size":"mh_6k","q":"What is the continent of origin of the chief executive officer for the developer of Windows Phone?","gold":["North America"],"pred":"North America","em":1,"facts":4,"ms":0.769}
+{"qid":"factconsolidation_mh_6k_no33","size":"mh_6k","q":"Which continent does the country where the sport played by the Slovakia national football team originated come from?","gold":["South America"],"pred":"South America","em":1,"facts":3,"ms":0.676}
+{"qid":"factconsolidation_mh_6k_no34","size":"mh_6k","q":"Which religion was the partner of Ferdinand Marcos associated with?","gold":["atheism"],"pred":"atheism","em":1,"facts":2,"ms":0.227}
+{"qid":"factconsolidation_mh_6k_no35","size":"mh_6k","q":"What is the name of the significant creation associated with the creator of Vito Corleone?","gold":["The Fairly OddParents"],"pred":"The Fairly OddParents","em":1,"facts":2,"ms":0.307}
+{"qid":"factconsolidation_mh_6k_no36","size":"mh_6k","q":"To which country does the performer who goes by the name Rocket Man hold citizenship?","gold":["Japan"],"pred":"Japan","em":1,"facts":2,"ms":0.425}
+{"qid":"factconsolidation_mh_6k_no37","size":"mh_6k","q":"Which language does the performer of Hermione Granger know how to speak, write or sign?","gold":["German"],"pred":"German","em":1,"facts":2,"ms":0.546}
+{"qid":"factconsolidation_mh_6k_no38","size":"mh_6k","q":"From which country does the musical genre Michael Mantler is associated with come from?","gold":["Canada"],"pred":"Canada","em":1,"facts":2,"ms":0.427}
+{"qid":"factconsolidation_mh_6k_no39","size":"mh_6k","q":"Which sport is associated with the position played by Robert Parish on a team or his specialty?","gold":["Muay Thai"],"pred":"Muay Thai","em":1,"facts":2,"ms":0.341}
+{"qid":"factconsolidation_mh_6k_no40","size":"mh_6k","q":"What is the name of the person who founded the organization that Benjamin Mazar was part of?","gold":["Philippe, Duke of Orléans"],"pred":"Philippe, Duke of Orléans","em":1,"facts":2,"ms":0.403}
+{"qid":"factconsolidation_mh_6k_no41","size":"mh_6k","q":"Which language is recognized as the official language of the place where Gennady Rozhdestvensky took his last breath?","gold":["German"],"pred":"German","em":1,"facts":2,"ms":0.346}
+{"qid":"factconsolidation_mh_6k_no42","size":"mh_6k","q":"What is the birthplace of the author of \"The Marriage of Figaro\"?","gold":["Leeds"],"pred":"Leeds","em":1,"facts":2,"ms":0.863}
+{"qid":"factconsolidation_mh_6k_no43","size":"mh_6k","q":"In which country was Darryl Strawberry's sport developed, and who is the head of government in that nation?","gold":["Shinzō Abe"],"pred":"Shinzō Abe","em":1,"facts":3,"ms":0.993}
+{"qid":"factconsolidation_mh_6k_no44","size":"mh_6k","q":"Which city serves as the capital of the country where the sport that Mike D'Antoni specialized in hails from?","gold":["London"],"pred":"Oderzo","em":0,"facts":4,"ms":0.436}
+{"qid":"factconsolidation_mh_6k_no45","size":"mh_6k","q":"At what location did the author of \"Sketches by Boz\" breathe his last?","gold":["London"],"pred":"London","em":1,"facts":2,"ms":0.349}
+{"qid":"factconsolidation_mh_6k_no46","size":"mh_6k","q":"What is the capital city of the country from which the sport of Daniele De Rossi originated?","gold":["Tokyo"],"pred":"Tokyo","em":1,"facts":4,"ms":0.337}
+{"qid":"factconsolidation_mh_6k_no47","size":"mh_6k","q":"To which continent is the country of citizenship of Ferdinand von Richthofen located?","gold":["Asia"],"pred":"Asia","em":1,"facts":2,"ms":0.461}
+{"qid":"factconsolidation_mh_6k_no48","size":"mh_6k","q":"In which city is the capital of the country where the sport played by Galwegians RFC was originated?","gold":["Grosseto"],"pred":"Grosseto","em":1,"facts":3,"ms":0.453}
+{"qid":"factconsolidation_mh_6k_no49","size":"mh_6k","q":"What languages are spoken, written or signed by the founder of Shingon Buddhism?","gold":["Latin"],"pred":"Latin","em":1,"facts":2,"ms":0.245}
+{"qid":"factconsolidation_mh_6k_no51","size":"mh_6k","q":"What is the professional role of the chairperson of the Congolese Party of Labour?","gold":["journalist"],"pred":"journalist","em":1,"facts":2,"ms":0.24}
+{"qid":"factconsolidation_mh_6k_no52","size":"mh_6k","q":"Where did the religion associated with the Bagratuni Dynasty come into existence?","gold":["Taipei"],"pred":"Christianity","em":0,"facts":1,"ms":0.464}
+{"qid":"factconsolidation_mh_6k_no53","size":"mh_6k","q":"What country does the genre of music associated with the spouse of Roy Rogers originate from?","gold":["Russian Empire"],"pred":"Russian Empire","em":1,"facts":3,"ms":0.854}
+{"qid":"factconsolidation_mh_6k_no54","size":"mh_6k","q":"In which city is the capital located of the country where the director/producer of \"666 Park Avenue\" is a citizen?","gold":["Beaumont"],"pred":"Beaumont","em":1,"facts":4,"ms":0.66}
+{"qid":"factconsolidation_mh_6k_no55","size":"mh_6k","q":"In what place was the organization that Ron Dennis works for, first established?","gold":["Sweden"],"pred":"Sweden","em":1,"facts":2,"ms":0.333}
+{"qid":"factconsolidation_mh_6k_no56","size":"mh_6k","q":"On which continent was Le Petit Parisien originally made?","gold":["Africa"],"pred":"Africa","em":1,"facts":2,"ms":0.774}
+{"qid":"factconsolidation_mh_6k_no57","size":"mh_6k","q":"Which city serves as the capital city of the country where the sport played by the partner of Victoria Beckham originated?","gold":["Oderzo"],"pred":"Oderzo","em":1,"facts":4,"ms":0.685}
+{"qid":"factconsolidation_mh_6k_no58","size":"mh_6k","q":"What is the name of the political entity that was established from the successor of the Sasanian Empire?","gold":["Charles Frederick, Duke of Holstein-Gottorp"],"pred":"Walter Chrysler","em":0,"facts":1,"ms":0.249}
+{"qid":"factconsolidation_mh_6k_no59","size":"mh_6k","q":"In which city is the capital of the country that FC Irtysh Omsk originates from located?","gold":["Duluth"],"pred":"Duluth","em":1,"facts":3,"ms":0.332}
+{"qid":"factconsolidation_mh_6k_no60","size":"mh_6k","q":"What is the place of death of the performer of the song collection \"Back to Black\"?","gold":["Berlin"],"pred":"Berlin","em":1,"facts":2,"ms":0.261}
+{"qid":"factconsolidation_mh_6k_no61","size":"mh_6k","q":"What was the sport that Hines Ward competed in professionally?","gold":["field hockey"],"pred":"field hockey","em":1,"facts":2,"ms":0.289}
+{"qid":"factconsolidation_mh_6k_no62","size":"mh_6k","q":"In which position did the person related to the original broadcaster of \"The Brady Bunch\" serve?","gold":["Ernst Heinkel"],"pred":"Ernst Heinkel","em":1,"facts":2,"ms":0.293}
+{"qid":"factconsolidation_mh_6k_no63","size":"mh_6k","q":"In what location did the person who founded Chanel pass away?","gold":["Montmélian"],"pred":"Montmélian","em":1,"facts":2,"ms":0.286}
+{"qid":"factconsolidation_mh_6k_no64","size":"mh_6k","q":"What is the country of citizenship of the author of \"Starship Troopers\"?","gold":["United Kingdom"],"pred":"United Kingdom","em":1,"facts":2,"ms":0.333}
+{"qid":"factconsolidation_mh_6k_no65","size":"mh_6k","q":"Which individual holds the position of director/manager at the company that employs Dave Filoni?","gold":["Narendra Modi"],"pred":"Narendra Modi","em":1,"facts":2,"ms":0.312}
+{"qid":"factconsolidation_mh_6k_no66","size":"mh_6k","q":"In what language is the notable work associated with Hugh Hefner written?","gold":["German"],"pred":"German","em":1,"facts":2,"ms":0.349}
+{"qid":"factconsolidation_mh_6k_no67","size":"mh_6k","q":"Which city serves as the capital of the country that gave rise to the sport played by Rogério Ceni?","gold":["New Delhi"],"pred":"Grosseto","em":0,"facts":4,"ms":0.333}
+{"qid":"factconsolidation_mh_6k_no68","size":"mh_6k","q":"From which educational institution did the author of 'Sidereus Nuncius' receive their education?","gold":["University of Southern California"],"pred":"University of Southern California","em":1,"facts":2,"ms":0.196}
+{"qid":"factconsolidation_mh_6k_no69","size":"mh_6k","q":"What is the place of death of the author of Endymion?","gold":["Leipzig"],"pred":"Leipzig","em":1,"facts":2,"ms":0.245}
+{"qid":"factconsolidation_mh_6k_no70","size":"mh_6k","q":"In which city can the headquarters of the educational institution attended by the spouse of Sophia Hawthorne be found?","gold":["Botevgrad"],"pred":"Botevgrad","em":1,"facts":3,"ms":0.38}
+{"qid":"factconsolidation_mh_6k_no71","size":"mh_6k","q":"What is the name of the chief of state of the country where Leo Stein holds citizenship?","gold":["Connachta"],"pred":"Connachta","em":1,"facts":2,"ms":0.622}
+{"qid":"factconsolidation_mh_6k_no72","size":"mh_6k","q":"What is the name of the chief of state of the country that Hal Needham belongs to?","gold":["Connachta"],"pred":"Connachta","em":1,"facts":2,"ms":0.598}
+{"qid":"factconsolidation_mh_6k_no73","size":"mh_6k","q":"Who serves as the head of government in the location where the AP1000 was made by its manufacturer?","gold":["Jonathan Rothschild"],"pred":"Jonathan Rothschild","em":1,"facts":3,"ms":0.326}
+{"qid":"factconsolidation_mh_6k_no74","size":"mh_6k","q":"In what place did the author of \"A Wizard of Earthsea\" breathe his last?","gold":["Wolverhampton"],"pred":"Wolverhampton","em":1,"facts":2,"ms":0.35}
+{"qid":"factconsolidation_mh_6k_no75","size":"mh_6k","q":"Which religion does the partner of the performer of \"Aladdin Sane\" follow?","gold":["interdenominational organization"],"pred":"interdenominational organization","em":1,"facts":3,"ms":0.335}
+{"qid":"factconsolidation_mh_6k_no76","size":"mh_6k","q":"At which location does the Prime Minister of Sweden spend most of their work hours?","gold":["Washington, D.C."],"pred":"Washington, D.C.","em":1,"facts":2,"ms":0.401}
+{"qid":"factconsolidation_mh_6k_no77","size":"mh_6k","q":"What is the capital city of the country whose citizenship is held by the CEO of the developer of AppleScript?","gold":["Rome"],"pred":"Rome","em":1,"facts":4,"ms":0.385}
+{"qid":"factconsolidation_mh_6k_no78","size":"mh_6k","q":"Which continent is the country of origin for Gala RFC located in?","gold":["Africa"],"pred":"Africa","em":1,"facts":3,"ms":0.204}
+{"qid":"factconsolidation_mh_6k_no79","size":"mh_6k","q":"What sport is associated with the position played by Irving Fryar on a team/specialty?","gold":["rugby"],"pred":"rugby","em":1,"facts":2,"ms":0.195}
+{"qid":"factconsolidation_mh_6k_no80","size":"mh_6k","q":"In which continent is the country to which Cédric Klapisch holds citizenship located?","gold":["Antarctica"],"pred":"Antarctica","em":1,"facts":2,"ms":0.226}
+{"qid":"factconsolidation_mh_6k_no81","size":"mh_6k","q":"What is the location of the headquarters of the company where Leonte Răutu worked?","gold":["Ankara"],"pred":"Ankara","em":1,"facts":2,"ms":0.661}
+{"qid":"factconsolidation_mh_6k_no82","size":"mh_6k","q":"To whom does the head of government of the country of origin of Club Nouveau report to?","gold":["Elizabeth II"],"pred":"Soviet Union","em":0,"facts":1,"ms":0.736}
+{"qid":"factconsolidation_mh_6k_no83","size":"mh_6k","q":"Which individual is responsible for founding the organization that has its headquarters in the same location where Bill Frisell received his education?","gold":["William Penn"],"pred":"William Penn","em":1,"facts":3,"ms":0.303}
+{"qid":"factconsolidation_mh_6k_no84","size":"mh_6k","q":"In which city of the country where Charles Messier held citizenship is the capital located?","gold":["Tehran"],"pred":"Tehran","em":1,"facts":2,"ms":0.429}
+{"qid":"factconsolidation_mh_6k_no85","size":"mh_6k","q":"Which country does the sportsperson who specializes in Lisa Leslie's position originally come from?","gold":["Philippines"],"pred":"Philippines","em":1,"facts":3,"ms":0.766}
+{"qid":"factconsolidation_mh_6k_no86","size":"mh_6k","q":"What is the name of the capital city of the country where the founder of the manufacturer of Ford F-Series hailed from?","gold":["New Delhi"],"pred":"Grosseto","em":0,"facts":4,"ms":1.11}
+{"qid":"factconsolidation_mh_6k_no87","size":"mh_6k","q":"Which city serves as the capital of the country where the sport that Sandy Alderson is associated with originated?","gold":["Duluth"],"pred":"Duluth","em":1,"facts":3,"ms":1.073}
+{"qid":"factconsolidation_mh_6k_no88","size":"mh_6k","q":"Which language is the official language of the country whose citizenship is held by the director/manager of \"Past Masters\"?","gold":["Arabic"],"pred":"Arabic","em":1,"facts":4,"ms":0.687}
+{"qid":"factconsolidation_mh_6k_no89","size":"mh_6k","q":"Which nation is the birthplace of the sport that features the split-finger fastball?","gold":["Australia"],"pred":"Australia","em":1,"facts":2,"ms":0.384}
+{"qid":"factconsolidation_mh_6k_no90","size":"mh_6k","q":"In which languages can the author of \"The Witcher\" write, speak, or sign?","gold":["French"],"pred":"French","em":1,"facts":2,"ms":0.331}
+{"qid":"factconsolidation_mh_6k_no91","size":"mh_6k","q":"In which city is the capital of the country, where the book \"The Birth of Tragedy\" first came from, located?","gold":["Duluth"],"pred":"Charlie Hebdo","em":0,"facts":2,"ms":0.296}
+{"qid":"factconsolidation_mh_6k_no92","size":"mh_6k","q":"In what language are communications in the headquarters location of the manufacturer of Il-2 Shturmovik conducted officially?","gold":["German"],"pred":"German","em":1,"facts":3,"ms":0.361}
+{"qid":"factconsolidation_mh_6k_no93","size":"mh_6k","q":"Which city serves as the capital of the country where the spouse of the performer of \"Viva Las Vegas\" is a citizen?","gold":["Harare"],"pred":"Harare","em":1,"facts":4,"ms":0.518}
+{"qid":"factconsolidation_mh_6k_no94","size":"mh_6k","q":"What is the country of origin of the sport that the New Firm is related to?","gold":["Japan"],"pred":"Japan","em":1,"facts":2,"ms":0.392}
+{"qid":"factconsolidation_mh_6k_no95","size":"mh_6k","q":"Which religious leader is responsible for founding the religion to which Sarit Thanarat belongs?","gold":["Mekere Morauta"],"pred":"Mekere Morauta","em":1,"facts":2,"ms":0.221}
+{"qid":"factconsolidation_mh_6k_no97","size":"mh_6k","q":"what kind of music does \"Born in the U.S.A.\" fall under according to its performer?","gold":["Australian hip hop"],"pred":"Australian hip hop","em":1,"facts":2,"ms":0.462}
+{"qid":"factconsolidation_mh_6k_no98","size":"mh_6k","q":"What is the capital city of the country where the founder of the manufacturer of Ford Transit Connect holds citizenship?","gold":["Paris"],"pred":"Grosseto","em":0,"facts":4,"ms":0.561}
+{"qid":"factconsolidation_mh_6k_no99","size":"mh_6k","q":"In what language are the official documents of the country where Alta IF originates written?","gold":["Swedish"],"pred":"Swedish","em":1,"facts":3,"ms":0.257}
+{"qid":"factconsolidation_sh_6k_no0","size":"sh_6k","q":"Which sport is goaltender associated with?","gold":["pesäpallo"],"pred":"pesäpallo","em":1,"facts":1,"ms":0.073}
+{"qid":"factconsolidation_sh_6k_no1","size":"sh_6k","q":"What is Nobuhiro Watsuki famous for?","gold":["The Fairly OddParents"],"pred":"The Fairly OddParents","em":1,"facts":1,"ms":0.139}
+{"qid":"factconsolidation_sh_6k_no2","size":"sh_6k","q":"Which country was rugby union created in?","gold":["India"],"pred":"India","em":1,"facts":1,"ms":0.14}
+{"qid":"factconsolidation_sh_6k_no3","size":"sh_6k","q":"What is Ferdowsi famous for?","gold":["Shahnameh"],"pred":"Shahnameh","em":1,"facts":1,"ms":0.124}
+{"qid":"factconsolidation_sh_6k_no4","size":"sh_6k","q":"Which university was Joan Didion educated at?","gold":["University of California, Berkeley"],"pred":"University of California, Berkeley","em":1,"facts":1,"ms":0.143}
+{"qid":"factconsolidation_sh_6k_no5","size":"sh_6k","q":"Who is the author of The Marriage of Figaro?","gold":["Thomas Kyd"],"pred":"Thomas Kyd","em":1,"facts":1,"ms":0.156}
+{"qid":"factconsolidation_sh_6k_no6","size":"sh_6k","q":"Which sport is Tunisia national football team associated with?","gold":["basketball"],"pred":"basketball","em":1,"facts":1,"ms":0.145}
+{"qid":"factconsolidation_sh_6k_no7","size":"sh_6k","q":"Which sport is quarterback associated with?","gold":["Muay Thai"],"pred":"Muay Thai","em":1,"facts":1,"ms":0.127}
+{"qid":"factconsolidation_sh_6k_no8","size":"sh_6k","q":"What is the official language of Japan?","gold":["Swedish"],"pred":"Swedish","em":1,"facts":1,"ms":0.126}
+{"qid":"factconsolidation_sh_6k_no9","size":"sh_6k","q":"What is the name of the current head of the Tucson government?","gold":["Jonathan Rothschild"],"pred":"Jonathan Rothschild","em":1,"facts":1,"ms":0.112}
+{"qid":"factconsolidation_sh_6k_no10","size":"sh_6k","q":"What is the name of the current head of the Italy government?","gold":["Giuseppe Conte"],"pred":"Giuseppe Conte","em":1,"facts":1,"ms":0.122}
+{"qid":"factconsolidation_sh_6k_no11","size":"sh_6k","q":"Who performed Meredith Grey?","gold":["Ellen Pompeo"],"pred":"Ellen Pompeo","em":1,"facts":1,"ms":0.134}
+{"qid":"factconsolidation_sh_6k_no12","size":"sh_6k","q":"What position does Robert Parish play?","gold":["quarterback"],"pred":"quarterback","em":1,"facts":1,"ms":0.145}
+{"qid":"factconsolidation_sh_6k_no13","size":"sh_6k","q":"What is the country of citizenship of Cédric Klapisch?","gold":["Malaysia"],"pred":"Malaysia","em":1,"facts":1,"ms":0.147}
+{"qid":"factconsolidation_sh_6k_no14","size":"sh_6k","q":"Who is the author of Sidereus Nuncius?","gold":["Samuel Beckett"],"pred":"Samuel Beckett","em":1,"facts":1,"ms":0.14}
+{"qid":"factconsolidation_sh_6k_no15","size":"sh_6k","q":"Which continent is Germany located in?","gold":["Africa"],"pred":"Africa","em":1,"facts":1,"ms":0.127}
+{"qid":"factconsolidation_sh_6k_no16","size":"sh_6k","q":"Which religion is Kingdom of Ireland affiliated with?","gold":["Zoroastrianism"],"pred":"Zoroastrianism","em":1,"facts":1,"ms":0.144}
+{"qid":"factconsolidation_sh_6k_no17","size":"sh_6k","q":"Which country was association football created in?","gold":["Italy"],"pred":"Italy","em":1,"facts":1,"ms":0.168}
+{"qid":"factconsolidation_sh_6k_no18","size":"sh_6k","q":"Who is the developer of Windows Phone?","gold":["Microsoft"],"pred":"Microsoft","em":1,"facts":1,"ms":0.169}
+{"qid":"factconsolidation_sh_6k_no19","size":"sh_6k","q":"Who is the chief executive officer of Microsoft?","gold":["Steve Jobs"],"pred":"Steve Jobs","em":1,"facts":1,"ms":0.16}
+{"qid":"factconsolidation_sh_6k_no20","size":"sh_6k","q":"Who is the chairperson of Harvard University?","gold":["Peter Diamandis"],"pred":"Peter Diamandis","em":1,"facts":1,"ms":0.137}
+{"qid":"factconsolidation_sh_6k_no21","size":"sh_6k","q":"Who founded Church of Scotland?","gold":["John Knox"],"pred":"John Knox","em":1,"facts":1,"ms":0.127}
+{"qid":"factconsolidation_sh_6k_no22","size":"sh_6k","q":"Which sport is Galwegians RFC associated with?","gold":["rugby union"],"pred":"rugby union","em":1,"facts":1,"ms":0.14}
+{"qid":"factconsolidation_sh_6k_no23","size":"sh_6k","q":"Who is the director of American Broadcasting Company?","gold":["Ernst Heinkel"],"pred":"Ernst Heinkel","em":1,"facts":1,"ms":0.204}
+{"qid":"factconsolidation_sh_6k_no24","size":"sh_6k","q":"Which city did Gennady Rozhdestvensky die in?","gold":["United States of America"],"pred":"United States of America","em":1,"facts":1,"ms":0.199}
+{"qid":"factconsolidation_sh_6k_no25","size":"sh_6k","q":"What is the capital of Tang Empire?","gold":["Beaumont"],"pred":"Beaumont","em":1,"facts":1,"ms":0.167}
+{"qid":"factconsolidation_sh_6k_no26","size":"sh_6k","q":"Who is the director of British Broadcasting Corporation?","gold":["Narendra Modi"],"pred":"Narendra Modi","em":1,"facts":1,"ms":0.154}
+{"qid":"factconsolidation_sh_6k_no27","size":"sh_6k","q":"What is the country of citizenship of Benjamin Mazar?","gold":["Israel"],"pred":"Israel","em":1,"facts":1,"ms":0.13}
+{"qid":"factconsolidation_sh_6k_no28","size":"sh_6k","q":"What type of music does Michael Mantler play?","gold":["post-punk"],"pred":"post-punk","em":1,"facts":1,"ms":0.155}
+{"qid":"factconsolidation_sh_6k_no29","size":"sh_6k","q":"Which city did Oscar Wilde die in?","gold":["Guangzhou"],"pred":"Guangzhou","em":1,"facts":1,"ms":0.18}
+{"qid":"factconsolidation_sh_6k_no30","size":"sh_6k","q":"Which country was baseball created in?","gold":["Japan"],"pred":"Japan","em":1,"facts":1,"ms":0.15}
+{"qid":"factconsolidation_sh_6k_no31","size":"sh_6k","q":"What is the country of citizenship of Ernst Heinkel?","gold":["Tang Empire"],"pred":"Tang Empire","em":1,"facts":1,"ms":0.162}
+{"qid":"factconsolidation_sh_6k_no32","size":"sh_6k","q":"Which city is the headquarter of The University of the Arts located in?","gold":["Philadelphia"],"pred":"Philadelphia","em":1,"facts":1,"ms":0.163}
+{"qid":"factconsolidation_sh_6k_no33","size":"sh_6k","q":"Which country was rap rock created in?","gold":["Russian Empire"],"pred":"Russian Empire","em":1,"facts":1,"ms":0.211}
+{"qid":"factconsolidation_sh_6k_no34","size":"sh_6k","q":"Where was Christianity founded?","gold":["Taipei"],"pred":"Taipei","em":1,"facts":1,"ms":0.215}
+{"qid":"factconsolidation_sh_6k_no35","size":"sh_6k","q":"What is the official language of United States of America?","gold":["German"],"pred":"German","em":1,"facts":1,"ms":0.155}
+{"qid":"factconsolidation_sh_6k_no36","size":"sh_6k","q":"Who performed Past Masters?","gold":["Madonna"],"pred":"Madonna","em":1,"facts":1,"ms":0.15}
+{"qid":"factconsolidation_sh_6k_no37","size":"sh_6k","q":"What is the capital of Japan?","gold":["Tokyo"],"pred":"Tokyo","em":1,"facts":1,"ms":0.136}
+{"qid":"factconsolidation_sh_6k_no38","size":"sh_6k","q":"What is the capital of France?","gold":["Harare"],"pred":"Harare","em":1,"facts":1,"ms":0.198}
+{"qid":"factconsolidation_sh_6k_no39","size":"sh_6k","q":"Who is the developer of SteamOS?","gold":["ABB Group"],"pred":"ABB Group","em":1,"facts":1,"ms":0.231}
+{"qid":"factconsolidation_sh_6k_no40","size":"sh_6k","q":"Which city is the headquarter of University of Bucharest located in?","gold":["Ankara"],"pred":"Ankara","em":1,"facts":1,"ms":0.15}
+{"qid":"factconsolidation_sh_6k_no41","size":"sh_6k","q":"Which sport is wide receiver associated with?","gold":["rugby"],"pred":"rugby","em":1,"facts":1,"ms":0.115}
+{"qid":"factconsolidation_sh_6k_no42","size":"sh_6k","q":"What position does Hines Ward play?","gold":["cornerback"],"pred":"cornerback","em":1,"facts":1,"ms":0.144}
+{"qid":"factconsolidation_sh_6k_no43","size":"sh_6k","q":"What is the capital of Australia?","gold":["Oderzo"],"pred":"Oderzo","em":1,"facts":1,"ms":0.158}
+{"qid":"factconsolidation_sh_6k_no44","size":"sh_6k","q":"Which continent is Malaysia located in?","gold":["Antarctica"],"pred":"Antarctica","em":1,"facts":1,"ms":0.133}
+{"qid":"factconsolidation_sh_6k_no45","size":"sh_6k","q":"Who is the author of A Wizard of Earthsea?","gold":["Pius XII"],"pred":"Pius XII","em":1,"facts":1,"ms":0.138}
+{"qid":"factconsolidation_sh_6k_no46","size":"sh_6k","q":"Who performed Free as a Bird?","gold":["The Beatles"],"pred":"The Beatles","em":1,"facts":1,"ms":0.145}
+{"qid":"factconsolidation_sh_6k_no47","size":"sh_6k","q":"Who is the author of Our Mutual Friend?","gold":["Charles Darwin"],"pred":"Charles Darwin","em":1,"facts":1,"ms":0.158}
+{"qid":"factconsolidation_sh_6k_no48","size":"sh_6k","q":"Which country was basketball created in?","gold":["Soviet Union"],"pred":"Soviet Union","em":1,"facts":1,"ms":0.268}
+{"qid":"factconsolidation_sh_6k_no49","size":"sh_6k","q":"What is the country of citizenship of Hal Needham?","gold":["United States of America"],"pred":"United States of America","em":1,"facts":1,"ms":0.251}
+{"qid":"factconsolidation_sh_6k_no50","size":"sh_6k","q":"Which continent is Bengaluru located in?","gold":["Oceania"],"pred":"Oceania","em":1,"facts":1,"ms":0.138}
+{"qid":"factconsolidation_sh_6k_no51","size":"sh_6k","q":"Which sport is Slovakia national football team associated with?","gold":["cricket"],"pred":"cricket","em":1,"facts":1,"ms":0.189}
+{"qid":"factconsolidation_sh_6k_no52","size":"sh_6k","q":"What is the name of the current head of state in United States of America?","gold":["Connachta"],"pred":"Connachta","em":1,"facts":1,"ms":0.187}
+{"qid":"factconsolidation_sh_6k_no53","size":"sh_6k","q":"Which religion is Imelda Marcos affiliated with?","gold":["atheism"],"pred":"atheism","em":1,"facts":1,"ms":0.124}
+{"qid":"factconsolidation_sh_6k_no54","size":"sh_6k","q":"What type of music does Dana International play?","gold":["Australian hip hop"],"pred":"Australian hip hop","em":1,"facts":1,"ms":0.127}
+{"qid":"factconsolidation_sh_6k_no55","size":"sh_6k","q":"What is the country of citizenship of Sable?","gold":["Czech Republic"],"pred":"Czech Republic","em":1,"facts":1,"ms":0.133}
+{"qid":"factconsolidation_sh_6k_no56","size":"sh_6k","q":"Which country was Charlie Hebdo created in?","gold":["Italy"],"pred":"Italy","em":1,"facts":1,"ms":0.175}
+{"qid":"factconsolidation_sh_6k_no57","size":"sh_6k","q":"Who is Elvis Presley married to?","gold":["Charles the Bold"],"pred":"Charles the Bold","em":1,"facts":1,"ms":0.19}
+{"qid":"factconsolidation_sh_6k_no58","size":"sh_6k","q":"Who performed Hermione Granger?","gold":["Kylie Minogue"],"pred":"Kylie Minogue","em":1,"facts":1,"ms":0.147}
+{"qid":"factconsolidation_sh_6k_no59","size":"sh_6k","q":"Which sport is Bo Ryan associated with?","gold":["association football"],"pred":"association football","em":1,"facts":1,"ms":0.137}
+{"qid":"factconsolidation_sh_6k_no60","size":"sh_6k","q":"What type of music does John McVie play?","gold":["rap rock"],"pred":"rap rock","em":1,"facts":1,"ms":0.122}
+{"qid":"factconsolidation_sh_6k_no61","size":"sh_6k","q":"What position does Rogério Ceni play?","gold":["flanker"],"pred":"flanker","em":1,"facts":1,"ms":0.133}
+{"qid":"factconsolidation_sh_6k_no62","size":"sh_6k","q":"Who is the chief executive officer of Twitter?","gold":["Bernard Arnault"],"pred":"Bernard Arnault","em":1,"facts":1,"ms":0.145}
+{"qid":"factconsolidation_sh_6k_no63","size":"sh_6k","q":"What language does Kylie Minogue speak?","gold":["German"],"pred":"German","em":1,"facts":1,"ms":0.131}
+{"qid":"factconsolidation_sh_6k_no64","size":"sh_6k","q":"Which sport is Darryl Strawberry associated with?","gold":["baseball"],"pred":"baseball","em":1,"facts":1,"ms":0.108}
+{"qid":"factconsolidation_sh_6k_no65","size":"sh_6k","q":"Which sport is placekicker associated with?","gold":["rugby"],"pred":"rugby","em":1,"facts":1,"ms":0.177}
+{"qid":"factconsolidation_sh_6k_no67","size":"sh_6k","q":"Who is the employer of Dave Filoni?","gold":["British Broadcasting Corporation"],"pred":"British Broadcasting Corporation","em":1,"facts":1,"ms":0.178}
+{"qid":"factconsolidation_sh_6k_no68","size":"sh_6k","q":"Which continent is San Francisco located in?","gold":["North America"],"pred":"North America","em":1,"facts":1,"ms":0.173}
+{"qid":"factconsolidation_sh_6k_no69","size":"sh_6k","q":"Where was Canadair founded?","gold":["Tucson"],"pred":"Tucson","em":1,"facts":1,"ms":0.207}
+{"qid":"factconsolidation_sh_6k_no70","size":"sh_6k","q":"Which company is AP1000 produced by?","gold":["Canadair"],"pred":"Canadair","em":1,"facts":1,"ms":0.161}
+{"qid":"factconsolidation_sh_6k_no71","size":"sh_6k","q":"What is the country of citizenship of Ayumi Hamasaki?","gold":["Japan"],"pred":"Japan","em":1,"facts":1,"ms":0.135}
+{"qid":"factconsolidation_sh_6k_no72","size":"sh_6k","q":"What position does Blair Walsh play?","gold":["placekicker"],"pred":"placekicker","em":1,"facts":1,"ms":0.158}
+{"qid":"factconsolidation_sh_6k_no73","size":"sh_6k","q":"Who is Tony Blair married to?","gold":["Alan Jay Lerner"],"pred":"Alan Jay Lerner","em":1,"facts":1,"ms":0.161}
+{"qid":"factconsolidation_sh_6k_no74","size":"sh_6k","q":"Who is the author of Endymion?","gold":["John Keats"],"pred":"John Keats","em":1,"facts":1,"ms":0.134}
+{"qid":"factconsolidation_sh_6k_no75","size":"sh_6k","q":"Who is the author of Lady Windermere's Fan?","gold":["Oscar Wilde"],"pred":"Oscar Wilde","em":1,"facts":1,"ms":0.126}
+{"qid":"factconsolidation_sh_6k_no76","size":"sh_6k","q":"What is the name of the current head of the Japan government?","gold":["Shinzō Abe"],"pred":"Shinzō Abe","em":1,"facts":1,"ms":0.163}
+{"qid":"factconsolidation_sh_6k_no77","size":"sh_6k","q":"Who is the chairperson of Congolese Party of Labour?","gold":["Stephen McNeil"],"pred":"Stephen McNeil","em":1,"facts":1,"ms":0.15}
+{"qid":"factconsolidation_sh_6k_no78","size":"sh_6k","q":"Which sport is flanker associated with?","gold":["rugby union"],"pred":"rugby union","em":1,"facts":1,"ms":0.111}
+{"qid":"factconsolidation_sh_6k_no79","size":"sh_6k","q":"What is the capital of Czech Republic?","gold":["Prague"],"pred":"Prague","em":1,"facts":1,"ms":0.121}
+{"qid":"factconsolidation_sh_6k_no80","size":"sh_6k","q":"What position does Lisa Leslie play?","gold":["goaltender"],"pred":"goaltender","em":1,"facts":1,"ms":0.163}
+{"qid":"factconsolidation_sh_6k_no81","size":"sh_6k","q":"What is the name of the current head of state in Soviet Union?","gold":["Elizabeth II"],"pred":"Elizabeth II","em":1,"facts":1,"ms":0.156}
+{"qid":"factconsolidation_sh_6k_no82","size":"sh_6k","q":"What is the country of citizenship of Ferdinand von Richthofen?","gold":["Canada"],"pred":"Canada","em":1,"facts":1,"ms":0.128}
+{"qid":"factconsolidation_sh_6k_no83","size":"sh_6k","q":"Which religion is Karen Armstrong affiliated with?","gold":["Church of Scotland"],"pred":"Church of Scotland","em":1,"facts":1,"ms":0.177}
+{"qid":"factconsolidation_sh_6k_no84","size":"sh_6k","q":"Who was Vito Corleone created by?","gold":["Nobuhiro Watsuki"],"pred":"Nobuhiro Watsuki","em":1,"facts":1,"ms":0.187}
+{"qid":"factconsolidation_sh_6k_no85","size":"sh_6k","q":"What is the capital of Romania?","gold":["Rajanpur"],"pred":"Rajanpur","em":1,"facts":1,"ms":0.123}
+{"qid":"factconsolidation_sh_6k_no86","size":"sh_6k","q":"Which continent is India located in?","gold":["Africa"],"pred":"Africa","em":1,"facts":1,"ms":0.14}
+{"qid":"factconsolidation_sh_6k_no87","size":"sh_6k","q":"Which city did Olga of Kiev die in?","gold":["Rodez"],"pred":"Rodez","em":1,"facts":1,"ms":0.175}
+{"qid":"factconsolidation_sh_6k_no88","size":"sh_6k","q":"Who founded Sasanian Empire?","gold":["Walter Chrysler"],"pred":"Walter Chrysler","em":1,"facts":1,"ms":0.145}
+{"qid":"factconsolidation_sh_6k_no90","size":"sh_6k","q":"Which sport is Surrey Senior Cup associated with?","gold":["basketball"],"pred":"basketball","em":1,"facts":1,"ms":0.129}
+{"qid":"factconsolidation_sh_6k_no91","size":"sh_6k","q":"What is the country of citizenship of Narendra Modi?","gold":["Australia"],"pred":"Australia","em":1,"facts":1,"ms":0.127}
+{"qid":"factconsolidation_sh_6k_no92","size":"sh_6k","q":"Who is Victoria Beckham married to?","gold":["David Beckham"],"pred":"David Beckham","em":1,"facts":1,"ms":0.121}
+{"qid":"factconsolidation_sh_6k_no93","size":"sh_6k","q":"What is the country of citizenship of Charles Messier?","gold":["Iran"],"pred":"Iran","em":1,"facts":1,"ms":0.188}
+{"qid":"factconsolidation_sh_6k_no94","size":"sh_6k","q":"Who was Rand al'Thor created by?","gold":["Ferdowsi"],"pred":"Ferdowsi","em":1,"facts":1,"ms":0.182}
+{"qid":"factconsolidation_sh_6k_no95","size":"sh_6k","q":"What position does Mike D'Antoni play?","gold":["point guard"],"pred":"point guard","em":1,"facts":1,"ms":0.129}
+{"qid":"factconsolidation_sh_6k_no96","size":"sh_6k","q":"What is the country of citizenship of Colin Irwin?","gold":["Israel"],"pred":"Israel","em":1,"facts":1,"ms":0.148}
+{"qid":"factconsolidation_sh_6k_no97","size":"sh_6k","q":"Who is Walter Chrysler's child?","gold":["Charles Frederick, Duke of Holstein-Gottorp"],"pred":"Charles Frederick, Duke of Holstein-Gottorp","em":1,"facts":1,"ms":0.149}
+{"qid":"factconsolidation_sh_6k_no98","size":"sh_6k","q":"Who is Charles Darwin married to?","gold":["Amala Paul"],"pred":"Amala Paul","em":1,"facts":1,"ms":0.129}
+{"qid":"factconsolidation_sh_6k_no99","size":"sh_6k","q":"What position does Irving Fryar play?","gold":["wide receiver"],"pred":"wide receiver","em":1,"facts":1,"ms":0.095}

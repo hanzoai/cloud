@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-09T18:29:45.651Z",
+ "generated": "2026-09-10T19:45:50.860Z",
  "sections": [
   {
    "bench": "conv",
@@ -843,6 +843,88 @@
   },
   {
    "bench": "locomo",
+   "run": "locomo-all-context-k20-enso-flash",
+   "row": null,
+   "split": null,
+   "k": 20,
+   "reader": "enso-flash",
+   "facts": null,
+   "commit": "9eab30f73493a28244d1cd00b3fa53b83fdfba3c",
+   "categories": [
+    {
+     "name": "all",
+     "n": 57,
+     "metrics": {
+      "of": 1536,
+      "f1": {
+       "mean": 0.5455782816071159,
+       "lo": 0.4518687649088278,
+       "hi": 0.6369116701541265
+      },
+      "em": {
+       "mean": 0.2631578947368421,
+       "lo": 0.15789473684210525,
+       "hi": 0.38596491228070173
+      },
+      "exact": 0.8596491228070176,
+      "supported": 0.22807017543859648,
+      "answered": 0.5789473684210527,
+      "tokens": 980.6140350877193,
+      "p50_ms": 4546,
+      "p95_ms": 154013
+     }
+    },
+    {
+     "name": "dev",
+     "n": 3,
+     "metrics": {
+      "of": 383,
+      "f1": {
+       "mean": 0.8888888888888888,
+       "lo": 0.6666666666666666,
+       "hi": 1
+      },
+      "em": {
+       "mean": 0.6666666666666666,
+       "lo": 0,
+       "hi": 1
+      },
+      "exact": 0.6666666666666666,
+      "supported": 0.3333333333333333,
+      "answered": 1,
+      "tokens": 1090.6666666666667,
+      "p50_ms": 4257,
+      "p95_ms": 13074
+     }
+    },
+    {
+     "name": "test",
+     "n": 54,
+     "metrics": {
+      "of": 1153,
+      "f1": {
+       "mean": 0.5265054700914616,
+       "lo": 0.4260833190157158,
+       "hi": 0.632516101919087
+      },
+      "em": {
+       "mean": 0.24074074074074073,
+       "lo": 0.12962962962962962,
+       "hi": 0.37037037037037035
+      },
+      "exact": 0.8703703703703703,
+      "supported": 0.2222222222222222,
+      "answered": 0.5555555555555556,
+      "tokens": 974.5,
+      "p50_ms": 4630,
+      "p95_ms": 154013
+     }
+    }
+   ],
+   "table": null
+  },
+  {
+   "bench": "locomo",
    "run": "locomo-all-context-k20-gemma4-31b",
    "row": null,
    "split": null,
@@ -981,6 +1063,88 @@
       "tokens": 967.1394230769231,
       "p50_ms": 17809,
       "p95_ms": 20364
+     }
+    }
+   ],
+   "table": null
+  },
+  {
+   "bench": "locomo",
+   "run": "locomo-all-context-k20-gpt-oss-120b",
+   "row": null,
+   "split": null,
+   "k": 20,
+   "reader": "gpt-oss-120b",
+   "facts": null,
+   "commit": "9eab30f73493a28244d1cd00b3fa53b83fdfba3c",
+   "categories": [
+    {
+     "name": "all",
+     "n": 181,
+     "metrics": {
+      "of": 1536,
+      "f1": {
+       "mean": 0.4543590977441535,
+       "lo": 0.40524752161287436,
+       "hi": 0.506637508108068
+      },
+      "em": {
+       "mean": 0.143646408839779,
+       "lo": 0.09392265193370165,
+       "hi": 0.19889502762430938
+      },
+      "exact": 0.8784530386740331,
+      "supported": 0.11602209944751381,
+      "answered": 0.47513812154696133,
+      "tokens": 992.9281767955802,
+      "p50_ms": 2182,
+      "p95_ms": 28949
+     }
+    },
+    {
+     "name": "dev",
+     "n": 69,
+     "metrics": {
+      "of": 383,
+      "f1": {
+       "mean": 0.5149799627714698,
+       "lo": 0.42756969278708407,
+       "hi": 0.5950202835144508
+      },
+      "em": {
+       "mean": 0.15942028985507245,
+       "lo": 0.08695652173913043,
+       "hi": 0.2463768115942029
+      },
+      "exact": 0.8840579710144928,
+      "supported": 0.14492753623188406,
+      "answered": 0.5507246376811594,
+      "tokens": 993.9710144927536,
+      "p50_ms": 2217,
+      "p95_ms": 35269
+     }
+    },
+    {
+     "name": "test",
+     "n": 112,
+     "metrics": {
+      "of": 1153,
+      "f1": {
+       "mean": 0.41701231482553874,
+       "lo": 0.35230830180275724,
+       "hi": 0.485424165467321
+      },
+      "em": {
+       "mean": 0.13392857142857142,
+       "lo": 0.08035714285714286,
+       "hi": 0.20535714285714285
+      },
+      "exact": 0.875,
+      "supported": 0.09821428571428571,
+      "answered": 0.42857142857142855,
+      "tokens": 992.2857142857143,
+      "p50_ms": 2154,
+      "p95_ms": 5760
      }
     }
    ],
@@ -12225,13 +12389,40 @@
    "k": 10,
    "reader": "none",
    "facts": null,
-   "commit": "bea5d0ad18",
+   "commit": "9eab30f734",
    "categories": [
     {
      "name": "mh_6k",
      "n": 100,
      "metrics": {
-      "substring_em": 0.83
+      "substring_em": 0.88
+     }
+    },
+    {
+     "name": "sh_6k",
+     "n": 100,
+     "metrics": {
+      "substring_em": 0.98
+     }
+    }
+   ],
+   "table": null
+  },
+  {
+   "bench": "mab",
+   "run": "mab-dev-beamx-none",
+   "row": "beamx",
+   "split": "dev",
+   "k": 10,
+   "reader": "none",
+   "facts": null,
+   "commit": "9eab30f734",
+   "categories": [
+    {
+     "name": "mh_6k",
+     "n": 100,
+     "metrics": {
+      "substring_em": 0.9
      }
     },
     {
@@ -12279,27 +12470,27 @@
    "k": 10,
    "reader": "none",
    "facts": null,
-   "commit": "bea5d0ad18",
+   "commit": "9eab30f734",
    "categories": [
     {
      "name": "mh_32k",
      "n": 100,
      "metrics": {
-      "substring_em": 0.76
+      "substring_em": 0.87
      }
     },
     {
      "name": "mh_64k",
      "n": 100,
      "metrics": {
-      "substring_em": 0.76
+      "substring_em": 0.84
      }
     },
     {
      "name": "mh_262k",
      "n": 100,
      "metrics": {
-      "substring_em": 0.51
+      "substring_em": 0.64
      }
     },
     {

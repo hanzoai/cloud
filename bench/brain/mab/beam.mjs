@@ -92,7 +92,8 @@ export function beamResolve(ix, find, plan, question, o = {}) {
   for (let h = 0; h <= plan.chain.length; h++) {
     const next = []
     for (const s of beam) {
-      let rels = h < plan.chain.length ? alternatives(plan.chain[h]) : (want ? Object.keys(TYPE).filter((r) => typeOk(r, want)) : [])
+      let rels = h < plan.chain.length ? [...new Set([...alternatives(plan.chain[h]), ...Object.keys(plan.votes?.[h] ?? {}).flatMap((r) => alternatives(r))])] : (want ? Object.keys(TYPE).filter((r) => typeOk(r, want)) : [])
+      if (o.exhaustive && h < plan.chain.length + 1) { const has = new Set((ix.byEntity.get(s.entity) ?? []).filter((f) => norm(f.subject) === s.entity).map((f) => f.relation)); rels = [...new Set([...rels, ...has])] }
       if (h === plan.chain.length - 1 && want && !(CLASS[plan.chain[h]] ? FAMILY_TYPE[plan.chain[h]] === want || (want === 'place' && ['city', 'country'].includes(FAMILY_TYPE[plan.chain[h]])) || (want === 'person' && FAMILY_TYPE[plan.chain[h]] === 'person') : typeOk(plan.chain[h], want))) rels = [...new Set([...rels, ...Object.keys(TYPE).filter((r) => typeOk(r, want))])]
       if (h === plan.chain.length) consider(s, 0) // the plan's own length
       else if (h > 0 && want && typeOk(s.evidence[s.evidence.length - 1]?.relation, want) && !(CLASS[plan.chain[plan.chain.length - 1]] ? FAMILY_TYPE[plan.chain[plan.chain.length - 1]] === want : typeOk(plan.chain[plan.chain.length - 1], want))) consider(s, -1) // stop early: the type is already right and the plan's tail would break it
@@ -105,8 +106,9 @@ export function beamResolve(ix, find, plan, question, o = {}) {
         return true
       }
       let direct = false
-      const planned = (rel, h) => h < plan.chain.length && (rel === plan.chain[h] || (CLASS[plan.chain[h]] ?? []).includes(rel))
-      for (const rel of rels) { const relScore = h < plan.chain.length ? (planned(rel, h) ? 3 : 1) : -1; if (expand(rel, relScore, null)) direct = true }
+      const planned = (rel, h) => h < plan.chain.length && (rel === plan.chain[h] || (CLASS[plan.chain[h]] ?? []).includes(rel) || !!(plan.votes?.[h]?.[rel]) || Object.keys(plan.votes?.[h] ?? {}).some((r) => (CLASS[r] ?? []).includes(rel)))
+      const weight = (rel, h) => plan.votes ? (Math.max(0, ...Object.entries(plan.votes[h] ?? {}).filter(([r]) => r === rel || (CLASS[r] ?? []).includes(rel)).map(([, n]) => n)) / plan.plans) : 1
+      for (const rel of rels) { const relScore = h < plan.chain.length ? (planned(rel, h) ? 2 + weight(rel, h) : (alternatives(plan.chain[h]).includes(rel) ? 1 : 0)) : -1; if (expand(rel, relScore, null)) direct = true }
       let bridged = false
       if (!direct && h < plan.chain.length) { // the bridge: the entity's own current facts, one step, then the relation
         const own = (ix.byEntity.get(s.entity) ?? []).filter((f) => f.current && norm(f.subject) === s.entity).sort((a, b) => a.serial - b.serial)
@@ -121,4 +123,19 @@ export function beamResolve(ix, find, plan, question, o = {}) {
   const best = finals[0]
   return { answer: best.evidence[best.evidence.length - 1].object, evidence: best.evidence, score: best.score, complete: true,
     trace: [{ step: 'entity', entity: plan.entity, found: base.key, how: base.how }, ...best.evidence.map((f, i) => ({ step: 'hop', entity: norm(f.subject), relation: f.relation, planned: plan.chain[i] ?? null, serial: f.serial, object: f.object })), { step: 'type', want, finals: finals.length, runner_up: finals[1] ? { answer: finals[1].evidence[finals[1].evidence.length - 1].object, score: finals[1].score } : null }] }
+}
+
+/**
+ * The lattice: several plans for one question merged into one sketch. At each
+ * hop position the relations the plans proposed are kept with their agreement
+ * (how many plans said so); the chain is as long as the longest plan and the
+ * search may stop early on the answer type. A relation that more compilers
+ * proposed scores higher; a path may take hop 1 from one plan and hop 2 from
+ * another, which no single plan allowed. Deterministic; no gold; no model.
+ */
+export function lattice(plans) {
+  const entity = plans.map((p) => p.entity).sort((a, b) => plans.filter((x) => x.entity === b).length - plans.filter((x) => x.entity === a).length)[0]
+  const len = Math.max(...plans.map((p) => p.chain.length)); const hops = []
+  for (let h = 0; h < len; h++) { const votes = {}; for (const p of plans) if (p.chain[h]) votes[p.chain[h]] = (votes[p.chain[h]] ?? 0) + 1; hops.push(votes) }
+  return { entity, chain: hops.map((v) => Object.entries(v).sort((a, b) => b[1] - a[1])[0][0]), votes: hops, plans: plans.length, set: 'lattice' }
 }
