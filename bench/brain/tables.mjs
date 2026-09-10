@@ -98,6 +98,26 @@ if (mab.length) {
   write('mab-fc.tex', `\\begin{tabular}{lrrrrrrrrrr}\n\\toprule\n & \\multicolumn{5}{c}{FC-SH} & \\multicolumn{5}{c}{FC-MH} \\\\\n\\cmidrule(lr){2-6}\\cmidrule(lr){7-11}\nConfiguration (reader) & 6k & 32k & 64k & 262k & pooled & 6k & 32k & 64k & 262k & pooled \\\\\n\\midrule\n${rows.join('\n')}\n\\midrule\n\\multicolumn{11}{l}{CAR (arXiv 2606.01435), pooled 6k--262k: 78.0 / 30.2 with gpt-4o-mini, 94.8 / 51.5 with gpt-4o; at 262k: 82 / 27 and 93 / 41} \\\\\n\\bottomrule\n\\end{tabular}\n`, 'runs/mab-*; substring exact match; 6k is the dev split, the rest test; pooled = mean of the four sizes as CAR reports')
 }
 
+// Best-of-N against selected-of-N and the version-policy ceilings, from the search row's traces (mab/nbest.mjs, mab/contested.mjs).
+if (existsSync(new URL('./runs/mab-test-beamx-none/traces.jsonl', here)) && existsSync(new URL('./runs/mab-dev-beamx-none/traces.jsonl', here))) {
+  const { nbest } = await import('./mab/nbest.mjs'); const { ceiling } = await import('./mab/contested.mjs')
+  const per = [['6k', nbest('mab-dev-beamx-none', 'mh_6k')], ['32k', nbest('mab-test-beamx-none', 'mh_32k')], ['64k', nbest('mab-test-beamx-none', 'mh_64k')], ['262k', nbest('mab-test-beamx-none', 'mh_262k')]].filter(([, r]) => r)
+  const at = (r, k) => r.recall.length >= k ? `${r.recall[k - 1]} / ${r.success[k - 1]}` : '\\ldots'
+  const N = Math.max(...per.map(([, r]) => r.order.length))
+  write('mab-nbest.tex', `\\begin{tabular}{lrrrrr}\n\\toprule\nHaystack & sets & plans / question & N=1 & N=3 & N=${N} \\\\\n\\midrule\n` +
+    per.map(([size, r]) => `${size} & ${r.order.length} & ${r.plansPerQ.toFixed(1)} & ${at(r, 1)} & ${at(r, 3)} & ${at(r, r.order.length)} \\\\`).join('\n') + `\n\\bottomrule\n\\end{tabular}`,
+    'FC-MH, plan recall@N / execution success@N out of 100, no reader; sets in lane order: the lexicon set, then the model sets alphabetically, each also in every relation order; 6k is dev')
+  const cs = ['6k', '32k', '64k', '262k'].map((size) => ceiling(size, size === '6k' ? 'mab-dev-beamx-none' : 'mab-test-beamx-none'))
+  write('mab-ceiling.tex', `\\begin{tabular}{lrrrr}\n\\toprule\n & ${cs.map((c) => c.size).join(' & ')} \\\\\n\\midrule\n` + [
+    ['multi-hop questions with a gold path in the parsed store', (c) => c.paths],
+    ['whose gold needs an older version of an updated key', (c) => c.needOlder],
+    ['keys contested between questions', (c) => c.contested],
+    ['ceiling, one version per key chosen by an oracle', (c) => c.oracleCeiling],
+    ['ceiling, latest version wins', (c) => c.latestCeiling],
+    ['the search, selected-of-N', (c) => c.exact]].map(([label, f]) => `${label} & ${cs.map(f).join(' & ')} \\\\`).join('\n') + `\n\\bottomrule\n\\end{tabular}`,
+    'FC-MH per haystack, out of 100; a gold path is the shortest path from the plan\'s base entity to an object matching the gold; a contested key is one two questions need in different versions')
+}
+
 // ── the code lane: RepoBench-R, both settings, test split, one row per configuration
 {
   const codeDir = new URL('../code/runs/', here)
