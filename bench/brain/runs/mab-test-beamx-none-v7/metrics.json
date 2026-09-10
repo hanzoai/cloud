@@ -4,62 +4,62 @@
  "reader": "none",
  "k": 10,
  "prompt_sha": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
- "commit": "c687fd6500",
- "n": 600,
+ "commit": "b2bb961938",
+ "n": 589,
  "by_size": {
   "mh_32k": {
    "n": 100,
-   "substring_em": 0.89,
+   "substring_em": 0.87,
    "ci95": [
-    0.82,
-    0.95
+    0.79,
+    0.94
    ]
   },
   "mh_64k": {
    "n": 100,
-   "substring_em": 0.89,
+   "substring_em": 0.88,
    "ci95": [
-    0.82,
+    0.81,
     0.95
    ]
   },
   "mh_262k": {
    "n": 100,
-   "substring_em": 0.67,
+   "substring_em": 0.65,
    "ci95": [
-    0.59,
-    0.77
+    0.57,
+    0.76
    ]
   },
   "sh_32k": {
    "n": 100,
-   "substring_em": 0.98,
+   "substring_em": 0.97,
    "ci95": [
-    0.95,
+    0.94,
     1
    ]
   },
   "sh_64k": {
-   "n": 100,
-   "substring_em": 0.98,
-   "ci95": [
-    0.95,
-    1
-   ]
-  },
-  "sh_262k": {
    "n": 100,
    "substring_em": 0.97,
    "ci95": [
     0.93,
     1
    ]
+  },
+  "sh_262k": {
+   "n": 100,
+   "substring_em": 0.94,
+   "ci95": [
+    0.89,
+    0.98
+   ]
   }
  },
  "facts_per_q": 1.81,
- "retrieval_ms_p50": 0.557,
- "retrieval_ms_p95": 29.41,
+ "retrieval_ms_p50": 1.536,
+ "retrieval_ms_p95": 94.356,
  "reader_calls": 0,
  "context_tokens_per_q": 0,
- "wall_s": 2
+ "wall_s": 6
 }

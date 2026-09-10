@@ -56,6 +56,45 @@ question scores 0.
 | beam | the typed search above, over every plan set on disk |
 | semantic / lexical / rrf / entities / timeline / hops / resolver / full | earlier rows that hand facts to a reader; kept for the record |
 
+## What stops 262k at two thirds
+
+At 262k a gold path exists in the parsed store for 98 of 100 multi-hop
+questions, and the search misses 35: 29 whose gold uses an *older* version of
+a key that a later line updates, 2 with no path, 4 where a shortcut path hides
+the same version problem. The later line is an edit no question in the
+haystack asks for. The benchmark is built from MQuAKE-CF counterfactual edits,
+and a haystack packs the edits of instances it never asks about; the gold
+follows the edit on 183 versioned hops and the original on 46, and the store
+says nothing about which is which.
+
+| | 6k | 32k | 64k | 262k |
+|---|---|---|---|---|
+| questions whose gold needs an older version | 3 | 13 | 8 | 33 |
+| contested keys (two questions, two versions) | 4 | 6 | 2 | 5 |
+| ceiling: one version per key, chosen by an oracle | 97 | 94 | 98 | 94 |
+| ceiling: latest version wins | 97 | 87 | 92 | 67 |
+| the search, selected-of-N | 93 | · | · | 65 |
+
+Six signals a store can read were tried against the 46 older-gold hops at
+262k, each against the 183 latest-gold hops as a control; none separates the
+edit the gold follows from the edit it ignores:
+
+| signal | older-gold hops (gold wins / other wins) | latest-gold hops |
+|---|---|---|
+| degree of the object | 21 / 20 | 52 / 119 |
+| object has facts of its own | equal | equal |
+| object tied back to the subject elsewhere | 13 / 0 | 4 / 42 |
+| key contested by another question | 6 questions in all | |
+| serial distance to the chain's other facts | 24 / 38 | 93 / 72 |
+| position in the list, by decile | same distribution as the ignored edits | |
+
+The third row is the shape of the problem: corroboration finds the *original*
+fact, and the gold wants the original only a fifth of the time. So a system
+that reads only the haystack cannot pass 67 at 262k without guessing, and the
+search sits on that line. `contested.mjs`, `corroborate.mjs`, `locality.mjs`,
+`goldversion.mjs`, `updates.mjs` and `discriminate.mjs` are the measurements;
+each takes `--sizes` and `contested.mjs` takes `--run` to bucket a run's misses.
+
 ## Reference numbers (verified from the CAR paper, arXiv 2606.01435)
 
 CAR pools its headline over the 6K–262K haystacks: **78.0 SH / 30.2 MH** with
