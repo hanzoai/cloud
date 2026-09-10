@@ -4,7 +4,7 @@
  "reader": "none",
  "k": 10,
  "prompt_sha": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
- "commit": "9eab30f734",
+ "commit": "b2bb961938b",
  "n": 196,
  "by_size": {
   "mh_6k": {
@@ -24,10 +24,10 @@
    ]
   }
  },
- "facts_per_q": 1.74,
- "retrieval_ms_p50": 0.221,
- "retrieval_ms_p95": 1.11,
+ "facts_per_q": 1.75,
+ "retrieval_ms_p50": 1.385,
+ "retrieval_ms_p95": 22.926,
  "reader_calls": 0,
  "context_tokens_per_q": 0,
- "wall_s": 0
+ "wall_s": 1
 }
