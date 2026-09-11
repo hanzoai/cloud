@@ -17,6 +17,7 @@ update both.
 ```
 bench/self/run.sh                   # build it, boot it, ask each door: can you have this
 bench/egress/run.sh                 # and whether having it means anyone hears about it
+bench/cipher/run.sh                 # write a value through the API, look for it on the disk
 bench/doors/run.sh                  # what an agent pays per call, per envelope
 node fleet/fleet.mjs /tmp/fleet     # 1M dormant agents: bytes, write rate, resume
 node fleet/cost.mjs                 # the same, as a monthly bill
@@ -69,6 +70,27 @@ fails if either reports nothing.
 
 The claim is narrow and checkable: nothing in the default path phones home. A
 deployment that enables a subsystem with an upstream connects to it, on purpose.
+
+### At rest — the value is not in the file
+
+`cipher/run.sh` writes a value nothing else could have written through two
+operations, stops the server, and searches every file under the data directory.
+The same binary runs twice.
+
+| | with a master key | development path |
+|---|---|---|
+| distinct file headers | **7** | 1 — `SQLite format 3` |
+| files holding the canary | **0** | **2** |
+
+Each store gets its own data encryption key, so seven files begin with seven
+different ciphertexts; a plaintext run writes the same magic seven times.
+
+The right-hand column is not a competitor. It is the proof the left-hand one
+measures anything: same binary, same writes, same search, on a store that is
+deliberately not encrypted. Without it, a zero could mean the write never
+reached the disk or that the search does not read binary files — and the second
+of those happened while the lane was being written, which is why the lane fails
+if the control ever reads zero.
 
 ### The per-call tax — same handler, three envelopes
 
