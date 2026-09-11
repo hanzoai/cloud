@@ -255,6 +255,30 @@ than the store. A better embedding buys less than a better answer does.
 | the full stack | 43.0 | 53.3 |
 | one hop only | 36.7 | 48.8 |
 
+**What each answer cost, from the runs' own rows.** Every prediction records its
+latency and the reader's token usage, so this is arithmetic over
+`predictions.jsonl` rather than a second measurement.
+
+| | per question | prompt tokens | seconds |
+|---|---|---|---|
+| the full stack, local reader | 1,525 answered | 1,400 | **4.8** |
+| the full stack, hosted 120B | 282 answered | 1,296 | 6.9 |
+| oracle, local reader | 1,525 answered | **294** | 3.1 |
+
+Two things fall out, and the second is the more useful.
+
+**The local reader answered faster.** 4.8 s against 6.9 s on the same policy and
+nearly the same prompt. Read the hosted figure as what a caller waits for — it
+carries the network and the router with it — rather than as the model being
+slower.
+
+**Retrieval sends 4.8× the context the answer needs.** The oracle policy hands
+the reader 294 prompt tokens and scores 61.8; the full stack hands it 1,400 and
+scores 53.3. Those 1,100 extra tokens per question are what precision is
+currently costing, and they are the same tokens any hosted bill is metered on.
+Better precision is the lever on both speed and price here — not a faster model,
+and not a cheaper rate.
+
 ### Code retrieval — the typed link beats the model
 
 RepoBench-R, cross-file-first, test split, n=500, `all-MiniLM-L6-v2`, from
