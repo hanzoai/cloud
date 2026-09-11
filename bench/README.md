@@ -213,6 +213,41 @@ than a like-for-like — and it is **unsourced**: it is not on any page reachabl
 from their sitemap as of 2026-09-11. [naive.md](naive.md) lists every figure in
 this file that is in that position.
 
+### Answering, and what running it yourself costs
+
+Recall says whether the right turn was retrieved. This says whether the question
+got answered. LoCoMo token-F1 against the gold string, k=20, from
+`brain/benchmarks.json`.
+
+Every row below is the same 282 multi-hop questions, so the column compares. The
+hosted readers were run on that category alone; the local ones answered all four,
+which is why only their overall column exists.
+
+| reader | where it runs | multi-hop F1 | all four, F1 |
+|---|---|---|---|
+| gpt-oss-120b | hosted | **45.3** | — |
+| enso-flash | hosted | 45.1 | — |
+| **qwen3.6:35b-a3b** | **your machine** | **43.0** | **53.3** |
+| gemma4:31b | your machine | 40.5 | — |
+
+**Running it yourself costs 2.3 F1 points.** That is the whole of the ownership
+premium on this benchmark: 43.0 against 45.3, local open weights against a
+hosted 120B, on identical retrieval and identical questions. Nobody has to take
+that on faith — `self/` says the software is yours, `egress/` says it tells no
+one, and this says what it scores when nothing leaves the machine.
+
+**And the ceiling says where the rest of the gap is.** Handing the same reader
+perfect retrieval — the oracle policy, the right turns every time — scores 55.6
+on those questions and 61.8 over all four. Our retrieval reaches **77% of that
+on multi-hop and 86% overall**, so most of what is left is the reader rather
+than the store. A better embedding buys less than a better answer does.
+
+| policy, local reader | multi-hop F1 | all four, F1 |
+|---|---|---|
+| oracle — perfect retrieval | 55.6 | 61.8 |
+| the full stack | 43.0 | 53.3 |
+| one hop only | 36.7 | 48.8 |
+
 ### Code retrieval — the typed link beats the model
 
 RepoBench-R, cross-file-first, test split, n=500, `all-MiniLM-L6-v2`, from
