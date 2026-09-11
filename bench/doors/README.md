@@ -16,18 +16,27 @@ in the body. Over the op-call plane the name is in the path and the body is
 binary. Same handler, same process, three envelopes — so the difference between
 these rows is the envelope and nothing else.
 
-Taken on an M-series laptop, 2026-09-11, `n=200` interleaved.
+Taken on an M-series laptop, 2026-09-11, `n=200` interleaved, four runs. The
+`min` of each run:
 
-| door | min | p50 |
-|---|---|---|
-| REST | 0.27 ms | 0.51 ms |
-| op-call plane | 0.28 ms | 0.53 ms |
-| MCP | 0.30 ms | 0.56 ms |
+| door | run 1 | run 2 | run 3 | run 4 |
+|---|---|---|---|---|
+| REST | 0.27 ms | 0.22 ms | 0.24 ms | 0.29 ms |
+| op-call plane | 0.28 ms | 0.23 ms | 0.25 ms | 0.30 ms |
+| MCP | 0.30 ms | 0.25 ms | 0.26 ms | 0.31 ms |
 
-**The envelope costs about 30 microseconds.** REST is fastest because the
+**The envelope costs 20 to 30 microseconds.** REST is fastest because the
 operation is already the address; MCP pays for a name lookup and a JSON-RPC
-frame. On a loop of a hundred tool calls that is three milliseconds, against a
-model turn measured in seconds.
+frame. The ordering is the same in all four runs and the gap is the same size,
+while the absolute floor moves with what else the machine is doing. On a loop of
+a hundred tool calls that is three milliseconds, against a model turn measured
+in seconds.
+
+**p50 does not separate the doors.** Across the four runs it read 0.51/0.53/0.56,
+0.43/0.44/0.43, 0.44/0.43/0.47 and 0.46/0.50/0.47 — three different orderings.
+An earlier version of this table carried one run's p50 column as if it ranked
+them. It does not: the difference being measured is smaller than the median's
+own movement, which is the same reason the p90 is not here.
 
 ## How to read this, and how not to
 
@@ -37,11 +46,12 @@ busy machine is larger than the difference being measured. Round-robin puts
 every door in the same conditions each iteration. If you change that, the
 comparison stops meaning anything.
 
-**Trust `min`, not the tail.** The p90 on this laptop ranged from 0.94 ms to
-10.87 ms across runs while `min` moved by 0.03 ms. The tail is measuring what
-else the machine was doing. `min` is the closest thing here to the cost of the
-envelope itself, and it is the only column whose ordering was stable across
-every run.
+**Trust `min`, not the tail, and not the median.** The p90 on this laptop ranged
+from 0.77 ms to 10.87 ms across runs, and the p50's ordering changed run to run,
+while the gap between the `min` rows stayed 20–30 µs. The tail and the median
+are measuring what else the machine was doing. `min` is the closest thing here
+to the cost of the envelope itself, and it is the only column whose ordering was
+stable across every run.
 
 **This is not a round-trip to a cloud.** Loopback, one process, no network, no
 model, no authentication. It is the floor: what the server adds to a call before
