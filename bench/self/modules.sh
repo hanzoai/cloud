@@ -11,9 +11,12 @@
 # dependencies, so the run fails unless the absent one is refused.
 set -uo pipefail
 cd "$(dirname "$0")/../.."
+. bench/host.sh
 export GOWORK=off
 
 say() { printf '%-34s %s\n' "$1" "$2"; }
+
+host
 
 # The Go proxy lowercases an uppercase letter and marks it with a bang, so a
 # module path is not its own URL.

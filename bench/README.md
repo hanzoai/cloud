@@ -4,9 +4,17 @@ One lane per claim a competitor makes about us, and two for the claims they
 cannot make: that you can have the software, and what it costs to ask it for
 something.
 
-Every number below was taken on an M-series laptop between 2026-09-07 and
-2026-09-11, and every script here re-runs to produce it. Where we lose, the row
-says so — a benchmark suite that only contains wins is a brochure.
+Every number below was taken between 2026-09-07 and 2026-09-11, and every script
+here re-runs to produce it. Where we lose, the row says so — a benchmark suite
+that only contains wins is a brochure.
+
+**Say which machine.** "An M-series laptop" covered an M1 Max with 10 cores and
+an M4 Max with 16, and the goroutine lane reads about twice as fast on the
+second — 452 ns to spawn against 187, 347 ns to wake against 114, while the
+memory figure moved by five bytes. A timing without its host is not reproducible
+and not comparable, including against itself next month. Every lane that
+measures time prints its host now, from `bench/host.sh`, and the tables below
+carry it.
 
 Timings are the median of the pass; memory is deterministic and has no range.
 This is the same pass the two papers cite, and they carry the ranges:
