@@ -1,10 +1,12 @@
 # bench
 
-Five measurements, one per claim a competitor makes about us.
+One lane per claim a competitor makes about us, and two for the claims they
+cannot make: that you can have the software, and what it costs to ask it for
+something.
 
-Every number below was taken on an M-series laptop on 2026-09-07, and every
-script here re-runs to produce it. Where we lose, the row says so — a benchmark
-suite that only contains wins is a brochure.
+Every number below was taken on an M-series laptop between 2026-09-07 and
+2026-09-11, and every script here re-runs to produce it. Where we lose, the row
+says so — a benchmark suite that only contains wins is a brochure.
 
 Timings are the median of the pass; memory is deterministic and has no range.
 This is the same pass the two papers cite, and they carry the ranges:
@@ -13,15 +15,60 @@ of numbers, one run behind them — if you re-run and get different figures,
 update both.
 
 ```
+bench/self/run.sh                   # build it, boot it, ask each door: can you have this
+bench/doors/run.sh                  # what an agent pays per call, per envelope
 node fleet/fleet.mjs /tmp/fleet     # 1M dormant agents: bytes, write rate, resume
 node fleet/cost.mjs                 # the same, as a monthly bill
 cd goroutine && go build -o /tmp/g . && /tmp/g   # agent as goroutine; goja, gpython, wasm
-node brain/brain.mjs                # LoCoMo recall, single-hop and multi-hop
 node sandbox/sandbox.mjs            # cold start: isolate vs container vs pooled
 node pricing/pricing.mjs            # what a call costs, and what it could sell for
 ```
 
+`brain/` and `code/` are their own lanes with their own protocol and generated
+tables — `brain/METHOD.md` is the protocol, `brain/RESULTS.md` is written from
+the runs, and `node brain/results.mjs` reproduces both from a fresh clone. The
+summaries below are read from those tables, not typed in beside them.
+
 ## What was measured
+
+### Ownership — the row a hosted competitor has no way to fill
+
+`self/run.sh` builds the binary from this repository, starts it, asks it what it
+serves, and reaches one operation through every door it opens.
+
+| | measured |
+|---|---|
+| private modules required | **0** |
+| build from source | 13 s |
+| binary | 80 MB |
+| boot to a healthy answer | **1.2 s** |
+| operations served by default | 13 over 8 paths |
+
+Zero private modules is the load-bearing number, and it is the one you can check
+without trusting this table: it is a property of `go.mod`. Everything else here
+measures what the software does; this measures whether you can have it.
+
+### The per-call tax — same handler, three envelopes
+
+An agent's loop is call, read, decide, call again, so what the envelope costs is
+multiplied by every step of every task. `doors/run.sh` asks the same operation
+over each door, interleaved, n=200.
+
+`min` across four runs, because it is the only column whose ordering held:
+
+| door | min, best | min, worst |
+|---|---|---|
+| REST | 0.22 ms | 0.29 ms |
+| op-call plane | 0.23 ms | 0.30 ms |
+| MCP | 0.25 ms | 0.31 ms |
+
+**The envelope costs 20 to 30 microseconds.** REST wins because the operation is
+already the address; MCP pays for a name lookup and a JSON-RPC frame. The p50
+read three different orderings across those runs, so it is not in this table —
+the difference is smaller than the median's own movement. A hundred tool calls is
+three milliseconds of difference against a model turn measured in seconds, which
+is the useful finding: pick the door that fits the caller, not the one that
+benchmarks fastest.
 
 ### Fleet residency — we win, decisively
 
@@ -74,32 +121,56 @@ on all five runs; the timings are medians. Benchmark a **built binary** — unde
 WASM is not one language: CPython, QuickJS for TypeScript, Rust and Go all
 target it. A V8 isolate is JavaScript only.
 
-### Agent Brain — we lose today, and the gap is legible
+### Agent Brain — most of the gap is closed, and what remains is legible
 
-LoCoMo, the same benchmark their column comes from (Maharana et al.), category 4
-single-hop and category 1 multi-hop. Retrieval with `zen-embedding-0.6b`, plain
-cosine, no reranking and no graph:
+LoCoMo, the same benchmark their column comes from (Maharana et al.), scored at
+k=20 with `zen-embedding-0.6b`. The rows are the generators switched on one at a
+time, read from `brain/benchmarks-retrieval.json`:
 
-| | single-hop (841 Q) | multi-hop (282 Q) |
-|---|---|---|
-| recall@5 all | 59.1% | 10.3% |
-| recall@10 all | 69.3% | 14.9% |
-| recall@20 all | **78.2%** | 22.7% |
-| recall@20 any | 80.7% | **80.1%** |
-| Naïve claim | 91% | 57% |
+| | single-hop all | multi-hop all | multi-hop any | recall |
+|---|---|---|---|---|
+| semantic only | 78.2% | 22.7% | 79.8% | 71.9% |
+| + lexical | 82.5% | 22.7% | 78.0% | 74.6% |
+| + facts | 82.3% | 36.9% | 88.3% | 78.2% |
+| + adjacency | 84.2% | 39.0% | 88.7% | 79.7% |
+| + iterative hops | **86.8%** | **39.0%** | 87.9% | **80.9%** |
+| Naïve claim | 91% | 57% | — | — |
 
-A flat vector search beats several systems in their own table — they list
-HippoRAG-v2 at 54%, MemGPT/Cognee 28%, Mem0 18%, Zep 7% on single-hop — but it
-does not reach their number.
+Flat cosine already beat several systems in their own table — they list
+HippoRAG-v2 at 54%, MemGPT/Cognee 28%, Mem0 18%, Zep 7% on single-hop — and the
+rest of the ladder is what a store does that similarity does not.
 
-The multi-hop rows say why, and say what to build. **Recall@20 "any" is 80.1%
-while "all" is 22.7%**: the store finds *a* relevant turn almost every time and
-all of them almost never. That is the definition of a multi-hop failure, and it
-is not fixed by a better embedding. It is fixed by retrieving more than once —
-follow the entities in the first hit and search again.
+**The multi-hop diagnosis held.** At semantic only, "any" was 79.8% and "all"
+22.7%: the store found *a* relevant turn almost every time and all of them
+almost never, which is what a multi-hop failure is. A better embedding does not
+fix it. Retrieving a second time with what the first pass resolved does: facts
+and adjacency together carry multi-hop from 22.7% to 39.0%, and a second hop
+carries single-hop to 86.8%.
+
+Two costs. The full stack is p50 1.65 ms against 0.55 ms for cosine alone, and
+a global RRF over the same generators scored **worse** on multi-hop (33.7%) than
+the ladder it was meant to improve — it is in the table as a failed row because
+it was run, not because it was guessed.
 
 Their k and their all-vs-any are unstated, so treat 91/57 as a target rather
 than a like-for-like.
+
+### Code retrieval — the typed link beats the model
+
+RepoBench-R, cross-file-first, test split, n=500, `all-MiniLM-L6-v2`, from
+`brain/benchmarks-code.json`:
+
+| | recall@1 | recall@5 | MRR |
+|---|---|---|---|
+| dense only | 18.8% | 72.8% | 0.408 |
+| BM25 only | 19.4% | 67.6% | 0.404 |
+| typed links only, no model | 31.4% | 75.4% | 0.505 |
+| full: dense + BM25 + typed links | **33.2%** | **79.4%** | **0.523** |
+
+The row worth reading twice is the third: **parsing the repository and following
+its declarations beats either retrieval model on its own**, at recall@1 by 12
+points, with no embedding call at all. The model earns its place in the last
+row, not the first.
 
 ### Pricing — 90% under them still clears
 
@@ -133,6 +204,12 @@ curl -sL https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo
 ```
 
 `sandbox.mjs` needs a container runtime. `colima start` is enough on macOS.
+
+`self/run.sh` and `doors/run.sh` build and start the binary themselves and need
+nothing fetched. `doors/run.sh` measures round-robin rather than door by door:
+measured in blocks the three rows disagreed about which door was fastest on
+every run, because drift between phases on a busy machine is larger than the
+difference being measured.
 
 ## A lane with no numbers yet
 
