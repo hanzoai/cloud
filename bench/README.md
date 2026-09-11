@@ -300,6 +300,27 @@ Coverage is not accuracy — having the evidence in front of the reader is
 necessary for a right answer and does not produce one — so read those as a
 ceiling on what trimming k could cost rather than as an F1 prediction.
 
+**Across three policies it ordered them the way the reader did.** The same
+measurement, run on each, against the F1 those runs scored:
+
+| policy | evidence at k=1 | at k=5 | at k=20 | F1 |
+|---|---|---|---|---|
+| the full stack | **38.3%** | **60.6%** | **75.1%** | **53.3** |
+| cer | 32.6% | 56.5% | 71.3% | 50.3 |
+| one hop only | 25.7% | 49.4% | 65.3% | 48.8 |
+
+Three points is not a law, but it is three for three, and it suggests something
+useful: a retrieval change can be ranked **before** anyone spends a reader token
+on it, because the evidence was either retrieved or it was not and that question
+costs nothing to ask.
+
+The other thing the k=1 column says is where the extra hops earn their keep. The
+full stack leads the single-hop row by 12.6 points at k=1 and by 9.8 at k=20 —
+so following the first result mostly moves the right turn **up the list**,
+rather than finding turns that were missing. That is the same finding as the
+token row from the other side: what is being bought is position, and position is
+what a smaller k is allowed to trade on.
+
 ### Code retrieval — the typed link beats the model
 
 RepoBench-R, cross-file-first, test split, n=500, `all-MiniLM-L6-v2`, from

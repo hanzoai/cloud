@@ -11,36 +11,45 @@
  * necessary for a correct answer and does not produce one, so read a row here as
  * a ceiling on what trimming k could cost, not as an F1 prediction.
  *
- *   node depth.mjs runs/<name>
+ * Give it more than one run and it prints them as a table: the policies in a
+ * column each, which is how they get compared without spending a reader token.
+ *
+ *   node depth.mjs runs/<name> [runs/<other> ...]
  */
 import { readFileSync } from 'node:fs'
 
 const store = JSON.parse(readFileSync(new URL('./brain-vectors.json', import.meta.url), 'utf8'))
-const dir = process.argv[2]
-if (!dir) { console.error('usage: node depth.mjs runs/<name>'); process.exit(1) }
+const dirs = process.argv.slice(2)
+if (!dirs.length) { console.error('usage: node depth.mjs runs/<name> [runs/<other> ...]'); process.exit(1) }
 
-const rows = readFileSync(`${dir}/predictions.jsonl`, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
-const depth = []
-let asked = 0, whole = 0
-for (const r of rows) {
-  const ev = store[r.ci]?.qa?.[r.qi]?.evidence ?? []
-  const ctx = r.ctx ?? []
-  if (!ev.length) continue
-  asked++
-  const at = ev.map((e) => ctx.indexOf(e))
-  if (at.some((i) => i < 0)) continue
-  whole++
-  depth.push(Math.max(...at) + 1)
-}
-depth.sort((a, b) => a - b)
-const within = (k) => depth.filter((d) => d <= k).length
 const pct = (a, b) => `${((100 * a) / b).toFixed(1)}%`
+const KS = [1, 2, 3, 5, 8, 10, 15, 20]
 
-console.log(`${dir.split('/').pop()}`)
-console.log(`  questions with evidence          ${asked}`)
-console.log(`  all of it retrieved              ${whole}  ${pct(whole, asked)}`)
-console.log(`\n  k    all evidence within it   of every question`)
-for (const k of [1, 2, 3, 5, 8, 10, 15, 20]) {
-  if (k > Math.max(...depth)) break
-  console.log(`  ${String(k).padEnd(4)} ${String(within(k)).padStart(6)}  ${pct(within(k), whole).padStart(7)}   ${pct(within(k), asked).padStart(7)}`)
+const read = (dir) => {
+  const rows = readFileSync(`${dir}/predictions.jsonl`, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  const depth = []
+  let asked = 0
+  for (const r of rows) {
+    const ev = store[r.ci]?.qa?.[r.qi]?.evidence ?? []
+    const ctx = r.ctx ?? []
+    if (!ev.length) continue
+    asked++
+    const at = ev.map((e) => ctx.indexOf(e))
+    if (at.some((i) => i < 0)) continue
+    depth.push(Math.max(...at) + 1)
+  }
+  depth.sort((a, b) => a - b)
+  return { name: dir.split('/').pop(), asked, depth, within: (k) => depth.filter((d) => d <= k).length }
+}
+
+const runs = dirs.map(read)
+const w = Math.max(...runs.map((r) => r.name.length))
+
+console.log(`${'run'.padEnd(w)}  ${'evidence'.padStart(9)}  ${KS.map((k) => `k${k}`.padStart(7)).join('')}`)
+console.log(`${''.padEnd(w)}  ${'retrieved'.padStart(9)}  ${KS.map(() => 'of all'.padStart(7)).join('')}`)
+for (const r of runs) {
+  console.log(
+    `${r.name.padEnd(w)}  ${pct(r.depth.length, r.asked).padStart(9)}  ` +
+      KS.map((k) => pct(r.within(k), r.asked).padStart(7)).join('')
+  )
 }
