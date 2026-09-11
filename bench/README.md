@@ -333,18 +333,25 @@ retrieved tokens and 30% of the prompt, because the rest of it — the
 instruction, the question — does not shrink. The oracle row is the floor: 1.52
 turns, 76 tokens of context, 294 in total.
 
-**And what those seven points of coverage are worth: 2.2 F1.** The same policy,
-the same reader, the same 1,536 questions, answered at k=10:
+**The curve, answered.** The same policy, the same reader, the same 1,536
+questions, on one machine — an M4 Max:
 
-| | prompt tokens | F1 | multi-hop | single-hop |
+| k | prompt tokens | F1 | multi-hop | single-hop |
 |---|---|---|---|---|
-| k=20 | 1,400 | **53.3** | 43.0 | 61.9 |
-| k=10 | **812** | 51.1 | 40.8 | 58.7 |
-| oracle, 1.52 turns | 294 | 61.8 | 55.6 | 70.8 |
+| 5 | 502 | 47.6 | 35.7 | 54.3 |
+| 10 | 812 | 51.1 | 40.8 | 58.7 |
+| 20 | 1,400 | **53.3** | 43.0 | 61.9 |
+| oracle, 1.52 turns | **294** | **61.8** | **55.6** | **70.8** |
 
-So half the context costs 2.2 points overall and 2.2 on multi-hop, for 42% of
-the prompt. Whether that is a good trade is a pricing question rather than a
-retrieval one, and it is now a question with both numbers in it.
+Doubling k twice buys +3.5 then +2.2 F1, for +310 then +588 tokens: **11.3 F1
+per thousand tokens, then 3.7**. The marginal return falls threefold while the
+marginal cost rises, which is what a diminishing curve looks like when you
+finally price both axes.
+
+**And the oracle row is the argument.** A quarter of the tokens and 8.5 more F1
+than the best retrieval setting. Perfect ranking is not a more expensive tier —
+it is the cheapest row in the table and the best one. Every token spent widening
+k is a token not spent ranking, and the table now says what each buys.
 
 **Latency across runs is not comparable, and this is how we know.** The k=20 run
 recorded 4.79 s a question and the oracle run 3.08 s — at 294 prompt tokens
