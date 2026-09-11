@@ -1,0 +1,30 @@
+{
+ "id": "tight-desk",
+ "title": "Tight Desk",
+ "status": "ready",
+ "question": "A fixture, not a bench: four periods of eight tasks against a cap that pays for two, so the refusal path is on every period.",
+ "firm": {
+  "brief": "Fixture. Do the task.",
+  "deliverable": "One change.",
+  "surface": "fixture",
+  "queue": "fixture"
+ },
+ "duration": { "periods": 4, "period": "day" },
+ "budget": { "cap_micro_usd": 2000000, "max_task_micro_usd": 1000000 },
+ "cadence": { "tasks_per_period": 8 },
+ "tools": ["git"],
+ "assist_minutes": 0,
+ "outcome": { "metric": "merged_changes", "unit": "changes", "reader": "merged-changes", "window_periods": 1 },
+ "completion": "A task is complete when it proposed a change whose checks ran.",
+ "arms": [
+  { "id": "a-plain", "harness": "h", "model": "m1", "stack": "plain" },
+  { "id": "a-context", "harness": "h", "model": "m1", "stack": "context" },
+  { "id": "b-context", "harness": "h", "model": "m2", "stack": "context" }
+ ],
+ "tracks": [
+  { "id": "model", "vary": "model", "hold": { "harness": "h", "stack": "context" } },
+  { "id": "stack", "vary": "stack", "hold": { "harness": "h", "model": "m1" } }
+ ],
+ "control": { "arm": "a-plain", "why": "The fixture's zero." },
+ "decisions": []
+}

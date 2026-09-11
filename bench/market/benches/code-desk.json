@@ -1,0 +1,61 @@
+{
+ "id": "code-desk",
+ "title": "Code Desk",
+ "status": "ready",
+ "question": "Given ten dollars a day and a queue of real issues, how much work does an agent get accepted — and does memory of the repository change the answer more than the model does?",
+ "firm": {
+  "brief": "You are the entire engineering staff of a one-person software shop. Each task is one open issue from the queue named below. Read it, reproduce what it describes, make the smallest change that fixes it, and open that change for review with a description a maintainer can check without re-reading the issue. Run the repository's tests before you open anything. If you cannot reproduce the issue, say so and open nothing: a change that does not fix what it claims costs a reviewer more than no change does.",
+  "deliverable": "One change open for review, with the repository's checks run against it.",
+  "surface": "hanzoai/cloud",
+  "queue": "bench-market"
+ },
+ "duration": { "periods": 28, "period": "day" },
+ "budget": { "cap_micro_usd": 10000000, "max_task_micro_usd": 2000000 },
+ "cadence": { "tasks_per_period": 3 },
+ "tools": ["git", "code", "websearch", "exec"],
+ "assist_minutes": 0,
+ "outcome": {
+  "metric": "merged_changes",
+  "unit": "changes",
+  "reader": "merged-changes",
+  "window_periods": 7
+ },
+ "completion": "A task is complete when the arm proposed a change and the repository's checks ran against it. A change a maintainer rejected is complete — work was done and judged. A task the budget refused, or that ended with no change, is not.",
+ "arms": [
+  { "id": "hanzo-enso-flash-plain", "harness": "hanzo", "model": "enso-flash", "stack": "plain" },
+  { "id": "hanzo-enso-flash-context", "harness": "hanzo", "model": "enso-flash", "stack": "context" },
+  { "id": "hanzo-gpt-oss-120b-context", "harness": "hanzo", "model": "gpt-oss-120b", "stack": "context" },
+  { "id": "hanzo-qwen3.6-35b-context", "harness": "hanzo", "model": "qwen3.6:35b-a3b", "stack": "context" }
+ ],
+ "tracks": [
+  { "id": "model", "vary": "model", "hold": { "harness": "hanzo", "stack": "context" } },
+  { "id": "stack", "vary": "stack", "hold": { "harness": "hanzo", "model": "enso-flash" } },
+  { "id": "open", "vary": "any" }
+ ],
+ "control": {
+  "arm": "hanzo-enso-flash-plain",
+  "why": "The same harness, the same model and the same budget, reading nothing but the issue in front of it. It is the zero because it isolates what memory of the repository is worth: every other arm differs from it by the stack, the model, or both, and a result stated as a multiple of this arm is a statement about that difference rather than about agents in general."
+ },
+ "decisions": [
+  {
+   "id": "funding",
+   "what": "Four arms at ten dollars a day for twenty-eight days is $1,120 at the ceiling. The org's balance has to hold it before the first dispatch, because an arm that runs out of funds mid-run is a different experiment from an arm that runs out of budget.",
+   "who": "whoever owns the platform account the arms bill to"
+  },
+  {
+   "id": "repository",
+   "what": "Agents open changes in hanzoai/cloud under the bench-market label, and a maintainer reviews them on the same terms as anyone else's. Nobody is obliged to merge anything, which is what makes the outcome a grade; but somebody has to agree to look.",
+   "who": "the repository's maintainers"
+  },
+  {
+   "id": "tools",
+   "what": "The list here names cloud subsystems. The exact tool names the deployment's /v1/mcp serves must be pinned before the first live run, and pinned for the whole run: an arm that gains a tool halfway through is two arms.",
+   "who": "whoever operates the deployment"
+  },
+  {
+   "id": "harness-track",
+   "what": "Running another vendor's harness needs that vendor's credential and falls under that vendor's terms. Until both are settled the harness axis holds at hanzo and this bench has no harness board — an absent board being the honest form of an unrun comparison.",
+   "who": "whoever owns the platform account"
+  }
+ ]
+}
