@@ -17,7 +17,7 @@ import { createHash } from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { rankAll, store } from './rank.mjs'
 import { ask, apiFor, credential, contextOf, f1, em } from './answer.mjs'
-import { scoreRows, expectedCounts, readRows, table } from './score.mjs'
+import { scoreRows, expectedCounts, readRows, counts, qid, table } from './score.mjs'
 
 const arg = (k, d) => { const m = process.argv.find((a) => a.startsWith(`--${k}=`)); return m ? m.split('=')[1] : d }
 const POLICY = arg('policy', 'cer'), K = Number(arg('k', 20)), READER = arg('reader', 'enso-flash')
@@ -48,11 +48,17 @@ let meta = existsSync(`${DIR}/meta.json`) ? JSON.parse(readFileSync(`${DIR}/meta
 // wall time accumulates across invocations: a row filled one category at a time is still one row
 const priorWall = meta.wall_seconds ?? 0
 const wall = () => priorWall + Math.round((Date.now() - started) / 1000)
-meta = { ...meta, name: NAME, benchmark: 'locomo', policy: POLICY, k: K, reader: READER, api: new URL(API).host, cats: CATS, workers: WORKERS,
+// Categories accumulate: a directory asked for multi-hop yesterday and for the
+// rest today has been asked for both, and its denominator is both.
+const asked = [...new Set([...(meta.cats ?? []), ...CATS])].sort((a, b) => a - b)
+meta = { ...meta, name: NAME, benchmark: 'locomo', policy: POLICY, k: K, reader: READER, api: new URL(API).host, cats: asked, workers: WORKERS,
   prompt: PROMPT_PATH.pathname.split('/').slice(-2).join('/'), prompt_sha256: sha(PROMPT_PATH), dataset_sha256: sha('locomo10.json'), store_sha256: sha('brain-vectors.json'),
   facts_sha256: existsSync('facts-vectors.json') ? sha('facts-vectors.json') : null, commit: execSync('git rev-parse HEAD').toString().trim(),
-  temperature: 0, max_tokens: 64, questions: qs.length, started: meta.started ?? new Date(started).toISOString() }
-const writeMeta = (extra = {}) => writeFileSync(`${DIR}/meta.json`, JSON.stringify({ ...meta, ...extra }, null, 1))
+  temperature: 0, max_tokens: 64, started: meta.started ?? new Date(started).toISOString() }
+// questions and answered are read off the rows on disk every time, so the two
+// counts always describe the same artifact and a resumed run cannot claim a
+// denominator it no longer has.
+const writeMeta = (extra = {}) => writeFileSync(`${DIR}/meta.json`, JSON.stringify({ ...meta, ...counts(readRows(DIR), store), ...extra }, null, 1))
 const writeMetrics = () => { const rows = readRows(DIR); const m = scoreRows(rows, store, expectedCounts(store, [1, 2, 3, 4])); writeFileSync(`${DIR}/metrics.json`, JSON.stringify(m, null, 1)); return m }
 writeMeta()
 
@@ -84,8 +90,8 @@ async function one(q) {
 
 let pass = 0, quiet = 0
 while (pass++ < MAX_PASSES) {
-  const have = new Set(readRows(DIR).map((r) => `${r.ci}:${r.qi}`))
-  const todo = qs.filter((q) => !have.has(`${q.ci}:${q.qi}`))
+  const have = new Set(readRows(DIR).map(qid))
+  const todo = qs.filter((q) => !have.has(qid(q)))
   if (!todo.length) break
   const fails = {}; let okCount = 0, sample = ''
   const t0 = Date.now()
@@ -108,8 +114,9 @@ while (pass++ < MAX_PASSES) {
 }
 const m = writeMetrics()
 const rows = readRows(DIR)
-writeMeta({ finished: new Date().toISOString(), wall_seconds: wall(), answered: rows.length,
+writeMeta({ finished: new Date().toISOString(), wall_seconds: wall(),
   tokens_per_question: rows.length ? Math.round(rows.reduce((a, r) => a + r.tokens, 0) / rows.length) : 0,
   reader_tokens: rows.reduce((a, r) => a + (r.usage?.total_tokens ?? 0), 0) })
-log(`done: ${rows.length}/${qs.length} answered`)
+const done = counts(rows, store)
+log(`done: ${done.answered}/${done.questions} answered`)
 console.log(table(NAME, m))

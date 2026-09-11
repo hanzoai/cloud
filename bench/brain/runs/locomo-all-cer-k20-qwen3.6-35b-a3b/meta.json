@@ -24,7 +24,7 @@
  "started": "2026-09-09T10:17:13.162Z",
  "finished": "2026-09-09T14:03:37.744Z",
  "wall_seconds": 1548,
- "answered": 1638,
+ "answered": 1525,
  "tokens_per_question": 975,
  "reader_tokens": 2315795
 }

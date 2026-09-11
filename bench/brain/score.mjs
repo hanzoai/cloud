@@ -36,6 +36,32 @@ export function readRows(dir) {
   return readFileSync(p, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
 }
 
+/**
+ * Which question a prediction is an answer to: the conversation and the index
+ * within it. Question TEXT is not an identity — LoCoMo asks eleven of its
+ * questions twice, of different people, and keying on the words collapses the
+ * pair into one row and grades the survivor against the wrong conversation's
+ * evidence. Everything that dedupes, resumes or counts uses this.
+ */
+export const qid = (r) => `${r.ci}:${r.qi}`
+
+/**
+ * What a run set out to answer and what it answered, from the run's own rows
+ * and the store it asked over.
+ *
+ * The denominator is the whole of every category the run's rows touch, not the
+ * count of rows: a run reports its categories one at a time and resumes into the
+ * same directory, so a per-invocation count would say a finished run of four
+ * categories asked only the last one. The numerator is DISTINCT questions, so a
+ * question asked twice across passes is answered once.
+ */
+export function counts(rows, store) {
+  const cats = [...new Set(rows.map((r) => r.cat))].filter((c) => c != null).sort((a, b) => a - b)
+  let questions = 0
+  for (const c of store) for (const q of c.qa) if (q.evidence.length && cats.includes(q.category)) questions++
+  return { cats, questions, answered: new Set(rows.map(qid)).size }
+}
+
 /** Grade one prediction against the store. */
 export function grade(row, store) {
   const q = store[row.ci].qa[row.qi], ctx = new Set(row.ctx ?? [])

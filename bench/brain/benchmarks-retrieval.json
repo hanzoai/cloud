@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-10T23:55:37.282Z",
+ "generated": "2026-09-11T03:22:43.863Z",
  "tables": [
   {
    "bench": "locomo-retrieval",
@@ -11,6 +11,9 @@
    "rows": [
     {
      "row": "semantic only",
+     "run": "locomo-retrieval-all-semantic-only-locomo",
+     "commit": "885a21a63c32",
+     "when": "2026-09-09T10:03:36.864Z",
      "order": 0,
      "failed": false,
      "mh_all": 0.22695035460992907,
@@ -27,6 +30,9 @@
     },
     {
      "row": "+lexical",
+     "run": "locomo-retrieval-all-lexical-locomo",
+     "commit": "885a21a63c32",
+     "when": "2026-09-09T10:03:38.310Z",
      "order": 1,
      "failed": false,
      "mh_all": 0.22695035460992907,
@@ -43,6 +49,9 @@
     },
     {
      "row": "+facts",
+     "run": "locomo-retrieval-all-facts-locomo",
+     "commit": "885a21a63c32",
+     "when": "2026-09-09T10:03:40.125Z",
      "order": 2,
      "failed": false,
      "mh_all": 0.36879432624113473,
@@ -59,6 +68,9 @@
     },
     {
      "row": "+adjacency",
+     "run": "locomo-retrieval-all-adjacency-locomo",
+     "commit": "885a21a63c32",
+     "when": "2026-09-09T10:03:41.917Z",
      "order": 5,
      "failed": false,
      "mh_all": 0.3900709219858156,
@@ -75,6 +87,9 @@
     },
     {
      "row": "+iterative hops",
+     "run": "locomo-retrieval-all-iterative-hops-locomo",
+     "commit": "885a21a63c32",
+     "when": "2026-09-09T10:03:46.669Z",
      "order": 7,
      "failed": false,
      "mh_all": 0.3900709219858156,
@@ -91,6 +106,9 @@
     },
     {
      "row": "failed: global RRF",
+     "run": "locomo-retrieval-all-failed-global-rrf-locomo",
+     "commit": "885a21a63c32",
+     "when": "2026-09-09T10:03:49.797Z",
      "order": 13,
      "failed": true,
      "mh_all": 0.33687943262411346,
@@ -117,6 +135,9 @@
    "rows": [
     {
      "row": "semantic only",
+     "run": "locomo-retrieval-all-semantic-only-locomo-minilm",
+     "commit": "885a21a63c32",
+     "when": "2026-09-09T10:03:50.863Z",
      "order": 0,
      "failed": false,
      "mh_all": 0.09574468085106383,
@@ -133,6 +154,9 @@
     },
     {
      "row": "+lexical",
+     "run": "locomo-retrieval-all-lexical-locomo-minilm",
+     "commit": "885a21a63c32",
+     "when": "2026-09-09T10:03:51.764Z",
      "order": 1,
      "failed": false,
      "mh_all": 0.13829787234042554,
@@ -149,6 +173,9 @@
     },
     {
      "row": "+facts",
+     "run": "locomo-retrieval-all-facts-locomo-minilm",
+     "commit": "885a21a63c32",
+     "when": "2026-09-09T10:03:52.827Z",
      "order": 2,
      "failed": false,
      "mh_all": 0.20921985815602837,
@@ -165,6 +192,9 @@
     },
     {
      "row": "+adjacency",
+     "run": "locomo-retrieval-all-adjacency-locomo-minilm",
+     "commit": "885a21a63c32",
+     "when": "2026-09-09T10:03:53.889Z",
      "order": 5,
      "failed": false,
      "mh_all": 0.21631205673758866,
@@ -181,6 +211,9 @@
     },
     {
      "row": "+iterative hops",
+     "run": "locomo-retrieval-all-iterative-hops-locomo-minilm",
+     "commit": "885a21a63c32",
+     "when": "2026-09-09T10:03:55.935Z",
      "order": 7,
      "failed": false,
      "mh_all": 0.24113475177304963,
@@ -197,6 +230,9 @@
     },
     {
      "row": "failed: global RRF",
+     "run": "locomo-retrieval-all-failed-global-rrf-locomo-minilm",
+     "commit": "885a21a63c32",
+     "when": "2026-09-09T10:03:57.003Z",
      "order": 13,
      "failed": true,
      "mh_all": 0.20212765957446807,
@@ -223,6 +259,9 @@
    "rows": [
     {
      "row": "semantic only",
+     "run": "locomo-retrieval-test-semantic-only-locomo",
+     "commit": "33d0f8749bd1",
+     "when": "2026-09-09T09:30:55.680Z",
      "order": 0,
      "failed": false,
      "mh_all": 0.1875,
@@ -239,6 +278,9 @@
     },
     {
      "row": "+lexical",
+     "run": "locomo-retrieval-test-lexical-locomo",
+     "commit": "33d0f8749bd1",
+     "when": "2026-09-09T09:30:56.727Z",
      "order": 1,
      "failed": false,
      "mh_all": 0.21153846153846154,
@@ -255,6 +297,9 @@
     },
     {
      "row": "+facts",
+     "run": "locomo-retrieval-test-facts-locomo",
+     "commit": "33d0f8749bd1",
+     "when": "2026-09-09T09:30:58.545Z",
      "order": 2,
      "failed": false,
      "mh_all": 0.35096153846153844,
@@ -271,6 +316,9 @@
     },
     {
      "row": "+entities",
+     "run": "locomo-retrieval-test-entities-locomo",
+     "commit": "33d0f8749bd1",
+     "when": "2026-09-09T09:31:00.258Z",
      "order": 3,
      "failed": false,
      "mh_all": 0.35096153846153844,
@@ -287,6 +335,9 @@
     },
     {
      "row": "+timeline",
+     "run": "locomo-retrieval-test-timeline-locomo",
+     "commit": "33d0f8749bd1",
+     "when": "2026-09-09T09:31:01.864Z",
      "order": 4,
      "failed": false,
      "mh_all": 0.34615384615384615,
@@ -303,6 +354,9 @@
     },
     {
      "row": "+adjacency",
+     "run": "locomo-retrieval-test-adjacency-locomo",
+     "commit": "33d0f8749bd1",
+     "when": "2026-09-09T09:31:03.410Z",
      "order": 5,
      "failed": false,
      "mh_all": 0.375,
@@ -319,6 +373,9 @@
     },
     {
      "row": "+typed graph",
+     "run": "locomo-retrieval-test-typed-graph-locomo",
+     "commit": "33d0f8749bd1",
+     "when": "2026-09-09T09:31:04.904Z",
      "order": 6,
      "failed": false,
      "mh_all": 0.375,
@@ -335,6 +392,9 @@
     },
     {
      "row": "+iterative hops",
+     "run": "locomo-retrieval-test-iterative-hops-locomo",
+     "commit": "47f46c9ef14f",
+     "when": "2026-09-09T09:38:06.789Z",
      "order": 7,
      "failed": false,
      "mh_all": 0.375,
@@ -351,6 +411,9 @@
     },
     {
      "row": "failed: PRF",
+     "run": "locomo-retrieval-test-failed-prf-locomo",
+     "commit": "47f46c9ef14f",
+     "when": "2026-09-09T09:38:08.419Z",
      "order": 9,
      "failed": true,
      "mh_all": 0.1971153846153846,
@@ -367,6 +430,9 @@
     },
     {
      "row": "failed: chain search",
+     "run": "locomo-retrieval-test-failed-chain-search-locomo",
+     "commit": "47f46c9ef14f",
+     "when": "2026-09-09T09:41:15.253Z",
      "order": 11,
      "failed": true,
      "mh_all": 0.375,
@@ -383,6 +449,9 @@
     },
     {
      "row": "failed: surface entities",
+     "run": "locomo-retrieval-test-failed-surface-entities-locomo",
+     "commit": "47f46c9ef14f",
+     "when": "2026-09-09T09:41:17.264Z",
      "order": 12,
      "failed": true,
      "mh_all": 0.3557692307692308,
@@ -399,6 +468,9 @@
     },
     {
      "row": "failed: global RRF",
+     "run": "locomo-retrieval-test-failed-global-rrf-locomo",
+     "commit": "47f46c9ef14f",
+     "when": "2026-09-09T09:41:19.209Z",
      "order": 13,
      "failed": true,
      "mh_all": 0.32211538461538464,
