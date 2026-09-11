@@ -49,8 +49,13 @@ $(KEYFILE):
 	@umask 077 && openssl rand -base64 32 > $(KEYFILE)
 	@echo "minted $(KEYFILE)"
 
+# The Go tree, then the one bench lane with tests. bench/market drives agents
+# with real money in a live run, so its state machine — periods, budget
+# refusals, the read window, what gets recorded as finished — is exercised here
+# against a stand-in that spends nothing.
 test:
 	go test ./...
+	node --test 'bench/market/test/*.test.mjs'
 
 vet:
 	go vet ./...

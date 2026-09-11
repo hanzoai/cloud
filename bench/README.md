@@ -133,3 +133,17 @@ curl -sL https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo
 ```
 
 `sandbox.mjs` needs a container runtime. `colima start` is enough on macOS.
+
+## A lane with no numbers yet
+
+`market/` grades against what happened rather than against an answer key: a
+company template, run by an agent on a hard daily budget, scored on what the
+world accepted — a change merged, a thread resolved, a page ranked. Four benches
+are defined there and **none has been run**, so it contributes no row above.
+
+What it does contribute is the harness and the refusals: a board whose arms
+differ in more than one of harness, model and stack will not load, a period is
+not graded until its read window closes, and a run is recorded as finished only
+when the last window has. `bench/market/README.md` says what each bench still
+needs a human to decide — accounts, payment, and the platform terms that decide
+whether one of them can exist at all.

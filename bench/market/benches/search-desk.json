@@ -1,0 +1,54 @@
+{
+ "id": "search-desk",
+ "title": "Search Desk",
+ "status": "soon",
+ "question": "Can an agent write pages that search engines and answer engines actually return, on ten dollars a day, without a human editor?",
+ "firm": {
+  "brief": "You run the content desk for one site. Each task is one question people ask that the site does not answer yet. Write the page that answers it: correct, specific, and better than what currently ranks. Publish it. Do not write about anything you cannot check.",
+  "deliverable": "One page published on the site, with its target question recorded.",
+  "surface": "one site the org owns",
+  "queue": "search-log"
+ },
+ "duration": { "periods": 12, "period": "week" },
+ "budget": { "cap_micro_usd": 70000000, "max_task_micro_usd": 5000000 },
+ "cadence": { "tasks_per_period": 7 },
+ "tools": ["websearch", "crawl", "sites"],
+ "assist_minutes": 0,
+ "outcome": {
+  "metric": "top_ten_rankings",
+  "unit": "rankings",
+  "reader": "top-ten-rankings",
+  "window_periods": 4
+ },
+ "completion": "A task is complete when the page was published and its target question recorded. Whether anything ever ranks is the outcome.",
+ "arms": [
+  { "id": "hanzo-enso-flash-plain", "harness": "hanzo", "model": "enso-flash", "stack": "plain" },
+  { "id": "hanzo-enso-flash-context", "harness": "hanzo", "model": "enso-flash", "stack": "context" },
+  { "id": "hanzo-gpt-oss-120b-context", "harness": "hanzo", "model": "gpt-oss-120b", "stack": "context" }
+ ],
+ "tracks": [
+  { "id": "model", "vary": "model", "hold": { "harness": "hanzo", "stack": "context" } },
+  { "id": "stack", "vary": "stack", "hold": { "harness": "hanzo", "model": "enso-flash" } }
+ ],
+ "control": {
+  "arm": "hanzo-enso-flash-plain",
+  "why": "The same brief with no memory of what the site already published. Ranking rewards a site that covers a subject rather than a page that covers a question, so the arm that cannot see its own back catalogue is the right zero."
+ },
+ "decisions": [
+  {
+   "id": "site",
+   "what": "Each arm needs its own site, or the arms compete with each other for the same rankings and the board measures cannibalisation. Separate domains means separate domain histories, which is itself a variable — the fairest arrangement available is four sites registered on the same day with no prior history, and that is a purchase.",
+   "who": "whoever owns the domains"
+  },
+  {
+   "id": "publishing",
+   "what": "Unedited agent-written pages published under a name we own is a decision about what that name means. It also has an obvious failure mode: a page that is wrong and ranks is worse than no page.",
+   "who": "whoever owns the brand"
+  },
+  {
+   "id": "rank-reading",
+   "what": "Ranking has to be read from somewhere, and every source is a third party with its own terms, its own sampling and its own price. Scraping a results page is against most of their terms. Which source, at what cost, read on what schedule, is unsettled — and a rank read from an unstated source is not a measurement.",
+   "who": "us"
+  }
+ ]
+}

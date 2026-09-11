@@ -1,0 +1,54 @@
+{
+ "id": "support-desk",
+ "title": "Support Desk",
+ "status": "soon",
+ "question": "Can an agent on a fixed daily budget close real customer questions without a human behind it, and what does a closed question cost?",
+ "firm": {
+  "brief": "You are the support desk. Each task is one unanswered question from a real customer. Answer it from the product's own documentation and the customer's own account state. Say what you checked. If the answer needs something you cannot see or cannot do, hand it to a human with what you found rather than guessing.",
+  "deliverable": "One reply sent to the customer, on the thread the question arrived on.",
+  "surface": "the org's support inbox",
+  "queue": "unanswered"
+ },
+ "duration": { "periods": 28, "period": "day" },
+ "budget": { "cap_micro_usd": 10000000, "max_task_micro_usd": 1000000 },
+ "cadence": { "tasks_per_period": 8 },
+ "tools": ["knowledge", "account", "websearch"],
+ "assist_minutes": 0,
+ "outcome": {
+  "metric": "resolved_threads",
+  "unit": "threads",
+  "reader": "resolved-threads",
+  "window_periods": 7
+ },
+ "completion": "A task is complete when a reply was sent. Resolution is the outcome, not the completion: a thread that reopened within the window was answered and answered wrongly, which is a result and not a gap.",
+ "arms": [
+  { "id": "hanzo-enso-flash-plain", "harness": "hanzo", "model": "enso-flash", "stack": "plain" },
+  { "id": "hanzo-enso-flash-context", "harness": "hanzo", "model": "enso-flash", "stack": "context" },
+  { "id": "hanzo-gpt-oss-120b-context", "harness": "hanzo", "model": "gpt-oss-120b", "stack": "context" }
+ ],
+ "tracks": [
+  { "id": "model", "vary": "model", "hold": { "harness": "hanzo", "stack": "context" } },
+  { "id": "stack", "vary": "stack", "hold": { "harness": "hanzo", "model": "enso-flash" } }
+ ],
+ "control": {
+  "arm": "hanzo-enso-flash-plain",
+  "why": "The documentation and nothing else. Support is where memory of a customer should pay most, so the arm without it is the number the rest are read against."
+ },
+ "decisions": [
+  {
+   "id": "reader",
+   "what": "Nothing here reads whether a thread stayed closed. A reader has to reach the inbox, decide what reopening means, and decide it the same way every period. Until it exists this bench cannot be graded and is not ready.",
+   "who": "us"
+  },
+  {
+   "id": "customers",
+   "what": "These are real people with real problems. Answering them with an unattended agent is a decision about the product's support promise, not a benchmark configuration, and it needs a stated escalation path and a person watching the first week.",
+   "who": "whoever owns support"
+  },
+  {
+   "id": "consent",
+   "what": "A thread is customer content. Recording it in a research run means recording what a customer wrote, so either the run keeps only the grade and not the text, or the customers have agreed. Keeping only the grade is the cheaper answer and probably the right one.",
+   "who": "whoever owns the privacy posture"
+  }
+ ]
+}

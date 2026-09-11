@@ -1,0 +1,59 @@
+{
+ "id": "social-desk",
+ "title": "Social Desk",
+ "status": "soon",
+ "question": "Can an agent build an audience from nothing on a fixed daily budget, and does the curve bend away from a frozen control?",
+ "firm": {
+  "brief": "You run one account on one platform. Each task is one post: decide what it is about, make it, publish it, and record what you expected it to do. Read what the last posts actually did before deciding the next one.",
+  "deliverable": "One post published, with the expectation recorded before it was.",
+  "surface": "one account on one platform",
+  "queue": "self-directed"
+ },
+ "duration": { "periods": 84, "period": "day" },
+ "budget": { "cap_micro_usd": 10000000, "max_task_micro_usd": 3000000 },
+ "cadence": { "tasks_per_period": 2 },
+ "tools": ["content", "social", "websearch"],
+ "assist_minutes": 0,
+ "outcome": {
+  "metric": "views",
+  "unit": "views",
+  "reader": "post-views",
+  "window_periods": 7
+ },
+ "completion": "A task is complete when a post was published and its expectation recorded before publication. A post the budget refused is not.",
+ "arms": [
+  { "id": "hanzo-enso-flash-frozen", "harness": "hanzo", "model": "enso-flash", "stack": "frozen" },
+  { "id": "hanzo-enso-flash-context", "harness": "hanzo", "model": "enso-flash", "stack": "context" },
+  { "id": "hanzo-gpt-oss-120b-context", "harness": "hanzo", "model": "gpt-oss-120b", "stack": "context" }
+ ],
+ "tracks": [
+  { "id": "model", "vary": "model", "hold": { "harness": "hanzo", "stack": "context" } },
+  { "id": "stack", "vary": "stack", "hold": { "harness": "hanzo", "model": "enso-flash" } }
+ ],
+ "control": {
+  "arm": "hanzo-enso-flash-frozen",
+  "why": "The same brief and the same budget, with no sight of how its earlier posts performed. An audience curve means nothing on its own — it is a function of the platform, the subject and the month — so the only number worth publishing is the ratio to an arm that could not learn."
+ },
+ "decisions": [
+  {
+   "id": "platform-terms",
+   "what": "Automated posting is against the terms of several of the platforms this bench would be interesting on, and some of the rest allow it only through an API tier that costs money and rate-limits the cadence. This is the blocker, not a detail of it: which platform, under which terms, with which API, decides whether this bench can exist at all. Running it against terms that forbid it would make the numbers unpublishable and the accounts disposable.",
+   "who": "whoever can accept the terms on the org's behalf, with legal"
+  },
+  {
+   "id": "accounts",
+   "what": "Three arms means three accounts, created the same day, with no prior audience and no cross-posting between them. Creating them may itself need a phone number, a payment method and an identity, each of which is a real-world artefact somebody owns.",
+   "who": "whoever owns the accounts"
+  },
+  {
+   "id": "reader",
+   "what": "Views have to be read from the platform's own analytics, which means an API token per account and a fixed read schedule. A view counted at a different age is a different number, so the window has to be enforced by the reader rather than by whoever happened to look.",
+   "who": "us"
+  },
+  {
+   "id": "disclosure",
+   "what": "An account run by an agent should say so. Most platforms now require it; where they do not, publishing the benchmark while hiding it would be worse than not running it.",
+   "who": "whoever owns the brand"
+  }
+ ]
+}
