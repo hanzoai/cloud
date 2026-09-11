@@ -73,6 +73,17 @@ every pass that answers nothing, and clears it on the first pass that answers.
 `results.mjs` prints those to stderr after the tables, because that is where a
 person already looks.
 
+**A number its own predictions no longer produce is named too.** `rescore.mjs`
+rewrites `predictions.jsonl`, collapsing a resumed runner's duplicate answers to
+the last one, so a run scored before that can hold counts describing rows the
+file no longer has. `results.mjs` compares the two and says which.
+
+It asks the block the PUBLISHER reads — `summary` when a run has one, the nested
+blocks otherwise, the order `section.mjs` uses. Asked of the nested block
+instead, it reported four rescored runs as drifted whose published numbers were
+right, which is the whole trap in one line: a question asked at a different seam
+from the consumer's answers about a different thing.
+
 The run says which it is. Every lane writes `questions` — the denominator,
 counted from the corpus rather than from the rows that came back — beside
 `answered` and, when it gets there, `finished`; and `record.mjs` posts that to

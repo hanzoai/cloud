@@ -31,7 +31,19 @@ for (const dir of process.argv.slice(2)) {
   const summary = {}
   for (const split of ['all', 'dev', 'test']) { const xs = preds.filter((r) => split === 'all' || r.split === split); if (!xs.length) continue; summary[split] = block(xs); for (const c of [1, 2, 3, 4]) { const ys = xs.filter((r) => r.category === c); if (ys.length) summary[`${split}:${LABEL[c]}`] = block(ys) } }
   const m = existsSync(`${dir}/metrics.json`) ? JSON.parse(readFileSync(`${dir}/metrics.json`, 'utf8')) : {}
-  writeFileSync(`${dir}/metrics.json`, JSON.stringify({ ...m, summary, rescored: { rows: rows.length, unique: preds.length } }, null, 1))
+  // The same numbers in the nested shape `run.mjs` writes, replacing what was
+  // there. Spreading `m` and adding only `summary` left the pre-dedup blocks in
+  // place beside the corrected ones, so one file held two answers — 51.6 F1
+  // under `all.overall` and 53.3 under `summary.all` for the same run — and
+  // which you got depended on which reader you were. `section.mjs` prefers the
+  // summary, so the tables were right; anyone opening the file was not.
+  const nested = {}
+  for (const [key, b] of Object.entries(summary)) {
+    const [split, cat] = key.split(':')
+    ;(nested[split] ??= {})[cat ?? 'overall'] = b
+  }
+  writeFileSync(`${dir}/metrics.json`, JSON.stringify(
+    { ...m, ...nested, summary, rescored: { rows: rows.length, unique: preds.length } }, null, 1))
   if (existsSync(`${dir}/meta.json`)) {
     const meta = JSON.parse(readFileSync(`${dir}/meta.json`, 'utf8'))
     writeFileSync(`${dir}/meta.json`, JSON.stringify({ ...meta, ...counts([...last.values()], store) }, null, 1))
