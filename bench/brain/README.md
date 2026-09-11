@@ -39,6 +39,7 @@ node conv/retrieve.mjs --help
 node longmemeval/retrieve.mjs --help
 
 # the tables
+node depth.mjs runs/<name>                        # how far down the list the evidence sat
 node results.mjs                                 # RESULTS.md and the three benchmarks*.json
 node tables.mjs                                  # LaTeX tables into ../../../papers/tables/
 
