@@ -8,6 +8,7 @@
  * substring_exact_match. Each run writes runs/mab-<split>-<row>-<reader>/.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } from 'node:fs'
+import { record, STUDY } from '../record.mjs'
 import { createHash } from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { load, norm, DATA } from './parse.mjs'
@@ -184,6 +185,8 @@ for (const rowName of ROWS) {
   const metrics = { row: rowName, split: SPLIT, reader: ['noreader', 'beam', 'beamx', 'beamr'].includes(rowName) ? 'none' : READER, k: K, prompt_sha: sha(PROMPT), commit, n: preds.length, by_size: Object.fromEntries(Object.entries(per).map(([s, xs]) => [s, { n: xs.length, substring_em: +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(4), ci95: bootstrap(xs).map((x) => +x.toFixed(4)) }])),
     facts_per_q: +(preds.reduce((a, p) => a + p.facts, 0) / preds.length).toFixed(2), retrieval_ms_p50: +[...preds.map((p) => p.ms)].sort((a, b) => a - b)[Math.floor(preds.length / 2)].toFixed(3), retrieval_ms_p95: +[...preds.map((p) => p.ms)].sort((a, b) => a - b)[Math.floor(preds.length * 0.95)].toFixed(3), reader_calls: calls, context_tokens_per_q: calls ? Math.round(tokens / calls) : 0, wall_s: Math.round((Date.now() - t0) / 1000) }
   writeFileSync(dir + 'metrics.json', JSON.stringify(metrics, null, 1))
-  writeFileSync(dir + 'meta.json', JSON.stringify({ bench: 'MemoryAgentBench Conflict_Resolution (FactConsolidation)', dataset_sha256: sha(readFileSync(DATA + 'Conflict_Resolution-00000-of-00001.parquet')), split: SPLIT, row: rowName, reader: metrics.reader, planner: Object.entries(Object.values(plans).reduce((a, p) => (a[p.model] = (a[p.model] ?? 0) + 1, a), {})).map(([m, n]) => `${m}:${n}`).join(' '), embedding: 'zenlm/zen-embedding-0.6b', k: K, temperature: 0, max_tokens: 64, prompt: 'prompts/reader-mab.txt', prompt_sha256: sha(PROMPT), commit }, null, 1))
+  writeFileSync(dir + 'meta.json', JSON.stringify({ bench: 'MemoryAgentBench Conflict_Resolution (FactConsolidation)', dataset_sha256: sha(readFileSync(DATA + 'Conflict_Resolution-00000-of-00001.parquet')), split: SPLIT, row: rowName, reader: metrics.reader, planner: Object.entries(Object.values(plans).reduce((a, p) => (a[p.model] = (a[p.model] ?? 0) + 1, a), {})).map(([m, n]) => `${m}:${n}`).join(' '), embedding: 'zenlm/zen-embedding-0.6b', k: K, temperature: 0, max_tokens: 64, prompt: 'prompts/reader-mab.txt', prompt_sha256: sha(PROMPT), commit,
+    questions: Object.values(per).reduce((a, xs) => a + xs.length, 0), answered: preds.length, finished: new Date().toISOString() }, null, 1))
+  await record(dir, dir.replace(/\/$/, '').split('/').pop(), STUDY.brain)
   console.log(`${rowName.padEnd(9)} ${Object.entries(metrics.by_size).map(([s, m]) => `${s} ${(m.substring_em * 100).toFixed(1)} [${(m.ci95[0] * 100).toFixed(0)}–${(m.ci95[1] * 100).toFixed(0)}] n=${m.n}`).join('  ')}   facts/q ${metrics.facts_per_q}  p50 ${metrics.retrieval_ms_p50}ms  calls ${calls}`)
 }

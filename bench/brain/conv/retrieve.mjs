@@ -19,6 +19,7 @@
  * where query is { text, v } and ci indexes conversations.
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { record } from '../record.mjs'
 import { recallOf, summary, fmt } from './score.mjs'
 const ROOT = new URL('../', import.meta.url).pathname
 const VEC = process.env.VEC ?? 'st-minilm', K = Number(process.env.K ?? 10), OLLAMA = process.env.OLLAMA ?? 'http://127.0.0.1:11434'
@@ -81,7 +82,11 @@ export async function run(rank, label, bank) {
   const dir = ROOT + `runs/conv-proxy-${label}-${VEC.replace(/[^a-z0-9.-]/gi, '_')}-k${K}/`; mkdirSync(dir, { recursive: true })
   writeFileSync(dir + 'metrics.json', JSON.stringify({ label, vec: VEC, k: K, table, latency_ms: { p50: lat[Math.floor(lat.length / 2)], p95: lat[Math.floor(lat.length * 0.95)] } }, null, 1))
   writeFileSync(dir + 'predictions.jsonl', rows.map((r) => JSON.stringify(r)).join('\n') + '\n')
-  writeFileSync(dir + 'meta.json', JSON.stringify({ bench: 'locomo-conv (proxy: original LoCoMo QA pool; paper styles unreleased)', protocol: 'arXiv 2609.03467: raw turns, top-k, recall=|ret∩gold|/|gold| with verbatim containment', embed: VEC, k: K, memories: 'speaker: text', when: new Date().toISOString() }, null, 1))
+  // questions counts every item the styles enumerate; answered counts the rows
+  // that scored, and an item with no recoverable gold is the difference
+  writeFileSync(dir + 'meta.json', JSON.stringify({ bench: 'locomo-conv (proxy: original LoCoMo QA pool; paper styles unreleased)', protocol: 'arXiv 2609.03467: raw turns, top-k, recall=|ret∩gold|/|gold| with verbatim containment', embed: VEC, k: K, memories: 'speaker: text', when: new Date().toISOString(),
+    questions: Object.values(S).reduce((a, xs) => a + xs.length, 0), answered: rows.length, finished: new Date().toISOString() }, null, 1))
+  await record(dir)
   return table
 }
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop())) { const bank = await load(); await run(dense(bank), 'naive-rag', bank) }

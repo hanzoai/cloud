@@ -24,6 +24,7 @@
  *   node context-code.mjs --setting=cff --split=test --embed-only   # fill the embedding cache and stop
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { record, STUDY } from '../brain/record.mjs'
 import { createHash } from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { rank as rankScore, ci, pct, quantile } from '../brain/metrics.mjs'
@@ -153,6 +154,8 @@ if (MAIN) {
     if (has('write')) { const dir = new URL(`./runs/repobench-r-${SETTING}-${split}-${name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase()}/`, here); mkdirSync(dir, { recursive: true })
       writeFileSync(new URL('metrics.json', dir), JSON.stringify({ benchmark: 'repobench-r', subset: `python_${SETTING}`, row: name, cfg, split, embed: cfg.dense ? EMBED : null, frozen: frozen && base.links ? { commit: frozen.commit, w: frozen.w } : null, summary: s }, null, 1))
       writeFileSync(new URL('predictions.jsonl', dir), t.rows.map((r) => JSON.stringify(r)).join('\n')); writeFileSync(new URL('traces.jsonl', dir), t.traces.map((x) => JSON.stringify(x)).join('\n'))
-      writeFileSync(new URL('meta.json', dir), JSON.stringify({ commit: commit(), embedder: cfg.dense ? EMBED : 'none', data: DATA[SETTING], split: split === 'dev' ? 'train_easy[0:100] + train_hard[0:100]' : 'test_easy[0:250] + test_hard[0:250]', when: new Date().toISOString() }, null, 1)) }
+      writeFileSync(new URL('meta.json', dir), JSON.stringify({ commit: commit(), embedder: cfg.dense ? EMBED : 'none', data: DATA[SETTING], split: split === 'dev' ? 'train_easy[0:100] + train_hard[0:100]' : 'test_easy[0:250] + test_hard[0:250]', when: new Date().toISOString(),
+        questions: items.length, answered: s.all.n, finished: new Date().toISOString() }, null, 1))
+      await record(dir, dir.pathname.replace(/\/$/, '').split('/').pop(), STUDY.code) }
   }
 }

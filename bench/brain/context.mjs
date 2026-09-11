@@ -25,6 +25,7 @@
  * takes this file's ranked ids through `rank()`.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { record } from './record.mjs'
 import { createHash } from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { complete, embed, pool } from './llm.mjs'
@@ -277,6 +278,10 @@ if (MAIN) {
     if (has('write')) { const dir = new URL(`./runs/locomo-retrieval-${split}-${name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase()}-${FACTS}${suffix}/`, import.meta.url); mkdirSync(dir, { recursive: true })
       writeFileSync(new URL('metrics.json', dir), JSON.stringify({ row: name, cfg, split, facts: FACTS, k: K, frozen: frozen ? { commit: frozen.commit, objective: frozen.objective } : null, summary: s }, null, 1))
       writeFileSync(new URL('traces.jsonl', dir), t.traces.map((x) => JSON.stringify(x)).join('\n'))
-      writeFileSync(new URL('meta.json', dir), JSON.stringify({ commit: commit(), embedding: process.env.EMBED_MODEL ?? 'zenlm/zen-embedding-0.6b', facts: FACTS, k: K, split, store: sha(readFileSync(new URL('./brain-vectors.json', import.meta.url))), when: new Date().toISOString() }, null, 1)) }
+      // the denominator is counted from the corpus, not from the rows that came
+      // back, so a question this row failed to score shows up as the difference
+      writeFileSync(new URL('meta.json', dir), JSON.stringify({ commit: commit(), embedding: process.env.EMBED_MODEL ?? 'zenlm/zen-embedding-0.6b', facts: FACTS, k: K, split, store: sha(readFileSync(new URL('./brain-vectors.json', import.meta.url))), when: new Date().toISOString(),
+        questions: store.reduce((a, c, ci) => a + (SPLITS[split](ci) ? c.qa.filter((q) => q.evidence.length).length : 0), 0), answered: s.all.n, finished: new Date().toISOString() }, null, 1))
+      await record(dir) }
   }
 }
