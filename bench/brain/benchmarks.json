@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-10T23:55:37.299Z",
+ "generated": "2026-09-11T03:22:43.895Z",
  "sections": [
   {
    "bench": "conv",
@@ -10,6 +10,26 @@
    "reader": null,
    "facts": null,
    "commit": null,
+   "record": {
+    "commit": null,
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": null,
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "all-minilm",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:09:17.510Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "original",
@@ -93,6 +113,26 @@
    "reader": null,
    "facts": null,
    "commit": null,
+   "record": {
+    "commit": null,
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": null,
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "st-minilm",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:07:58.770Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "original",
@@ -176,6 +216,26 @@
    "reader": null,
    "facts": null,
    "commit": null,
+   "record": {
+    "commit": null,
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": null,
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:28:50.937Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "original",
@@ -259,6 +319,26 @@
    "reader": null,
    "facts": null,
    "commit": null,
+   "record": {
+    "commit": null,
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": null,
+    "facts_digest": null,
+    "reader": null,
+    "embedding": null,
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": null,
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "turn·all",
@@ -355,6 +435,165 @@
   },
   {
    "bench": "locomo",
+   "run": "locomo-all-cer-k20-enso-flash",
+   "row": null,
+   "split": null,
+   "k": 20,
+   "reader": "enso-flash",
+   "facts": null,
+   "commit": "885a21a63c3254415e40555f7905c8c04aa0be65",
+   "record": {
+    "commit": "885a21a63c3254415e40555f7905c8c04aa0be65",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "enso-flash",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 282,
+    "answered": 282,
+    "started": "2026-09-09T09:11:57.018Z",
+    "ended": "2026-09-10T01:18:55.312Z",
+    "completion": "complete",
+    "wall_seconds": 55895,
+    "tokens_per_question": 968,
+    "reader_tokens": 99823
+   },
+   "categories": [
+    {
+     "name": "all",
+     "n": 282,
+     "metrics": {
+      "of": 1536,
+      "f1": {
+       "mean": 0.42489476674409804,
+       "lo": 0.38122477595934917,
+       "hi": 0.4646630704046311
+      },
+      "em": {
+       "mean": 0.11702127659574468,
+       "lo": 0.08156028368794327,
+       "hi": 0.1524822695035461
+      },
+      "exact": 0.8723404255319149,
+      "supported": 0.1099290780141844,
+      "answered": 0.450354609929078,
+      "tokens": 968.2588652482269
+     }
+    },
+    {
+     "name": "all:multi-hop",
+     "n": 282,
+     "metrics": {
+      "of": 282,
+      "f1": {
+       "mean": 0.42489476674409804,
+       "lo": 0.38122477595934917,
+       "hi": 0.4646630704046311
+      },
+      "em": {
+       "mean": 0.11702127659574468,
+       "lo": 0.08156028368794327,
+       "hi": 0.1524822695035461
+      },
+      "exact": 0.8723404255319149,
+      "supported": 0.1099290780141844,
+      "answered": 0.450354609929078,
+      "tokens": 968.2588652482269
+     }
+    },
+    {
+     "name": "dev",
+     "n": 74,
+     "metrics": {
+      "of": 383,
+      "f1": {
+       "mean": 0.49631866340677494,
+       "lo": 0.4127368877368879,
+       "hi": 0.5770937859173152
+      },
+      "em": {
+       "mean": 0.14864864864864866,
+       "lo": 0.06756756756756757,
+       "hi": 0.24324324324324326
+      },
+      "exact": 0.8648648648648649,
+      "supported": 0.10810810810810811,
+      "answered": 0.581081081081081,
+      "tokens": 963.9324324324324
+     }
+    },
+    {
+     "name": "dev:multi-hop",
+     "n": 74,
+     "metrics": {
+      "of": 74,
+      "f1": {
+       "mean": 0.49631866340677494,
+       "lo": 0.4127368877368879,
+       "hi": 0.5770937859173152
+      },
+      "em": {
+       "mean": 0.14864864864864866,
+       "lo": 0.06756756756756757,
+       "hi": 0.24324324324324326
+      },
+      "exact": 0.8648648648648649,
+      "supported": 0.10810810810810811,
+      "answered": 0.581081081081081,
+      "tokens": 963.9324324324324
+     }
+    },
+    {
+     "name": "test",
+     "n": 208,
+     "metrics": {
+      "of": 1153,
+      "f1": {
+       "mean": 0.3994843419698761,
+       "lo": 0.3547845292710734,
+       "hi": 0.4501778901165273
+      },
+      "em": {
+       "mean": 0.10576923076923077,
+       "lo": 0.0673076923076923,
+       "hi": 0.14903846153846154
+      },
+      "exact": 0.875,
+      "supported": 0.11057692307692307,
+      "answered": 0.40384615384615385,
+      "tokens": 969.7980769230769
+     }
+    },
+    {
+     "name": "test:multi-hop",
+     "n": 208,
+     "metrics": {
+      "of": 208,
+      "f1": {
+       "mean": 0.3994843419698761,
+       "lo": 0.3547845292710734,
+       "hi": 0.4501778901165273
+      },
+      "em": {
+       "mean": 0.10576923076923077,
+       "lo": 0.0673076923076923,
+       "hi": 0.14903846153846154
+      },
+      "exact": 0.875,
+      "supported": 0.11057692307692307,
+      "answered": 0.40384615384615385,
+      "tokens": 969.7980769230769
+     }
+    }
+   ],
+   "table": null
+  },
+  {
+   "bench": "locomo",
    "run": "locomo-all-cer-k20-gemma4-31b",
    "row": null,
    "split": null,
@@ -362,6 +601,26 @@
    "reader": "gemma4:31b",
    "facts": null,
    "commit": "ddc076f5dd0506ce50428416c336e45c4a7ada73",
+   "record": {
+    "commit": "ddc076f5dd0506ce50428416c336e45c4a7ada73",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "gemma4:31b",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 282,
+    "answered": 282,
+    "started": "2026-09-09T09:11:57.021Z",
+    "ended": "2026-09-09T12:34:27.896Z",
+    "completion": "complete",
+    "wall_seconds": 760,
+    "tokens_per_question": 968,
+    "reader_tokens": 402677
+   },
    "categories": [
     {
      "name": "all",
@@ -500,6 +759,165 @@
   },
   {
    "bench": "locomo",
+   "run": "locomo-all-cer-k20-gpt-oss-120b",
+   "row": null,
+   "split": null,
+   "k": 20,
+   "reader": "gpt-oss-120b",
+   "facts": null,
+   "commit": "885a21a63c3254415e40555f7905c8c04aa0be65",
+   "record": {
+    "commit": "885a21a63c3254415e40555f7905c8c04aa0be65",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "gpt-oss-120b",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 282,
+    "answered": 282,
+    "started": "2026-09-09T09:11:57.070Z",
+    "ended": "2026-09-10T01:16:16.096Z",
+    "completion": "complete",
+    "wall_seconds": 55736,
+    "tokens_per_question": 968,
+    "reader_tokens": 367354
+   },
+   "categories": [
+    {
+     "name": "all",
+     "n": 282,
+     "metrics": {
+      "of": 1536,
+      "f1": {
+       "mean": 0.42644300151111564,
+       "lo": 0.38803062177423187,
+       "hi": 0.4690826695335125
+      },
+      "em": {
+       "mean": 0.11347517730496454,
+       "lo": 0.07801418439716312,
+       "hi": 0.1524822695035461
+      },
+      "exact": 0.8723404255319149,
+      "supported": 0.1099290780141844,
+      "answered": 0.44680851063829785,
+      "tokens": 968.2695035460993
+     }
+    },
+    {
+     "name": "all:multi-hop",
+     "n": 282,
+     "metrics": {
+      "of": 282,
+      "f1": {
+       "mean": 0.42644300151111564,
+       "lo": 0.38803062177423187,
+       "hi": 0.4690826695335125
+      },
+      "em": {
+       "mean": 0.11347517730496454,
+       "lo": 0.07801418439716312,
+       "hi": 0.1524822695035461
+      },
+      "exact": 0.8723404255319149,
+      "supported": 0.1099290780141844,
+      "answered": 0.44680851063829785,
+      "tokens": 968.2695035460993
+     }
+    },
+    {
+     "name": "dev",
+     "n": 74,
+     "metrics": {
+      "of": 383,
+      "f1": {
+       "mean": 0.4894098152157783,
+       "lo": 0.40524786561265225,
+       "hi": 0.5697896918485152
+      },
+      "em": {
+       "mean": 0.13513513513513514,
+       "lo": 0.06756756756756757,
+       "hi": 0.21621621621621623
+      },
+      "exact": 0.8648648648648649,
+      "supported": 0.10810810810810811,
+      "answered": 0.5540540540540541,
+      "tokens": 963.972972972973
+     }
+    },
+    {
+     "name": "dev:multi-hop",
+     "n": 74,
+     "metrics": {
+      "of": 74,
+      "f1": {
+       "mean": 0.4894098152157783,
+       "lo": 0.40524786561265225,
+       "hi": 0.5697896918485152
+      },
+      "em": {
+       "mean": 0.13513513513513514,
+       "lo": 0.06756756756756757,
+       "hi": 0.21621621621621623
+      },
+      "exact": 0.8648648648648649,
+      "supported": 0.10810810810810811,
+      "answered": 0.5540540540540541,
+      "tokens": 963.972972972973
+     }
+    },
+    {
+     "name": "test",
+     "n": 208,
+     "metrics": {
+      "of": 1153,
+      "f1": {
+       "mean": 0.4040413466354181,
+       "lo": 0.3593656991605714,
+       "hi": 0.4515793988039147
+      },
+      "em": {
+       "mean": 0.10576923076923077,
+       "lo": 0.0673076923076923,
+       "hi": 0.14903846153846154
+      },
+      "exact": 0.875,
+      "supported": 0.11057692307692307,
+      "answered": 0.40865384615384615,
+      "tokens": 969.7980769230769
+     }
+    },
+    {
+     "name": "test:multi-hop",
+     "n": 208,
+     "metrics": {
+      "of": 208,
+      "f1": {
+       "mean": 0.4040413466354181,
+       "lo": 0.3593656991605714,
+       "hi": 0.4515793988039147
+      },
+      "em": {
+       "mean": 0.10576923076923077,
+       "lo": 0.0673076923076923,
+       "hi": 0.14903846153846154
+      },
+      "exact": 0.875,
+      "supported": 0.11057692307692307,
+      "answered": 0.40865384615384615,
+      "tokens": 969.7980769230769
+     }
+    }
+   ],
+   "table": null
+  },
+  {
+   "bench": "locomo",
    "run": "locomo-all-cer-k20-qwen3.6-35b-a3b",
    "row": null,
    "split": null,
@@ -507,6 +925,26 @@
    "reader": "qwen3.6:35b-a3b",
    "facts": null,
    "commit": "12468828cfba9497ebbb927af840534bb7e3fce2",
+   "record": {
+    "commit": "12468828cfba9497ebbb927af840534bb7e3fce2",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "qwen3.6:35b-a3b",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 1536,
+    "answered": 1525,
+    "started": "2026-09-09T10:17:13.162Z",
+    "ended": "2026-09-09T14:03:37.744Z",
+    "completion": "partial",
+    "wall_seconds": 1548,
+    "tokens_per_question": 975,
+    "reader_tokens": 2315795
+   },
    "categories": [
     {
      "name": "all",
@@ -850,6 +1288,26 @@
    "reader": "enso-flash",
    "facts": null,
    "commit": "9eab30f73493a28244d1cd00b3fa53b83fdfba3c",
+   "record": {
+    "commit": "9eab30f73493a28244d1cd00b3fa53b83fdfba3c",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "enso-flash",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 282,
+    "answered": 282,
+    "started": "2026-09-10T01:19:00.084Z",
+    "ended": "2026-09-10T21:24:01.507Z",
+    "completion": "complete",
+    "wall_seconds": 72301,
+    "tokens_per_question": 971,
+    "reader_tokens": 366988
+   },
    "categories": [
     {
      "name": "all",
@@ -932,6 +1390,26 @@
    "reader": "gemma4:31b",
    "facts": null,
    "commit": "ddc076f5dd0506ce50428416c336e45c4a7ada73",
+   "record": {
+    "commit": "ddc076f5dd0506ce50428416c336e45c4a7ada73",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "gemma4:31b",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 282,
+    "answered": 282,
+    "started": "2026-09-09T10:01:09.280Z",
+    "ended": "2026-09-09T10:44:25.089Z",
+    "completion": "complete",
+    "wall_seconds": 1620,
+    "tokens_per_question": 971,
+    "reader_tokens": 402503
+   },
    "categories": [
     {
      "name": "all",
@@ -1077,6 +1555,26 @@
    "reader": "gpt-oss-120b",
    "facts": null,
    "commit": "9eab30f73493a28244d1cd00b3fa53b83fdfba3c",
+   "record": {
+    "commit": "9eab30f73493a28244d1cd00b3fa53b83fdfba3c",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "gpt-oss-120b",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 282,
+    "answered": 282,
+    "started": "2026-09-10T01:16:19.890Z",
+    "ended": "2026-09-10T21:22:38.922Z",
+    "completion": "complete",
+    "wall_seconds": 72379,
+    "tokens_per_question": 971,
+    "reader_tokens": 367151
+   },
    "categories": [
     {
      "name": "all",
@@ -1159,6 +1657,26 @@
    "reader": "qwen3.6:35b-a3b",
    "facts": null,
    "commit": "12468828cfba9497ebbb927af840534bb7e3fce2",
+   "record": {
+    "commit": "12468828cfba9497ebbb927af840534bb7e3fce2",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "qwen3.6:35b-a3b",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 1536,
+    "answered": 1525,
+    "started": "2026-09-09T12:33:00.876Z",
+    "ended": "2026-09-09T13:59:29.450Z",
+    "completion": "partial",
+    "wall_seconds": 2449,
+    "tokens_per_question": 968,
+    "reader_tokens": 2554957
+   },
    "categories": [
     {
      "name": "all",
@@ -1502,6 +2020,26 @@
    "reader": "gemma4:31b",
    "facts": null,
    "commit": "ddc076f5dd0506ce50428416c336e45c4a7ada73",
+   "record": {
+    "commit": "ddc076f5dd0506ce50428416c336e45c4a7ada73",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "gemma4:31b",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 282,
+    "answered": 282,
+    "started": "2026-09-09T10:44:25.916Z",
+    "ended": "2026-09-09T10:56:08.299Z",
+    "completion": "complete",
+    "wall_seconds": 702,
+    "tokens_per_question": 169,
+    "reader_tokens": 114470
+   },
    "categories": [
     {
      "name": "all",
@@ -1647,6 +2185,26 @@
    "reader": "qwen3.6:35b-a3b",
    "facts": null,
    "commit": "12468828cfba9497ebbb927af840534bb7e3fce2",
+   "record": {
+    "commit": "12468828cfba9497ebbb927af840534bb7e3fce2",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "qwen3.6:35b-a3b",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 1536,
+    "answered": 1525,
+    "started": "2026-09-09T12:45:37.890Z",
+    "ended": "2026-09-09T13:59:30.537Z",
+    "completion": "partial",
+    "wall_seconds": 1989,
+    "tokens_per_question": 82,
+    "reader_tokens": 460599
+   },
    "categories": [
     {
      "name": "all",
@@ -1990,6 +2548,26 @@
    "reader": "gemma4:31b",
    "facts": null,
    "commit": "ddc076f5dd0506ce50428416c336e45c4a7ada73",
+   "record": {
+    "commit": "ddc076f5dd0506ce50428416c336e45c4a7ada73",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "gemma4:31b",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 282,
+    "answered": 282,
+    "started": "2026-09-09T10:56:09.853Z",
+    "ended": "2026-09-09T11:33:57.673Z",
+    "completion": "complete",
+    "wall_seconds": 2268,
+    "tokens_per_question": 835,
+    "reader_tokens": 367970
+   },
    "categories": [
     {
      "name": "all",
@@ -2135,6 +2713,26 @@
    "reader": "qwen3.6:35b-a3b",
    "facts": null,
    "commit": "bea5d0ad184462b76db19ad2d601f39c329b7c09",
+   "record": {
+    "commit": "bea5d0ad184462b76db19ad2d601f39c329b7c09",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "qwen3.6:35b-a3b",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 1536,
+    "answered": 1525,
+    "started": "2026-09-09T12:54:38.083Z",
+    "ended": "2026-09-09T13:59:32.379Z",
+    "completion": "partial",
+    "wall_seconds": 2390,
+    "tokens_per_question": 840,
+    "reader_tokens": 1989142
+   },
    "categories": [
     {
      "name": "all",
@@ -2478,6 +3076,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "885a21a63c32",
+   "record": {
+    "commit": "885a21a63c32",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T10:03:41.917Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -2916,6 +3534,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "885a21a63c32",
+   "record": {
+    "commit": "885a21a63c32",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "all-minilm",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T10:03:53.889Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -3354,6 +3992,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "885a21a63c32",
+   "record": {
+    "commit": "885a21a63c32",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T10:03:40.125Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -3792,6 +4450,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "885a21a63c32",
+   "record": {
+    "commit": "885a21a63c32",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "all-minilm",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T10:03:52.827Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -4230,6 +4908,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "885a21a63c32",
+   "record": {
+    "commit": "885a21a63c32",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T10:03:49.797Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -4668,6 +5366,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "885a21a63c32",
+   "record": {
+    "commit": "885a21a63c32",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "all-minilm",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T10:03:57.003Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -5106,6 +5824,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "885a21a63c32",
+   "record": {
+    "commit": "885a21a63c32",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T10:03:46.669Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -5544,6 +6282,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "885a21a63c32",
+   "record": {
+    "commit": "885a21a63c32",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "all-minilm",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T10:03:55.935Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -5982,6 +6740,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "885a21a63c32",
+   "record": {
+    "commit": "885a21a63c32",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T10:03:38.310Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -6420,6 +7198,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "885a21a63c32",
+   "record": {
+    "commit": "885a21a63c32",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "all-minilm",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T10:03:51.764Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -6858,6 +7656,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "885a21a63c32",
+   "record": {
+    "commit": "885a21a63c32",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T10:03:36.864Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -7296,6 +8114,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "885a21a63c32",
+   "record": {
+    "commit": "885a21a63c32",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "all-minilm",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T10:03:50.863Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -7734,6 +8572,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "33d0f8749bd1",
+   "record": {
+    "commit": "33d0f8749bd1",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:31:03.410Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -8122,6 +8980,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "33d0f8749bd1",
+   "record": {
+    "commit": "33d0f8749bd1",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:31:00.258Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -8510,6 +9388,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "33d0f8749bd1",
+   "record": {
+    "commit": "33d0f8749bd1",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:30:58.545Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -8898,6 +9796,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "47f46c9ef14f",
+   "record": {
+    "commit": "47f46c9ef14f",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:41:15.253Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -9286,6 +10204,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "47f46c9ef14f",
+   "record": {
+    "commit": "47f46c9ef14f",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:41:19.209Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -9674,6 +10612,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "47f46c9ef14f",
+   "record": {
+    "commit": "47f46c9ef14f",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:38:08.419Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -10062,6 +11020,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "47f46c9ef14f",
+   "record": {
+    "commit": "47f46c9ef14f",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:41:17.264Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -10450,6 +11428,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "47f46c9ef14f",
+   "record": {
+    "commit": "47f46c9ef14f",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:38:06.789Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -10838,6 +11836,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "33d0f8749bd1",
+   "record": {
+    "commit": "33d0f8749bd1",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:30:56.727Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -11226,6 +12244,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "33d0f8749bd1",
+   "record": {
+    "commit": "33d0f8749bd1",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:30:55.680Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -11614,6 +12652,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "33d0f8749bd1",
+   "record": {
+    "commit": "33d0f8749bd1",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:31:01.864Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -12002,6 +13060,26 @@
    "reader": null,
    "facts": "locomo",
    "commit": "33d0f8749bd1",
+   "record": {
+    "commit": "33d0f8749bd1",
+    "prompt": null,
+    "prompt_digest": null,
+    "dataset_digest": null,
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": null,
+    "reader": null,
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": null,
+    "max_tokens": null,
+    "questions": null,
+    "answered": null,
+    "started": "2026-09-09T09:31:04.904Z",
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "multi-hop",
@@ -12390,6 +13468,26 @@
    "reader": "none",
    "facts": null,
    "commit": "b2bb961938b",
+   "record": {
+    "commit": "b2bb961938b",
+    "prompt": "prompts/reader-mab.txt",
+    "prompt_digest": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
+    "dataset_digest": "24d5c3f09ce0ce15625cb9f8a98f44f0d864ca6c94d7b4ad04eb697ca3a5ff45",
+    "store_digest": null,
+    "facts_digest": null,
+    "reader": "none",
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": null,
+    "answered": null,
+    "started": null,
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "mh_6k",
@@ -12417,6 +13515,26 @@
    "reader": "none",
    "facts": null,
    "commit": "b2bb961938",
+   "record": {
+    "commit": "b2bb961938",
+    "prompt": "prompts/reader-mab.txt",
+    "prompt_digest": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
+    "dataset_digest": "24d5c3f09ce0ce15625cb9f8a98f44f0d864ca6c94d7b4ad04eb697ca3a5ff45",
+    "store_digest": null,
+    "facts_digest": null,
+    "reader": "none",
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": null,
+    "answered": null,
+    "started": null,
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "mh_6k",
@@ -12444,6 +13562,26 @@
    "reader": "none",
    "facts": null,
    "commit": "2bce2e8f3e1",
+   "record": {
+    "commit": "2bce2e8f3e1",
+    "prompt": "prompts/reader-mab.txt",
+    "prompt_digest": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
+    "dataset_digest": "24d5c3f09ce0ce15625cb9f8a98f44f0d864ca6c94d7b4ad04eb697ca3a5ff45",
+    "store_digest": null,
+    "facts_digest": null,
+    "reader": "none",
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": null,
+    "answered": null,
+    "started": null,
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "mh_6k",
@@ -12471,6 +13609,26 @@
    "reader": "none",
    "facts": null,
    "commit": "12468828cf",
+   "record": {
+    "commit": "12468828cf",
+    "prompt": "prompts/reader-mab.txt",
+    "prompt_digest": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
+    "dataset_digest": "24d5c3f09ce0ce15625cb9f8a98f44f0d864ca6c94d7b4ad04eb697ca3a5ff45",
+    "store_digest": null,
+    "facts_digest": null,
+    "reader": "none",
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": null,
+    "answered": null,
+    "started": null,
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "mh_6k",
@@ -12498,6 +13656,26 @@
    "reader": "none",
    "facts": null,
    "commit": "9eab30f734",
+   "record": {
+    "commit": "9eab30f734",
+    "prompt": "prompts/reader-mab.txt",
+    "prompt_digest": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
+    "dataset_digest": "24d5c3f09ce0ce15625cb9f8a98f44f0d864ca6c94d7b4ad04eb697ca3a5ff45",
+    "store_digest": null,
+    "facts_digest": null,
+    "reader": "none",
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": null,
+    "answered": null,
+    "started": null,
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "mh_32k",
@@ -12553,6 +13731,26 @@
    "reader": "none",
    "facts": null,
    "commit": "2bce2e8f3e1",
+   "record": {
+    "commit": "2bce2e8f3e1",
+    "prompt": "prompts/reader-mab.txt",
+    "prompt_digest": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
+    "dataset_digest": "24d5c3f09ce0ce15625cb9f8a98f44f0d864ca6c94d7b4ad04eb697ca3a5ff45",
+    "store_digest": null,
+    "facts_digest": null,
+    "reader": "none",
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": null,
+    "answered": null,
+    "started": null,
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "mh_32k",
@@ -12608,6 +13806,26 @@
    "reader": "none",
    "facts": null,
    "commit": "12468828cf",
+   "record": {
+    "commit": "12468828cf",
+    "prompt": "prompts/reader-mab.txt",
+    "prompt_digest": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
+    "dataset_digest": "24d5c3f09ce0ce15625cb9f8a98f44f0d864ca6c94d7b4ad04eb697ca3a5ff45",
+    "store_digest": null,
+    "facts_digest": null,
+    "reader": "none",
+    "embedding": "zenlm/zen-embedding-0.6b",
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": null,
+    "answered": null,
+    "started": null,
+    "ended": null,
+    "completion": "unknown",
+    "wall_seconds": null,
+    "tokens_per_question": null,
+    "reader_tokens": null
+   },
    "categories": [
     {
      "name": "mh_32k",
