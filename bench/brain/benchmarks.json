@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-11T03:22:43.895Z",
+ "generated": "2026-09-11T20:05:41.269Z",
  "sections": [
   {
    "bench": "conv",
@@ -1274,6 +1274,108 @@
       "tokens": 958.6,
       "p50_ms": 2804,
       "p95_ms": 3374
+     }
+    }
+   ],
+   "table": null
+  },
+  {
+   "bench": "locomo",
+   "run": "locomo-all-context-k10-qwen3.6-35b-a3b",
+   "row": null,
+   "split": null,
+   "k": 10,
+   "reader": "qwen3.6:35b-a3b",
+   "facts": null,
+   "commit": "64aff2baa5dcdb091edbcd6d0e9e50ea161b763c",
+   "record": {
+    "commit": "64aff2baa5dcdb091edbcd6d0e9e50ea161b763c",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "qwen3.6:35b-a3b",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 1536,
+    "answered": 1536,
+    "started": "2026-09-11T19:43:16.379Z",
+    "ended": "2026-09-11T20:02:09.086Z",
+    "completion": "complete",
+    "wall_seconds": 1133,
+    "tokens_per_question": 501,
+    "reader_tokens": 1256382
+   },
+   "categories": [
+    {
+     "name": "all",
+     "n": 1536,
+     "metrics": {
+      "of": 1536,
+      "f1": {
+       "mean": 0.5113555536331214,
+       "lo": 0.48912339505483055,
+       "hi": 0.5317439126374927
+      },
+      "em": {
+       "mean": 0.2786458333333333,
+       "lo": 0.255859375,
+       "hi": 0.30078125
+      },
+      "exact": 0.810546875,
+      "supported": 0.2786458333333333,
+      "answered": 0.541015625,
+      "tokens": 501.4973958333333,
+      "p50_ms": 1463,
+      "p95_ms": 1659
+     }
+    },
+    {
+     "name": "dev",
+     "n": 383,
+     "metrics": {
+      "of": 383,
+      "f1": {
+       "mean": 0.503700361472211,
+       "lo": 0.4618527186863862,
+       "hi": 0.5433698625919571
+      },
+      "em": {
+       "mean": 0.2506527415143603,
+       "lo": 0.21148825065274152,
+       "hi": 0.2950391644908616
+      },
+      "exact": 0.8067885117493473,
+      "supported": 0.2245430809399478,
+      "answered": 0.5430809399477807,
+      "tokens": 518.9660574412533,
+      "p50_ms": 1475,
+      "p95_ms": 1669
+     }
+    },
+    {
+     "name": "test",
+     "n": 1153,
+     "metrics": {
+      "of": 1153,
+      "f1": {
+       "mean": 0.5138984318617684,
+       "lo": 0.4904346281818154,
+       "hi": 0.5387305639062268
+      },
+      "em": {
+       "mean": 0.28794449262792715,
+       "lo": 0.2610581092801388,
+       "hi": 0.31309627059843886
+      },
+      "exact": 0.8117953165654813,
+      "supported": 0.2966175195143105,
+      "answered": 0.5403295750216826,
+      "tokens": 495.69470945359933,
+      "p50_ms": 1460,
+      "p95_ms": 1658
      }
     }
    ],
