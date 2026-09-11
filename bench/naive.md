@@ -57,6 +57,20 @@ in this directory.
 | ~1 MB per dormant agent | Fleet residency — already marked *"their assumption"* | modelled, not theirs |
 | "$0.05 a credit" | Pricing | **withdrawn** — see below |
 
+The sandbox lane prints three more, about other vendors, and none of those is
+sourced either. `docs.e2b.dev` carries no start-up time and no default memory on
+the page checked 2026-09-11; Modal's and Cloudflare's were not traced to a page
+at all.
+
+| cited as | status |
+|---|---|
+| E2B <200 ms, 512 MB min | unsourced; not on the docs landing page |
+| Modal ~1 s, 128 MB min | unsourced |
+| Cloudflare 1–3 s, 256 MB min | unsourced |
+
+A figure with a vendor's name on it and no page behind it is worth less than no
+figure. Either source them or measure them, as the isolate row now is.
+
 ## The pricing row was wrong, and the correction goes the other way
 
 The Pricing section read "Naïve charge $0.05 a credit — 79,614× marginal". No
