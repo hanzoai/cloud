@@ -34,10 +34,12 @@ t1=$(python3 -c 'import time;print(time.time())')
 say "build from source" "$(python3 -c "print('%.0f s' % ($t1-$t0))")"
 say "binary" "$(du -h "$BIN" | cut -f1)"
 
-# The store refuses to open unencrypted without a key, which is the right
-# default. A zero key is what every store test in this repo states.
+# The store refuses to open unencrypted, which is the right default, so a run
+# from source has to say which it wants. This lane asks for the dev path and
+# NOT for a key: a plain `go build` links ordinary SQLite rather than
+# libsqlcipher, so a key here would be a request the binary correctly refuses.
+# See README.md — it is the one row where running it yourself costs something.
 export CLOUD_DEV_UNENCRYPTED=1
-export CLOUD_KMS_MASTER_KEY_REF=$(python3 -c 'import base64;print(base64.b64encode(bytes(32)).decode())')
 export CLOUD_LISTEN=":$P" CLOUD_ZAP_LISTEN="127.0.0.1:$ZP"
 export CLOUD_HEALTH_LISTEN="127.0.0.1:$HP" CLOUD_ADMIN_LISTEN="127.0.0.1:$AP"
 export CLOUD_DATA_DIR="$DATA"

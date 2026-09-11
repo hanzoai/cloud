@@ -220,6 +220,63 @@ func Encrypting() bool {
 // Open returns a *sql.DB for the SQLite database at path, encrypted at rest when
 // a master key is configured. It is the single drop-in replacement for
 // sql.Open("sqlite", path) across every cloud store.
+// Capable answers whether THIS BUILD can encrypt a store, which is a different
+// question from [Encrypting] and was being asked as the same one.
+//
+// THE FAILURE IT NAMES, MEASURED. A plain `go build` of this repository links
+// cgo against ordinary SQLite rather than libsqlcipher. Encrypting() is true
+// because a master key is set, so the boot announces "data-plane encryption
+// ACTIVE"; every store is then created with the "SQLite format 3" magic still on
+// it — classify calls that statePlaintext — and the SECOND boot dies in
+// migration with `sqlcipher_export: no such function`. Between those two moments
+// the program has written customer data to disk in the clear while saying it did
+// not. The pure-Go backend has an honest error for exactly this
+// (ErrEncryptionUnavailable); the cgo-without-the-library path had none.
+//
+// It answers by DOING it rather than by inspecting the build: mint a keyed
+// database, write to it, and ask the same classifier the open path asks. A probe
+// that checked a tag or a symbol would be a second opinion about the one thing
+// that matters, and the two could disagree.
+//
+// The recipe it names is the driver's own: CGO_ENABLED=1, -tags libsqlite3,
+// linked against libsqlcipher.
+func Capable() error {
+	dir, err := os.MkdirTemp("", "cek-capable")
+	if err != nil {
+		return fmt.Errorf("cek: capability probe: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	path := filepath.Join(dir, "probe.db")
+	// The driver's own key, so the probe exercises the same material a real store
+	// would be given rather than a plausible-looking one.
+	dek, err := sqlitedrv.NewDEK()
+	if err != nil {
+		return fmt.Errorf("cek: capability probe: %w", err)
+	}
+	db, err := openKeyed(path, dek)
+	if err != nil {
+		return fmt.Errorf("cek: capability probe: %w", err)
+	}
+	// One page written and closed, because a database with no content may never
+	// reach the disk and an unwritten file says nothing about the codec.
+	_, xerr := db.Exec("CREATE TABLE probe(x)")
+	cerr := db.Close()
+	if xerr != nil {
+		return fmt.Errorf("cek: capability probe: %w", xerr)
+	}
+	if cerr != nil {
+		return fmt.Errorf("cek: capability probe: %w", cerr)
+	}
+	if classify(path) != stateEncrypted {
+		return fmt.Errorf("cek: this build cannot encrypt a store — a keyed database " +
+			"was written with a plaintext header. Build with CGO_ENABLED=1 -tags libsqlite3 " +
+			"linked against libsqlcipher, or set " + DevUnencryptedEnv + "=1 to run unencrypted " +
+			"on purpose")
+	}
+	return nil
+}
+
 func Open(path string) (*sql.DB, error) {
 	master, err := resolveMaster()
 	if err != nil {
@@ -230,7 +287,29 @@ func Open(path string) (*sql.DB, error) {
 		// key already errored above). Preserve the prior bare-path behavior.
 		return sql.Open("sqlite", path)
 	}
+	// THE SEAM THAT OPENS A STORE IS THE SEAM THAT CHECKS THE CODEC, and it is
+	// here rather than at boot because boot is not early enough: the posture check
+	// in serve.go runs after the gateway's own store is already open, so a build
+	// that cannot encrypt had written one plaintext file before anything refused.
+	// Asked once per process (capableOnce), so a store open pays one probe and the
+	// rest pay a load.
+	if err := capable(); err != nil {
+		return nil, err
+	}
 	return openEncrypted(path, master)
+}
+
+var (
+	capableOnce sync.Once
+	capableErr  error
+)
+
+// capable is [Capable] asked once per process. Every store open funnels through
+// it, so no ordering anywhere else can produce a plaintext file on a build that
+// meant to encrypt.
+func capable() error {
+	capableOnce.Do(func() { capableErr = Capable() })
+	return capableErr
 }
 
 func openEncrypted(path string, master []byte) (*sql.DB, error) {

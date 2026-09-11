@@ -132,13 +132,25 @@ func Serve(specs []MountSpec, enable []string) error {
 	// missing/invalid CLOUD_KMS_MASTER_KEY_REF makes the FIRST store open fail
 	// closed (MountAll aborts) — the same fail-closed stance as the KMS store; we
 	// surface it here so the posture is never silent.
-	// The false branch says "no key", not "no codec": every backend encrypts
-	// (cgo links libsqlcipher, pure-Go uses the codec VFS), so the only way to
-	// reach it is a missing or malformed key — and then the first store open
-	// fails closed. Saying "pure-Go dev build" here was how a boot came to
-	// announce that encryption was off and then refuse to start BECAUSE it was
-	// on; one of the two had to be wrong, and it was this line.
+	// TWO QUESTIONS, AND THEY WERE BEING ASKED AS ONE. Encrypting() says a usable
+	// master key is present. It does not say this BUILD can encrypt, and the
+	// comment that used to stand here asserted that every backend can —
+	// measured, an ordinary `go build` does not: cgo links plain SQLite unless
+	// the build says -tags libsqlite3 against libsqlcipher. On such a build the
+	// key is present, so the line below announced encryption, every store was
+	// then written with the plaintext SQLite header, and the SECOND boot died in
+	// migration with `sqlcipher_export: no such function`. Between those two
+	// moments it had written customer data to disk in the clear while saying it
+	// had not, which is the worst shape a privacy claim can take.
+	//
+	// So the capability is asked too, by making a keyed store and looking at it
+	// (cek.Capable), and a key without a codec REFUSES TO BOOT. It is the same
+	// fail-closed stance the rest of this posture takes; what it adds is that
+	// the failure now happens before any data is written rather than after.
 	if cek.Encrypting() {
+		if err := cek.Capable(); err != nil {
+			return fmt.Errorf("data-plane encryption: %w", err)
+		}
 		deps.Logger.Info("data-plane encryption ACTIVE (SQLCipher at rest, per-db DEK)")
 	} else {
 		deps.Logger.Warn("data-plane encryption OFF — no usable " + cek.MasterKeyEnv +
