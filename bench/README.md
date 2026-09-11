@@ -16,6 +16,7 @@ update both.
 
 ```
 bench/self/run.sh                   # build it, boot it, ask each door: can you have this
+bench/self/modules.sh               # and whether anyone else can fetch what it is built from
 bench/egress/run.sh                 # and whether having it means anyone hears about it
 bench/cipher/run.sh                 # write a value through the API, look for it on the disk
 bench/doors/run.sh                  # what an agent pays per call, per envelope
@@ -41,14 +42,20 @@ serves, and reaches one operation through every door it opens.
 | | measured |
 |---|---|
 | private modules required | **0** |
+| modules the binary needs, fetchable with no credential | **127 of 127** |
 | build from source | 13 s |
 | binary | 80 MB |
 | boot to a healthy answer | **1.2 s** |
 | operations served by default | 13 over 8 paths |
 
-Zero private modules is the load-bearing number, and it is the one you can check
-without trusting this table: it is a property of `go.mod`. Everything else here
-measures what the software does; this measures whether you can have it.
+The second row is the load-bearing one. Counting private paths in `go.mod` is a
+property of a file; asking the public Go proxy for every module the binary
+actually needs, with no credential, is a property of whether anyone else can
+build it. All 127 answer, and the run ends by asking for a module that does not
+exist — 404, or the sweep above would not be evidence.
+
+Everything else here measures what the software does; this measures whether you
+can have it.
 
 ### Privacy — nothing in the default path phones anyone, including us
 
