@@ -2,7 +2,6 @@ package functions
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -22,7 +21,11 @@ import (
 // encrypt, so this is what lets the tests exercise the SAME encrypted path a
 // deployment runs rather than a plaintext shortcut.
 func TestMain(m *testing.M) {
-	os.Setenv("CLOUD_KMS_MASTER_KEY_REF", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	// A store, not a codec. These ask what the surface does with data, so they take
+	// the development path explicitly rather than naming a key: a key is a request
+	// to ENCRYPT, and a build without libsqlcipher linked now refuses it instead of
+	// writing plaintext while saying otherwise (cek.Capable).
+	os.Setenv("CLOUD_DEV_UNENCRYPTED", "1")
 	os.Exit(m.Run())
 }
 

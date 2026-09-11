@@ -2,7 +2,6 @@ package kv
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -20,7 +19,11 @@ import (
 // refuses to open a data plane unencrypted, so these tests run the REAL
 // encrypted path — the same code a deployment runs, not a way around it.
 func TestMain(m *testing.M) {
-	_ = os.Setenv("CLOUD_KMS_MASTER_KEY_REF", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	_ = // A store, not a codec. These ask what the surface does with data, so they take
+	// the development path explicitly rather than naming a key: a key is a request
+	// to ENCRYPT, and a build without libsqlcipher linked now refuses it instead of
+	// writing plaintext while saying otherwise (cek.Capable).
+	os.Setenv("CLOUD_DEV_UNENCRYPTED", "1")
 	os.Exit(m.Run())
 }
 

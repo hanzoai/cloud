@@ -27,7 +27,6 @@ package cloud
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net"
@@ -72,7 +71,11 @@ func doorApp(t *testing.T) *doorRig {
 	// The trail is an ENCRYPTED store and refuses to open without a key, which is
 	// the right default and is why every store test states one. A zero key is the
 	// package idiom: what is under test here is what gets recorded, not the codec.
-	t.Setenv("CLOUD_KMS_MASTER_KEY_REF", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	// A store, not a codec. These ask what the surface does with data, so they take
+	// the development path explicitly rather than naming a key: a key is a request
+	// to ENCRYPT, and a build without libsqlcipher linked now refuses it instead of
+	// writing plaintext while saying otherwise (cek.Capable).
+	t.Setenv("CLOUD_DEV_UNENCRYPTED", "1")
 
 	rec, err := audit.Open(t.TempDir()+"/audit.db", nil)
 	if err != nil {
