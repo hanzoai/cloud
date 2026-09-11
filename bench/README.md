@@ -274,7 +274,10 @@ without re-embedding. Fetch the dataset first:
 curl -sL https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json -o locomo10.json
 ```
 
-`sandbox.mjs` needs a container runtime. `colima start` is enough on macOS.
+`sandbox.mjs` needs a container runtime for two of its four rows — `colima
+start` is enough on macOS — and `npm i isolated-vm` in `bench/sandbox/` for the
+isolate row. Each row says so and is skipped rather than guessed when its
+dependency is absent.
 
 `self/run.sh` and `doors/run.sh` build and start the binary themselves and need
 nothing fetched. `doors/run.sh` measures round-robin rather than door by door:
