@@ -39,12 +39,35 @@ node conv/retrieve.mjs --help
 node longmemeval/retrieve.mjs --help
 
 # the tables
-node results.mjs                                 # RESULTS.md, benchmarks.json, benchmarks-retrieval.json
+node results.mjs                                 # RESULTS.md and the three benchmarks*.json
 node tables.mjs                                  # LaTeX tables into ../../../papers/tables/
 ```
 
 Credentials: `HANZO_API_KEY`, else the token `hanzo auth login` saved. Never printed,
 never in a run file.
+
+Only the run steps need a dataset, a model or a key. `node results.mjs` reads
+`runs/*/metrics.json`, `runs/*/meta.json`, `ablations/*.json` and
+`../code/runs/*/metrics.json` and writes `RESULTS.md`, `benchmarks.json`,
+`benchmarks-retrieval.json` and `benchmarks-code.json`. On a fresh clone, with
+no data fetched and nothing installed, it reproduces all four; they differ from
+the committed copies only in the `generated` timestamp. `hanzo.ai/benchmarks`
+reads the same three JSON files, so that command is the check on the page.
+
+A run in progress is still a run: `run.mjs` checkpoints, and `results.mjs`
+reports whatever a run has answered so far. Regenerate the tables when a run
+finishes, not while it is answering, or a row carries a partial sample with an
+interval to match.
+
+## Data
+
+Fetched, never committed — each dataset is third-party and carries its own
+terms. LoCoMo (snap-research/locomo) is CC BY-NC 4.0 and RepoBench-R
+(`tianyang/repobench-r`) is CC BY-NC-ND 4.0; MemoryAgentBench
+(`ai-hyz/MemoryAgentBench`) and LongMemEval (`xiaowu0162/longmemeval`) are MIT.
+`data/`, `locomo10.json` and the `*-vectors.json` caches are gitignored. What is
+committed is our side of it: the code, the prompts, and the predictions and
+metrics of every run.
 
 ## Layout
 
