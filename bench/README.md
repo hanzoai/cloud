@@ -306,6 +306,25 @@ Coverage is not accuracy — having the evidence in front of the reader is
 necessary for a right answer and does not produce one — so read those as a
 ceiling on what trimming k could cost rather than as an F1 prediction.
 
+**What each k costs, beside what it covers.** The same script reconstructs the
+retrieved half of the prompt from the turns it named, and prints it against the
+tokens the reader reported for the run's own k:
+
+| k | retrieved tokens | covers | total prompt |
+|---|---|---|---|
+| 1 | 48 | 38.3% | ~560 |
+| 5 | 228 | 60.6% | ~740 |
+| 10 | 460 | 68.1% | ~975 |
+| 20 | **885** | 75.1% | **1,400** — what the reader counted |
+
+The reconstruction lands on the reader's own number at k=20, which is what makes
+the shorter rows worth reading.
+
+**Halving k does not halve the bill.** Going from 20 to 10 removes 48% of the
+retrieved tokens and 30% of the prompt, because the rest of it — the
+instruction, the question — does not shrink. The oracle row is the floor: 1.52
+turns, 76 tokens of context, 294 in total.
+
 **Across three policies it ordered them the way the reader did.** The same
 measurement, run on each, against the F1 those runs scored:
 
