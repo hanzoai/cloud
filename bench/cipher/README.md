@@ -10,16 +10,25 @@ the API, and then look for that value in the files.
 bench/cipher/run.sh
 ```
 
-Taken on an M-series laptop, 2026-09-11. The same binary, run twice.
+Taken on an M-series laptop, 2026-09-11. Three builds, given a master key.
 
-| | with a master key | on the development path |
-|---|---|---|
-| encryption | ACTIVE | off, and it says so on every boot |
-| stores written | 7 | 7 |
-| distinct file headers | **7** | 1 — `SQLite format 3` |
-| files holding the canary | **0** | **2** |
+| build | with a master key |
+|---|---|
+| `CGO_ENABLED=0` | 7 stores · **7 distinct headers** · canary in **0** files |
+| `CGO_ENABLED=1`, as `make build` does it | **refuses** — "this build cannot encrypt a store" |
+| `CGO_ENABLED=1 -tags libsqlite3` | 7 stores · **7 distinct headers** · canary in **0** files |
+| the control: `CLOUD_DEV_UNENCRYPTED=1` | 7 stores · 1 header, `SQLite format 3` · canary in **1** file |
 
-A value nothing else could have written goes in through `POST /v1/tasks` and
+**The refusal is a result, not an error.** cgo is on by default on macOS and that
+build links ordinary SQLite, so it cannot encrypt. Given a key it stops and names
+the recipe rather than writing a plaintext store and reporting success — which
+is what it did before the check existed, and the second boot then died on a
+SQLCipher function it did not have.
+
+**Two builds do encrypt**, and they agree: seven stores, seven different first
+bytes, and the value nowhere on the disk.
+
+A value nothing else could have written goes in through
 `POST /v1/base/collections/notes`. Then the server is stopped and every file
 under the data directory is searched for it.
 

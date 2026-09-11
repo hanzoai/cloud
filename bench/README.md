@@ -84,10 +84,16 @@ deployment that enables a subsystem with an upstream connects to it, on purpose.
 operations, stops the server, and searches every file under the data directory.
 The same binary runs twice.
 
-| | with a master key | development path |
-|---|---|---|
-| distinct file headers | **7** | 1 — `SQLite format 3` |
-| files holding the canary | **0** | **2** |
+| build, given a master key | result |
+|---|---|
+| `CGO_ENABLED=0` | 7 distinct headers · canary in **0** files |
+| `CGO_ENABLED=1`, as built | **refuses**, and names the recipe |
+| `CGO_ENABLED=1 -tags libsqlite3` | 7 distinct headers · canary in **0** files |
+| control: `CLOUD_DEV_UNENCRYPTED=1` | 1 header, `SQLite format 3` · canary in **1** file |
+
+The refusal is a result. cgo is on by default on macOS and that build links
+ordinary SQLite, so given a key it stops rather than writing a plaintext store
+and reporting success — which is what it did before the check existed.
 
 Each store gets its own data encryption key, so seven files begin with seven
 different ciphertexts; a plaintext run writes the same magic seven times.
