@@ -16,6 +16,7 @@ update both.
 
 ```
 bench/self/run.sh                   # build it, boot it, ask each door: can you have this
+bench/egress/run.sh                 # and whether having it means anyone hears about it
 bench/doors/run.sh                  # what an agent pays per call, per envelope
 node fleet/fleet.mjs /tmp/fleet     # 1M dormant agents: bytes, write rate, resume
 node fleet/cost.mjs                 # the same, as a monthly bill
@@ -47,6 +48,27 @@ serves, and reaches one operation through every door it opens.
 Zero private modules is the load-bearing number, and it is the one you can check
 without trusting this table: it is a property of `go.mod`. Everything else here
 measures what the software does; this measures whether you can have it.
+
+### Privacy — nothing in the default path phones anyone, including us
+
+`egress/run.sh` starts the binary with no configuration, asks every door for an
+operation sixty times, and watches what it connects to throughout.
+
+| | measured |
+|---|---|
+| attempts to leave | **0** |
+| peers off this machine | **0** |
+
+Two observers, because one of them can miss. A listener standing in for the
+internet takes `HTTP_PROXY`, so every attempt is recorded with what it asked for
+and timing cannot defeat it. `lsof` sampling watches the sockets directly and
+**can** miss — the run reports how much it missed of traffic it generated
+itself, which on this machine is all of it, so that row is corroboration and
+never the proof. Both end pointed at something that does reach out, and the lane
+fails if either reports nothing.
+
+The claim is narrow and checkable: nothing in the default path phones home. A
+deployment that enables a subsystem with an upstream connects to it, on purpose.
 
 ### The per-call tax — same handler, three envelopes
 
