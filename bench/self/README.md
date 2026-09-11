@@ -8,6 +8,7 @@ asks it what it serves, and reaches one operation through each door it opens.
 
 ```
 bench/self/run.sh
+bench/self/modules.sh     # and whether anyone else can fetch what it is built from
 ```
 
 Taken on an M-series laptop, 2026-09-10, median of four runs.
@@ -34,6 +35,20 @@ row that matters:
 **Zero private modules is the load-bearing one.** It is what separates running
 the software from renting it, and it is a property of `go.mod` you can check
 without trusting this table.
+
+`modules.sh` asks the stronger form of the same question. Rather than counting
+private paths in a file, it asks the public Go proxy for every module the binary
+actually needs, with no credential:
+
+| | measured |
+|---|---|
+| modules the binary needs | 127 |
+| fetchable with no credential | **127** |
+| control: a module that does not exist | 404 |
+
+The control is why the sweep means anything. A probe that answered 200 for
+everything would report a clean sweep for a tree full of dependencies only we
+can resolve, so the run fails unless the absent module is refused.
 
 **Thirteen operations is the default, not the ceiling.** Subsystems here are
 disabled by default and fail closed: one without its configuration refuses to
