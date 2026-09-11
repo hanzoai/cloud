@@ -279,6 +279,27 @@ currently costing, and they are the same tokens any hosted bill is metered on.
 Better precision is the lever on both speed and price here — not a faster model,
 and not a cheaper rate.
 
+**And the rows say how much of k=20 is doing work.** `brain/depth.mjs` reads a
+finished run and asks, of the questions whose evidence was retrieved at all, how
+far down the list its last piece sat.
+
+| all evidence within the first… | of those questions | of every question |
+|---|---|---|
+| 1 | 51.0% | 38.3% |
+| 5 | 80.6% | 60.6% |
+| 10 | 90.7% | 68.1% |
+| 20 | 100% | 75.1% |
+
+Half the time the single top result is the whole answer. Going from k=10 to k=20
+buys **7 points of coverage for twice the prompt**, and from k=5 to k=20, 14.5
+points for four times it. So k=20 is not waste, and most of it is: the last ten
+positions are the expensive half of the context and the smaller half of the
+work.
+
+Coverage is not accuracy — having the evidence in front of the reader is
+necessary for a right answer and does not produce one — so read those as a
+ceiling on what trimming k could cost rather than as an F1 prediction.
+
 ### Code retrieval — the typed link beats the model
 
 RepoBench-R, cross-file-first, test split, n=500, `all-MiniLM-L6-v2`, from
