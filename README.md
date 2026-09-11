@@ -8,51 +8,85 @@ plugin runtime. Every subsystem mounts from one composition root (`apps.Wire()`)
 No Kubernetes. No cluster. No network. No Rust toolchain. A data directory is
 the whole dependency.
 
-## Run it
+## Run locally
+
+Requires Go 1.26.5 and `openssl`.
 
 ```bash
-make dev
+git clone https://github.com/hanzoai/cloud && cd cloud
+CGO_ENABLED=0 make dev
 ```
 
-That builds the binary, mints a local encryption key the first time, and serves
-<http://127.0.0.1:8080>. Open it — the console is embedded in the binary.
+This builds `./cloud`, writes a random key to `.dev/master.key` (mode 0600,
+gitignored) the first time, and serves <http://127.0.0.1:8080> with its data in
+`.dev/data`. The console is embedded.
 
-Or without make:
+Stores are encrypted at rest with SQLCipher, and today only the pure-Go SQLite
+backend can do that, hence `CGO_ENABLED=0`. A default cgo build refuses to start
+with a key ([#3](https://github.com/hanzoai/cloud/issues/3)). Keep
+`.dev/master.key`: the stores open only with the key that created them.
+`CLOUD_DEV_UNENCRYPTED=1` runs without a key and says so on every boot.
+
+The same run without make, for a launcher script:
 
 ```bash
-go build ./cmd/cloud
-CLOUD_KMS_MASTER_KEY_REF=$(openssl rand -base64 32) ./cloud
+CGO_ENABLED=0 go build -o cloud ./cmd/cloud
+mkdir -p .dev && (umask 077 && openssl rand -base64 32 > .dev/master.key)
+CLOUD_LISTEN=127.0.0.1:8080 CLOUD_DATA_DIR=.dev/data CLOUD_ENABLE_STAGED=functions \
+  CLOUD_KMS_MASTER_KEY_REF=$(cat .dev/master.key) ./cloud
 ```
 
-`go build` needs nothing but Go. The feature-flag evaluator has a native Rust
-implementation, but it sits behind `-tags flags_native` precisely so that a
-missing Rust toolchain can never stop the binary from building; without the tag
-a pure-Go fallback takes its place.
-
-### Where it listens
-
-`CLOUD_LISTEN` is the address (default `:8080`). `PORT` is read as a fallback
-when `CLOUD_LISTEN` says nothing, so `PORT=3000 ./cloud` does what you expect.
-Health and metrics are on a separate ops listener, `CLOUD_HEALTH_LISTEN`
-(default `:9090`), so a load balancer probes a port the public never reaches:
+Check it:
 
 ```bash
-curl localhost:9090/health
-curl localhost:8080/v1/openapi.json     # every route this process serves
+curl 127.0.0.1:9090/healthz
+curl -X POST 127.0.0.1:8080/v1/base/collections/notes -d '{"doc":{"title":"hello"}}'
+curl 127.0.0.1:8080/v1/base/collections/notes
+curl 127.0.0.1:8080/v1/openapi.json     # every route this process serves
 ```
 
-### The encryption key is not optional
+### Listeners
 
-Stores open through `cek`, which encrypts them at rest with SQLCipher. **Every**
-build can encrypt — the cgo backend links `libsqlcipher`, the pure-Go backend
-uses a pure-Go codec — so a build with no key refuses to open the data plane
-rather than silently writing plaintext. That refusal is the point, and it is the
-same code path in development and production.
+| env | default | serves |
+|---|---|---|
+| `CLOUD_LISTEN`, else `PORT` | `:8080`, every interface | HTTP API and console; `make dev` sets `127.0.0.1:$(PORT)` |
+| `CLOUD_HEALTH_LISTEN` | `127.0.0.1:9090` | `/healthz`, `/readyz`, `/metrics` |
+| `CLOUD_ZAP_LISTEN` | `127.0.0.1:9653` | ZAP, the same routes as HTTP |
 
-`make dev` therefore mints a real key into `.dev/master.key` (gitignored, mode
-0600) instead of exempting itself. If you want plaintext files to poke at,
-`CLOUD_DEV_UNENCRYPTED=1` opts out of *only* the no-key case, loudly, every boot.
-A malformed key still fails. Never set it where real data lives.
+`CLOUD_ADMIN_LISTEN` (default `:8081`) is read, but nothing listens on it. A
+second cloud on the same machine needs its own address for all three:
+
+```bash
+CLOUD_HEALTH_LISTEN=127.0.0.1:19090 CLOUD_ZAP_LISTEN=127.0.0.1:19653 CGO_ENABLED=0 make dev PORT=18080
+```
+
+### IAM and KMS
+
+This edition has no IAM of its own. It accepts JWTs issued by Hanzo IAM and
+checks them against `https://hanzo.id/v1/iam/.well-known/jwks`. `/v1/base` needs
+no token. `/v1/kms/orgs/{org}/secrets` does: without one it answers 403
+`no validated principal`. With a Hanzo account it works locally, for the org in
+the token's `owner` claim:
+
+```bash
+TOKEN=$(hanzo auth token)        # after `hanzo auth login`
+curl -H "Authorization: Bearer $TOKEN" 127.0.0.1:8080/v1/kms/orgs/<org>/secrets \
+  -d '{"name":"API_KEY","env":"dev","value":"example"}'
+curl -H "Authorization: Bearer $TOKEN" '127.0.0.1:8080/v1/kms/orgs/<org>/secrets/API_KEY?env=dev'
+```
+
+Secrets are sealed under the master key in `.dev/data/orgs/<org>/kms.db`. Without
+a Hanzo account, or offline, KMS is not usable yet
+([#2](https://github.com/hanzoai/cloud/issues/2)).
+
+### The hanzo CLI
+
+`hanzo network use local` points the [hanzo CLI](https://github.com/hanzoai/cli)
+at `http://localhost:3690`, and `CGO_ENABLED=0 make dev PORT=3690` serves there.
+The CLI still does not reach it: on a loopback network it starts a separate
+`host` binary that this repository does not build, and stops with
+`no local cloud host` ([#4](https://github.com/hanzoai/cloud/issues/4)). Call the
+HTTP API directly until then.
 
 ## The local apps
 
@@ -72,7 +106,8 @@ document under a collection is the key/value store, and it is SQLite underneath.
 Two more doors onto one room would be two more names to keep in agreement.
 
 `/v1/kms` is here too, serving from an embedded `luxfi/kms` — secrets belong in
-KMS locally exactly as they do in production, never in an env file.
+KMS locally exactly as they do in production, never in an env file. Its secret
+routes need a Hanzo IAM token; see [IAM and KMS](#iam-and-kms).
 
 A bot is a loop, and one instance of that loop is a run. `/v1/bot/runs` is where
 your runs are, wherever they happen to be: start one where you have a machine
@@ -110,8 +145,8 @@ tool surface, the CLI and the generated SDKs at once. An untyped route gets none
 of those, which is the whole reason not to write one.
 
 ```bash
-curl -X POST localhost:8080/v1/base/collections/notes -d '{"title":"hello"}'
-curl localhost:8080/v1/base/collections/notes
+curl -X POST 127.0.0.1:8080/v1/base/collections/notes -d '{"doc":{"title":"hello"}}'
+curl 127.0.0.1:8080/v1/base/collections/notes
 ```
 
 ### MCP
@@ -166,7 +201,7 @@ reports which ones have actually loaded.
 | — | `CLOUD_KMS_MASTER_KEY_REF` | — | base64 of 32 bytes |
 | `-brand` | `CLOUD_BRAND` | `hanzo` | white-label brand |
 | `-domain` | `CLOUD_DOMAIN` | `api.hanzo.ai` | primary domain |
-| `-iam-issuer` | `CLOUD_IAM_ISSUER` | — | JWKS issuer |
+| `-iam-issuer` | `CLOUD_IAM_ISSUER` | the brand's issuer, `https://hanzo.id` for `hanzo` | JWKS issuer |
 
 Where a plane the private build injects is absent, the subsystem mounts
 fail-closed and says so rather than pretending to work:
@@ -178,7 +213,7 @@ s3 subsystem mounted fail-closed: S3_ADMIN_ACCESS_KEY not set (all ops 503 until
 ## Develop
 
 ```bash
-make build          # go build, no Rust needed
+make build          # go build, no Rust needed; CGO_ENABLED=0 for a binary that can encrypt
 make test           # go test ./...
 make native         # optional: cargo build the Rust flag evaluator
 make build TAGS=flags_native
