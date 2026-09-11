@@ -13,6 +13,7 @@
 # difference between these rows is the envelope and nothing else.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+. bench/host.sh
 export GOWORK=off
 
 N=${N:-200}
@@ -34,6 +35,7 @@ done
 
 # One READ, because a read is what an agent does most and it writes nothing that
 # would make the second call different from the first.
+host
 python3 - "$P" "$N" <<'PY'
 import json, statistics, sys, time, urllib.request
 

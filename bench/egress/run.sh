@@ -22,8 +22,11 @@
 # reach out. A zero from an observer that cannot see is not evidence.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+. bench/host.sh
 
 say() { printf '%-34s %s\n' "$1" "$2"; }
+
+host
 
 sockets() {
   lsof -nP -i -a -p "$1" -F n 2>/dev/null | sed -n 's/^n//p' || true
