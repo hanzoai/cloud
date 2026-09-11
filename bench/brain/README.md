@@ -63,6 +63,16 @@ reports whatever a run has answered so far. Regenerate the tables when a run
 finishes, not while it is answering, or a row carries a partial sample with an
 interval to match.
 
+**A run that is answering nothing says so.** Retrying is right — a reader quota
+resets — so a pass that answers nothing waits longer and tries again, up to half
+an hour. What was missing is that nothing said it was happening: two runs sat on
+a `429 Usage limit reached for this 8h` for thirteen hours, at 0.0% CPU, looking
+from the outside exactly like two runs being patient. `run.mjs` now writes
+`stalled` — since when, how many passes, which failure, and what it said — on
+every pass that answers nothing, and clears it on the first pass that answers.
+`results.mjs` prints those to stderr after the tables, because that is where a
+person already looks.
+
 The run says which it is. Every lane writes `questions` — the denominator,
 counted from the corpus rather than from the rows that came back — beside
 `answered` and, when it gets there, `finished`; and `record.mjs` posts that to

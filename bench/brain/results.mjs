@@ -90,3 +90,27 @@ const sections = runs.map((d) => sectionOf(new URL(`./runs/${d}/`, here), d))
 const shown = sections.filter((x) => !/-v\d+$/.test(x.run) && (x.table || x.categories.some((c) => (c.n ?? 0) >= 50)))
 writeFileSync(new URL('./benchmarks.json', here), JSON.stringify({ generated: new Date().toISOString(), sections: shown }, null, 1))
 console.log(md)
+
+// A run that is answering nothing, said where the tables are read.
+//
+// `run.mjs` retries, which is right — a quota resets — and writes `stalled` on
+// the pass that answers nothing. Without this it went no further than that file:
+// two runs sat on a reader quota for thirteen hours, looking from the outside
+// exactly like two runs being patient. A partial row already says a run is
+// unfinished; this says it is not moving, and what it is waiting for.
+const stuck = runs
+  .map((d) => [d, (() => { try { return read(`./runs/${d}/meta.json`) } catch { return {} } })()])
+  .filter(([, m]) => m.stalled)
+if (stuck.length) {
+  console.error(`\nNOT MOVING — ${stuck.length} run${stuck.length > 1 ? 's' : ''} answering nothing:`)
+  for (const [d, m] of stuck) {
+    const hrs = (Date.now() - Date.parse(m.stalled.since)) / 3600000
+    // Not every lane keeps its counts under these names, so the fraction is
+    // printed when it is there and left out when it is not, rather than read
+    // aloud as undefined.
+    const of = m.answered != null && m.questions != null ? `${m.answered}/${m.questions} answered · ` : ''
+    console.error(`  ${d}`)
+    console.error(`    ${of}${m.stalled.passes} passes · ${hrs.toFixed(1)}h on ${m.stalled.kind}`)
+    if (m.stalled.saying) console.error(`    ${m.stalled.saying.slice(0, 120)}`)
+  }
+}

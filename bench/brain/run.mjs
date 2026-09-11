@@ -92,7 +92,7 @@ async function one(q) {
   return { ok: false, kind: last?.kind ?? 'unknown', message: last?.message ?? '' }
 }
 
-let pass = 0, quiet = 0
+let pass = 0, quiet = 0, stalledSince = ''
 while (pass++ < MAX_PASSES) {
   const have = new Set(readRows(DIR).map(qid))
   const todo = qs.filter((q) => !have.has(qid(q)))
@@ -108,7 +108,21 @@ while (pass++ < MAX_PASSES) {
   })
   const failed = Object.values(fails).reduce((a, b) => a + b, 0)
   log(`pass ${pass}: asked ${todo.length}, answered ${okCount}, failed ${failed}${failed ? ' ' + JSON.stringify(fails) + ' e.g. ' + sample : ''} in ${((Date.now() - t0) / 1000).toFixed(0)}s`)
-  writeMetrics(); writeMeta({ passes: pass, wall_seconds: wall() }); await record(DIR)
+  // A pass that answers nothing is recorded as such, with what it was failing
+  // with and since when. Retrying is right — a quota resets — but a run that has
+  // been answering nothing for hours looked exactly like one being patient, and
+  // two of them span for thirteen hours on a reader quota with nobody the wiser.
+  // `stalled` clears the moment a pass answers, so it reads as now, not as
+  // history.
+  if (okCount) stalledSince = ''
+  else if (!stalledSince) stalledSince = new Date().toISOString()
+  const stalled = okCount ? null : {
+    since: stalledSince,
+    passes: quiet + 1,
+    kind: Object.entries(fails).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'unknown',
+    saying: sample,
+  }
+  writeMetrics(); writeMeta({ passes: pass, wall_seconds: wall(), stalled }); await record(DIR)
   if (!failed) continue
   quiet = okCount ? 0 : quiet + 1
   // a pass that answered nothing is the router saying not now: wait longer each time, up to half an hour
@@ -118,7 +132,7 @@ while (pass++ < MAX_PASSES) {
 }
 const m = writeMetrics()
 const rows = readRows(DIR)
-writeMeta({ finished: new Date().toISOString(), wall_seconds: wall(),
+writeMeta({ finished: new Date().toISOString(), wall_seconds: wall(), stalled: null,
   tokens_per_question: rows.length ? Math.round(rows.reduce((a, r) => a + r.tokens, 0) / rows.length) : 0,
   reader_tokens: rows.reduce((a, r) => a + (r.usage?.total_tokens ?? 0), 0) })
 await record(DIR)
