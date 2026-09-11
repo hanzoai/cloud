@@ -655,6 +655,16 @@ k: `20` · reader: `qwen3.6:35b-a3b` · commit: `12468828cfba9497ebbb927af840534
 | test:open-domain | 73.00 | 73.00 | 23.0 [15.1, 31.7] | 16.4 [8.2, 26.0] | 63.0 | 21.9 | 899 | 3585 | 4213 |
 | test:single-hop | 630 | 630 | 63.0 [59.9, 66.1] | 41.4 [37.6, 45.2] | 89.7 | 66.3 | 950 | 5065 | 5526 |
 
+### locomo-all-context-k5-qwen3.6-35b-a3b
+
+k: `5` · reader: `qwen3.6:35b-a3b` · commit: `64aff2baa5dcdb091edbcd6d0e9e50ea161b763c` · prompt sha: `prompts/reader-locomo.txt`
+
+| category | n | of | f1 | em | exact | supported | answered | tokens | p50_ms | p95_ms |
+|---|---|---|---|---|---|---|---|---|---|---|
+| all | 1536 | 1536 | 47.6 [45.5, 49.7] | 25.5 [23.4, 27.9] | 73.8 | 24.6 | 50.3 | 249 | 1082 | 1248 |
+| dev | 383 | 383 | 47.9 [43.6, 51.7] | 23.5 [19.3, 27.9] | 73.1 | 19.6 | 52.5 | 257 | 1074 | 1201 |
+| test | 1153 | 1153 | 47.5 [45.3, 49.9] | 26.2 [23.6, 28.7] | 74.1 | 26.3 | 49.6 | 246 | 1084 | 1261 |
+
 ### locomo-all-oracle-k20-gemma4-31b
 
 k: `20` · reader: `gemma4:31b` · commit: `ddc076f5dd0506ce50428416c336e45c4a7ada73` · prompt sha: `prompts/reader-locomo.txt`

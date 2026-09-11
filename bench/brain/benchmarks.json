@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-11T20:05:41.269Z",
+ "generated": "2026-09-11T20:57:44.090Z",
  "sections": [
   {
    "bench": "conv",
@@ -2108,6 +2108,108 @@
       "tokens": 950.0079365079365,
       "p50_ms": 5065,
       "p95_ms": 5526
+     }
+    }
+   ],
+   "table": null
+  },
+  {
+   "bench": "locomo",
+   "run": "locomo-all-context-k5-qwen3.6-35b-a3b",
+   "row": null,
+   "split": null,
+   "k": 5,
+   "reader": "qwen3.6:35b-a3b",
+   "facts": null,
+   "commit": "64aff2baa5dcdb091edbcd6d0e9e50ea161b763c",
+   "record": {
+    "commit": "64aff2baa5dcdb091edbcd6d0e9e50ea161b763c",
+    "prompt": "prompts/reader-locomo.txt",
+    "prompt_digest": "afa0a591ae62c574",
+    "dataset_digest": "79fa87e90f040813",
+    "store_digest": "688cea6b889e484c",
+    "facts_digest": "cc680d252a3538b9",
+    "reader": "qwen3.6:35b-a3b",
+    "embedding": null,
+    "temperature": 0,
+    "max_tokens": 64,
+    "questions": 1536,
+    "answered": 1536,
+    "started": "2026-09-11T20:42:31.614Z",
+    "ended": "2026-09-11T20:56:26.530Z",
+    "completion": "complete",
+    "wall_seconds": 835,
+    "tokens_per_question": 249,
+    "reader_tokens": 779484
+   },
+   "categories": [
+    {
+     "name": "all",
+     "n": 1536,
+     "metrics": {
+      "of": 1536,
+      "f1": {
+       "mean": 0.47583046735731876,
+       "lo": 0.45517053481761144,
+       "hi": 0.4969367357420909
+      },
+      "em": {
+       "mean": 0.2552083333333333,
+       "lo": 0.23372395833333334,
+       "hi": 0.2786458333333333
+      },
+      "exact": 0.73828125,
+      "supported": 0.24609375,
+      "answered": 0.5032552083333334,
+      "tokens": 248.92122395833334,
+      "p50_ms": 1082,
+      "p95_ms": 1248
+     }
+    },
+    {
+     "name": "dev",
+     "n": 383,
+     "metrics": {
+      "of": 383,
+      "f1": {
+       "mean": 0.4791140101007203,
+       "lo": 0.4358377497819865,
+       "hi": 0.5169003773274441
+      },
+      "em": {
+       "mean": 0.2349869451697128,
+       "lo": 0.19321148825065274,
+       "hi": 0.2793733681462141
+      },
+      "exact": 0.7310704960835509,
+      "supported": 0.195822454308094,
+      "answered": 0.5248041775456919,
+      "tokens": 257.48563968668407,
+      "p50_ms": 1074,
+      "p95_ms": 1201
+     }
+    },
+    {
+     "name": "test",
+     "n": 1153,
+     "metrics": {
+      "of": 1153,
+      "f1": {
+       "mean": 0.47473975021011916,
+       "lo": 0.4525393344341285,
+       "hi": 0.49930086914030886
+      },
+      "em": {
+       "mean": 0.2619254119687771,
+       "lo": 0.23590633130962707,
+       "hi": 0.2870771899392888
+      },
+      "exact": 0.7406764960971379,
+      "supported": 0.26279271465741544,
+      "answered": 0.49609713790112747,
+      "tokens": 246.07632263660017,
+      "p50_ms": 1084,
+      "p95_ms": 1261
      }
     }
    ],
