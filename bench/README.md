@@ -197,7 +197,9 @@ the ladder it was meant to improve — it is in the table as a failed row becaus
 it was run, not because it was guessed.
 
 Their k and their all-vs-any are unstated, so treat 91/57 as a target rather
-than a like-for-like.
+than a like-for-like — and it is **unsourced**: it is not on any page reachable
+from their sitemap as of 2026-09-11. [naive.md](naive.md) lists every figure in
+this file that is in that position.
 
 ### Code retrieval — the typed link beats the model
 
@@ -216,13 +218,26 @@ its declarations beats either retrieval model on its own**, at recall@1 by 12
 points, with no embedding call at all. The model earns its place in the last
 row, not the first.
 
-### Pricing — 90% under them still clears
+### Pricing — compute is not where the difference is
 
-Costs from `railway.com/pricing`; volumes measured above.
+Our costs from `railway.com/pricing`; their prices from `usenaive.ai/pricing`,
+read 2026-09-11 and recorded verbatim in [naive.md](naive.md); volumes measured
+above.
 
-- one call ≈ **51 ms** of compute → **$0.00000063** marginal
-- Naïve charge **$0.05** a credit — 79,614× marginal
-- at **$0.005** (90% under), 1B calls/month returns **$3.7M** after giving 25%
+- one call ≈ **51 ms** of compute → **$0.00000063** marginal, measured
+- the same call at their published **$0.0504/vCPU-hr** → **$0.00000071**
+- so their compute is about **1.1×** what the work costs — a thin markup
+
+An earlier version of this row said they charge $0.05 a credit and called it
+79,614× marginal. No per-credit price is published; $0.0504 is an hour of a
+vCPU, and reading it as a call overstates their price by the ratio of an hour to
+a call. The correction goes against us and the row is here as it reads.
+
+Where their published prices do carry a markup is the metered tools —
+`$0.002158` for one web search — and the model tokens, which every stack bills
+and which dominate both columns.
+
+- at **$0.005** a call, 1B calls/month returns **$3.7M** after giving 25%
   to open source, three availability zones, twelve months of retained history,
   and twice the infrastructure bill in people
 
