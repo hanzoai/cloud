@@ -127,40 +127,52 @@ benchmarks fastest.
 Their row is marked *"MODELLED, NEVER BILLED."* Ours is a file you can `ls`.
 2,198× is the distance between an assumption and a measurement.
 
-### Sandbox — the table conflates two primitives
+### Sandbox — three primitives, and one of them we now measure
 
-| | measured here | published |
+| | measured here | attributed elsewhere |
 |---|---|---|
-| V8 context | **0.15 ms** | Naïve, isolated-vm: 2.79 ms |
+| V8 context | 0.23 ms | — |
+| V8 isolate, isolated-vm 7.0.1 | **0.59 ms**, 1.00 MiB each | 2.79 ms, 1.2 MB |
 | container, cold | **150.8 ms** | E2B <200 ms · Modal ~1 s · Cloudflare 1–3 s |
 | container, pooled | **37.5 ms** | — |
 
-Two honest readings. A plain V8 context is **17× faster than their isolate
-number**, so an isolate tier would beat the row they lead with. And our cold
-container already beats E2B, Modal and Cloudflare, while a pooled one answers in
-37.5 ms.
+**The isolate row used to be the context row.** A `vm.createContext` makes a
+fresh global inside the isolate already running; it is cheap because it shares
+the heap, which is exactly what an isolate does not do. Reporting 0.15 ms
+against a published 2.79 ms and calling it 17× was comparing two different
+primitives in our favour. Running the library the number is attributed to, on
+this laptop, an isolate costs **0.59 ms** — still under the figure cited at us,
+by 4.7× rather than 17×, and now a measurement rather than an argument.
 
-But an isolate runs JavaScript. It cannot run pytest, pip, cargo, or a shell —
-which is what a coding agent was asked to do. The two rows are different
-primitives and the comparison is per workload, not per millisecond.
+**The megabyte is V8's, not a vendor's.** A fresh isolate's heap measures 1.00
+MiB here, which is close to the 1.2 MB cited — because it is what any V8 isolate
+costs, including one of ours. It is not a competitor's weakness.
+
+The cold container beats E2B, Modal and Cloudflare, and a pooled one answers in
+37.5 ms. But an isolate runs JavaScript: no pytest, no pip, no cargo, no shell —
+which is what a coding agent was asked to do. The rows are different primitives
+and the comparison is per workload, not per millisecond.
 
 ### Agent as goroutine — the execution half of the fleet claim
 
 A dormant agent is a row. An agent that is *running* still has to hold its
 place, and that is a goroutine rather than a container.
 
-| | measured here | published |
+| | measured here | attributed elsewhere |
 |---|---|---|
-| per live agent | **601 bytes** of heap | Naïve, isolated-vm: 1.2 MB |
-| spawn | **187 ns** | 2.79 ms cold start |
+| per live agent | **601 bytes** of heap | isolated-vm: 1.2 MB — and 1.00 MiB measured |
+| spawn | **187 ns** | 2.79 ms — and 0.59 ms measured |
 | wake 1M | 114 ms (114 ns each) | — |
 | wazero (WASM) | 8.9 µs instantiate, 23 ns call | — |
 | goja (JavaScript) | 2.7 µs per VM, 818 ns warm eval | — |
 | gpython (Python) | 29.9 µs per context | — |
 
-601 bytes against a 128 MB container floor is ~223,000×. Memory was identical
-on all five runs; the timings are medians. Benchmark a **built binary** — under
-`go run` the compile is counted and spawn reads 253 ns instead of 187 ns.
+601 bytes against a 128 MB container floor is ~223,000×. Against a V8 isolate it
+is ~1,700× — and that one is a goroutine against a JavaScript VM, so read it as
+what each primitive costs rather than as one beating the other. Memory was
+identical on all five runs; the timings are medians. Benchmark a **built
+binary** — under `go run` the compile is counted and spawn reads 253 ns instead
+of 187 ns.
 
 WASM is not one language: CPython, QuickJS for TypeScript, Rust and Go all
 target it. A V8 isolate is JavaScript only.

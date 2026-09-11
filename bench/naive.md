@@ -52,8 +52,8 @@ in this directory.
 | cited as | where in this suite | status |
 |---|---|---|
 | 91% single-hop, 57% multi-hop, LoCoMo | Agent Brain | **unsourced** |
-| isolated-vm 2.79 ms cold start | Sandbox, Agent as goroutine | **unsourced** |
-| isolated-vm 1.2 MB per agent | Agent as goroutine | **unsourced** |
+| isolated-vm 2.79 ms cold start | Sandbox, Agent as goroutine | **unsourced** — and measured here at 0.59 ms |
+| isolated-vm 1.2 MB per agent | Agent as goroutine | **unsourced** — and measured here at 1.00 MiB, which is V8's floor |
 | ~1 MB per dormant agent | Fleet residency — already marked *"their assumption"* | modelled, not theirs |
 | "$0.05 a credit" | Pricing | **withdrawn** — see below |
 
