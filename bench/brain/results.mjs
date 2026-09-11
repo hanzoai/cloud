@@ -91,6 +91,41 @@ const shown = sections.filter((x) => !/-v\d+$/.test(x.run) && (x.table || x.cate
 writeFileSync(new URL('./benchmarks.json', here), JSON.stringify({ generated: new Date().toISOString(), sections: shown }, null, 1))
 console.log(md)
 
+// A published number that its own predictions no longer produce.
+//
+// `metrics.json` is what these tables read; `predictions.jsonl` is what it was
+// computed from. `rescore.mjs` rewrites the predictions — it collapses a
+// resumed runner's duplicate answers to the last one — so a run scored before
+// that can hold counts describing rows the file no longer has.
+//
+// Asked of the block the PUBLISHER reads, which is `summary` when a run has one
+// and the nested blocks otherwise — the order `section.mjs` uses. Asked of the
+// nested block instead, this reported four rescored runs as drifted whose
+// published numbers were right: rescore leaves the pre-dedup block in place
+// beside the summary, so comparing that one measures a vestige.
+const rowsOf = (d) => {
+  try {
+    return readFileSync(new URL(`./runs/${d}/predictions.jsonl`, here), 'utf8')
+      .split('\n').filter(Boolean).length
+  } catch { return null }
+}
+const published = (m) => m?.summary?.all?.n ?? m?.all?.overall?.n ?? null
+const drifted = runs
+  .map((d) => {
+    const have = rowsOf(d)
+    let said = null
+    try { said = published(read(`./runs/${d}/metrics.json`)) } catch {}
+    return [d, said, have]
+  })
+  .filter(([, said, have]) => said != null && have != null && said !== have)
+if (drifted.length) {
+  console.error(`\nMETRICS DO NOT MATCH THEIR PREDICTIONS — ${drifted.length} run${drifted.length > 1 ? 's' : ''}:`)
+  for (const [d, said, have] of drifted) {
+    console.error(`  ${d}`)
+    console.error(`    published block counts ${said}, predictions.jsonl holds ${have} — node rescore.mjs runs/${d}`)
+  }
+}
+
 // A run that is answering nothing, said where the tables are read.
 //
 // `run.mjs` retries, which is right — a quota resets — and writes `stalled` on
