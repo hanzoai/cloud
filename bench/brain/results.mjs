@@ -135,16 +135,21 @@ if (drifted.length) {
 // unfinished; this says it is not moving, and what it is waiting for.
 const stuck = runs
   .map((d) => [d, (() => { try { return read(`./runs/${d}/meta.json`) } catch { return {} } })()])
-  .filter(([, m]) => m.stalled)
+  .filter(([, m]) => m.stalled || m.stopped)
 if (stuck.length) {
   console.error(`\nNOT MOVING — ${stuck.length} run${stuck.length > 1 ? 's' : ''} answering nothing:`)
   for (const [d, m] of stuck) {
-    const hrs = (Date.now() - Date.parse(m.stalled.since)) / 3600000
     // Not every lane keeps its counts under these names, so the fraction is
     // printed when it is there and left out when it is not, rather than read
     // aloud as undefined.
     const of = m.answered != null && m.questions != null ? `${m.answered}/${m.questions} answered · ` : ''
     console.error(`  ${d}`)
+    if (m.stopped) {
+      console.error(`    ${of}gave up on ${m.stopped.reason} — waiting cannot fix it`)
+      if (m.stopped.saying) console.error(`    ${m.stopped.saying.slice(0, 120)}`)
+      continue
+    }
+    const hrs = (Date.now() - Date.parse(m.stalled.since)) / 3600000
     console.error(`    ${of}${m.stalled.passes} passes · ${hrs.toFixed(1)}h on ${m.stalled.kind}`)
     if (m.stalled.saying) console.error(`    ${m.stalled.saying.slice(0, 120)}`)
   }
