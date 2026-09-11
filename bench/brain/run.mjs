@@ -92,7 +92,7 @@ async function one(q) {
   return { ok: false, kind: last?.kind ?? 'unknown', message: last?.message ?? '' }
 }
 
-let pass = 0, quiet = 0, stalledSince = ''
+let pass = 0, quiet = 0, stalledSince = '', gaveUp = null
 while (pass++ < MAX_PASSES) {
   const have = new Set(readRows(DIR).map(qid))
   const todo = qs.filter((q) => !have.has(qid(q)))
@@ -122,7 +122,18 @@ while (pass++ < MAX_PASSES) {
     kind: Object.entries(fails).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'unknown',
     saying: sample,
   }
-  writeMetrics(); writeMeta({ passes: pass, wall_seconds: wall(), stalled }); await record(DIR)
+  // A pass that failed entirely on client errors is not being told "not now",
+  // it is being told "not you": `one()` already refuses to retry one of those,
+  // and waiting half an hour cannot expire less. This is how a run on a dead
+  // credential spent five hours discovering the same 401 — behind a quota,
+  // which reset and revealed a token that had been expired for eleven hours.
+  if (!okCount && failed > 0 && failed === (fails.client ?? 0)) {
+    gaveUp = { reason: 'client', saying: sample, at: new Date().toISOString() }
+    writeMetrics(); writeMeta({ passes: pass, wall_seconds: wall(), stalled, stopped: gaveUp }); await record(DIR)
+    log(`stopping: every question failed with a client error, which waiting cannot fix — ${sample}`)
+    break
+  }
+  writeMetrics(); writeMeta({ passes: pass, wall_seconds: wall(), stalled, stopped: null }); await record(DIR)
   if (!failed) continue
   quiet = okCount ? 0 : quiet + 1
   // a pass that answered nothing is the router saying not now: wait longer each time, up to half an hour
@@ -132,7 +143,7 @@ while (pass++ < MAX_PASSES) {
 }
 const m = writeMetrics()
 const rows = readRows(DIR)
-writeMeta({ finished: new Date().toISOString(), wall_seconds: wall(), stalled: null,
+writeMeta({ ...(gaveUp ? {} : { finished: new Date().toISOString() }), wall_seconds: wall(), stalled: null,
   tokens_per_question: rows.length ? Math.round(rows.reduce((a, r) => a + r.tokens, 0) / rows.length) : 0,
   reader_tokens: rows.reduce((a, r) => a + (r.usage?.total_tokens ?? 0), 0) })
 await record(DIR)

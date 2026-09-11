@@ -63,9 +63,17 @@ reports whatever a run has answered so far. Regenerate the tables when a run
 finishes, not while it is answering, or a row carries a partial sample with an
 interval to match.
 
-**A run that is answering nothing says so.** Retrying is right — a reader quota
-resets — so a pass that answers nothing waits longer and tries again, up to half
-an hour. What was missing is that nothing said it was happening: two runs sat on
+**A run stops when waiting cannot help.** `one()` already refuses to retry a
+client error on one question; the pass loop did not, so a run whose every
+question came back 401 waited half an hour and asked again. That is how two runs
+spent five hours rediscovering the same expired token — the 401 was behind a
+quota, and when the quota reset it revealed a credential that had been dead for
+eleven hours. A pass that fails entirely on client errors now records why and
+stops, and the run is not stamped finished.
+
+**A run that is answering nothing says so.** Retrying is right where it can help
+— a reader quota resets — so a pass that answers nothing for any other reason
+waits longer and tries again, up to half an hour. What was missing is that nothing said it was happening: two runs sat on
 a `429 Usage limit reached for this 8h` for thirteen hours, at 0.0% CPU, looking
 from the outside exactly like two runs being patient. `run.mjs` now writes
 `stalled` — since when, how many passes, which failure, and what it said — on
