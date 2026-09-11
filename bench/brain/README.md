@@ -41,6 +41,10 @@ node longmemeval/retrieve.mjs --help
 # the tables
 node results.mjs                                 # RESULTS.md and the three benchmarks*.json
 node tables.mjs                                  # LaTeX tables into ../../../papers/tables/
+
+# the record
+node record.mjs                                  # post every run under runs/ and ../code/runs to /v1/research
+node --test record.test.mjs                      # the normalization and the absences
 ```
 
 Credentials: `HANZO_API_KEY`, else the token `hanzo auth login` saved. Never printed,
@@ -58,6 +62,16 @@ A run in progress is still a run: `run.mjs` checkpoints, and `results.mjs`
 reports whatever a run has answered so far. Regenerate the tables when a run
 finishes, not while it is answering, or a row carries a partial sample with an
 interval to match.
+
+The run says which it is. Every lane writes `questions` — the denominator,
+counted from the corpus rather than from the rows that came back — beside
+`answered` and, when it gets there, `finished`; and `record.mjs` posts that to
+`/v1/research/runs` as the run goes, so an unfinished run is
+`?completion=partial` rather than a row nobody caught. That the counts are
+written at all is the fix for a real defect: `locomo-all-context-k20-enso-flash`
+was published at 57 of its 282 questions, 9.4 F1 points above where it landed.
+Recording needs a credential and is never on the critical path — without one the
+recorder says so once and the run proceeds.
 
 ## Data
 
@@ -81,6 +95,8 @@ metrics of every run.
 | `extract.mjs`, `entities.mjs`, `coverage.mjs` | the write side: atomic facts, canonical entities, events, cue anchors; coverage of the gold turns |
 | `mab/`, `conv/`, `longmemeval/` | the other benchmarks, each with its own README |
 | `cer2.mjs`, `cer.mjs`, `oracle.mjs`, `misses.mjs`, `hops.mjs`, `evidence.mjs` | the first cut and its diagnostics, kept so the earlier numbers stay reproducible |
+| `section.mjs` | one run directory's numbers, normalized once — imported by `results.mjs` and `record.mjs`, so the page and the record cannot disagree |
+| `record.mjs` | a run reports itself to `/v1/research` as it goes; run directly it posts the whole tree |
 | `runs/<bench>-<split>-<row>-<facts>[-<embedding>]/` | `meta.json`, `metrics.json`, `traces.jsonl` or `predictions.jsonl` |
 | `ablations/`, `prompts/`, `RESULTS.md`, `METHOD.md` | the search tables, every prompt, the generated results, the protocol |
 

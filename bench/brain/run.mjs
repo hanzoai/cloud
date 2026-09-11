@@ -18,6 +18,7 @@ import { execSync } from 'node:child_process'
 import { rankAll, store } from './rank.mjs'
 import { ask, apiFor, credential, contextOf, f1, em } from './answer.mjs'
 import { scoreRows, expectedCounts, readRows, counts, qid, table } from './score.mjs'
+import { record } from './record.mjs'
 
 const arg = (k, d) => { const m = process.argv.find((a) => a.startsWith(`--${k}=`)); return m ? m.split('=')[1] : d }
 const POLICY = arg('policy', 'cer'), K = Number(arg('k', 20)), READER = arg('reader', 'enso-flash')
@@ -61,6 +62,9 @@ meta = { ...meta, name: NAME, benchmark: 'locomo', policy: POLICY, k: K, reader:
 const writeMeta = (extra = {}) => writeFileSync(`${DIR}/meta.json`, JSON.stringify({ ...meta, ...counts(readRows(DIR), store), ...extra }, null, 1))
 const writeMetrics = () => { const rows = readRows(DIR); const m = scoreRows(rows, store, expectedCounts(store, [1, 2, 3, 4])); writeFileSync(`${DIR}/metrics.json`, JSON.stringify(m, null, 1)); return m }
 writeMeta()
+// The record tracks the files, not a second copy of them held here: a run exists
+// in /v1/research from the moment it starts, and says where it is at every pass.
+await record(DIR)
 
 async function pool(items, fn) {
   let i = 0
@@ -104,7 +108,7 @@ while (pass++ < MAX_PASSES) {
   })
   const failed = Object.values(fails).reduce((a, b) => a + b, 0)
   log(`pass ${pass}: asked ${todo.length}, answered ${okCount}, failed ${failed}${failed ? ' ' + JSON.stringify(fails) + ' e.g. ' + sample : ''} in ${((Date.now() - t0) / 1000).toFixed(0)}s`)
-  writeMetrics(); writeMeta({ passes: pass, wall_seconds: wall() })
+  writeMetrics(); writeMeta({ passes: pass, wall_seconds: wall() }); await record(DIR)
   if (!failed) continue
   quiet = okCount ? 0 : quiet + 1
   // a pass that answered nothing is the router saying not now: wait longer each time, up to half an hour
@@ -117,6 +121,7 @@ const rows = readRows(DIR)
 writeMeta({ finished: new Date().toISOString(), wall_seconds: wall(),
   tokens_per_question: rows.length ? Math.round(rows.reduce((a, r) => a + r.tokens, 0) / rows.length) : 0,
   reader_tokens: rows.reduce((a, r) => a + (r.usage?.total_tokens ?? 0), 0) })
+await record(DIR)
 const done = counts(rows, store)
 log(`done: ${done.answered}/${done.questions} answered`)
 console.log(table(NAME, m))

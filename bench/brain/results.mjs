@@ -9,20 +9,19 @@
  *   node results.mjs            # writes RESULTS.md and prints it
  */
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { LABEL as label, leaf, pairs, sectionOf } from './section.mjs'
 
 const here = new URL('.', import.meta.url)
 const runs = existsSync(new URL('./runs/', here)) ? readdirSync(new URL('./runs/', here)).filter((d) => existsSync(new URL(`./runs/${d}/metrics.json`, here))).sort() : []
 const read = (p) => JSON.parse(readFileSync(new URL(p, here), 'utf8'))
 const pct = (x) => (x * 100).toFixed(1)
 const cell = (v) => v && typeof v === 'object' && 'mean' in v ? `${pct(v.mean)} [${pct(v.lo)}, ${pct(v.hi)}]` : typeof v === 'number' ? (v <= 1 ? pct(v) : v.toFixed(v < 100 ? 2 : 0)) : String(v ?? '')
-const label = { 1: 'multi-hop', 2: 'temporal', 3: 'open-domain', 4: 'single-hop', all: 'all' }
 
-const leaf = (v) => typeof v === 'number' || (v && typeof v === 'object' && 'mean' in v)
 /** The first field shaped like {row: {metric: number|interval}} or [{name, metric...}], as a markdown table. */
 function gridOf(m) {
   for (const key of ['summary', 'by_size', 'by_style', 'by_category', 'rows', 'table']) {
     const v = m[key]; if (!v || typeof v !== 'object') continue
-    const entries = Array.isArray(v) ? v.map((r, i) => [r.name ?? r.row ?? r.style ?? r.size ?? String(i), r]) : Object.entries(v)
+    const entries = pairs(v)
     if (!entries.length || !entries.every(([, r]) => r && typeof r === 'object' && Object.values(r).some(leaf))) continue
     const cols = [...new Set(entries.flatMap(([, r]) => Object.keys(r).filter((k) => leaf(r[k]) && !['name', 'row', 'style', 'size'].includes(k))))]
     let out = `| ${key === 'summary' ? 'category' : key.replace('by_', '')} | ${cols.join(' | ')} |\n|---|${cols.map(() => '---').join('|')}|\n`
@@ -59,47 +58,6 @@ if (abl.length) {
 }
 writeFileSync(new URL('./RESULTS.md', here), md)
 
-/**
- * Completion, DERIVED from what the record says and never written by a run.
- *
- * A harness that checkpoints produces the record a finished run produces minus
- * the denominator, so a count that is absent is never assumed and counts that
- * agree are not enough on their own: something has to say the run ended. Same
- * four words, same rule, as /v1/research derives on read.
- */
-const completionOf = (questions, answered, ended) =>
-  questions == null || answered == null ? 'unknown'
-    : answered > questions ? 'inconsistent'
-      : answered < questions ? 'partial'
-        : ended ? 'complete' : 'unknown'
-
-/**
- * One run's execution record: what it was frozen at, what it read, what it set
- * out to answer, what it answered, and what it cost. Absent stays absent — a
- * field the harness did not write is null here and `unknown` downstream, never
- * zero. hanzo.ai/benchmarks admits a row to a leaderboard on `completion`.
- */
-const record = (meta) => ({
-  commit: meta.commit ?? null,
-  prompt: meta.prompt ?? null,
-  prompt_digest: meta.prompt_sha256 ?? null,
-  dataset_digest: meta.dataset_sha256 ?? null,
-  store_digest: meta.store_sha256 ?? meta.store ?? null,
-  facts_digest: meta.facts_sha256 ?? null,
-  reader: meta.reader ?? null,
-  embedding: meta.embedding ?? meta.embed ?? null,
-  temperature: meta.temperature ?? null,
-  max_tokens: meta.max_tokens ?? null,
-  questions: meta.questions ?? null,
-  answered: meta.answered ?? null,
-  started: meta.started ?? meta.when ?? null,
-  ended: meta.finished ?? null,
-  completion: completionOf(meta.questions ?? null, meta.answered ?? null, meta.finished ?? null),
-  wall_seconds: meta.wall_seconds ?? null,
-  tokens_per_question: meta.tokens_per_question ?? null,
-  reader_tokens: meta.reader_tokens ?? null,
-})
-
 // The retrieval runs, grouped for hanzo.ai/benchmarks: one table per split and embedding space, one row per configuration.
 const ROW_ORDER = ['semantic-only', 'lexical', 'facts', 'entities', 'timeline', 'adjacency', 'typed-graph', 'iterative-hops', 'full-facets', 'failed-prf', 'failed-multi-query-rrf', 'failed-chain-search', 'failed-surface-entities', 'failed-global-rrf']
 const groups2 = {}
@@ -126,29 +84,8 @@ for (const d of codeRuns) { const mm = d.match(/^repobench-r-(cff|cfr)-(dev|test
 for (const g of Object.values(codeGroups)) g.rows.sort((a, b) => a.order - b.order)
 writeFileSync(new URL('./benchmarks-code.json', here), JSON.stringify({ generated: new Date().toISOString(), tables: Object.values(codeGroups) }, null, 1))
 
-/**
- * The split blocks run.mjs writes, in the flat `split` / `split:category` shape
- * rescore.mjs writes — for the runs scored before that shape existed. A run that
- * carries a summary keeps it: the summary is the deduped one, and the nested
- * blocks beside it are whatever the run was scored at last.
- */
-const flatten = (m) => {
-  const out = {}
-  for (const split of ['all', 'dev', 'test']) { const b = m[split]; if (!b || typeof b !== 'object') continue
-    if (b.overall?.n) out[split] = b.overall
-    for (const [name, x] of Object.entries(b)) if (name !== 'overall' && x?.n) out[`${split}:${name}`] = x }
-  return Object.keys(out).length ? out : null
-}
-
 // The same numbers as data, for hanzo.ai/benchmarks: one section per run.
-const sections = runs.map((d) => { const m = read(`./runs/${d}/metrics.json`), meta = existsSync(new URL(`./runs/${d}/meta.json`, here)) ? read(`./runs/${d}/meta.json`) : {}
-  const key = ['summary', 'by_size', 'by_style', 'by_category', 'rows', 'table'].find((k) => m[k] && typeof m[k] === 'object')
-  const v = key ? m[key] : flatten(m)
-  const entries = !v ? [] : Array.isArray(v) ? v.map((r, i) => [r.name ?? r.row ?? r.style ?? r.size ?? String(i), r]) : Object.entries(v)
-  const categories = entries.filter(([, r]) => r && typeof r === 'object' && Object.values(r).some(leaf)).map(([c, s]) => ({ name: label[c] ?? c, n: s.n ?? null,
-    metrics: Object.fromEntries(Object.entries(s).filter(([k, x]) => k !== 'n' && leaf(x)).map(([k, x]) => [k, x && typeof x === 'object' ? { mean: x.mean, lo: x.lo, hi: x.hi } : x])) }))
-  return { bench: d.split('-')[0], run: d, row: m.row ?? null, split: m.split ?? meta.split ?? null, k: m.k ?? meta.k ?? null, reader: m.reader ?? meta.reader ?? null, facts: m.facts ?? meta.facts ?? null, commit: meta.commit ?? null,
-    record: record(meta), categories, table: typeof m.table === 'string' ? m.table : null } })
+const sections = runs.map((d) => sectionOf(new URL(`./runs/${d}/`, here), d))
 // a run with fewer than fifty questions in every row is a smoke test, not a table for the site
 const shown = sections.filter((x) => !/-v\d+$/.test(x.run) && (x.table || x.categories.some((c) => (c.n ?? 0) >= 50)))
 writeFileSync(new URL('./benchmarks.json', here), JSON.stringify({ generated: new Date().toISOString(), sections: shown }, null, 1))
