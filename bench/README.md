@@ -325,6 +325,35 @@ retrieved tokens and 30% of the prompt, because the rest of it — the
 instruction, the question — does not shrink. The oracle row is the floor: 1.52
 turns, 76 tokens of context, 294 in total.
 
+**And what those seven points of coverage are worth: 2.2 F1.** The same policy,
+the same reader, the same 1,536 questions, answered at k=10:
+
+| | prompt tokens | F1 | multi-hop | single-hop |
+|---|---|---|---|---|
+| k=20 | 1,400 | **53.3** | 43.0 | 61.9 |
+| k=10 | **812** | 51.1 | 40.8 | 58.7 |
+| oracle, 1.52 turns | 294 | 61.8 | 55.6 | 70.8 |
+
+So half the context costs 2.2 points overall and 2.2 on multi-hop, for 42% of
+the prompt. Whether that is a good trade is a pricing question rather than a
+retrieval one, and it is now a question with both numbers in it.
+
+**Latency across runs is not comparable, and this is how we know.** The k=20 run
+recorded 4.79 s a question and the oracle run 3.08 s — at 294 prompt tokens
+against 1,400, which prompt size cannot explain. They were taken on different
+days under unknown load. Measured back to back on an idle machine, the same
+category at both settings:
+
+| k | context tokens | p50 |
+|---|---|---|
+| 10 | 479 | **1.4 s** |
+| 20 | 917 | 2.2 s |
+
+**1.6× faster for half the context** — not the 3× the older rows suggested. The
+doors lane learned this and said so; this lane had not, and its per-question
+seconds were being read as a property of the configuration when they were a
+property of the afternoon.
+
 **Across three policies it ordered them the way the reader did.** The same
 measurement, run on each, against the F1 those runs scored:
 

@@ -590,6 +590,16 @@ k: `20` · reader: `qwen3.6:35b-a3b` · commit: `12468828cfba9497ebbb927af840534
 | test:open-domain | 73.00 | 73.00 | 16.9 [9.8, 24.8] | 12.3 [5.5, 20.5] | 63.0 | 15.1 | 897 | 4797 | 5254 |
 | test:single-hop | 630 | 630 | 59.1 [55.7, 62.3] | 38.3 [34.6, 42.1] | 84.0 | 62.9 | 959 | 2804 | 3374 |
 
+### locomo-all-context-k10-qwen3.6-35b-a3b
+
+k: `10` · reader: `qwen3.6:35b-a3b` · commit: `64aff2baa5dcdb091edbcd6d0e9e50ea161b763c` · prompt sha: `prompts/reader-locomo.txt`
+
+| category | n | of | f1 | em | exact | supported | answered | tokens | p50_ms | p95_ms |
+|---|---|---|---|---|---|---|---|---|---|---|
+| all | 1536 | 1536 | 51.1 [48.9, 53.2] | 27.9 [25.6, 30.1] | 81.1 | 27.9 | 54.1 | 501 | 1463 | 1659 |
+| dev | 383 | 383 | 50.4 [46.2, 54.3] | 25.1 [21.1, 29.5] | 80.7 | 22.5 | 54.3 | 519 | 1475 | 1669 |
+| test | 1153 | 1153 | 51.4 [49.0, 53.9] | 28.8 [26.1, 31.3] | 81.2 | 29.7 | 54.0 | 496 | 1460 | 1658 |
+
 ### locomo-all-context-k20-enso-flash
 
 k: `20` · reader: `enso-flash` · commit: `9eab30f73493a28244d1cd00b3fa53b83fdfba3c` · prompt sha: `prompts/reader-locomo.txt`
