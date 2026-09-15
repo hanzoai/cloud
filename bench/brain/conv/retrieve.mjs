@@ -61,14 +61,27 @@ export const dense = (bank) => (ci, query) => {
   const turns = bank[ci].turns
   return turns.map((t, i) => [i, dot(query.v, t.v)]).sort((a, b) => b[1] - a[1]).slice(0, K).map(([i]) => turns[i].id)
 }
+/** Seeded PRNG, so the chance row is a fact about the metric and not about today. */
+const mulberry32 = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
+/** n distinct members of xs, drawn uniformly — a partial Fisher-Yates, no copy of the tail. */
+const sample = (xs, n, rnd) => { const a = xs.slice(); const k = Math.min(n, a.length); for (let i = 0; i < k; i++) { const j = i + Math.floor(rnd() * (a.length - i)); [a[i], a[j]] = [a[j], a[i]] } return a.slice(0, k) }
+
 export async function run(rank, label, bank) {
   bank ??= await load(); const S = styles(bank); const rows = []; const lat = []
+  const rnd = mulberry32(0)
   for (const [style, items] of Object.entries(S)) for (const it of items) {
     const byId = new Map(bank[it.ci].turns.map((t) => [t.id, t]))
     const t0 = process.hrtime.bigint(); const ids = rank(it.ci, it); lat.push(Number(process.hrtime.bigint() - t0) / 1e6)
     const returned = ids.map((id) => byId.get(id)).filter(Boolean), gold = it.gold.map((id) => byId.get(id)).filter(Boolean)
     const r = recallOf(returned, gold); if (!r) continue
-    rows.push({ style, category: it.category, ci: it.ci, ...r, tokens: Math.round(returned.reduce((a, t) => a + t.text.length, 0) / 4) })
+    // WHAT THE METRIC PAYS FOR NOTHING. Recall counts a gold turn as found when its
+    // text appears inside any returned memory, so the score rises with the size and
+    // number of memories before any retrieval happens. K turns drawn uniformly at
+    // random, scored the same way, is that floor — and a row is worth its distance
+    // above its own chance row, not its raw height. conv/units.py measures the same
+    // thing across memory units, where it is worth 35 points at whole-session size.
+    const c = recallOf(sample(bank[it.ci].turns, K, rnd), gold)
+    rows.push({ style, category: it.category, ci: it.ci, ...r, chance: c ? c.recall : 0, tokens: Math.round(returned.reduce((a, t) => a + t.text.length, 0) / 4) })
   }
   lat.sort((a, b) => a - b)
   const groups = {}
@@ -81,10 +94,10 @@ export async function run(rank, label, bank) {
   const split = (r) => (r.ci <= 1 ? 'dev' : 'test')
   for (const r of rows) { for (const key of [r.style, `${r.style}·cat${r.category}`, r.category === 5 ? null : `${r.style}·no-adversarial`, `${r.style}·${split(r)}`].filter(Boolean)) (groups[key] ??= []).push(r) }
   console.log(`\n── LoCoMo-Conv harness · ${label} · k=${K} · ${VEC} ──`)
-  console.log(`group                       n     recall@k (paper metric)      all      any     tokens/q`)
+  console.log(`group                       n     recall@k (paper metric)      all      any   chance   over     tokens/q`)
   const table = {}
-  for (const [g, rs] of Object.entries(groups)) { const s = summary(rs), a = summary(rs, 'all'), y = summary(rs, 'any'); table[g] = { n: s.n, recall: s.mean, ci: [s.lo, s.hi], all: a.mean, any: y.mean, tokens: rs.reduce((x, r) => x + r.tokens, 0) / rs.length }
-    console.log(`${g.padEnd(26)} ${String(s.n).padStart(5)}   ${fmt(s).padEnd(26)}  ${(a.mean * 100).toFixed(1).padStart(5)}    ${(y.mean * 100).toFixed(1).padStart(5)}   ${table[g].tokens.toFixed(0).padStart(6)}`) }
+  for (const [g, rs] of Object.entries(groups)) { const s = summary(rs), a = summary(rs, 'all'), y = summary(rs, 'any'); table[g] = { n: s.n, recall: s.mean, ci: [s.lo, s.hi], all: a.mean, any: y.mean, chance: rs.reduce((x, r) => x + r.chance, 0) / rs.length, tokens: rs.reduce((x, r) => x + r.tokens, 0) / rs.length }
+    console.log(`${g.padEnd(26)} ${String(s.n).padStart(5)}   ${fmt(s).padEnd(26)}  ${(a.mean * 100).toFixed(1).padStart(5)}    ${(y.mean * 100).toFixed(1).padStart(5)}   ${(table[g].chance * 100).toFixed(1).padStart(6)}  ${((s.mean - table[g].chance) * 100).toFixed(1).padStart(5)}   ${table[g].tokens.toFixed(0).padStart(6)}`) }
   console.log(`latency p50 ${lat[Math.floor(lat.length / 2)].toFixed(3)} ms · p95 ${lat[Math.floor(lat.length * 0.95)].toFixed(3)} ms`)
   const dir = ROOT + `runs/conv-proxy-${label}-${VEC.replace(/[^a-z0-9.-]/gi, '_')}-k${K}/`; mkdirSync(dir, { recursive: true })
   writeFileSync(dir + 'metrics.json', JSON.stringify({ label, vec: VEC, k: K, table, latency_ms: { p50: lat[Math.floor(lat.length / 2)], p95: lat[Math.floor(lat.length * 0.95)] } }, null, 1))
