@@ -44,7 +44,10 @@ Temperature 0, `max_tokens` 64, one prompt file per benchmark (`prompts/reader-l
 `prompts/reader-mab.txt`) shared by every row of a table. A row that changes the
 reader is a different table.
 
-Credentials: `HANZO_API_KEY`, else `~/.hanzo/credentials.json` `access_token`. Never printed.
+Credentials: `HANZO_API_KEY`, else a token minted by `hanzo auth token`, re-asked as
+its own `exp` falls due. Never printed. NOT `~/.hanzo/credentials.json` `access_token`,
+which this said for a while: that field is one expired exchange beside the refresh token
+the CLI actually uses, and reading it cost two runs four days of `401 token is expired`.
 
 ## Rows every table carries
 
