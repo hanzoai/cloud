@@ -35,6 +35,12 @@ node sandbox/sandbox.mjs            # cold start: isolate vs container vs pooled
 node pricing/pricing.mjs            # what a call costs, and what it could sell for
 ```
 
+`node bench/platform.mjs` runs the five lanes above that measure the software
+itself and writes `bench/benchmarks-platform.json` — the same numbers, as data,
+for anything that renders them. Each lane emits its own rows, so a rerun that
+changes a number changes the file, and a lane that fails leaves its section out
+rather than a stale one in.
+
 `brain/` and `code/` are their own lanes with their own protocol and generated
 tables — `brain/METHOD.md` is the protocol, `brain/RESULTS.md` is written from
 the runs, and `node brain/results.mjs` reproduces both from a fresh clone. The

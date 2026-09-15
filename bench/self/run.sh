@@ -11,8 +11,6 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 . bench/host.sh
 
-say() { printf '%-34s %s\n' "$1" "$2"; }
-
 host
 
 # A free port, because the point is that this runs beside whatever you already
@@ -61,13 +59,15 @@ t1=$(python3 -c 'import time;print(time.time())')
 say "boot to a healthy answer" "$(python3 -c "print('%.1f s' % ($t1-$t0))")"
 
 curl -s -m 10 "http://127.0.0.1:$P/.well-known/openapi.json" -o "$DATA/api.json"
-python3 - "$DATA/api.json" <<'PY'
+ops=$(python3 - "$DATA/api.json" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
 paths = d.get("paths", {})
-ops = sum(1 for p in paths.values() for m in p if m in ("get","post","put","patch","delete"))
-print("%-34s %d over %d paths" % ("operations served by default", ops, len(paths)))
+n = sum(1 for p in paths.values() for m in p if m in ("get","post","put","patch","delete"))
+print("%d over %d paths" % (n, len(paths)))
 PY
+)
+say "operations served by default" "$ops"
 
 # One operation, every door it opens. A door that does not answer is the row that
 # matters, so each is asked separately rather than counted.

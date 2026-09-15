@@ -19,8 +19,6 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 . bench/host.sh
 
-say() { printf '%-30s %s\n' "$1" "$2"; }
-
 host
 
 FLAGS_C=$(pkg-config --cflags sqlcipher 2>/dev/null || echo "-I/opt/homebrew/opt/sqlcipher/include")

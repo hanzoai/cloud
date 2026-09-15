@@ -24,8 +24,6 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 . bench/host.sh
 
-say() { printf '%-34s %s\n' "$1" "$2"; }
-
 host
 
 sockets() {

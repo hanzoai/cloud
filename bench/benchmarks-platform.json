@@ -1,0 +1,180 @@
+{
+ "generated": "2026-09-15T08:17:41.626Z",
+ "host": "Apple M1 Max · 10 cores · arm64 · macOS 26.6.2",
+ "sections": [
+  {
+   "lane": "self",
+   "title": "Ownership — building and serving it yourself",
+   "rows": [
+    {
+     "label": "private modules required",
+     "value": "0"
+    },
+    {
+     "label": "build from source",
+     "value": "13 s"
+    },
+    {
+     "label": "binary",
+     "value": " 80M"
+    },
+    {
+     "label": "boot to a healthy answer",
+     "value": "1.4 s"
+    },
+    {
+     "label": "operations served by default",
+     "value": "13 over 8 paths"
+    },
+    {
+     "label": "REST",
+     "value": "200"
+    },
+    {
+     "label": "MCP tools/list",
+     "value": "13 tools"
+    },
+    {
+     "label": "op-call plane",
+     "value": "200"
+    }
+   ]
+  },
+  {
+   "lane": "modules",
+   "title": "Ownership — can anyone fetch what it is built from",
+   "rows": [
+    {
+     "label": "modules the binary needs",
+     "value": "127"
+    },
+    {
+     "label": "fetchable with no credential",
+     "value": "127"
+    },
+    {
+     "label": "not",
+     "value": "0"
+    },
+    {
+     "label": "control: an absent module",
+     "value": "404"
+    }
+   ]
+  },
+  {
+   "lane": "egress",
+   "title": "Privacy — what leaves the machine",
+   "rows": [
+    {
+     "label": "attempts to leave",
+     "value": "0"
+    },
+    {
+     "label": "listeners seen",
+     "value": "3"
+    },
+    {
+     "label": "connections caught by sampling",
+     "value": "0"
+    },
+    {
+     "label": "peers off this machine",
+     "value": "0"
+    },
+    {
+     "label": "control: the catcher saw",
+     "value": "1 attempt(s) after one caller"
+    },
+    {
+     "label": "control: sampling saw",
+     "value": "1 peer(s)"
+    }
+   ]
+  },
+  {
+   "lane": "cipher",
+   "title": "At rest — what is on the disk",
+   "rows": [
+    {
+     "label": "CGO_ENABLED=0",
+     "value": "7 stores · 7 distinct headers · canary in 0 files"
+    },
+    {
+     "label": "CGO_ENABLED=1, as built",
+     "value": "refuses — this build cannot encrypt a store — a keyed database was written with a "
+    },
+    {
+     "label": "CGO_ENABLED=1 -tags libsqlite3",
+     "value": "7 stores · 7 distinct headers · canary in 0 files"
+    },
+    {
+     "label": "CLOUD_DEV_UNENCRYPTED=1",
+     "value": "7 stores · 1 distinct headers · canary in 1 files"
+    }
+   ]
+  },
+  {
+   "lane": "doors",
+   "title": "The per-call tax, per door",
+   "rows": [
+    {
+     "door": "REST",
+     "min_ms": 0.139,
+     "p50_ms": 0.271,
+     "p90_ms": 0.761,
+     "n": 200
+    },
+    {
+     "door": "MCP",
+     "min_ms": 0.162,
+     "p50_ms": 0.295,
+     "p90_ms": 0.625,
+     "n": 200
+    },
+    {
+     "door": "plane",
+     "min_ms": 0.135,
+     "p50_ms": 0.267,
+     "p90_ms": 0.581,
+     "n": 200
+    },
+    {
+     "door": "ZAP tcp",
+     "min_ms": 0.123,
+     "p50_ms": 0.232,
+     "p90_ms": 0.629,
+     "n": 200
+    },
+    {
+     "door": "REST",
+     "min_ms": 0.156,
+     "p50_ms": 0.261,
+     "p90_ms": 0.523,
+     "n": 200
+    },
+    {
+     "door": "MCP",
+     "min_ms": 0.144,
+     "p50_ms": 0.271,
+     "p90_ms": 0.604,
+     "n": 200
+    },
+    {
+     "door": "plane",
+     "min_ms": 0.149,
+     "p50_ms": 0.251,
+     "p90_ms": 0.56,
+     "n": 200
+    },
+    {
+     "door": "ZAP unix",
+     "min_ms": 0.081,
+     "p50_ms": 0.164,
+     "p90_ms": 0.412,
+     "n": 200
+    }
+   ]
+  }
+ ]
+}

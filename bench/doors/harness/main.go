@@ -42,6 +42,7 @@ func main() {
 	op := flag.String("op", "tasks_list", "the operation every door asks for")
 	n := flag.Int("n", 200, "iterations per door")
 	warm := flag.Int("warm", 20, "warm-up iterations per door")
+	jsonOut := flag.String("json", "", "also append the rows to this file, as JSON")
 	flag.Parse()
 	if *base == "" {
 		fmt.Fprintln(os.Stderr, "doors: -base is required")
@@ -106,10 +107,38 @@ func main() {
 	}
 
 	fmt.Printf("%-12s %8s %8s %8s   (ms, n=%d, interleaved)\n", "door", "min", "p50", "p90", *n)
+	type row struct {
+		Door string  `json:"door"`
+		Min  float64 `json:"min_ms"`
+		P50  float64 `json:"p50_ms"`
+		P90  float64 `json:"p90_ms"`
+		N    int     `json:"n"`
+	}
+	var rows []row
 	for _, d := range doors {
 		xs := samples[d.name]
 		sort.Float64s(xs)
-		fmt.Printf("%-12s %8.2f %8.2f %8.2f\n", d.name, xs[0], xs[len(xs)/2], xs[int(float64(len(xs))*0.9)-1])
+		min, p50, p90 := xs[0], xs[len(xs)/2], xs[int(float64(len(xs))*0.9)-1]
+		fmt.Printf("%-12s %8.2f %8.2f %8.2f\n", d.name, min, p50, p90)
+		rows = append(rows, row{d.name, min, p50, p90, *n})
+	}
+
+	// Appended, not written: a run measures the ZAP tcp phase and the unix one
+	// separately, and both belong to the same table.
+	if *jsonOut != "" {
+		var all []row
+		if b, err := os.ReadFile(*jsonOut); err == nil {
+			_ = json.Unmarshal(b, &all)
+		}
+		all = append(all, rows...)
+		b, err := json.MarshalIndent(all, "", " ")
+		if err == nil {
+			err = os.WriteFile(*jsonOut, b, 0o644)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "doors: writing %s: %v\n", *jsonOut, err)
+			os.Exit(1)
+		}
 	}
 }
 

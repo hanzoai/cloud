@@ -19,3 +19,17 @@ host() {
   fi
   printf 'host: %s · %s cores · %s · %s\n\n' "${cpu:-unknown}" "${cores:-?}" "$(uname -m)" "${os:-$(uname -s)}"
 }
+
+# One row of a lane's table, and — when `BENCH_JSON` names a file — one entry in
+# it. Every lane already funnelled its output through a local `say`; this is that
+# function, once, so a row reaches the terminal and the file by the same call and
+# the two cannot disagree.
+#
+# The value is written as a string. A lane's rows are as often "0 of 7" or
+# "refuses — …" as they are numbers, and a reader that wants a number knows which
+# row it asked for.
+say() {
+  printf '%-34s %s\n' "$1" "$2"
+  [ -n "${BENCH_JSON:-}" ] || return 0
+  python3 "$(dirname "${BASH_SOURCE[0]}")/row.py" "$BENCH_JSON" "$1" "$2"
+}
