@@ -72,7 +72,14 @@ export async function run(rank, label, bank) {
   }
   lat.sort((a, b) => a - b)
   const groups = {}
-  for (const r of rows) { for (const key of [r.style, `${r.style}·cat${r.category}`, r.category === 5 ? null : `${r.style}·no-adversarial`].filter(Boolean)) (groups[key] ??= []).push(r) }
+  // The split METHOD.md declares for LoCoMo-Conv — dev is the first two
+  // conversations' items, test is the rest — cut here beside every other cut, so
+  // the table publishes the number a claim should be quoted on. It was derivable
+  // from predictions.jsonl all along (every row carries its ci) and derived by
+  // nobody, so the tables quoted all-items figures against a method that promised
+  // a held-out one.
+  const split = (r) => (r.ci <= 1 ? 'dev' : 'test')
+  for (const r of rows) { for (const key of [r.style, `${r.style}·cat${r.category}`, r.category === 5 ? null : `${r.style}·no-adversarial`, `${r.style}·${split(r)}`].filter(Boolean)) (groups[key] ??= []).push(r) }
   console.log(`\n── LoCoMo-Conv harness · ${label} · k=${K} · ${VEC} ──`)
   console.log(`group                       n     recall@k (paper metric)      all      any     tokens/q`)
   const table = {}
