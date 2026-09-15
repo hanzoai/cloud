@@ -78,10 +78,11 @@ such per-credit price is published. The nearest published figure is **$0.0504
 per vCPU-hour**, which is not a per-call charge, and treating it as one
 overstates their price by the ratio of an hour to a call.
 
-Taken properly: a call measured here at 51 ms of one vCPU is
-`0.0504 × 51/3600/1000` = **$0.00000071** at their published rate, against
-**$0.00000063** measured as our marginal cost. Their compute is priced at about
-1.1× what the work costs — a thin markup, not a multiple.
+Taken properly, on the same slice — 51 ms of 0.5 vCPU and 0.25 GB, priced on
+both published axes — the work costs **$0.00000025** and prices at
+**$0.00000042**: a **1.68×** markup, thin rather than a multiple. An earlier
+correction here read 1.1×, which compared their compute price against our all-in
+marginal cost including memory and egress; that was the same error smaller.
 
 So compute is not where the difference is, and claiming it was is the kind of
 error that ends a conversation with anyone who checks. Where their published

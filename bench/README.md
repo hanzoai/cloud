@@ -429,14 +429,21 @@ Our costs from `railway.com/pricing`; their prices from `usenaive.ai/pricing`,
 read 2026-09-11 and recorded verbatim in [naive.md](naive.md); volumes measured
 above.
 
-- one call ≈ **51 ms** of compute → **$0.00000063** marginal, measured
-- the same call at their published **$0.0504/vCPU-hr** → **$0.00000071**
-- so their compute is about **1.1×** what the work costs — a thin markup
+- one call ≈ **51 ms** of 0.5 vCPU and 0.25 GB
+- that slice at cost: **$0.00000025** · at their published rates: **$0.00000042**
+- so their compute carries a **1.68×** markup — thin, and not a multiple
 
-An earlier version of this row said they charge $0.05 a credit and called it
-79,614× marginal. No per-credit price is published; $0.0504 is an hour of a
-vCPU, and reading it as a call overstates their price by the ratio of an hour to
-a call. The correction goes against us and the row is here as it reads.
+Both axes, because ours has both: their $0.0504/vCPU-hr against our vCPU plus
+memory plus egress would be the same mistake in the other direction. Egress is
+out of both sides — they publish no price for it and ours contributes four
+ten-thousandths of a cent.
+
+This row has been wrong twice. It first said they charge $0.05 a credit and
+called that 79,614× marginal; no per-credit price is published, and $0.0504 is
+an hour of a vCPU, so reading it as a call overstated them by the ratio of an
+hour to a call. The correction then compared their compute price against our
+all-in marginal cost and reported 1.1×, which was the same error smaller. 1.68×
+is the two rates on the same slice. Both corrections went against us.
 
 Where their published prices do carry a markup is the metered tools —
 `$0.002158` for one web search — and the model tokens, which every stack bills

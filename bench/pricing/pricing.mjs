@@ -20,7 +20,7 @@
  *     object      $0.015 /GB/month
  *
  *   COMPETITOR (usenaive.ai/pricing, Sept 2026)
- *     $0.05 per credit, one credit per call. LLM tokens billed separately.
+ *     $0.0504 per vCPU-hour, metered tools per call, LLM tokens per token.
  */
 
 const RAIL = {
@@ -31,7 +31,16 @@ const RAIL = {
   objectGbMonth: 0.015,
 }
 
-const NAIVE_PER_CALL = 0.05
+// Their published compute prices, from usenaive.ai/pricing read 2026-09-11 and
+// recorded verbatim in ../naive.md. Both axes, because ours has both: comparing
+// their vCPU-hour against our vCPU + memory + egress would be the same mistake
+// in the other direction.
+//
+// This row used to read `$0.05 per credit`, which is not a price they publish.
+// $0.0504 is an hour of a vCPU; reading it as a call overstated them by the
+// ratio of an hour to a call, and the multiple that followed was wrong by the
+// same factor. The correction goes against us.
+const NAIVE = { vcpuHour: 0.0504, gbHour: 0.0162 }
 const OSS_SHARE = 0.25 // given away, per the brief
 
 /**
@@ -74,8 +83,13 @@ const marginalCall =
 console.log(`\n══ WHAT A CALL COSTS ══\n`)
 console.log(`  compute time      ${(seconds * 1000).toFixed(1)} ms  (sandbox ${CALL.sandboxMs} + embed ${CALL.embedMs} + memory ${CALL.memoryMs} + resume ${CALL.resumeMs})`)
 console.log(`  marginal cost     $${marginalCall.toFixed(8)} per call`)
-console.log(`  Naïve charge      $${NAIVE_PER_CALL.toFixed(2)} per credit`)
-console.log(`  their headroom    ${(NAIVE_PER_CALL / marginalCall).toFixed(0)}× marginal\n`)
+// The same slice of compute and memory, at their published rates. Egress is
+// left out of both sides of this line: they publish no egress price, and what
+// ours contributes is four ten-thousandths of a cent.
+const ourCompute = seconds * CALL.vcpu * RAIL.vcpuSec + seconds * CALL.gb * RAIL.gbSec
+const naiveCall = seconds * CALL.vcpu * (NAIVE.vcpuHour / 3600) + seconds * CALL.gb * (NAIVE.gbHour / 3600)
+console.log(`  compute + memory  $${ourCompute.toFixed(8)} at cost, $${naiveCall.toFixed(8)} at their rate`)
+console.log(`  their markup      ${(naiveCall / ourCompute).toFixed(2)}× what the work costs\n`)
 
 /**
  * Marginal cost is not the business. A platform carries a control plane whether
@@ -102,7 +116,7 @@ console.log(`  1M dormant agents $${((477 * 1e6) / 1024 ** 3 * RAIL.objectGbMont
 
 /** Three schemes, each against the same measured cost. */
 const schemes = [
-  { name: 'Match Naïve', perCall: 0.05 },
+  { name: 'Their compute rate', perCall: 0.0000007 },
   { name: 'Half',        perCall: 0.025 },
   { name: '90% cheaper', perCall: 0.005 },
   { name: '99% cheaper', perCall: 0.0005 },

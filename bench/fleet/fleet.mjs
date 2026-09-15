@@ -15,6 +15,7 @@
 import { execFileSync } from 'node:child_process'
 import { statSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { say } from '../say.mjs'
 
 const DIR = process.argv[2] ?? '/tmp/fleet-bench'
 const TENANTS = Number(process.env.TENANTS ?? 100_000)
@@ -81,9 +82,9 @@ const wrote = Date.now() - started
 const size = bytes()
 
 console.log(`\n── measured ──`)
-console.log(`agents            ${TOTAL.toLocaleString()}`)
-console.log(`on disk           ${mb(size)} MB  (${(size / TOTAL).toFixed(0)} bytes per agent)`)
-console.log(`write time        ${(wrote / 1000).toFixed(1)}s  (${Math.round(TOTAL / (wrote / 1000)).toLocaleString()} agents/s)`)
+say('agents', TOTAL.toLocaleString())
+say('on disk', `${mb(size)} MB  (${(size / TOTAL).toFixed(0)} bytes per agent)`)
+say('write time', `${(wrote / 1000).toFixed(1)}s  (${Math.round(TOTAL / (wrote / 1000)).toLocaleString()} agents/s)`)
 
 // Waking one. A dormant agent is resumed by a point read on its primary key,
 // which is the whole cost of resume before the model is called.
@@ -92,13 +93,13 @@ const t0 = process.hrtime.bigint()
 for (const i of picks) sql(`select value from kv where key='agent/${i}';`)
 const t1 = process.hrtime.bigint()
 const perRead = Number(t1 - t0) / 1e6 / picks.length
-console.log(`resume (cold)     ${perRead.toFixed(2)} ms per agent  — includes sqlite3 process spawn`)
+say('resume (cold)', `${perRead.toFixed(2)} ms per agent — includes sqlite3 process spawn`)
 
 // The same reads inside one connection, which is how the server does it.
 const many = picks.map((i) => `select value from kv where key='agent/${i}';`).join('\n')
 const t2 = process.hrtime.bigint()
 sql(many)
 const t3 = process.hrtime.bigint()
-console.log(`resume (in-proc)  ${(Number(t3 - t2) / 1e6 / picks.length).toFixed(3)} ms per agent`)
+say('resume (in-proc)', `${(Number(t3 - t2) / 1e6 / picks.length).toFixed(3)} ms per agent`)
 
 console.log(`\nstorage for ${TOTAL.toLocaleString()} dormant agents: ${(size / 1024 / 1024 / 1024).toFixed(2)} GB`)
