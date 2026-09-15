@@ -1,0 +1,510 @@
+2026-09-10T21:23:42.345Z   25/282 asked, 25 answered, 2.5s each
+2026-09-10T21:24:05.643Z   50/282 asked, 50 answered, 1.7s each
+2026-09-10T21:25:08.119Z   75/282 asked, 75 answered, 2.0s each
+2026-09-10T21:26:02.775Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 9262 seconds.","type":"quota_error","code":429}}
+2026-09-10T22:19:08.407Z pass 1: asked 282, answered 84, failed 198 {"quota":198} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 9262 seconds.","type":"quota_error","code":429}} in 3389s
+2026-09-10T22:19:08.431Z waiting 15s before the next pass
+2026-09-10T22:20:11.822Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 6013 seconds.","type":"quota_error","code":429}}
+2026-09-10T23:12:37.744Z pass 2: asked 198, answered 0, failed 198 {"quota":198} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 6013 seconds.","type":"quota_error","code":429}} in 3194s
+2026-09-10T23:12:37.765Z waiting 60s before the next pass
+2026-09-10T23:14:26.116Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2758 seconds.","type":"quota_error","code":429}}
+2026-09-11T00:01:18.159Z   196/198 asked, 25 answered, 114.4s each
+2026-09-11T00:01:24.824Z pass 3: asked 198, answered 27, failed 171 {"quota":171} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2758 seconds.","type":"quota_error","code":429}} in 2867s
+2026-09-11T00:01:24.864Z waiting 15s before the next pass
+2026-09-11T00:02:07.125Z   25/171 asked, 25 answered, 1.1s each
+2026-09-11T00:02:49.229Z   50/171 asked, 50 answered, 1.4s each
+2026-09-11T00:03:38.011Z   first quota failure: 429 {"error":{"message":"Rate limit exceeded. Retry after 1 seconds.","type":"rate_limit_error","code":429}}
+2026-09-11T00:03:53.228Z   77/171 asked, 75 answered, 1.8s each
+2026-09-11T00:04:25.049Z   102/171 asked, 100 answered, 1.7s each
+2026-09-11T00:09:55.697Z   first server failure: 530 <!doctype html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html class="no-js ie7 oldie" 
+2026-09-11T00:16:23.468Z pass 4: asked 171, answered 115, failed 56 {"quota":35,"server":21} e.g. 429 {"error":{"message":"Rate limit exceeded. Retry after 1 seconds.","type":"rate_limit_error","code":429}} in 884s
+2026-09-11T00:16:23.527Z waiting 15s before the next pass
+2026-09-11T00:17:26.917Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 27778 seconds.","type":"quota_error","code":429}}
+2026-09-11T00:31:58.104Z pass 5: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 27778 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-11T00:31:58.151Z waiting 60s before the next pass
+2026-09-11T00:33:46.764Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26798 seconds.","type":"quota_error","code":429}}
+2026-09-11T00:48:22.752Z pass 6: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26798 seconds.","type":"quota_error","code":429}} in 925s
+2026-09-11T00:48:22.791Z waiting 120s before the next pass
+2026-09-11T00:51:11.790Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 25753 seconds.","type":"quota_error","code":429}}
+2026-09-11T01:06:34.747Z pass 7: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 25753 seconds.","type":"quota_error","code":429}} in 972s
+2026-09-11T01:06:34.827Z waiting 240s before the next pass
+2026-09-11T01:11:26.626Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 24538 seconds.","type":"quota_error","code":429}}
+2026-09-11T01:26:20.372Z pass 8: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 24538 seconds.","type":"quota_error","code":429}} in 946s
+2026-09-11T01:26:20.452Z waiting 480s before the next pass
+2026-09-11T01:35:08.858Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23116 seconds.","type":"quota_error","code":429}}
+2026-09-11T01:49:40.422Z pass 9: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23116 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-11T01:49:40.482Z waiting 960s before the next pass
+2026-09-11T02:06:28.847Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21236 seconds.","type":"quota_error","code":429}}
+2026-09-11T02:22:02.618Z pass 10: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21236 seconds.","type":"quota_error","code":429}} in 982s
+2026-09-11T02:22:02.683Z waiting 1800s before the next pass
+2026-09-11T02:52:54.614Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18451 seconds.","type":"quota_error","code":429}}
+2026-09-11T03:07:57.518Z pass 11: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18451 seconds.","type":"quota_error","code":429}} in 955s
+2026-09-11T03:07:57.562Z waiting 1800s before the next pass
+2026-09-11T04:20:21.797Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 13203 seconds.","type":"quota_error","code":429}}
+2026-09-11T04:23:11.415Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 9.453567918s","data":null,"data2":null}
+2026-09-11T04:24:57.360Z pass 12: asked 56, answered 0, failed 56 {"quota":12,"client":44} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 13203 seconds.","type":"quota_error","code":429}} in 325s
+2026-09-11T04:24:57.417Z waiting 1800s before the next pass
+2026-09-11T04:55:57.319Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 11068 seconds.","type":"quota_error","code":429}}
+2026-09-11T05:14:45.532Z pass 13: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 11068 seconds.","type":"quota_error","code":429}} in 1188s
+2026-09-11T05:14:45.593Z waiting 1800s before the next pass
+2026-09-11T05:45:53.951Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 8071 seconds.","type":"quota_error","code":429}}
+2026-09-11T05:52:10.843Z   first server failure: 502 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html class="no-js ie7 oldie" 
+2026-09-11T05:55:53.080Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 1h32m51.091895242s","data":null,"data2":null}
+2026-09-11T05:56:38.507Z pass 14: asked 56, answered 0, failed 56 {"quota":18,"server":8,"client":30} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 8071 seconds.","type":"quota_error","code":429}} in 713s
+2026-09-11T05:56:38.566Z waiting 1800s before the next pass
+2026-09-11T06:28:06.216Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 5538 seconds.","type":"quota_error","code":429}}
+2026-09-11T06:44:53.838Z pass 15: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 5538 seconds.","type":"quota_error","code":429}} in 1095s
+2026-09-11T06:44:53.896Z waiting 1800s before the next pass
+2026-09-11T07:16:15.456Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2653 seconds.","type":"quota_error","code":429}}
+2026-09-11T07:36:56.887Z pass 16: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2653 seconds.","type":"quota_error","code":429}} in 1323s
+2026-09-11T07:36:56.930Z waiting 1800s before the next pass
+2026-09-11T08:06:57.088Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 3h43m55.063964299s","data":null,"data2":null}
+2026-09-11T08:07:47.528Z pass 17: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 3h43m55.063964299s","data":null,"data2":null} in 51s
+2026-09-11T08:07:47.567Z waiting 1800s before the next pass
+2026-09-11T08:38:35.941Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26509 seconds.","type":"quota_error","code":429}}
+2026-09-11T08:53:07.157Z pass 18: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26509 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-11T08:53:07.223Z waiting 1800s before the next pass
+2026-09-11T09:23:55.586Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23789 seconds.","type":"quota_error","code":429}}
+2026-09-11T09:38:26.553Z pass 19: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23789 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-11T09:38:26.619Z waiting 1800s before the next pass
+2026-09-11T10:09:15.070Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21069 seconds.","type":"quota_error","code":429}}
+2026-09-11T10:24:07.696Z pass 20: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21069 seconds.","type":"quota_error","code":429}} in 941s
+2026-09-11T10:24:07.760Z waiting 1800s before the next pass
+2026-09-11T10:54:56.141Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18328 seconds.","type":"quota_error","code":429}}
+2026-09-11T11:09:27.404Z pass 21: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18328 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-11T11:09:27.466Z waiting 1800s before the next pass
+2026-09-11T11:40:15.866Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 15609 seconds.","type":"quota_error","code":429}}
+2026-09-11T11:54:46.747Z pass 22: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 15609 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-11T11:54:46.808Z waiting 1800s before the next pass
+2026-09-11T12:25:35.215Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12889 seconds.","type":"quota_error","code":429}}
+2026-09-11T12:40:05.983Z pass 23: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12889 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-11T12:40:06.043Z waiting 1800s before the next pass
+2026-09-11T13:10:54.530Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 10170 seconds.","type":"quota_error","code":429}}
+2026-09-11T13:25:25.882Z pass 24: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 10170 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-11T13:25:25.934Z waiting 1800s before the next pass
+2026-09-11T13:56:14.345Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7450 seconds.","type":"quota_error","code":429}}
+2026-09-11T14:10:45.886Z pass 25: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7450 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-11T14:10:45.947Z waiting 1800s before the next pass
+2026-09-11T14:41:34.387Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 4730 seconds.","type":"quota_error","code":429}}
+2026-09-11T14:56:05.598Z pass 26: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 4730 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-11T14:56:05.660Z waiting 1800s before the next pass
+2026-09-11T15:26:54.061Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2010 seconds.","type":"quota_error","code":429}}
+2026-09-11T15:41:24.957Z pass 27: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2010 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-11T15:41:25.016Z waiting 1800s before the next pass
+2026-09-11T16:11:25.198Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 11h48m23.240920058s","data":null,"data2":null}
+2026-09-11T16:12:17.674Z pass 28: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 11h48m23.240920058s","data":null,"data2":null} in 53s
+2026-09-11T16:12:17.740Z waiting 1800s before the next pass
+2026-09-11T16:43:06.181Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26238 seconds.","type":"quota_error","code":429}}
+2026-09-11T16:59:36.758Z pass 29: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26238 seconds.","type":"quota_error","code":429}} in 1039s
+2026-09-11T16:59:36.840Z waiting 1800s before the next pass
+2026-09-11T17:30:25.344Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23399 seconds.","type":"quota_error","code":429}}
+2026-09-11T17:45:06.975Z pass 30: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23399 seconds.","type":"quota_error","code":429}} in 930s
+2026-09-11T17:45:07.047Z waiting 1800s before the next pass
+2026-09-11T18:15:56.109Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 20668 seconds.","type":"quota_error","code":429}}
+2026-09-11T18:30:59.513Z pass 31: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 20668 seconds.","type":"quota_error","code":429}} in 952s
+2026-09-11T18:30:59.590Z waiting 1800s before the next pass
+2026-09-11T19:01:49.021Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 17915 seconds.","type":"quota_error","code":429}}
+2026-09-11T19:21:40.562Z pass 32: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 17915 seconds.","type":"quota_error","code":429}} in 1241s
+2026-09-11T19:21:40.641Z waiting 1800s before the next pass
+2026-09-11T19:51:40.818Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 15h28m38.838718336s","data":null,"data2":null}
+2026-09-11T19:52:32.793Z pass 33: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 15h28m38.838718336s","data":null,"data2":null} in 52s
+2026-09-11T19:52:32.841Z waiting 1800s before the next pass
+2026-09-11T20:24:17.807Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 16h1m15.783810786s","data":null,"data2":null}
+2026-09-11T20:25:54.669Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12870 seconds.","type":"quota_error","code":429}}
+2026-09-11T20:33:33.119Z pass 34: asked 56, answered 0, failed 56 {"client":29,"quota":27} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 16h1m15.783810786s","data":null,"data2":null} in 660s
+2026-09-11T20:33:33.197Z waiting 1800s before the next pass
+2026-09-11T21:10:12.506Z   first server failure: 524 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html class="no-js ie7 oldie" 
+2026-09-11T21:36:38.755Z   first quota failure: 429 {"error":{"message":"Rate limit exceeded. Retry after 1 seconds.","type":"rate_limit_error","code":429}}
+2026-09-11T22:05:39.959Z pass 35: asked 56, answered 0, failed 56 {"server":12,"quota":44} e.g. 524 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html clas in 3727s
+2026-09-11T22:05:40.003Z waiting 1800s before the next pass
+2026-09-11T22:36:28.399Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 5036 seconds.","type":"quota_error","code":429}}
+2026-09-11T22:52:01.528Z pass 36: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 5036 seconds.","type":"quota_error","code":429}} in 982s
+2026-09-11T22:52:01.600Z waiting 1800s before the next pass
+2026-09-11T23:22:50.034Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2254 seconds.","type":"quota_error","code":429}}
+2026-09-11T23:37:20.718Z pass 37: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2254 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-11T23:37:20.793Z waiting 1800s before the next pass
+2026-09-12T00:07:21.039Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 19h44m19.065461207s","data":null,"data2":null}
+2026-09-12T00:08:11.920Z pass 38: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 19h44m19.065461207s","data":null,"data2":null} in 51s
+2026-09-12T00:08:11.994Z waiting 1800s before the next pass
+2026-09-12T00:39:00.390Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26484 seconds.","type":"quota_error","code":429}}
+2026-09-12T00:53:31.632Z pass 39: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26484 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T00:53:31.707Z waiting 1800s before the next pass
+2026-09-12T01:24:20.120Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23764 seconds.","type":"quota_error","code":429}}
+2026-09-12T01:38:55.293Z pass 40: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23764 seconds.","type":"quota_error","code":429}} in 924s
+2026-09-12T01:38:55.368Z waiting 1800s before the next pass
+2026-09-12T02:09:43.805Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21041 seconds.","type":"quota_error","code":429}}
+2026-09-12T02:24:15.017Z pass 41: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21041 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T02:24:15.094Z waiting 1800s before the next pass
+2026-09-12T02:55:03.536Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18321 seconds.","type":"quota_error","code":429}}
+2026-09-12T03:09:34.548Z pass 42: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18321 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-12T03:09:34.617Z waiting 1800s before the next pass
+2026-09-12T03:40:23.049Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 15601 seconds.","type":"quota_error","code":429}}
+2026-09-12T03:54:54.051Z pass 43: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 15601 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-12T03:54:54.117Z waiting 1800s before the next pass
+2026-09-12T04:25:42.574Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12882 seconds.","type":"quota_error","code":429}}
+2026-09-12T04:40:13.855Z pass 44: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12882 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T04:40:13.934Z waiting 1800s before the next pass
+2026-09-12T05:11:02.424Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 10162 seconds.","type":"quota_error","code":429}}
+2026-09-12T05:25:33.950Z pass 45: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 10162 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T05:25:34.028Z waiting 1800s before the next pass
+2026-09-12T05:56:22.460Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7442 seconds.","type":"quota_error","code":429}}
+2026-09-12T06:10:54.224Z pass 46: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7442 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T06:10:54.298Z waiting 1800s before the next pass
+2026-09-12T06:41:42.701Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 4722 seconds.","type":"quota_error","code":429}}
+2026-09-12T06:56:26.434Z pass 47: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 4722 seconds.","type":"quota_error","code":429}} in 932s
+2026-09-12T06:56:26.511Z waiting 1800s before the next pass
+2026-09-12T07:27:14.947Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 1990 seconds.","type":"quota_error","code":429}}
+2026-09-12T07:41:46.638Z pass 48: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 1990 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T07:41:46.718Z waiting 1800s before the next pass
+2026-09-12T08:11:46.952Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 27h48m44.946685685s","data":null,"data2":null}
+2026-09-12T08:12:37.481Z pass 49: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 27h48m44.946685685s","data":null,"data2":null} in 51s
+2026-09-12T08:12:37.558Z waiting 1800s before the next pass
+2026-09-12T08:43:25.973Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26219 seconds.","type":"quota_error","code":429}}
+2026-09-12T08:57:57.247Z pass 50: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26219 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T08:57:57.320Z waiting 1800s before the next pass
+2026-09-12T09:28:45.656Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23499 seconds.","type":"quota_error","code":429}}
+2026-09-12T09:43:16.825Z pass 51: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23499 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T09:43:16.903Z waiting 1800s before the next pass
+2026-09-12T10:14:07.277Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 20777 seconds.","type":"quota_error","code":429}}
+2026-09-12T10:28:49.100Z pass 52: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 20777 seconds.","type":"quota_error","code":429}} in 932s
+2026-09-12T10:28:49.141Z waiting 1800s before the next pass
+2026-09-12T10:58:49.386Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 30h35m47.433607003s","data":null,"data2":null}
+2026-09-12T10:59:42.357Z pass 53: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 30h35m47.433607003s","data":null,"data2":null} in 53s
+2026-09-12T10:59:42.430Z waiting 1800s before the next pass
+2026-09-12T11:30:30.880Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 16194 seconds.","type":"quota_error","code":429}}
+2026-09-12T11:45:14.934Z pass 54: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 16194 seconds.","type":"quota_error","code":429}} in 932s
+2026-09-12T11:45:14.985Z waiting 1800s before the next pass
+2026-09-12T12:16:03.364Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 13461 seconds.","type":"quota_error","code":429}}
+2026-09-12T12:30:34.535Z pass 55: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 13461 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T12:30:34.611Z waiting 1800s before the next pass
+2026-09-12T13:01:22.999Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 10742 seconds.","type":"quota_error","code":429}}
+2026-09-12T13:15:54.095Z pass 56: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 10742 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-12T13:15:54.172Z waiting 1800s before the next pass
+2026-09-12T13:46:42.567Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 8022 seconds.","type":"quota_error","code":429}}
+2026-09-12T14:01:13.691Z pass 57: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 8022 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T14:01:13.763Z waiting 1800s before the next pass
+2026-09-12T14:32:02.147Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 5302 seconds.","type":"quota_error","code":429}}
+2026-09-12T14:46:33.288Z pass 58: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 5302 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T14:46:33.363Z waiting 1800s before the next pass
+2026-09-12T15:17:21.832Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2583 seconds.","type":"quota_error","code":429}}
+2026-09-12T15:32:06.443Z pass 59: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2583 seconds.","type":"quota_error","code":429}} in 933s
+2026-09-12T15:32:06.497Z waiting 1800s before the next pass
+2026-09-12T16:02:12.628Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 35h39m4.766775549s","data":null,"data2":null}
+2026-09-12T16:02:59.728Z pass 60: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 35h39m4.766775549s","data":null,"data2":null} in 53s
+2026-09-12T16:02:59.801Z waiting 1800s before the next pass
+2026-09-12T16:32:59.945Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 36h9m57.958359566s","data":null,"data2":null}
+2026-09-12T16:34:05.009Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26779 seconds.","type":"quota_error","code":429}}
+2026-09-12T16:43:45.814Z pass 61: asked 56, answered 0, failed 56 {"client":19,"quota":37} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 36h9m57.958359566s","data":null,"data2":null} in 646s
+2026-09-12T16:43:45.891Z waiting 1800s before the next pass
+2026-09-12T17:14:34.355Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 24350 seconds.","type":"quota_error","code":429}}
+2026-09-12T17:29:05.997Z pass 62: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 24350 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T17:29:06.074Z waiting 1800s before the next pass
+2026-09-12T17:59:54.559Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21630 seconds.","type":"quota_error","code":429}}
+2026-09-12T18:14:25.632Z pass 63: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21630 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-12T18:14:25.684Z waiting 1800s before the next pass
+2026-09-12T18:44:25.876Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 38h21m23.853653269s","data":null,"data2":null}
+2026-09-12T18:45:16.616Z pass 64: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 38h21m23.853653269s","data":null,"data2":null} in 51s
+2026-09-12T18:45:16.690Z waiting 1800s before the next pass
+2026-09-12T19:15:16.932Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 38h52m14.905738321s","data":null,"data2":null}
+2026-09-12T19:16:13.802Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 17051 seconds.","type":"quota_error","code":429}}
+2026-09-12T19:25:58.123Z pass 65: asked 56, answered 0, failed 56 {"client":17,"quota":39} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 38h52m14.905738321s","data":null,"data2":null} in 641s
+2026-09-12T19:25:58.185Z waiting 1800s before the next pass
+2026-09-12T19:56:46.549Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 14618 seconds.","type":"quota_error","code":429}}
+2026-09-12T20:11:25.454Z pass 66: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 14618 seconds.","type":"quota_error","code":429}} in 927s
+2026-09-12T20:11:25.517Z waiting 1800s before the next pass
+2026-09-12T20:42:13.931Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 11891 seconds.","type":"quota_error","code":429}}
+2026-09-12T20:56:45.006Z pass 67: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 11891 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-12T20:56:45.075Z waiting 1800s before the next pass
+2026-09-12T21:27:33.440Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 9171 seconds.","type":"quota_error","code":429}}
+2026-09-12T21:42:18.427Z pass 68: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 9171 seconds.","type":"quota_error","code":429}} in 933s
+2026-09-12T21:42:18.497Z waiting 1800s before the next pass
+2026-09-12T22:13:10.682Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 6434 seconds.","type":"quota_error","code":429}}
+2026-09-12T22:28:33.971Z pass 69: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 6434 seconds.","type":"quota_error","code":429}} in 975s
+2026-09-12T22:28:34.050Z waiting 1800s before the next pass
+2026-09-12T22:59:32.446Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 3658 seconds.","type":"quota_error","code":429}}
+2026-09-12T23:16:56.708Z   first server failure: 524 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html class="no-js ie7 oldie" 
+2026-09-12T23:27:51.937Z pass 70: asked 56, answered 0, failed 56 {"quota":47,"server":9} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 3658 seconds.","type":"quota_error","code":429}} in 1758s
+2026-09-12T23:27:51.987Z waiting 1800s before the next pass
+2026-09-12T23:58:25.514Z   first server failure: 502 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html class="no-js ie7 oldie" 
+2026-09-13T00:13:09.690Z pass 71: asked 56, answered 0, failed 56 {"server":56} e.g. 502 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html clas in 918s
+2026-09-13T00:13:09.770Z waiting 1800s before the next pass
+2026-09-13T00:43:09.922Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 44h20m7.950478328s","data":null,"data2":null}
+2026-09-13T00:44:17.796Z pass 72: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 44h20m7.950478328s","data":null,"data2":null} in 68s
+2026-09-13T00:44:17.874Z waiting 1800s before the next pass
+2026-09-13T01:14:20.224Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 44h51m16.080770651s","data":null,"data2":null}
+2026-09-13T01:15:42.613Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 24287 seconds.","type":"quota_error","code":429}}
+2026-09-13T01:28:21.282Z pass 73: asked 56, answered 0, failed 56 {"client":13,"quota":43} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 44h51m16.080770651s","data":null,"data2":null} in 843s
+2026-09-13T01:28:21.362Z waiting 1800s before the next pass
+2026-09-13T01:59:22.827Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21671 seconds.","type":"quota_error","code":429}}
+2026-09-13T02:15:39.516Z pass 74: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21671 seconds.","type":"quota_error","code":429}} in 1038s
+2026-09-13T02:15:39.592Z waiting 1800s before the next pass
+2026-09-13T02:46:28.354Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18836 seconds.","type":"quota_error","code":429}}
+2026-09-13T03:03:20.096Z pass 75: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18836 seconds.","type":"quota_error","code":429}} in 1060s
+2026-09-13T03:03:20.174Z waiting 1800s before the next pass
+2026-09-13T03:34:21.726Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 15969 seconds.","type":"quota_error","code":429}}
+2026-09-13T03:35:13.048Z   first network failure: network: TypeError
+2026-09-13T03:53:20.263Z pass 76: asked 56, answered 0, failed 56 {"quota":53,"network":3} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 15969 seconds.","type":"quota_error","code":429}} in 1200s
+2026-09-13T03:53:20.339Z waiting 1800s before the next pass
+2026-09-13T04:24:12.128Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12972 seconds.","type":"quota_error","code":429}}
+2026-09-13T04:40:17.898Z pass 77: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12972 seconds.","type":"quota_error","code":429}} in 1018s
+2026-09-13T04:40:17.974Z waiting 1800s before the next pass
+2026-09-13T05:11:07.128Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 10158 seconds.","type":"quota_error","code":429}}
+2026-09-13T05:27:13.196Z pass 78: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 10158 seconds.","type":"quota_error","code":429}} in 1015s
+2026-09-13T05:27:13.276Z waiting 1800s before the next pass
+2026-09-13T05:58:01.694Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7343 seconds.","type":"quota_error","code":429}}
+2026-09-13T06:13:33.881Z pass 79: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7343 seconds.","type":"quota_error","code":429}} in 981s
+2026-09-13T06:13:33.959Z waiting 1800s before the next pass
+2026-09-13T06:44:25.085Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 4559 seconds.","type":"quota_error","code":429}}
+2026-09-13T07:00:04.867Z pass 80: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 4559 seconds.","type":"quota_error","code":429}} in 991s
+2026-09-13T07:00:04.903Z waiting 1800s before the next pass
+2026-09-13T07:30:54.363Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 1771 seconds.","type":"quota_error","code":429}}
+2026-09-13T07:47:11.444Z pass 81: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 1771 seconds.","type":"quota_error","code":429}} in 1027s
+2026-09-13T07:47:11.504Z waiting 1800s before the next pass
+2026-09-13T08:17:11.683Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 51h54m9.713344581s","data":null,"data2":null}
+2026-09-13T08:17:56.442Z pass 82: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 51h54m9.713344581s","data":null,"data2":null} in 45s
+2026-09-13T08:17:56.517Z waiting 1800s before the next pass
+2026-09-13T08:48:44.921Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 25900 seconds.","type":"quota_error","code":429}}
+2026-09-13T09:04:05.274Z pass 83: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 25900 seconds.","type":"quota_error","code":429}} in 969s
+2026-09-13T09:04:05.351Z waiting 1800s before the next pass
+2026-09-13T09:34:53.705Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23131 seconds.","type":"quota_error","code":429}}
+2026-09-13T09:52:13.085Z pass 84: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23131 seconds.","type":"quota_error","code":429}} in 1088s
+2026-09-13T09:52:13.161Z waiting 1800s before the next pass
+2026-09-13T10:23:01.517Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 20243 seconds.","type":"quota_error","code":429}}
+2026-09-13T10:38:30.795Z pass 85: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 20243 seconds.","type":"quota_error","code":429}} in 978s
+2026-09-13T10:38:30.872Z waiting 1800s before the next pass
+2026-09-13T11:09:58.263Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 17426 seconds.","type":"quota_error","code":429}}
+2026-09-13T11:26:57.234Z pass 86: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 17426 seconds.","type":"quota_error","code":429}} in 1106s
+2026-09-13T11:26:57.306Z waiting 1800s before the next pass
+2026-09-13T11:57:45.631Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 14559 seconds.","type":"quota_error","code":429}}
+2026-09-13T12:12:57.988Z pass 87: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 14559 seconds.","type":"quota_error","code":429}} in 961s
+2026-09-13T12:12:58.064Z waiting 1800s before the next pass
+2026-09-13T12:43:54.582Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 11798 seconds.","type":"quota_error","code":429}}
+2026-09-13T13:00:01.474Z pass 88: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 11798 seconds.","type":"quota_error","code":429}} in 1023s
+2026-09-13T13:00:01.551Z waiting 1800s before the next pass
+2026-09-13T13:30:49.960Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 8975 seconds.","type":"quota_error","code":429}}
+2026-09-13T13:46:13.963Z pass 89: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 8975 seconds.","type":"quota_error","code":429}} in 972s
+2026-09-13T13:46:14.039Z waiting 1800s before the next pass
+2026-09-13T14:17:14.279Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 6192 seconds.","type":"quota_error","code":429}}
+2026-09-13T14:34:28.200Z pass 90: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 6192 seconds.","type":"quota_error","code":429}} in 1094s
+2026-09-13T14:34:28.236Z waiting 1800s before the next pass
+2026-09-13T15:05:16.629Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 3308 seconds.","type":"quota_error","code":429}}
+2026-09-13T15:19:52.652Z pass 91: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 3308 seconds.","type":"quota_error","code":429}} in 924s
+2026-09-13T15:19:52.725Z waiting 1800s before the next pass
+2026-09-13T15:50:45.729Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 580 seconds.","type":"quota_error","code":429}}
+2026-09-13T16:00:07.653Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 59h37m3.293408039s","data":null,"data2":null}
+2026-09-13T16:00:41.033Z pass 92: asked 56, answered 0, failed 56 {"quota":35,"client":21} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 580 seconds.","type":"quota_error","code":429}} in 648s
+2026-09-13T16:00:41.111Z waiting 1800s before the next pass
+2026-09-13T16:30:41.450Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 60h7m39.433917965s","data":null,"data2":null}
+2026-09-13T16:31:30.116Z pass 93: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 60h7m39.433917965s","data":null,"data2":null} in 49s
+2026-09-13T16:31:30.190Z waiting 1800s before the next pass
+2026-09-13T17:01:56.551Z   first server failure: 502 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html class="no-js ie7 oldie" 
+2026-09-13T17:15:07.642Z pass 94: asked 56, answered 0, failed 56 {"server":56} e.g. 502 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html clas in 817s
+2026-09-13T17:15:07.706Z waiting 1800s before the next pass
+2026-09-13T17:45:08.895Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 61h22m6.176401752s","data":null,"data2":null}
+2026-09-13T17:46:13.043Z pass 95: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 61h22m6.176401752s","data":null,"data2":null} in 65s
+2026-09-13T17:46:13.115Z waiting 1800s before the next pass
+2026-09-13T18:16:13.371Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 61h53m11.317552255s","data":null,"data2":null}
+2026-09-13T18:17:12.582Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 20593 seconds.","type":"quota_error","code":429}}
+2026-09-13T18:27:23.399Z pass 96: asked 56, answered 0, failed 56 {"client":22,"quota":34} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 61h53m11.317552255s","data":null,"data2":null} in 670s
+2026-09-13T18:27:23.474Z waiting 1800s before the next pass
+2026-09-13T18:58:11.854Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18133 seconds.","type":"quota_error","code":429}}
+2026-09-13T19:12:43.226Z pass 97: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18133 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-13T19:12:43.299Z waiting 1800s before the next pass
+2026-09-13T19:43:31.663Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 15413 seconds.","type":"quota_error","code":429}}
+2026-09-13T19:58:03.242Z pass 98: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 15413 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-13T19:58:03.305Z waiting 1800s before the next pass
+2026-09-13T20:28:51.660Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12693 seconds.","type":"quota_error","code":429}}
+2026-09-13T20:43:23.337Z pass 99: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12693 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-13T20:43:23.412Z waiting 1800s before the next pass
+2026-09-13T21:14:11.819Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 9973 seconds.","type":"quota_error","code":429}}
+2026-09-13T21:28:43.507Z pass 100: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 9973 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-13T21:28:43.582Z waiting 1800s before the next pass
+2026-09-13T21:59:31.950Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7253 seconds.","type":"quota_error","code":429}}
+2026-09-13T22:14:05.741Z pass 101: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7253 seconds.","type":"quota_error","code":429}} in 922s
+2026-09-13T22:14:05.814Z waiting 1800s before the next pass
+2026-09-13T23:03:32.511Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 66h40m30.525848427s","data":null,"data2":null}
+2026-09-13T23:04:23.122Z pass 102: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 66h40m30.525848427s","data":null,"data2":null} in 51s
+2026-09-13T23:04:23.199Z waiting 1800s before the next pass
+2026-09-13T23:35:11.549Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 1513 seconds.","type":"quota_error","code":429}}
+2026-09-13T23:49:42.732Z pass 103: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 1513 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-13T23:49:42.809Z waiting 1800s before the next pass
+2026-09-14T00:19:42.958Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 67h56m40.992655363s","data":null,"data2":null}
+2026-09-14T00:20:33.541Z pass 104: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 67h56m40.992655363s","data":null,"data2":null} in 51s
+2026-09-14T00:20:33.610Z waiting 1800s before the next pass
+2026-09-14T00:51:21.980Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 25742 seconds.","type":"quota_error","code":429}}
+2026-09-14T01:27:15.964Z pass 105: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 25742 seconds.","type":"quota_error","code":429}} in 2202s
+2026-09-14T01:27:16.044Z waiting 1800s before the next pass
+2026-09-14T01:57:16.652Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 69h34m14.873148598s","data":null,"data2":null}
+2026-09-14T01:58:05.263Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21739 seconds.","type":"quota_error","code":429}}
+2026-09-14T02:09:23.010Z pass 106: asked 56, answered 0, failed 56 {"client":12,"quota":44} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 69h34m14.873148598s","data":null,"data2":null} in 727s
+2026-09-14T02:09:23.084Z waiting 1800s before the next pass
+2026-09-14T02:55:19.679Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18305 seconds.","type":"quota_error","code":429}}
+2026-09-14T03:09:51.105Z pass 107: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18305 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-14T03:09:51.180Z waiting 1800s before the next pass
+2026-09-14T03:40:39.635Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 15585 seconds.","type":"quota_error","code":429}}
+2026-09-14T03:55:10.860Z pass 108: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 15585 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-14T03:55:10.937Z waiting 1800s before the next pass
+2026-09-14T04:25:59.305Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12865 seconds.","type":"quota_error","code":429}}
+2026-09-14T04:31:46.907Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 72h8m44.892383787s","data":null,"data2":null}
+2026-09-14T04:37:16.815Z pass 109: asked 56, answered 0, failed 56 {"quota":43,"client":13} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12865 seconds.","type":"quota_error","code":429}} in 726s
+2026-09-14T04:37:16.887Z waiting 1800s before the next pass
+2026-09-14T05:08:05.317Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 10339 seconds.","type":"quota_error","code":429}}
+2026-09-14T05:21:56.912Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 72h58m54.882225687s","data":null,"data2":null}
+2026-09-14T05:22:36.543Z pass 110: asked 56, answered 0, failed 56 {"quota":55,"client":1} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 10339 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-14T05:22:36.619Z waiting 1800s before the next pass
+2026-09-14T05:53:24.995Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7620 seconds.","type":"quota_error","code":429}}
+2026-09-14T06:07:56.000Z pass 111: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7620 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-14T06:07:56.076Z waiting 1800s before the next pass
+2026-09-14T06:38:44.581Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 4900 seconds.","type":"quota_error","code":429}}
+2026-09-14T06:53:15.864Z pass 112: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 4900 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-14T06:53:15.939Z waiting 1800s before the next pass
+2026-09-14T07:24:04.328Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2180 seconds.","type":"quota_error","code":429}}
+2026-09-14T07:38:35.233Z pass 113: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2180 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-14T07:38:35.306Z waiting 1800s before the next pass
+2026-09-14T08:08:35.559Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 75h45m33.539840558s","data":null,"data2":null}
+2026-09-14T08:09:26.052Z pass 114: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 75h45m33.539840558s","data":null,"data2":null} in 51s
+2026-09-14T08:09:26.122Z waiting 1800s before the next pass
+2026-09-14T08:39:26.363Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 76h16m24.382981536s","data":null,"data2":null}
+2026-09-14T08:40:14.610Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26410 seconds.","type":"quota_error","code":429}}
+2026-09-14T08:53:57.370Z pass 115: asked 56, answered 0, failed 56 {"client":2,"quota":54} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 76h16m24.382981536s","data":null,"data2":null} in 871s
+2026-09-14T08:53:57.449Z waiting 1800s before the next pass
+2026-09-14T09:24:45.852Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23739 seconds.","type":"quota_error","code":429}}
+2026-09-14T09:29:36.834Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 77h6m34.851533603s","data":null,"data2":null}
+2026-09-14T09:36:03.264Z pass 116: asked 56, answered 0, failed 56 {"quota":43,"client":13} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23739 seconds.","type":"quota_error","code":429}} in 726s
+2026-09-14T09:36:03.338Z waiting 1800s before the next pass
+2026-09-14T10:06:51.817Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21213 seconds.","type":"quota_error","code":429}}
+2026-09-14T10:21:23.190Z pass 117: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21213 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-14T10:21:23.270Z waiting 1800s before the next pass
+2026-09-14T10:52:11.705Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18493 seconds.","type":"quota_error","code":429}}
+2026-09-14T11:06:42.800Z pass 118: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18493 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-14T11:06:42.876Z waiting 1800s before the next pass
+2026-09-14T11:37:31.321Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 15773 seconds.","type":"quota_error","code":429}}
+2026-09-14T11:52:02.307Z pass 119: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 15773 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-14T11:52:02.386Z waiting 1800s before the next pass
+2026-09-14T12:22:50.741Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 13054 seconds.","type":"quota_error","code":429}}
+2026-09-14T12:37:30.122Z pass 120: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 13054 seconds.","type":"quota_error","code":429}} in 928s
+2026-09-14T12:37:30.200Z waiting 1800s before the next pass
+2026-09-14T13:08:18.648Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 10326 seconds.","type":"quota_error","code":429}}
+2026-09-14T13:22:49.506Z pass 121: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 10326 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-14T13:22:49.578Z waiting 1800s before the next pass
+2026-09-14T13:53:37.942Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7607 seconds.","type":"quota_error","code":429}}
+2026-09-14T14:08:09.157Z pass 122: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7607 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-14T14:08:09.235Z waiting 1800s before the next pass
+2026-09-14T14:38:57.630Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 4887 seconds.","type":"quota_error","code":429}}
+2026-09-14T14:43:56.875Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 82h20m54.895303746s","data":null,"data2":null}
+2026-09-14T14:50:24.294Z pass 123: asked 56, answered 0, failed 56 {"quota":44,"client":12} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 4887 seconds.","type":"quota_error","code":429}} in 735s
+2026-09-14T14:50:24.371Z waiting 1800s before the next pass
+2026-09-14T15:21:12.765Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2352 seconds.","type":"quota_error","code":429}}
+2026-09-14T15:35:44.266Z pass 124: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2352 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-14T15:35:44.340Z waiting 1800s before the next pass
+2026-09-14T16:05:44.541Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 83h42m42.517179006s","data":null,"data2":null}
+2026-09-14T16:06:35.444Z pass 125: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 83h42m42.517179006s","data":null,"data2":null} in 51s
+2026-09-14T16:06:35.515Z waiting 1800s before the next pass
+2026-09-14T16:36:35.692Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 84h13m33.696703056s","data":null,"data2":null}
+2026-09-14T16:37:32.635Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 26572 seconds.","type":"quota_error","code":429}}
+2026-09-14T16:48:02.079Z pass 126: asked 56, answered 0, failed 56 {"client":16,"quota":40} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 84h13m33.696703056s","data":null,"data2":null} in 687s
+2026-09-14T16:48:02.156Z waiting 1800s before the next pass
+2026-09-14T17:18:50.482Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 24094 seconds.","type":"quota_error","code":429}}
+2026-09-14T17:25:26.605Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 85h2m24.653004124s","data":null,"data2":null}
+2026-09-14T17:30:08.208Z pass 127: asked 56, answered 0, failed 56 {"quota":43,"client":13} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 24094 seconds.","type":"quota_error","code":429}} in 726s
+2026-09-14T17:30:08.285Z waiting 1800s before the next pass
+2026-09-14T18:00:56.734Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21568 seconds.","type":"quota_error","code":429}}
+2026-09-14T18:03:46.832Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 85h40m44.84290594s","data":null,"data2":null}
+2026-09-14T18:05:47.164Z pass 128: asked 56, answered 0, failed 56 {"quota":20,"client":36} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21568 seconds.","type":"quota_error","code":429}} in 339s
+2026-09-14T18:05:47.223Z waiting 1800s before the next pass
+2026-09-14T18:36:35.637Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 19429 seconds.","type":"quota_error","code":429}}
+2026-09-14T18:51:06.936Z pass 129: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 19429 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-14T18:51:07.009Z waiting 1800s before the next pass
+2026-09-14T19:21:07.202Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 86h58m5.208373207s","data":null,"data2":null}
+2026-09-14T19:21:57.814Z pass 130: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 86h58m5.208373207s","data":null,"data2":null} in 51s
+2026-09-14T19:21:57.864Z waiting 1800s before the next pass
+2026-09-14T19:51:58.047Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 87h28m56.033720552s","data":null,"data2":null}
+2026-09-14T19:54:00.673Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 14784 seconds.","type":"quota_error","code":429}}
+2026-09-14T19:59:47.581Z pass 131: asked 56, answered 0, failed 56 {"client":33,"quota":23} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 87h28m56.033720552s","data":null,"data2":null} in 470s
+2026-09-14T19:59:47.660Z waiting 1800s before the next pass
+2026-09-14T20:30:36.059Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12588 seconds.","type":"quota_error","code":429}}
+2026-09-14T20:45:07.950Z pass 132: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 12588 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-14T20:45:08.026Z waiting 1800s before the next pass
+2026-09-14T21:15:56.509Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 9868 seconds.","type":"quota_error","code":429}}
+2026-09-14T21:30:27.806Z pass 133: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 9868 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-14T21:30:27.864Z waiting 1800s before the next pass
+2026-09-14T22:00:28.196Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 89h37m26.226830131s","data":null,"data2":null}
+2026-09-14T22:01:19.419Z pass 134: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 89h37m26.226830131s","data":null,"data2":null} in 52s
+2026-09-14T22:01:19.493Z waiting 1800s before the next pass
+2026-09-14T22:31:19.855Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 90h8m17.864898926s","data":null,"data2":null}
+2026-09-14T22:32:25.455Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 5279 seconds.","type":"quota_error","code":429}}
+2026-09-14T22:40:29.467Z pass 135: asked 56, answered 0, failed 56 {"client":24,"quota":32} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 90h8m17.864898926s","data":null,"data2":null} in 550s
+2026-09-14T22:40:29.549Z waiting 1800s before the next pass
+2026-09-14T23:11:17.972Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2947 seconds.","type":"quota_error","code":429}}
+2026-09-14T23:16:57.471Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 90h53m55.450428201s","data":null,"data2":null}
+2026-09-14T23:18:11.027Z pass 136: asked 56, answered 0, failed 56 {"quota":27,"client":29} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 2947 seconds.","type":"quota_error","code":429}} in 461s
+2026-09-14T23:18:11.095Z waiting 1800s before the next pass
+2026-09-14T23:48:11.329Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 91h25m9.296472524s","data":null,"data2":null}
+2026-09-14T23:49:09.963Z pass 137: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 91h25m9.296472524s","data":null,"data2":null} in 59s
+2026-09-14T23:49:10.000Z waiting 1800s before the next pass
+2026-09-15T00:19:10.191Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 91h56m8.20052718s","data":null,"data2":null}
+2026-09-15T00:19:52.602Z pass 138: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 91h56m8.20052718s","data":null,"data2":null} in 43s
+2026-09-15T00:19:52.637Z waiting 1800s before the next pass
+2026-09-15T00:49:52.817Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 92h26m50.861318206s","data":null,"data2":null}
+2026-09-15T00:50:58.328Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 25766 seconds.","type":"quota_error","code":429}}
+2026-09-15T00:52:19.910Z pass 139: asked 56, answered 0, failed 56 {"client":50,"quota":6} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 92h26m50.861318206s","data":null,"data2":null} in 147s
+2026-09-15T00:52:19.964Z waiting 1800s before the next pass
+2026-09-15T01:23:08.439Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23836 seconds.","type":"quota_error","code":429}}
+2026-09-15T01:23:08.651Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 93h0m6.674301431s","data":null,"data2":null}
+2026-09-15T01:31:45.640Z pass 140: asked 56, answered 0, failed 56 {"quota":32,"client":24} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 23836 seconds.","type":"quota_error","code":429}} in 566s
+2026-09-15T01:31:45.696Z waiting 1800s before the next pass
+2026-09-15T02:02:34.105Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21470 seconds.","type":"quota_error","code":429}}
+2026-09-15T02:17:05.439Z pass 141: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 21470 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-15T02:17:05.499Z waiting 1800s before the next pass
+2026-09-15T02:47:53.904Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18751 seconds.","type":"quota_error","code":429}}
+2026-09-15T03:02:24.996Z pass 142: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 18751 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-15T03:02:25.076Z waiting 1800s before the next pass
+2026-09-15T03:33:13.435Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 16031 seconds.","type":"quota_error","code":429}}
+2026-09-15T03:47:08.701Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 95h24m6.69223427s","data":null,"data2":null}
+2026-09-15T03:47:10.291Z pass 143: asked 56, answered 0, failed 56 {"quota":54,"client":2} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 16031 seconds.","type":"quota_error","code":429}} in 885s
+2026-09-15T03:47:10.329Z waiting 1800s before the next pass
+2026-09-15T04:17:10.870Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 95h54m8.849339178s","data":null,"data2":null}
+2026-09-15T04:17:53.459Z pass 144: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 95h54m8.849339178s","data":null,"data2":null} in 43s
+2026-09-15T04:17:53.521Z waiting 1800s before the next pass
+2026-09-15T04:47:53.739Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 96h24m51.744073992s","data":null,"data2":null}
+2026-09-15T04:49:07.629Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 11477 seconds.","type":"quota_error","code":429}}
+2026-09-15T04:53:19.436Z pass 145: asked 56, answered 0, failed 56 {"client":38,"quota":18} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 96h24m51.744073992s","data":null,"data2":null} in 326s
+2026-09-15T04:53:19.497Z waiting 1800s before the next pass
+2026-09-15T05:23:44.027Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 97h0m42.017747071s","data":null,"data2":null}
+2026-09-15T05:24:32.676Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 9352 seconds.","type":"quota_error","code":429}}
+2026-09-15T05:29:56.219Z pass 146: asked 56, answered 0, failed 56 {"client":37,"quota":19} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 97h0m42.017747071s","data":null,"data2":null} in 397s
+2026-09-15T05:29:56.280Z waiting 1800s before the next pass
+2026-09-15T06:00:44.665Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7180 seconds.","type":"quota_error","code":429}}
+2026-09-15T06:15:15.763Z pass 147: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 7180 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-15T06:15:15.825Z waiting 1800s before the next pass
+2026-09-15T06:46:04.324Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 4460 seconds.","type":"quota_error","code":429}}
+2026-09-15T07:00:35.157Z pass 148: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 4460 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-15T07:00:35.218Z waiting 1800s before the next pass
+2026-09-15T07:31:23.717Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 1741 seconds.","type":"quota_error","code":429}}
+2026-09-15T07:45:54.365Z pass 149: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 1741 seconds.","type":"quota_error","code":429}} in 919s
+2026-09-15T07:45:54.416Z waiting 1800s before the next pass
+2026-09-15T08:35:47.470Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 100h12m45.468262261s","data":null,"data2":null}
+2026-09-15T08:36:38.152Z pass 150: asked 56, answered 0, failed 56 {"client":56} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 100h12m45.468262261s","data":null,"data2":null} in 51s
+2026-09-15T08:36:38.210Z waiting 1800s before the next pass
+2026-09-15T09:06:38.372Z   first client failure: 401 {"status":"error","msg":"invalid access token: token is expired by 100h43m36.382155953s","data":null,"data2":null}
+2026-09-15T09:07:43.660Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 24761 seconds.","type":"quota_error","code":429}}
+2026-09-15T09:15:47.743Z pass 151: asked 56, answered 0, failed 56 {"client":24,"quota":32} e.g. 401 {"status":"error","msg":"invalid access token: token is expired by 100h43m36.382155953s","data":null,"data2":null} in 550s
+2026-09-15T09:15:47.806Z waiting 1800s before the next pass
+2026-09-15T09:46:38.768Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 22426 seconds.","type":"quota_error","code":429}}
+2026-09-15T09:58:39.391Z   first server failure: 502 <!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <!--[if IE 7]> <html class="no-js ie7 oldie" 
+2026-09-15T10:04:23.796Z pass 152: asked 56, answered 0, failed 56 {"quota":55,"server":1} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 22426 seconds.","type":"quota_error","code":429}} in 1116s
+2026-09-15T10:04:23.857Z waiting 1800s before the next pass
+2026-09-15T10:35:12.426Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 19512 seconds.","type":"quota_error","code":429}}
+2026-09-15T10:49:43.492Z pass 153: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 19512 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-15T10:49:43.534Z waiting 1800s before the next pass
+2026-09-15T11:20:31.856Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 16793 seconds.","type":"quota_error","code":429}}
+2026-09-15T11:35:03.312Z pass 154: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 16793 seconds.","type":"quota_error","code":429}} in 920s
+2026-09-15T11:35:03.366Z waiting 1800s before the next pass
+2026-09-15T12:05:51.741Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 14073 seconds.","type":"quota_error","code":429}}
+2026-09-15T12:20:26.966Z pass 155: asked 56, answered 0, failed 56 {"quota":56} e.g. 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 14073 seconds.","type":"quota_error","code":429}} in 924s
+2026-09-15T12:20:27.026Z waiting 1800s before the next pass
+2026-09-15T12:51:15.458Z   first quota failure: 429 {"error":{"message":"Usage limit reached for this 8h. It resets in 11349 seconds.","type":"quota_error","code":429}}
+2026-09-15T13:04:07.088Z   25/56 asked, 25 answered, 1.0s each
+2026-09-15T13:04:43.173Z   50/56 asked, 50 answered, 1.2s each
+2026-09-15T13:05:06.432Z pass 1: asked 56, answered 56, failed 0 in 86s
+2026-09-15T13:05:06.555Z done: 282/282 answered

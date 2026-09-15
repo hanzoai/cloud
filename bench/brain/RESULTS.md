@@ -665,6 +665,16 @@ k: `5` · reader: `qwen3.6:35b-a3b` · commit: `64aff2baa5dcdb091edbcd6d0e9e50ea
 | dev | 383 | 383 | 47.9 [43.6, 51.7] | 23.5 [19.3, 27.9] | 73.1 | 19.6 | 52.5 | 257 | 1074 | 1201 |
 | test | 1153 | 1153 | 47.5 [45.3, 49.9] | 26.2 [23.6, 28.7] | 74.1 | 26.3 | 49.6 | 246 | 1084 | 1261 |
 
+### locomo-all-oracle-k20-enso-flash
+
+k: `20` · reader: `enso-flash` · commit: `64aff2baa5dcdb091edbcd6d0e9e50ea161b763c` · prompt sha: `prompts/reader-locomo.txt`
+
+| category | n | of | f1 | em | exact | supported | answered | tokens | p50_ms | p95_ms |
+|---|---|---|---|---|---|---|---|---|---|---|
+| all | 282 | 1536 | 53.6 [49.2, 57.8] | 17.7 [13.5, 22.3] | 99.6 | 12.4 | 60.6 | 169 | 6954 | 51147 |
+| dev | 74.00 | 383 | 63.2 [56.3, 70.1] | 17.6 [9.5, 25.7] | 98.6 | 13.5 | 75.7 | 135 | 4645 | 31524 |
+| test | 208 | 1153 | 50.1 [44.8, 54.8] | 17.8 [12.5, 23.1] | 100.0 | 12.0 | 55.3 | 180 | 8355 | 62118 |
+
 ### locomo-all-oracle-k20-gemma4-31b
 
 k: `20` · reader: `gemma4:31b` · commit: `ddc076f5dd0506ce50428416c336e45c4a7ada73` · prompt sha: `prompts/reader-locomo.txt`
@@ -677,6 +687,16 @@ k: `20` · reader: `gemma4:31b` · commit: `ddc076f5dd0506ce50428416c336e45c4a7a
 | dev:multi-hop | 74.00 | 74.00 | 59.2 [51.9, 67.0] | 13.5 [6.8, 21.6] | 98.6 | 66.2 | 135 | 3839 | 5649 |
 | test | 208 | 208 | 50.8 [46.0, 55.7] | 16.8 [12.0, 21.6] | 100.0 | 55.8 | 180 | 5017 | 7969 |
 | test:multi-hop | 208 | 208 | 50.8 [46.0, 55.7] | 16.8 [12.0, 21.6] | 100.0 | 55.8 | 180 | 5017 | 7969 |
+
+### locomo-all-oracle-k20-gpt-oss-120b
+
+k: `20` · reader: `gpt-oss-120b` · commit: `64aff2baa5dcdb091edbcd6d0e9e50ea161b763c` · prompt sha: `prompts/reader-locomo.txt`
+
+| category | n | of | f1 | em | exact | supported | answered | tokens | p50_ms | p95_ms |
+|---|---|---|---|---|---|---|---|---|---|---|
+| all | 282 | 1536 | 55.5 [51.4, 59.5] | 18.1 [13.5, 22.7] | 99.6 | 12.4 | 61.3 | 169 | 2436 | 6814 |
+| dev | 74.00 | 383 | 64.3 [56.7, 71.2] | 18.9 [10.8, 28.4] | 98.6 | 13.5 | 77.0 | 135 | 2828 | 31290 |
+| test | 208 | 1153 | 52.4 [47.6, 57.1] | 17.8 [13.0, 23.1] | 100.0 | 12.0 | 55.8 | 180 | 2375 | 3957 |
 
 ### locomo-all-oracle-k20-qwen3.6-35b-a3b
 

@@ -1,0 +1,28 @@
+{
+ "name": "locomo-all-oracle-k20-gpt-oss-120b",
+ "benchmark": "locomo",
+ "policy": "oracle",
+ "k": 20,
+ "reader": "gpt-oss-120b",
+ "api": "api.hanzo.ai",
+ "cats": [
+  1
+ ],
+ "workers": 3,
+ "prompt": "prompts/reader-locomo.txt",
+ "prompt_sha256": "afa0a591ae62c574",
+ "dataset_sha256": "79fa87e90f040813",
+ "store_sha256": "688cea6b889e484c",
+ "facts_sha256": "cc680d252a3538b9",
+ "commit": "64aff2baa5dcdb091edbcd6d0e9e50ea161b763c",
+ "temperature": 0,
+ "max_tokens": 64,
+ "questions": 282,
+ "started": "2026-09-10T21:22:39.804Z",
+ "passes": 155,
+ "wall_seconds": 399553,
+ "finished": "2026-09-15T13:05:06.555Z",
+ "answered": 282,
+ "tokens_per_question": 169,
+ "reader_tokens": 112413
+}
