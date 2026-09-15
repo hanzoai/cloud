@@ -5,6 +5,28 @@ was read. A comparison whose other column has no source is not a comparison.
 
 Read 2026-09-11 from the pages in the sitemap at `usenaive.ai/sitemap.xml`.
 
+**Re-read 2026-09-15.** Every price below is unchanged. `usenaive.ai/benchmarks`
+still answers 404, and the computer page still publishes no start-up, resume or
+per-agent memory figure — so four days on there is still nothing of theirs to
+compare a latency or an accuracy against, and any such claim of ours stands on our
+own measurement alone. Four details the first read did not capture:
+
+- the same compute rates per second — "$0.000014 per second, while running" and
+  "$0.0000045 per GiB-second", which divide out of the hourly figures exactly
+- "Usage metered per tier, booked in integer micro-USD" — their ledger's unit is
+  the integer micro-USD, where ours is an exact 18-decimal amount
+- creation fees "$0" ("there is no creation fee")
+- the completion ladder in full: "immediate · now 1.00×", "priority · ≤ 1 h 0.60×",
+  "loose · ≤ 24 h 0.35×" — the first read recorded only the last of the three
+
+One discrepancy, left as a discrepancy rather than quietly resolved: the example
+box reads `2 vcpu · 4 gb · chromium 129` today where the line below records 4 vcpu.
+The page renders the region and the spec without a separator
+(`iad/workspace2 vcpu · 4 gb`), so this is either a change on their side or a
+mis-split of that string on the first read. It is not load-bearing for any figure
+in this suite — no table prices their example box — and it is recorded because a
+source that moved without anyone noticing is the failure this file exists to catch.
+
 ## Pricing — `usenaive.ai/pricing`
 
 | | published |
