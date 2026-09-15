@@ -18,26 +18,35 @@ speaks the protocol this server is built on. Same handler, same process, four
 envelopes, so the difference between these rows is the envelope and nothing
 else.
 
-Apple M1 Max, 10 cores, `n=200` interleaved, four samples. The `min` and `p50`
-of each:
+Apple M1 Max, 10 cores, `n=200` interleaved, three samples of each phase.
 
-| door | min | p50 |
-|---|---|---|
-| **ZAP** | **0.13 · 0.10 · 0.12 · 0.09** | **0.31 · 0.22 · 0.24 · 0.19** |
-| REST | 0.14 · 0.11 · 0.12 · 0.11 | 0.33 · 0.27 · 0.27 · 0.21 |
-| MCP | 0.15 · 0.13 · 0.13 · 0.11 | 0.35 · 0.28 · 0.28 · 0.22 |
-| op-call plane | 0.14 · 0.12 · 0.13 · 0.11 | 0.36 · 0.28 · 0.28 · 0.23 |
+| door | min | p50 | p50 against REST, same phase |
+|---|---|---|---|
+| **ZAP unix** | **0.07–0.09** | **0.14–0.18** | **0.67 · 0.75 · 0.67** |
+| ZAP tcp | 0.08–0.12 | 0.19–0.24 | 0.86 · 0.87 · 0.90 |
+| REST | 0.10–0.13 | 0.21–0.28 | 1.00 |
+| MCP | 0.10–0.14 | 0.21–0.25 | 0.96 · 1.09 · 1.05 |
+| op-call plane | 0.09–0.12 | 0.19–0.23 | 1.00 · 1.00 · 1.00 |
 
-**ZAP is the fastest door on every sample, and it is the only one that is not
-HTTP.** It leads on `min` in all four and on `p50` in all four, by more than the
-three HTTP doors differ from each other. Among those three the ordering is REST,
-then MCP and the plane within noise of one another: REST is first because the
-operation is already the address, and MCP pays for a name lookup and a JSON-RPC
-frame.
+**ZAP is the fastest door, and the socket is faster than the port.** Over a unix
+socket it answers in about two thirds of REST's median; over loopback TCP, about
+nine tenths. Both lead every HTTP door in every sample. Among the three HTTP
+doors the differences are inside the noise: REST is nominally first because the
+operation is already the address, and MCP nominally last for a name lookup and a
+JSON-RPC frame, but they trade places between runs.
 
-All four are under a quarter of a millisecond at the median. On a loop of a
-hundred tool calls the spread between the best and worst is three hundredths of
-a second, against a model turn measured in seconds.
+**Read the last column, not the absolutes.** A process serves one ZAP address,
+so the socket is a second phase rather than a fifth row, and the machine moves
+between phases — REST's own median ranged 0.21 to 0.28 ms across these runs. The
+three HTTP doors are measured again in the second phase precisely to carry that
+drift, and the ratio to REST is what survives it. On the ratio the ordering is
+the same in all three samples.
+
+All of it is under a third of a millisecond at the median. On a loop of a
+hundred tool calls the spread between the best and worst door is about a
+hundredth of a second, against a model turn measured in seconds — so the
+practical reading is still to pick the door that fits the caller. What the ZAP
+rows buy is the one in-process-adjacent path, and the socket is where that shows.
 
 ## The client was in the old numbers
 

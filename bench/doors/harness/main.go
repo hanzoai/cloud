@@ -38,6 +38,7 @@ type tasks struct {
 func main() {
 	base := flag.String("base", "", "http base, e.g. http://127.0.0.1:18086")
 	zapAddr := flag.String("zap", "", "ZAP address: host:port for tcp, or a path for unix")
+	zapName := flag.String("zap-name", "ZAP", "what to call the ZAP row")
 	op := flag.String("op", "tasks_list", "the operation every door asks for")
 	n := flag.Int("n", 200, "iterations per door")
 	warm := flag.Int("warm", 20, "warm-up iterations per door")
@@ -80,7 +81,7 @@ func main() {
 		doors = append(doors, struct {
 			name string
 			call func() error
-		}{"ZAP", zapCall})
+		}{*zapName, zapCall})
 	}
 
 	for i := 0; i < *warm; i++ {
@@ -104,11 +105,11 @@ func main() {
 		}
 	}
 
-	fmt.Printf("%-10s %8s %8s %8s   (ms, n=%d, interleaved)\n", "door", "min", "p50", "p90", *n)
+	fmt.Printf("%-12s %8s %8s %8s   (ms, n=%d, interleaved)\n", "door", "min", "p50", "p90", *n)
 	for _, d := range doors {
 		xs := samples[d.name]
 		sort.Float64s(xs)
-		fmt.Printf("%-10s %8.2f %8.2f %8.2f\n", d.name, xs[0], xs[len(xs)/2], xs[int(float64(len(xs))*0.9)-1])
+		fmt.Printf("%-12s %8.2f %8.2f %8.2f\n", d.name, xs[0], xs[len(xs)/2], xs[int(float64(len(xs))*0.9)-1])
 	}
 }
 

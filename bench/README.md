@@ -119,19 +119,25 @@ An agent's loop is call, read, decide, call again, so what the envelope costs is
 multiplied by every step of every task. `doors/run.sh` asks the same operation
 over each door, interleaved, n=200.
 
-Four samples, `n=200` interleaved, Apple M1 Max:
+Three samples of each phase, `n=200` interleaved, Apple M1 Max:
 
-| door | min, best–worst | p50, best–worst |
-|---|---|---|
-| **ZAP** | **0.09–0.13 ms** | **0.19–0.31 ms** |
-| REST | 0.11–0.14 ms | 0.21–0.33 ms |
-| MCP | 0.11–0.15 ms | 0.22–0.35 ms |
-| op-call plane | 0.11–0.14 ms | 0.23–0.36 ms |
+| door | min | p50 | p50 against REST |
+|---|---|---|---|
+| **ZAP unix** | **0.07–0.09 ms** | **0.14–0.18 ms** | **0.67–0.75×** |
+| ZAP tcp | 0.08–0.12 ms | 0.19–0.24 ms | 0.86–0.90× |
+| REST | 0.10–0.13 ms | 0.21–0.28 ms | 1.00 |
+| MCP | 0.10–0.14 ms | 0.21–0.25 ms | 0.96–1.09× |
+| op-call plane | 0.09–0.12 ms | 0.19–0.23 ms | 1.00× |
 
-**ZAP is the fastest door on every sample, and it is the only one that is not
-HTTP.** Among the three that are, REST leads because the operation is already
-the address, and MCP pays for a name lookup and a JSON-RPC frame. All four sit
-under a quarter of a millisecond at the median, so the practical reading is
+**ZAP is the fastest door and the socket is faster than the port** — two thirds
+of REST's median over a unix socket, nine tenths over loopback TCP, ahead of
+every HTTP door in every sample. Among the three HTTP doors the differences are
+inside the noise and they trade places between runs.
+
+A process serves one ZAP address, so the socket is a second phase rather than a
+fifth row. The three HTTP doors are measured again in that phase to carry the
+drift between them, and the ratio to REST is the column that survives it. All of
+it is under a third of a millisecond at the median, so the practical reading is
 still to pick the door that fits the caller.
 
 The harness is one Go program calling all four round-robin. The previous table
