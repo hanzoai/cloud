@@ -7,10 +7,11 @@
  *
  * The reader is any OpenAI-compatible chat endpoint: the Hanzo router for the
  * house and matched lanes, local Ollama for the open lane. The credential is
- * HANZO_API_KEY, else the token `hanzo auth login` saved; Ollama needs none.
+ * HANZO_API_KEY, else one minted by the CLI (see credential); Ollama needs none.
  *
  *   node answer.mjs --reader=enso-flash "Excerpt lines..." "Question?"
  */
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
 // ── scoring, as the paper does it
@@ -31,13 +32,48 @@ export const ROUTER = 'https://api.hanzo.ai/v1'
 export const OLLAMA = 'http://127.0.0.1:11434/v1'
 /** A model name with a tag (`gemma4:31b`) is a local Ollama model; the rest go to the router. */
 export const apiFor = (reader) => (reader.includes(':') && !reader.includes('/') ? OLLAMA : ROUTER)
+/** A minted token is asked for again this long before it expires. */
+const SKEW_MS = 60_000
+/** An opaque key says nothing about when it dies, so it is held only briefly. */
+const OPAQUE_MS = 60_000
+let held = null // { key, until }
+
+/**
+ * The access token, asked of the one thing that knows how to mint one.
+ *
+ * It used to read `access_token` out of ~/.hanzo/credentials.json — a second
+ * implementation of credential resolution, and the wrong half of that file. The
+ * durable value there is the REFRESH token; `access_token` is a copy of one
+ * exchange, and it expires. Two 100-hour LoCoMo runs spent their last four days
+ * answering nothing but `401 invalid access token: token is expired by 101h`,
+ * retrying on a 30-minute timer against a credential no retry could mend, while
+ * `hanzo auth token` on the same host returned a working one the whole time.
+ *
+ * A minted token lives about ELEVEN MINUTES, so it is re-asked rather than held:
+ * hoisting one at start, which run.mjs also did, is the same bug with a shorter
+ * fuse. The cache's bound is the token's own `exp`, read off the JWT, because a
+ * guess is what put the run in that loop.
+ */
 export function credential(api) {
   if (api.startsWith(OLLAMA)) return 'ollama'
-  const home = process.env.HOME
-  const read = (f) => { try { return JSON.parse(readFileSync(`${home}/.hanzo/${f}`, 'utf8')) } catch { return {} } }
-  const key = process.env.HANZO_API_KEY ?? read('credentials.json').access_token ?? read('config.json').apiKey
+  if (process.env.HANZO_API_KEY) return process.env.HANZO_API_KEY
+  if (held && Date.now() < held.until) return held.key
+  let key = ''
+  try {
+    key = execFileSync('hanzo', ['auth', 'token'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+  } catch { /* not installed, or signed out — reported below as one thing */ }
   if (!key) throw new Error('no credential: run `hanzo auth login` or set HANZO_API_KEY')
+  held = { key, until: expiresAt(key) }
   return key
+}
+
+/** When a JWT says it dies, less the skew. Anything unreadable is treated as opaque. */
+function expiresAt(jwt) {
+  try {
+    const claims = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString('utf8'))
+    if (Number.isFinite(claims.exp)) return claims.exp * 1000 - SKEW_MS
+  } catch { /* opaque */ }
+  return Date.now() + OPAQUE_MS
 }
 
 /** The excerpt block the reader sees: one line per retrieved turn, in the order given. */

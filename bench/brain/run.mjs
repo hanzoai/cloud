@@ -36,7 +36,6 @@ const corpus = JSON.parse(readFileSync('locomo10.json', 'utf8'))
 const dates = corpus.map((c) => Object.fromEntries(Object.entries(c.conversation).filter(([k]) => k.endsWith('_date_time')).map(([k, v]) => [k.replace('_date_time', ''), v])))
 const turnsById = store.map((c) => new Map(c.turns.map((t) => [t.id, t])))
 const ranked = await rankAll(POLICY, K)
-const key = credential(API)
 
 const qs = []
 store.forEach((c, ci) => c.qa.forEach((q, qi) => { if (q.evidence.length && CATS.includes(q.category)) qs.push({ ci, qi, cat: q.category, question: q.question }) }))
@@ -79,7 +78,7 @@ async function one(q) {
   let last
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const { pred, usage, ms } = await ask({ api: API, key, reader: READER, system, context, question: q.question })
+      const { pred, usage, ms } = await ask({ api: API, key: credential(API), reader: READER, system, context, question: q.question })
       const row = { ci: q.ci, qi: q.qi, cat: q.cat, q: q.question, gold, pred, f1: f1(pred, gold), em: em(pred, gold), tokens: Math.round(context.length / 4), ctx: ids, ms, attempt, usage }
       appendFileSync(`${DIR}/predictions.jsonl`, JSON.stringify(row) + '\n')
       return { ok: true }
