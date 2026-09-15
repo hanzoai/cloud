@@ -9,43 +9,49 @@ Every interval is a bootstrap 95% CI over questions (1000 resamples). Splits and
 
 k: `10`
 
-| table | n | recall | all | any | tokens |
-|---|---|---|---|---|---|
-| original | 1977 | 42.9 | 39.0 | 47.7 | 262 |
-| original·cat2 | 320 | 49.4 | 46.3 | 52.5 | 253 |
-| original·no-adversarial | 1531 | 45.5 | 40.7 | 51.6 | 265 |
-| original·cat3 | 89.00 | 26.3 | 16.9 | 39.3 | 250 |
-| original·cat1 | 281 | 26.7 | 9.6 | 49.8 | 270 |
-| original·cat4 | 841 | 52.3 | 51.5 | 53.2 | 269 |
-| original·cat5 | 446 | 33.9 | 33.2 | 34.5 | 250 |
+| table | n | recall | all | any | chance | tokens |
+|---|---|---|---|---|---|---|
+| original | 1977 | 42.9 | 39.0 | 47.7 | 1.2 | 262 |
+| original·cat2 | 320 | 49.4 | 46.3 | 52.5 | 1.9 | 253 |
+| original·no-adversarial | 1531 | 45.5 | 40.7 | 51.6 | 1.4 | 265 |
+| original·dev | 301 | 43.8 | 39.9 | 48.5 | 1.9 | 261 |
+| original·cat3 | 89.00 | 26.3 | 16.9 | 39.3 | 3.7 | 250 |
+| original·cat1 | 281 | 26.7 | 9.6 | 49.8 | 1.0 | 270 |
+| original·cat4 | 841 | 52.3 | 51.5 | 53.2 | 1.0 | 269 |
+| original·cat5 | 446 | 33.9 | 33.2 | 34.5 | 0.8 | 250 |
+| original·test | 1676 | 42.7 | 38.8 | 47.6 | 1.1 | 262 |
 
 ### conv-proxy-naive-rag-st-minilm-k10
 
 k: `10`
 
-| table | n | recall | all | any | tokens |
-|---|---|---|---|---|---|
-| original | 1977 | 42.9 | 39.0 | 47.9 | 262 |
-| original·cat2 | 320 | 49.4 | 46.3 | 52.5 | 253 |
-| original·no-adversarial | 1531 | 45.5 | 40.7 | 51.7 | 265 |
-| original·cat3 | 89.00 | 26.3 | 16.9 | 39.3 | 251 |
-| original·cat1 | 281 | 27.0 | 9.6 | 50.5 | 270 |
-| original·cat4 | 841 | 52.3 | 51.5 | 53.2 | 269 |
-| original·cat5 | 446 | 33.9 | 33.2 | 34.5 | 250 |
+| table | n | recall | all | any | chance | tokens |
+|---|---|---|---|---|---|---|
+| original | 1977 | 42.9 | 39.0 | 47.9 | 1.2 | 262 |
+| original·cat2 | 320 | 49.4 | 46.3 | 52.5 | 1.9 | 253 |
+| original·no-adversarial | 1531 | 45.5 | 40.7 | 51.7 | 1.4 | 265 |
+| original·dev | 301 | 43.8 | 39.9 | 48.5 | 1.9 | 262 |
+| original·cat3 | 89.00 | 26.3 | 16.9 | 39.3 | 3.7 | 251 |
+| original·cat1 | 281 | 27.0 | 9.6 | 50.5 | 1.0 | 270 |
+| original·cat4 | 841 | 52.3 | 51.5 | 53.2 | 1.0 | 269 |
+| original·cat5 | 446 | 33.9 | 33.2 | 34.5 | 0.8 | 250 |
+| original·test | 1676 | 42.7 | 38.8 | 47.7 | 1.1 | 262 |
 
 ### conv-proxy-naive-rag-zenlm_zen-embedding-0.6b-k10
 
 k: `10`
 
-| table | n | recall | all | any | tokens |
-|---|---|---|---|---|---|
-| original | 1977 | 59.7 | 54.9 | 65.6 | 315 |
-| original·cat2 | 320 | 74.0 | 70.9 | 76.9 | 332 |
-| original·no-adversarial | 1531 | 63.5 | 57.6 | 70.9 | 319 |
-| original·cat3 | 89.00 | 40.4 | 33.7 | 49.4 | 286 |
-| original·cat1 | 281 | 38.1 | 14.9 | 68.7 | 311 |
-| original·cat4 | 841 | 70.5 | 69.3 | 71.7 | 320 |
-| original·cat5 | 446 | 46.4 | 45.5 | 47.3 | 302 |
+| table | n | recall | all | any | chance | tokens |
+|---|---|---|---|---|---|---|
+| original | 1977 | 59.7 | 54.9 | 65.6 | 1.2 | 315 |
+| original·cat2 | 320 | 74.0 | 70.9 | 76.9 | 1.9 | 332 |
+| original·no-adversarial | 1531 | 63.5 | 57.6 | 70.9 | 1.4 | 319 |
+| original·dev | 301 | 63.3 | 58.8 | 68.1 | 1.9 | 320 |
+| original·cat3 | 89.00 | 40.4 | 33.7 | 49.4 | 3.7 | 286 |
+| original·cat1 | 281 | 38.1 | 14.9 | 68.7 | 1.0 | 311 |
+| original·cat4 | 841 | 70.5 | 69.3 | 71.7 | 1.0 | 320 |
+| original·cat5 | 446 | 46.4 | 45.5 | 47.3 | 0.8 | 302 |
+| original·test | 1676 | 59.0 | 54.2 | 65.2 | 1.1 | 315 |
 
 ### conv-proxy-units-st-minilm-k10
 
