@@ -31,7 +31,6 @@ def units(turns, unit):
 table = {}
 preds = []
 for unit in ['turn', 'w2', 'w3', 'w5', 'session']:
-    rows = []
     for ci, conv in enumerate(corpus):
         turns = turns_of(conv); us = units(turns, unit); text = {t[0]: t[3] for t in turns}
         uv = m.encode([u[1] for u in us], normalize_embeddings=True, batch_size=128)
@@ -55,23 +54,31 @@ for unit in ['turn', 'w2', 'w3', 'w5', 'session']:
             cids = set(i for j in cidx for i in us[j][0]); cbodies = [us[j][1].lower() for j in cidx]
             chit = [g for g in gold if g in cids or (text.get(g) and any(text[g].lower() in b for b in cbodies))]
             crecall = len(chit) / len(gold)
-            rows.append((q['category'], recall, toks))
             # The row, not only its average. METHOD.md declares a predictions.jsonl
             # per run and a dev/test split for LoCoMo-Conv; this table published
             # neither, so its figures — including the 8x token claim — could not be
             # cut on the held-out half or checked a question at a time. `ci` is what
             # the split is taken on, exactly as conv/retrieve.mjs takes it.
+            # tokens EXACT, not rounded: the cuts average this field, and averaging a
+            # rounded per-question count moves a published figure in the fourth decimal
+            # for nothing. A row is data, not a display.
             preds.append({'style': unit, 'category': q['category'], 'ci': ci,
-                          'recall': recall, 'tokens': round(toks), 'chance': crecall})
-    for pool, keep in [('all', lambda c: True), ('no-adversarial', lambda c: c != 5)]:
-        rs = [r for r in rows if keep(r[0])]
-        table[f'{unit}·{pool}'] = {'n': len(rs), 'recall': float(np.mean([r[1] for r in rs])), 'tokens': float(np.mean([r[2] for r in rs])), 'units_per_conv': len(us)}
-    for split, keep in [('dev', lambda c: c <= 1), ('test', lambda c: c > 1)]:
-        rs = [p for p in preds if p['style'] == unit and keep(p['ci'])]
-        table[f'{unit}·{split}'] = {'n': len(rs), 'recall': float(np.mean([r['recall'] for r in rs])), 'tokens': float(np.mean([r['tokens'] for r in rs])), 'units_per_conv': len(us)}
+                          'recall': recall, 'tokens': toks, 'chance': crecall})
+    # Chance rides every cut as a FIELD, the shape conv/retrieve.mjs publishes. It was
+    # a row of its own here, which made one idea read two ways across two tables and
+    # left the floor unavailable per split — the cut where it matters most, since a
+    # held-out number is the one anybody quotes.
     mine = [p for p in preds if p['style'] == unit]
-    table[f'{unit}·chance'] = {'n': len(mine), 'recall': float(np.mean([r['chance'] for r in mine])), 'tokens': float(np.mean([r['tokens'] for r in mine])), 'units_per_conv': len(us)}
-    print(f"{unit:8s} all {table[unit+'·all']['recall']*100:5.1f}   no-adversarial {table[unit+'·no-adversarial']['recall']*100:5.1f}   chance {table[unit+'·chance']['recall']*100:5.1f}   over chance {(table[unit+'·all']['recall']-table[unit+'·chance']['recall'])*100:+5.1f}   tokens/q {table[unit+'·all']['tokens']:6.0f}   units in last conv {len(us)}")
+    def cut(key, rs):
+        table[key] = {'n': len(rs), 'recall': float(np.mean([r['recall'] for r in rs])),
+                      'chance': float(np.mean([r['chance'] for r in rs])),
+                      'tokens': float(np.mean([r['tokens'] for r in rs])), 'units_per_conv': len(us)}
+    for pool, keep in [('all', lambda p: True), ('no-adversarial', lambda p: p['category'] != 5)]:
+        cut(f'{unit}·{pool}', [p for p in mine if keep(p)])
+    for split, keep in [('dev', lambda p: p['ci'] <= 1), ('test', lambda p: p['ci'] > 1)]:
+        cut(f'{unit}·{split}', [p for p in mine if keep(p)])
+    a = table[unit + '·all']
+    print(f"{unit:8s} all {a['recall']*100:5.1f}   no-adversarial {table[unit+'·no-adversarial']['recall']*100:5.1f}   chance {a['chance']*100:5.1f}   over chance {(a['recall']-a['chance'])*100:+5.1f}   test over chance {(table[unit+'·test']['recall']-table[unit+'·test']['chance'])*100:+5.1f}   tokens/q {a['tokens']:6.0f}   units in last conv {len(us)}")
 (out := root / 'runs' / 'conv-proxy-units-st-minilm-k10').mkdir(parents=True, exist_ok=True)
 open(out / 'predictions.jsonl', 'w').write('\n'.join(json.dumps(p) for p in preds) + '\n')
 json.dump({'protocol': 'exact all-MiniLM-L6-v2, top-10, recall=|ret∩gold|/|gold| with containment, original LoCoMo QA pool', 'paper_naive_rag': {'dialog': .533, 'implicit': .312, 'counterfactual': .573, 'composed': .266}, 'table': table}, open(out / 'metrics.json', 'w'), indent=1)
