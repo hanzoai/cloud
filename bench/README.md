@@ -119,21 +119,25 @@ An agent's loop is call, read, decide, call again, so what the envelope costs is
 multiplied by every step of every task. `doors/run.sh` asks the same operation
 over each door, interleaved, n=200.
 
-`min` across four runs, because it is the only column whose ordering held:
+Four samples, `n=200` interleaved, Apple M1 Max:
 
-| door | min, best | min, worst |
+| door | min, best–worst | p50, best–worst |
 |---|---|---|
-| REST | 0.22 ms | 0.29 ms |
-| op-call plane | 0.23 ms | 0.30 ms |
-| MCP | 0.25 ms | 0.31 ms |
+| **ZAP** | **0.09–0.13 ms** | **0.19–0.31 ms** |
+| REST | 0.11–0.14 ms | 0.21–0.33 ms |
+| MCP | 0.11–0.15 ms | 0.22–0.35 ms |
+| op-call plane | 0.11–0.14 ms | 0.23–0.36 ms |
 
-**The envelope costs 20 to 30 microseconds.** REST wins because the operation is
-already the address; MCP pays for a name lookup and a JSON-RPC frame. The p50
-read three different orderings across those runs, so it is not in this table —
-the difference is smaller than the median's own movement. A hundred tool calls is
-three milliseconds of difference against a model turn measured in seconds, which
-is the useful finding: pick the door that fits the caller, not the one that
-benchmarks fastest.
+**ZAP is the fastest door on every sample, and it is the only one that is not
+HTTP.** Among the three that are, REST leads because the operation is already
+the address, and MCP pays for a name lookup and a JSON-RPC frame. All four sit
+under a quarter of a millisecond at the median, so the practical reading is
+still to pick the door that fits the caller.
+
+The harness is one Go program calling all four round-robin. The previous table
+was measured from Python and read 0.22–0.31 ms at `min` where the same doors now
+read 0.09–0.15 — that difference was the client, silently in every row, and it
+had to go before a fourth door could be added that no script can speak.
 
 ### Fleet residency — we win, decisively
 
