@@ -227,11 +227,21 @@ time, read from `brain/benchmarks-retrieval.json`:
 | + facts | 82.3% | 36.9% | 88.3% | 78.2% |
 | + adjacency | 84.2% | 39.0% | 88.7% | 79.7% |
 | + iterative hops | **86.8%** | **39.0%** | 87.9% | **80.9%** |
-| Naïve claim | 91% | 57% | — | — |
 
-Flat cosine already beat several systems in their own table — they list
-HippoRAG-v2 at 54%, MemGPT/Cognee 28%, Mem0 18%, Zep 7% on single-hop — and the
-rest of the ladder is what a store does that similarity does not.
+**The naive row that used to end this table has been removed.** It read
+"91% / 57%", and it is a real published figure — `usenaive.ai/lab/memory`, July
+2026 — but of something else: answer accuracy on *FictionalCharacters QA* with a
+gpt-4o-mini reader. These columns are retrieval recall on LoCoMo. Different
+dataset, different quantity, different backbone, printed as one table, and it
+happened to read against us, which is how it survived. The systems the same page
+lists (HippoRAG-v2 54%, MemGPT/Cognee 28%, Mem0 18%, Zep 7% single-hop) are on
+their benchmark too, so they are not comparable here either.
+
+What IS comparable is `bench/brain`'s MemoryAgentBench lane, and that comparison
+is settled: every baseline on their page is the CAR paper's MemoryAgentBench
+number to the decimal, so their benchmark is this one. On it, with no reader at
+all against their matched gpt-4o-mini, this suite scores **98.2 single-hop and
+84.5 multi-hop** pooled against their **91 / 57**. See `naive.md`.
 
 **The multi-hop diagnosis held.** At semantic only, "any" was 79.8% and "all"
 22.7%: the store found *a* relevant turn almost every time and all of them

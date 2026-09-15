@@ -5,11 +5,8 @@ was read. A comparison whose other column has no source is not a comparison.
 
 Read 2026-09-11 from the pages in the sitemap at `usenaive.ai/sitemap.xml`.
 
-**Re-read 2026-09-15.** Every price below is unchanged. `usenaive.ai/benchmarks`
-still answers 404, and the computer page still publishes no start-up, resume or
-per-agent memory figure — so four days on there is still nothing of theirs to
-compare a latency or an accuracy against, and any such claim of ours stands on our
-own measurement alone. Four details the first read did not capture:
+**Re-read 2026-09-15.** Every price below is unchanged. Four details the first
+read did not capture:
 
 - the same compute rates per second — "$0.000014 per second, while running" and
   "$0.0000045 per GiB-second", which divide out of the hourly figures exactly
@@ -26,6 +23,105 @@ The page renders the region and the spec without a separator
 mis-split of that string on the first read. It is not load-bearing for any figure
 in this suite — no table prices their example box — and it is recorded because a
 source that moved without anyone noticing is the failure this file exists to catch.
+
+## They publish more than this file said, and it was never hidden
+
+`usenaive.ai/benchmarks` answers 404, and both the first read and the 2026-09-15
+re-read concluded from that there was nothing of theirs to compare against. That
+was wrong, and wrong in the way that is hardest to notice: each read checked the
+pages this file already listed. The sitemap it cites carries ninety-odd URLs, and
+among them are `/lab/memory`, `/lab/sandbox`, `/lab/inference` and four
+`/benchmark/<name>` pages — singular, which is why guessing the plural 404'd.
+
+Read 2026-09-15 from `usenaive.ai/lab/sandbox`, measured by them on an
+**AWS m7i.8xlarge, 2026-07-22**:
+
+| | published |
+|---|---|
+| cold start | "2.79ms" |
+| warm resume | "~1ms warm resume" |
+| fork | "1.55ms copy-on-write" |
+| RAM per agent | "1.2MB" |
+| idle agent | "KBs of state storage only" |
+| concurrency | "2,000 concurrent agents under an 8-second heartbeat at a p99 execution latency of 37.5 ms" |
+| at scale | "at 4,000 agents p99 rises to 73.8 ms, over our 50 ms SLO" |
+| worker_threads fallback | "roughly 15x slower on create and 15-17x heavier per agent" |
+| E2B (Firecracker microVM) | cold "<200ms", resume "~1s from pause", RAM min "512MB" |
+| Modal (container/gVisor) | cold "~1s", resume "~1s mem snapshot", RAM min "128MB" |
+| Morph (microVM) | resume "<250ms", fork "<250ms" |
+| Cloudflare (container) | cold "1-3s", RAM min "256MB" |
+
+Read the same day from `usenaive.ai/lab/memory`, dated July 2026:
+
+| | single-hop | multi-hop |
+|---|---|---|
+| Naive Brain | "91%" | "57%" |
+| CAR (prior SOTA) | "78%" | "30.2%" |
+| HippoRAG-v2 | "54%" | "<=7%" |
+| MemGPT / Cognee | "28%" | "<=7%" |
+| Mem0 / Contriever | "18%" | "<=7%" |
+| Zep / Graphiti | "7%" | "<=7%" |
+
+on "FictionalCharacters QA on a matched gpt-4o-mini backbone", metric
+"% of held-out questions answered correctly", and "Naive measured, others
+published". The preprint, "Both Engines, One Harness", is "Coming soon".
+
+### Two comparisons in this suite are now known to be wrong
+
+**The 91/57 row is not a LoCoMo row.** README's LoCoMo retrieval ladder ends with
+"Naive claim 91% 57%" beside our 86.8% / 39.0%. Ours are RETRIEVAL recall on
+LoCoMo; theirs are ANSWER accuracy on FictionalCharacters QA with a gpt-4o-mini
+reader. Different dataset, different quantity, different backbone — three ways
+apart, and the row reads as one table. It has to come out or be relabelled.
+
+**The isolate comparison is across different machines.** Their 2.79 ms is an
+m7i.8xlarge; our 0.59 ms is a laptop. The direction happens to favour us and that
+is not the point — an uncontrolled comparison is not evidence, whichever way it
+falls.
+
+### What their benchmark is, established by its own baselines
+
+`/lab/memory` names no dataset, no question count, no protocol and no citation, so
+the first reading here was that the identification could not be made. It can, from
+the page's own comparison column. Every baseline it prints is the CAR paper's
+MemoryAgentBench number, verified in `brain/mab/README.md` against arXiv 2606.01435:
+
+| | CAR paper, MemoryAgentBench | `/lab/memory` |
+|---|---|---|
+| CAR, gpt-4o-mini, pooled 6K-262K | 78.0 / 30.2 | "78%" / "30.2%" |
+| HippoRAG-v2 | 54 / 5 | "54%" / "<=7%" |
+| MemGPT, Cognee | 28 / 3 | "28%" / "<=7%" |
+| Mem0 | 18 / 2 | "18%" / "<=7%" |
+| Zep | 7 / 3 | "7%" / "<=7%" |
+
+Five baselines, matching to the decimal, with their multi-hop scores collapsed
+into the "<=7%" the page's own headline uses. A table is identified by its
+baselines the way a photograph is identified by its background. "FictionalCharacters
+QA" is MemoryAgentBench Conflict Resolution — FactConsolidation, whose haystacks
+are templated facts about invented entities, which is where the name comes from —
+and `brain/mab` has been running it all along.
+
+So the comparison IS like-for-like on dataset and metric, and it is ours:
+
+| | single-hop | multi-hop |
+|---|---|---|
+| **this suite**, beamx, **no reader** | **98.2** | **84.5** |
+| Naive Brain, "matched gpt-4o-mini backbone" | 91 | 57 |
+| CAR, gpt-4o | 94.8 | 51.5 |
+| CAR, gpt-4o-mini | 78.0 | 30.2 |
+
++7.2 single-hop and **+27.5 multi-hop** over their published figure, and the
+readers differ in the direction that favours this suite: theirs is a matched
+gpt-4o-mini, ours is none at all — the answer is resolved by typed search, and
+`substring_exact_match` scores a median ten-character string, not a retrieved
+blob. `table.mjs` names the reader on every row, because a row with a different
+reader is a different table.
+
+Two things still stand against over-quoting it. Their row is "Naive measured,
+others published" with no protocol given, so what varied under their 91/57 is
+unknown. And the pooled mean mixes 6k, which is this suite's dev split, with the
+three test sizes — CAR pools that way, so the columns match, and it should be said
+wherever the pooled number is.
 
 ## Pricing — `usenaive.ai/pricing`
 
@@ -73,25 +169,22 @@ in this directory.
 
 | cited as | where in this suite | status |
 |---|---|---|
-| 91% single-hop, 57% multi-hop, LoCoMo | Agent Brain | **unsourced** |
-| isolated-vm 2.79 ms cold start | Sandbox, Agent as goroutine | **unsourced** — and measured here at 0.59 ms |
-| isolated-vm 1.2 MB per agent | Agent as goroutine | **unsourced** — and measured here at 1.00 MiB, which is V8's floor |
+| 91% single-hop, 57% multi-hop | Agent Brain | **sourced** `/lab/memory` — but it is FictionalCharacters QA answer accuracy, NOT LoCoMo retrieval; the comparison is invalid, see above |
+| isolated-vm 2.79 ms cold start | Sandbox, Agent as goroutine | **sourced** `/lab/sandbox` — on an m7i.8xlarge; measured here at 0.59 ms on a laptop, so not controlled |
+| isolated-vm 1.2 MB per agent | Agent as goroutine | **sourced** `/lab/sandbox` — and measured here at 1.00 MiB, which is V8's floor either way |
 | ~1 MB per dormant agent | Fleet residency — already marked *"their assumption"* | modelled, not theirs |
 | "$0.05 a credit" | Pricing | **withdrawn** — see below |
 
-The sandbox lane prints three more, about other vendors, and none of those is
-sourced either. `docs.e2b.dev` carries no start-up time and no default memory on
-the page checked 2026-09-11; Modal's and Cloudflare's were not traced to a page
-at all.
+The sandbox lane prints three more, about other vendors. All three are naive's
+numbers for those vendors, published on `/lab/sandbox` — E2B "<200ms" / "512MB",
+Modal "~1s" / "128MB", Cloudflare "1-3s" / "256MB" — and they are sourced to
+naive, not to E2B, Modal or Cloudflare. `docs.e2b.dev` carried no start-up time
+and no default memory on the page checked 2026-09-11.
 
-| cited as | status |
-|---|---|
-| E2B <200 ms, 512 MB min | unsourced; not on the docs landing page |
-| Modal ~1 s, 128 MB min | unsourced |
-| Cloudflare 1–3 s, 256 MB min | unsourced |
-
-A figure with a vendor's name on it and no page behind it is worth less than no
-figure. Either source them or measure them, as the isolate row now is.
+That distinction is the whole of it: quoting a competitor's figure for a third
+party is citing what naive says about E2B, which is a different claim from what
+E2B says about itself, and a table that blurs the two is repeating a rival's
+marketing as though it were the vendor's own documentation.
 
 ## The pricing row was wrong, and the correction goes the other way
 
