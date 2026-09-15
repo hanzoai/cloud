@@ -41,7 +41,13 @@ const RAIL = {
 // ratio of an hour to a call, and the multiple that followed was wrong by the
 // same factor. The correction goes against us.
 const NAIVE = { vcpuHour: 0.0504, gbHour: 0.0162 }
-const OSS_SHARE = 0.25 // given away, per the brief
+// Not this file's number. `hanzoai/commerce` declares the OSS developer payout
+// in `config/oss-payout.json` — poolFraction 0.25, direct dependencies weighted
+// four times a transitive one — and `ossattr.MaxPoolFraction` caps it at 0.25 in
+// code, so raising it anywhere has no effect. Restated here because this repo
+// does not depend on commerce and should not acquire a billing service to read
+// one constant; changed there, this is what has to follow.
+const OSS_SHARE = 0.25
 
 /**
  * The overheads a marginal-cost sum leaves out, and they are the ones that
@@ -116,6 +122,9 @@ console.log(`  1M dormant agents $${((477 * 1e6) / 1024 ** 3 * RAIL.objectGbMont
 
 /** Three schemes, each against the same measured cost. */
 const schemes = [
+  // Candidate price points, not a price list. What Hanzo actually charges lives
+  // in commerce's PriceSet and PricingRule; this ladder asks what a price would
+  // have to clear, which is a different question and belongs here.
   { name: 'Their compute rate', perCall: 0.0000007 },
   { name: 'Half',        perCall: 0.025 },
   { name: '90% cheaper', perCall: 0.005 },

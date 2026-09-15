@@ -453,6 +453,15 @@ and which dominate both columns.
   to open source, three availability zones, twelve months of retained history,
   and twice the infrastructure bill in people
 
+**Which numbers are whose.** The 25% is not this lane's to set: `hanzoai/commerce`
+declares the OSS developer payout in `config/oss-payout.json` and `ossattr` caps
+it at 0.25 in code, so raising it anywhere has no effect. What Hanzo charges
+lives in commerce's PriceSet and PricingRule; the ladder above is not a price
+list but a question about what a price would have to clear. Railway's rails and
+naïve's rates are third-party price lists and stay here beside their citations —
+a competitor's published prices in our own billing service would be a category
+error, not a single source of truth.
+
 The line that grows is not agents, it is **history**: a dormant agent stays 477
 bytes, its transcript does not. At 2 KB retained per call, a billion calls a
 month is 22 TB after a year, and that eventually exceeds compute.
