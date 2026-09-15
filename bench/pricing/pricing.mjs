@@ -69,7 +69,20 @@ const RETENTION_MONTHS = 12
 const REDUNDANCY = 3
 const OPS_MULTIPLE = 2.0 // people and tooling, as a multiple of infra
 
-/** One agent call, as measured: wake, search memory, run a pooled sandbox. */
+/**
+ * One agent call, as measured: wake, search memory, run a pooled sandbox.
+ *
+ * The TIMES are measured here; the vcpu and gb slice is an allocation we assume,
+ * because nothing meters a request's own CPU or memory — and nothing should, since
+ * that is not how any of this is priced. It is modelled for exactly one reason: to
+ * compare against a vendor who DOES price per vCPU-hour, on their terms.
+ *
+ * The figure that needs no model now has a source. Every debit the platform takes
+ * is metered (hanzo_usage_charged_usd_total) beside the count of debits that took
+ * it (hanzo_usage_debits_total), so measured $/request per product falls out of a
+ * division once live traffic runs through them. Until this bench can read that
+ * store, the line below is a model and says so.
+ */
 const CALL = {
   sandboxMs: 35.8,
   memoryMs: 1.27,
