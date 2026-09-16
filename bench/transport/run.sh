@@ -23,8 +23,20 @@ export GOWORK=off
 
 N=${N:-200}
 P=${P:-18086}; ZP=${ZP:-19663}; HP=${HP:-19096}; AP=${AP:-18087}
-DATA=$(mktemp -d); BIN=$(mktemp -u); PID=""
-cleanup() { [ -n "$PID" ] && kill "$PID" 2>/dev/null; rm -rf "$DATA" "$BIN" "$BIN.transports"; }
+DATA=$(mktemp -d); BIN=$(mktemp -u); PID=""; DATA2=""
+# A CLEANUP THAT CAN FAIL EARLY DOES NOT CLEAN. set -e is in force inside a
+# trap, so `[ -n "$PID" ] && kill ...` returning non-zero — which is what it does
+# whenever PID is empty — aborts the handler before anything is removed. Empty is
+# exactly the early-exit case, a build that did not compile, where the temporary
+# files most want removing. Reproduced in isolation: the marker file survives.
+#
+# DATA2 is in here too. It belongs to the second phase and used to be removed by
+# the last line of the script, so every path that did not reach that line — the
+# second server failing to boot, an interrupt — left a data directory behind.
+cleanup() {
+  if [ -n "$PID" ]; then kill "$PID" 2>/dev/null || true; fi
+  rm -rf "$DATA" "$BIN" "$BIN.transports" "${DATA2:-}"
+}
 trap cleanup EXIT
 
 go build -o "$BIN" ./cmd/cloud
@@ -57,4 +69,3 @@ for _ in $(seq 1 300); do
   sleep 0.1
 done
 "$BIN.transports" -base "http://127.0.0.1:$P" -zap "$DATA2/cloud.sock" -zap-name "ZAP unix" -n "$N" ${BENCH_JSON:+-json "$BENCH_JSON"}
-rm -rf "$DATA2"

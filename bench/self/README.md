@@ -17,7 +17,7 @@ Taken on an M-series laptop, 2026-09-10, median of four runs.
 |---|---|
 | private modules required | **0** |
 | modules fetchable with no credential | **127 of 127** (re-run 2026-09-16) |
-| build from source | 13 s (9–18) |
+| build from source | 13 s (9–18) · 6 s re-measured 2026-09-16, warmer cache |
 | binary | 80 MB |
 | boot to a healthy answer | **1.2 s** |
 | operations served by default | 13 over 8 paths |

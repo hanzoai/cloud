@@ -19,7 +19,15 @@ P=${P:-18080}; ZP=${ZP:-19653}; HP=${HP:-19090}; AP=${AP:-18081}
 DATA=$(mktemp -d); BIN=$(mktemp -u); PID=""
 # An unset PID must not reach kill: `kill 0` signals the whole process group,
 # which takes down the shell that ran this and leaves no output to read.
-cleanup() { [ -n "$PID" ] && kill "$PID" 2>/dev/null; rm -rf "$DATA" "$BIN"; }
+# A CLEANUP THAT CAN FAIL EARLY DOES NOT CLEAN. set -e is in force inside a
+# trap, so `[ -n "$PID" ] && kill ...` returning non-zero — which is what it does
+# whenever PID is empty — aborts the handler before anything is removed. Empty is
+# exactly the early-exit case, a build that did not compile, where the temporary
+# files most want removing. Reproduced in isolation: the marker file survives.
+cleanup() {
+  if [ -n "$PID" ]; then kill "$PID" 2>/dev/null || true; fi
+  rm -rf "$DATA" "$BIN"
+}
 trap cleanup EXIT
 
 # This repository stands alone, and the point of the lane is that it does. A

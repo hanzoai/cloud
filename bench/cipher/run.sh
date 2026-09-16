@@ -25,8 +25,13 @@ FLAGS_C=$(pkg-config --cflags sqlcipher 2>/dev/null || echo "-I/opt/homebrew/opt
 FLAGS_L=$(pkg-config --libs sqlcipher 2>/dev/null || echo "-L/opt/homebrew/opt/sqlcipher/lib -lsqlcipher")
 
 PURE=$(mktemp -u); CGO=$(mktemp -u); CIPHER=$(mktemp -u); PID=""
+# A CLEANUP THAT CAN FAIL EARLY DOES NOT CLEAN. set -e is in force inside a
+# trap, so `[ -n "$PID" ] && kill ...` returning non-zero — which is what it does
+# whenever PID is empty — aborts the handler before anything is removed. Empty is
+# exactly the early-exit case, a build that did not compile, where the temporary
+# files most want removing. Reproduced in isolation: the marker file survives.
 cleanup() {
-  [ -n "$PID" ] && { kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null || true; }
+  if [ -n "$PID" ]; then kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true; fi
   rm -f "$PURE" "$CGO" "$CIPHER"
 }
 trap cleanup EXIT
