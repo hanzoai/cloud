@@ -14,6 +14,7 @@
  *   node tables.mjs [--out=/path/to/papers/tables]
  */
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { check } from './digest.mjs'
 
 const arg = (k, d) => { const m = process.argv.find((a) => a.startsWith(`--${k}=`)); return m ? m.slice(k.length + 3) : d }
 const here = new URL('.', import.meta.url)
@@ -63,7 +64,13 @@ if (existsSync(sweepFile) && existsSync(frozenFile)) {
   const NAME = { 'w.fact': 'fact weight', 'w.lex': 'BM25 weight', 'w.ent': 'entity weight', 'w.time': 'temporal weight', 'w.adj': 'adjacency weight', 'w.exp': 'expansion weight', 'w.hop': 'second-hop weight', 'w.facet': 'facet weight', 'budget.dense': 'dense pool', 'budget.fact': 'fact pool', 'budget.lex': 'BM25 pool', 'budget.hop': 'second-hop pool' }
   const rows = Object.keys(GRID).map((p) => { const [kind, key] = p.split('.'); const start = kind === 'w' ? first.w[key] : first.budget[key], chosen = kind === 'w' ? z.w[key] : z.budget[key]; return `${NAME[p]} & ${GRID[p]} & ${start} & ${chosen === start ? `${chosen}` : `\\textbf{${chosen}}`} \\\\` })
   const test = run('locomo-retrieval-test-iterative-hops-locomo')?.summary
-  const body = `\\begin{tabular}{lrrr}\n\\toprule\nParameter & range searched & start & chosen \\\\\n\\midrule\n${rows.join('\n')}\n\\midrule\n\\multicolumn{4}{l}{dev objective (mean over categories of (ALL@20 + nDCG@20)/2): ${pct(first.objective)} $\\rightarrow$ ${pct(z.objective)} over ${s.evaluations.length} evaluations} \\\\\n\\multicolumn{4}{l}{frozen at commit \\texttt{${z.commit}}; test split, run once: multi-hop ALL@20 ${pct(mean(test?.['1']?.['all@20']))}, ANY@20 ${pct(mean(test?.['1']?.['any@20']))}, single-hop ALL@20 ${pct(mean(test?.['4']?.['all@20']))}} \\\\\n\\bottomrule\n\\end{tabular}\n`
+  const body = `\\begin{tabular}{lrrr}\n\\toprule\nParameter & range searched & start & chosen \\\\\n\\midrule\n${rows.join('\n')}\n\\midrule\n\\multicolumn{4}{l}{dev objective (mean over categories of (ALL@20 + nDCG@20)/2): ${pct(first.objective)} $\\rightarrow$ ${pct(z.objective)} over ${s.evaluations.length} evaluations} \\\\\n\\multicolumn{4}{l}{frozen at engine \\texttt{${z.engine ?? 'unstamped'}}; test split, run once: multi-hop ALL@20 ${pct(mean(test?.['1']?.['all@20']))}, ANY@20 ${pct(mean(test?.['1']?.['any@20']))}, single-hop ALL@20 ${pct(mean(test?.['4']?.['all@20']))}} \\\\\n\\bottomrule\n\\end{tabular}\n`
+  // A TABLE THAT WENT STALE SHOULD SAY SO WHILE IT IS BEING WRITTEN. The commit
+  // stamp this replaced was orphaned by a rebase and nothing noticed for weeks,
+  // because nothing ever asked whether it still resolved.
+  const d = check(z, here)
+  if (d.state === 'drift') console.error(`  sweep.tex: engine moved ${d.was} -> ${d.engine} (${d.moved.join(', ')}) — rerun sweep.mjs or re-verify the rows`)
+  else if (d.state === 'unstamped') console.error(`  sweep.tex: frozen record carries no engine digest — engine on disk is ${d.engine}`)
   write('sweep.tex', body, 'dev split only (conversations 0–2); coordinate descent')
 }
 

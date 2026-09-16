@@ -259,6 +259,24 @@ time, read from `brain/benchmarks-retrieval.json`:
 | + adjacency | 84.2% | 39.0% | 88.7% | 79.7% |
 | + iterative hops | **86.8%** | **39.0%** | 87.9% | **80.9%** |
 
+**Re-measured 2026-09-16 and every row is identical** — 78.2 / 82.5 / 82.3 / 84.2
+/ 86.8 single-hop, 22.7 → 36.9 → 39.0 multi-hop — on an engine 52 insertions
+removed from the one that first produced them.
+
+That check was worth running because the stamp said it could not be made. The
+frozen record named a commit, `33d0f8749bd1`, and **that commit is not an
+ancestor of this history**: a rebase orphaned it, so nothing could be checked out
+to compare against, while `tables.mjs` went on printing it into the paper as the
+provenance of every number on the page. A stamp that does not resolve is worse
+than no stamp, because it reads as verified.
+
+The record now carries a sha256 of each file that decides a row — `context.mjs`,
+`rank.mjs`, `score.mjs` — and one digest over the three, which is what `mab/`
+already did and what survives history being rewritten. `tables.mjs` prints that
+digest and says so on stderr when the engine has moved out from under a table it
+is writing. The commit stays in the record; it is simply no longer the thing
+anyone checks.
+
 **The naive row that used to end this table has been removed.** It read
 "91% / 57%", and it is a real published figure — `usenaive.ai/lab/memory`, July
 2026 — but of something else: answer accuracy on *FictionalCharacters QA* with a

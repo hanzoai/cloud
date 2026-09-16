@@ -18,6 +18,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { evaluate, ROWS, DEFAULT_W, BUDGET, K } from './context.mjs'
+import { digest } from './digest.mjs'
 
 const arg = (k, d) => { const m = process.argv.find((a) => a.startsWith(`--${k}=`)); return m ? m.slice(k.length + 3) : d }
 const FACTS = arg('facts', process.env.FACTS ?? 'locomo')
@@ -67,6 +68,9 @@ for (let pass = 1; pass <= 4; pass++) {
   if (!moved) break
 }
 const commit = execSync('git rev-parse --short=12 HEAD', { cwd: new URL('.', import.meta.url).pathname }).toString().trim()
-const frozen = { row: rowName, facts: FACTS, k: K, w, budget, objective: best, commit, evaluations: table.length }
+// The commit is kept because it is useful when it resolves, and the ENGINE
+// digest is what anyone actually checks: a rebase orphaned the last commit
+// stamp and the paper tables went on printing it. See digest.mjs.
+const frozen = { row: rowName, facts: FACTS, k: K, w, budget, objective: best, commit, ...digest(), evaluations: table.length }
 writeFileSync(new URL(`./ablations/frozen-${FACTS}.json`, import.meta.url), JSON.stringify(frozen, null, 1))
 console.log(`\nfrozen (${table.length} evaluations): w=${JSON.stringify(w)} budget=${JSON.stringify(budget)} objective ${(best * 100).toFixed(2)} · commit ${commit}`)

@@ -25,5 +25,12 @@
  },
  "objective": 0.6373954854754578,
  "commit": "33d0f8749bd1",
+ "verified": "2026-09-16",
+ "code": {
+  "context.mjs": "bd743963defa1283f3703819b924175709faee7e5453a0737ecdedb0ddb463b3",
+  "rank.mjs": "b7cacc1f8bcfb30b45ffe742fb9f4d554fb3b0e51b5d455c01067e4a3282d761",
+  "score.mjs": "eeeecd018ba9a6188cc075446e581d4a8cdcdfa6c458b9f726d517577c65dde1"
+ },
+ "engine": "b467901f3950",
  "evaluations": 145
 }
