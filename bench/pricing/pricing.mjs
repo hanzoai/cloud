@@ -6,8 +6,8 @@
  *
  *   MEASURED (bench/fleet, brain.mjs, sandbox.mjs, this laptop, Sept 2026)
  *     dormant agent state      477 bytes
- *     pooled sandbox exec      35.8 ms
- *     cold container start     149.6 ms
+ *     microVM boot             309 ms    (hanzo-vm, n=20; there is no pooled mode)
+ *     pooled sandbox exec      35.8 ms   HISTORICAL — docker exec, a runtime we do not ship
  *     memory search            1.27 ms   (brute force, one conversation)
  *     embedding                14 ms     (zen-embedding-0.6b, batched)
  *     agent resume             0.031 ms
@@ -83,8 +83,29 @@ const OPS_MULTIPLE = 2.0 // people and tooling, as a multiple of infra
  * division once live traffic runs through them. Until this bench can read that
  * store, the line below is a model and says so.
  */
+//
+// THE SANDBOX TERM WAS 35.8 ms AND THAT MEASUREMENT NO LONGER EXISTS. It was
+// `docker exec` into an already-running container, and the sandbox lane does not
+// measure docker any more, because nothing here runs docker — the builds run
+// buildkit inside a microVM. Measured on the runtime we do ship, a hanzo-vm boots
+// in 309 ms, and `hanzo-vm` has no exec, no attach and no pool: `run`, `measure`,
+// `init`, `upgrade`, `checkpoint`, `prune`. Every call boots.
+//
+// So the pooled figure priced a mode the product does not have, and the gap is
+// 8.6x on the dominant term. Both are kept, because the difference between them
+// IS the price of that missing mode and it is worth seeing as a number rather
+// than discovering later:
+//
+//   POOLED   35.8 ms   a sandbox kept warm between calls — not built
+//   BOOT    309.0 ms   what a call costs today, measured, n=20
+//
+// The markup line is unaffected: their rate and our cost are both per second of
+// the same slice, so a longer slice moves both and the ratio does not.
+const POOLED_MS = 35.8
+const BOOT_MS = 309.0
+
 const CALL = {
-  sandboxMs: 35.8,
+  sandboxMs: BOOT_MS,
   memoryMs: 1.27,
   resumeMs: 0.031,
   embedMs: 14,
@@ -102,6 +123,13 @@ const marginalCall =
 console.log(`\n══ WHAT A CALL COSTS ══\n`)
 console.log(`  compute time      ${(seconds * 1000).toFixed(1)} ms  (sandbox ${CALL.sandboxMs} + embed ${CALL.embedMs} + memory ${CALL.memoryMs} + resume ${CALL.resumeMs})`)
 console.log(`  marginal cost     $${marginalCall.toFixed(8)} per call`)
+{
+  // What the same call would cost with a sandbox kept warm between calls. Printed
+  // beside the real one so the missing mode has a price rather than a plan.
+  const p = (POOLED_MS + CALL.memoryMs + CALL.resumeMs + CALL.embedMs) / 1000
+  const cost = p * CALL.vcpu * RAIL.vcpuSec + p * CALL.gb * RAIL.gbSec + (CALL.egressKb / 1024 / 1024) * RAIL.egressGb
+  console.log(`  if pooled         ${(p * 1000).toFixed(1)} ms · $${cost.toFixed(8)} per call — ${(marginalCall / cost).toFixed(1)}x cheaper, and not built`)
+}
 // The same slice of compute and memory, at their published rates. Egress is
 // left out of both sides of this line: they publish no egress price, and what
 // ours contributes is four ten-thousandths of a cent.
@@ -187,10 +215,17 @@ console.log(`══ READ ══
   after giving a quarter away and paying three zones, twelve months of
   retained history, and twice the infrastructure bill in people.
 
-  The reason that works is not efficiency in the abstract, it is the two
-  numbers this session measured: a dormant agent is 477 bytes rather than an
-  assumed megabyte, and a pooled sandbox answers in 35.8 ms rather than a
-  cold machine. Neither of those is a discount. They are the cost base.
+  The reason that works is not efficiency in the abstract, it is the number
+  this session measured and re-measured: a dormant agent is 477 bytes rather
+  than an assumed megabyte. That is not a discount, it is the cost base, and
+  it is why the storage line for a million sleeping agents is a cent.
+
+  IT USED TO CLAIM A SECOND ONE AND SHOULD NOT HAVE. "A pooled sandbox
+  answers in 35.8 ms rather than a cold machine" was docker exec into a
+  running container, on a runtime this estate does not have. hanzo-vm boots
+  in 309 ms and offers no exec, no attach and no pool, so every call boots and
+  the per-call cost is 3.1x what that sentence assumed. The pooled figure is
+  kept above as what the missing mode would be worth, not as something we do.
 
   WHAT THIS EXCLUDES, and it dominates everything above: model tokens. A
   single frontier call costs cents, so an agent turn that thinks is 100–1000×
