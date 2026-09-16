@@ -9,5 +9,13 @@
  },
  "objective": 0.5041781081405696,
  "commit": "ddc076f5dd05",
+ "engineBaselinedOn": "2026-09-16",
+ "engineBaselineMeans": "a baseline for future drift, NOT a re-verification: these rows were produced before this digest existed and data/repobench-r is not on disk to re-run them. The next edit to the engine will be caught; this one is not.",
+ "code": {
+  "../code/context-code.mjs": "321ec8acb165121e22924d23263ee90b4e3952db7d0cf99169e4dd39787e8c2b",
+  "metrics.mjs": "642ace40bffa4eabe8ed0592c007484b3f23b8e0076a9613260926f9eefadf07",
+  "llm.mjs": "49c0834b982e9c11cef09de9564f49a2da924b2188ac351953827380ee711139"
+ },
+ "engine": "facc55d4c1f2",
  "evaluations": 180
 }

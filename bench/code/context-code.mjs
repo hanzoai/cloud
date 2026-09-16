@@ -29,6 +29,7 @@ import { createHash } from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { rank as rankScore, ci, pct, quantile } from '../brain/metrics.mjs'
 import { embed } from '../brain/llm.mjs'
+import { digest, CODE_ENGINE } from '../brain/digest.mjs'
 
 const arg = (k, d) => { const m = process.argv.find((a) => a.startsWith(`--${k}=`)); return m ? m.slice(k.length + 3) : d }
 const has = (k) => process.argv.includes(`--${k}`)
@@ -141,7 +142,11 @@ if (MAIN) {
     for (const lex of [0, 0.2, 0.5, 1, 2]) for (const unused of [-1, -0.5, 0, 0.5, 1, 2]) for (const used of [-1, -0.5, 0, 0.5, 1, 2]) {
       const w = { lex, unused, used }; const { summary } = await evaluate(items, { ...ROWS['full: dense + BM25 + typed links'], w }); const obj = summary.all.mrr.mean
       table.push({ w, mrr: obj, recall1: summary.all['recall@1'].mean }); if (!best || obj > best.mrr + 1e-9) best = { w, mrr: obj } }
-    const frozen = { setting: SETTING, row: 'full: dense + BM25 + typed links', embed: EMBED, w: best.w, objective: best.mrr, commit: commit(), evaluations: table.length }
+    // The commit is kept because it is useful when it resolves, and the ENGINE
+    // digest is what anyone actually checks: the last two stamps here,
+    // 337022ce8e37 and ddc076f5dd05, are ancestors of nothing. See
+    // ../brain/digest.mjs.
+    const frozen = { setting: SETTING, row: 'full: dense + BM25 + typed links', embed: EMBED, w: best.w, objective: best.mrr, commit: commit(), ...digest(new URL('../brain/', import.meta.url), CODE_ENGINE), evaluations: table.length }
     writeFileSync(new URL(`./ablations/sweep-${SETTING}.json`, here), JSON.stringify({ setting: SETTING, objective: 'MRR on dev', evaluations: table }, null, 1)); writeFileSync(new URL(`./ablations/frozen-${SETTING}.json`, here), JSON.stringify(frozen, null, 1))
     console.log(`frozen on dev (${SETTING}): w=${JSON.stringify(best.w)} MRR ${pct(best.mrr)} over ${table.length} evaluations · commit ${frozen.commit}`); process.exit(0) }
   const items = load(split), want = arg('rows', 'all'), names = want === 'all' ? Object.keys(ROWS) : want.split(',').map((s) => s.trim())
