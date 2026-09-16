@@ -18,10 +18,10 @@ Medians of eight runs, September 2026. Memory was identical on every run.
 
 | | cold start | vs an isolate on THIS machine | vs their published figure |
 |---|---|---|---|
-| goroutine | **125 ns** | 4,720× | 22,300× |
-| goja — JavaScript | **2.4 µs** | 246× | 1,163× |
-| wazero — WASM | **7.8 µs** | 76× | 358× |
-| gpython — Python | **25.0 µs** | 24× | 112× |
+| goroutine | **125 ns** | 2,800× | 22,300× |
+| goja — JavaScript | **2.4 µs** | 146× | 1,163× |
+| wazero — WASM | **7.8 µs** | 45× | 358× |
+| gpython — Python | **25.0 µs** | 14× | 112× |
 
 | a fleet of 1,000,000 | |
 |---|---|
@@ -36,11 +36,16 @@ Warm paths, for the case where an agent is already up: **740 ns** per goja eval,
 
 **TWO COLUMNS, BECAUSE ONLY ONE OF THEM IS CONTROLLED.** Their 2.79 ms and 1.2 MB
 were measured on an m7i.8xlarge; everything here is a laptop. Running the same
-library they attribute those to — isolated-vm 7.0.1 — on this machine gives 0.59
+library they attribute those to — isolated-vm 7.0.1 — on this machine gives 0.35
 ms and 1.00 MiB (`../sandbox`), and that is the only comparison where the
 hardware is held still. The right-hand column is printed because it is the figure
 being cited at us, not because it is evidence. It is also flattering, which is
 the reason to keep it in the weaker column rather than the headline.
+
+That middle column read 4,720× for a few hours. It was computed against a 0.59 ms
+isolate, and five consecutive runs give 0.35 ms p50 (p95 0.41) — so every ratio in
+it came down by 1.7×. The correction is in the unflattering direction, which is
+the only reason anyone would believe the ones that are not.
 
 And a goroutine is not an isolate: one is a scheduled stack in a Go process, the
 other a JavaScript heap. Read these as what each primitive costs, not as one

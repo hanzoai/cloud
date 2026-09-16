@@ -164,31 +164,53 @@ had to go before a fourth door could be added that no script can speak.
 Their row is marked *"MODELLED, NEVER BILLED."* Ours is a file you can `ls`.
 2,198× is the distance between an assumption and a measurement.
 
-### Sandbox — three primitives, and one of them we now measure
+### Sandbox — the primitives, measured on the runtime we actually ship
 
 | | measured here | attributed elsewhere |
 |---|---|---|
-| V8 context | 0.23 ms | — |
-| V8 isolate, isolated-vm 7.0.1 | **0.59 ms**, 1.00 MiB each | 2.79 ms, 1.2 MB |
-| container, cold | **150.8 ms** | E2B <200 ms · Modal ~1 s · Cloudflare 1–3 s |
-| container, pooled | **37.5 ms** | — |
+| V8 context | 0.13 ms | — |
+| V8 isolate, isolated-vm 7.0.1 | **0.35 ms**, 1.00 MiB each | 2.79 ms, 1.2 MB |
+| hanzo-vm, cold boot | **309 ms** (p95 335) | E2B <200 ms · Modal ~1 s · Cloudflare 1–3 s |
+| hanzo-vm, from checkpoint | **311 ms** (p95 343) | Morph <250 ms resume · E2B ~1 s from pause |
+
+**The container rows were docker, and nothing here runs docker.** The lane shelled
+out to `docker run` and `docker exec` on machines that do not have it — the
+builds run buildkit inside a microVM, which is why `hanzo-vm checkpoint list`
+has a buildkit entry — so both rows printed "unavailable" while this table
+carried numbers anyway. They now measure `hanzo-vm`, which is what a sandbox on
+this stack actually is.
+
+**That moves us out of the container column and into the microVM one, and we do
+not win it.** 309 ms is slower than E2B's published <200 ms Firecracker cold
+start. Their figure is uncontrolled — their hardware, their harness — which is
+the same objection this file raises when the uncontrolled comparison runs the
+other way, so it is not a defence, just the reason neither number settles it.
+
+**A checkpoint saves the disk, not the boot.** Starting from a 403 MB checkpoint
+costs 311 ms against a cold boot's 309 ms: no difference. `--from` hands a VM the
+filesystem an earlier run left behind and the kernel boots either way. Morph's
+"<250 ms" and E2B's "~1 s from pause" are MEMORY snapshots, a mechanism hanzo-vm
+does not have — so that row has no counterpart of ours, and pairing it with this
+one would claim the feature by borrowing its name.
 
 **The isolate row used to be the context row.** A `vm.createContext` makes a
 fresh global inside the isolate already running; it is cheap because it shares
 the heap, which is exactly what an isolate does not do. Reporting 0.15 ms
 against a published 2.79 ms and calling it 17× was comparing two different
 primitives in our favour. Running the library the number is attributed to, on
-this laptop, an isolate costs **0.59 ms** — still under the figure cited at us,
-by 4.7× rather than 17×, and now a measurement rather than an argument.
+this laptop, an isolate costs **0.35 ms** — under the figure cited at us by 8.0×,
+and a measurement rather than an argument. It read 0.59 ms here once; five
+consecutive runs give 0.35 ms p50 with a p95 of 0.41, and the first run of a
+session reads high for the same reason the goroutine lane now discards a round.
 
 **The megabyte is V8's, not a vendor's.** A fresh isolate's heap measures 1.00
 MiB here, which is close to the 1.2 MB cited — because it is what any V8 isolate
 costs, including one of ours. It is not a competitor's weakness.
 
-The cold container beats E2B, Modal and Cloudflare, and a pooled one answers in
-37.5 ms. But an isolate runs JavaScript: no pytest, no pip, no cargo, no shell —
-which is what a coding agent was asked to do. The rows are different primitives
-and the comparison is per workload, not per millisecond.
+An isolate runs JavaScript: no pytest, no pip, no cargo, no shell — which is what
+a coding agent was asked to do. A microVM runs all of it behind a kernel
+boundary and costs three orders of magnitude more to start. The rows are
+different primitives and the comparison is per workload, not per millisecond.
 
 ### Agent as goroutine — the execution half of the fleet claim
 
@@ -198,7 +220,7 @@ place, and that is a goroutine rather than a container.
 | | measured here | attributed elsewhere |
 |---|---|---|
 | per live agent | **601 bytes** of heap | isolated-vm: 1.2 MB — and 1.00 MiB measured |
-| spawn | **125 ns** | 2.79 ms — and 0.59 ms measured |
+| spawn | **125 ns** | 2.79 ms — and 0.35 ms measured |
 | wake 1M | 107 ms (107 ns each) | — |
 | wazero (WASM) | 7.8 µs instantiate, 20 ns call | — |
 | goja (JavaScript) | 2.4 µs per VM, 740 ns warm eval | — |
