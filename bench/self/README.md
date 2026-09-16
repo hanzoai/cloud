@@ -4,7 +4,7 @@ What it costs to run this yourself.
 
 Every other lane measures what the software does. This one measures whether you
 can have it at all. `run.sh` builds the binary from this repository, starts it,
-asks it what it serves, and reaches one operation through each door it opens.
+asks it what it serves, and reaches one operation through each transport it opens.
 
 ```
 bench/self/run.sh
@@ -21,10 +21,10 @@ Taken on an M-series laptop, 2026-09-10, median of four runs.
 | boot to a healthy answer | **1.2 s** |
 | operations served by default | 13 over 8 paths |
 
-And the doors, each asked separately, because a door that does not answer is the
+And the transports, each asked separately, because a transport that does not answer is the
 row that matters:
 
-| door | answered |
+| transport | answered |
 |---|---|
 | REST | 200 |
 | MCP `tools/list` | 13 tools |

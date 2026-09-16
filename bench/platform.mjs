@@ -7,11 +7,11 @@
  * terminal and reached no further. This runs them and writes what they said.
  *
  * Nothing is typed in here: each lane emits its own rows through `say` (or, for
- * the doors harness, `-json`), so a rerun that changes a number changes this
+ * the transports harness, `-json`), so a rerun that changes a number changes this
  * file, and a lane that fails leaves its section out rather than a stale one in.
  *
  *   node bench/platform.mjs            # runs every lane, writes benchmarks-platform.json
- *   node bench/platform.mjs self doors # just those
+ *   node bench/platform.mjs self transports # just those
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -25,7 +25,7 @@ const LANES = [
   { lane: 'modules', script: 'self/modules.sh', title: 'Ownership — can anyone fetch what it is built from' },
   { lane: 'egress', script: 'egress/run.sh', title: 'Privacy — what leaves the machine' },
   { lane: 'cipher', script: 'cipher/run.sh', title: 'At rest — what is on the disk' },
-  { lane: 'doors', script: 'doors/run.sh', title: 'The per-call tax, per door' },
+  { lane: 'transports', script: 'transport/run.sh', title: 'The per-call tax, per transport' },
 ]
 
 const want = process.argv.slice(2)

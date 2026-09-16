@@ -23,15 +23,15 @@ of numbers, one run behind them — if you re-run and get different figures,
 update both.
 
 ```
-bench/self/run.sh                   # build it, boot it, ask each door: can you have this
+bench/self/run.sh                   # build it, boot it, ask each transport: can you have this
 bench/self/modules.sh               # and whether anyone else can fetch what it is built from
 bench/egress/run.sh                 # and whether having it means anyone hears about it
 bench/cipher/run.sh                 # write a value through the API, look for it on the disk
-bench/doors/run.sh                  # what an agent pays per call, per envelope
+bench/transport/run.sh              # what an agent pays per call, per envelope
 node fleet/fleet.mjs /tmp/fleet     # 1M dormant agents: bytes, write rate, resume
 node fleet/cost.mjs                 # the same, as a monthly bill
 cd goroutine && go build -o /tmp/g . && /tmp/g   # agent as goroutine; goja, gpython, wasm
-node sandbox/sandbox.mjs            # cold start: isolate vs container vs pooled
+node sandbox/sandbox.mjs            # cold start: V8 context, isolate, hanzo-vm
 node pricing/pricing.mjs            # what a call costs, and what it could sell for
 ```
 
@@ -51,7 +51,7 @@ summaries below are read from those tables, not typed in beside them.
 ### Ownership — the row a hosted competitor has no way to fill
 
 `self/run.sh` builds the binary from this repository, starts it, asks it what it
-serves, and reaches one operation through every door it opens.
+serves, and reaches one operation through every transport it opens.
 
 | | measured |
 |---|---|
@@ -73,7 +73,7 @@ can have it.
 
 ### Privacy — nothing in the default path phones anyone, including us
 
-`egress/run.sh` starts the binary with no configuration, asks every door for an
+`egress/run.sh` starts the binary with no configuration, asks every transport for an
 operation sixty times, and watches what it connects to throughout.
 
 | | measured |
@@ -122,12 +122,12 @@ if the control ever reads zero.
 ### The per-call tax — same handler, three envelopes
 
 An agent's loop is call, read, decide, call again, so what the envelope costs is
-multiplied by every step of every task. `doors/run.sh` asks the same operation
-over each door, interleaved, n=200.
+multiplied by every step of every task. `transport/run.sh` asks the same operation
+over each transport, interleaved, n=200.
 
 Three samples of each phase, `n=200` interleaved, Apple M1 Max:
 
-| door | min | p50 | p50 against REST |
+| transport | min | p50 | p50 against REST |
 |---|---|---|---|
 | **ZAP unix** | **0.07–0.09 ms** | **0.14–0.18 ms** | **0.67–0.75×** |
 | ZAP tcp | 0.08–0.12 ms | 0.19–0.24 ms | 0.86–0.90× |
@@ -135,21 +135,21 @@ Three samples of each phase, `n=200` interleaved, Apple M1 Max:
 | MCP | 0.10–0.14 ms | 0.21–0.25 ms | 0.96–1.09× |
 | op-call plane | 0.09–0.12 ms | 0.19–0.23 ms | 1.00× |
 
-**ZAP is the fastest door and the socket is faster than the port** — two thirds
+**ZAP is the fastest transport and the socket is faster than the port** — two thirds
 of REST's median over a unix socket, nine tenths over loopback TCP, ahead of
-every HTTP door in every sample. Among the three HTTP doors the differences are
+every HTTP transport in every sample. Among the three HTTP transports the differences are
 inside the noise and they trade places between runs.
 
 A process serves one ZAP address, so the socket is a second phase rather than a
-fifth row. The three HTTP doors are measured again in that phase to carry the
+fifth row. The three HTTP transports are measured again in that phase to carry the
 drift between them, and the ratio to REST is the column that survives it. All of
 it is under a third of a millisecond at the median, so the practical reading is
-still to pick the door that fits the caller.
+still to pick the transport that fits the caller.
 
 The harness is one Go program calling all four round-robin. The previous table
-was measured from Python and read 0.22–0.31 ms at `min` where the same doors now
+was measured from Python and read 0.22–0.31 ms at `min` where the same transports now
 read 0.09–0.15 — that difference was the client, silently in every row, and it
-had to go before a fourth door could be added that no script can speak.
+had to go before a fourth transport could be added that no script can speak.
 
 ### Fleet residency — we win, decisively
 
@@ -440,7 +440,7 @@ category at both settings:
 | 20 | 917 | 2.2 s |
 
 **1.6× faster for half the context** — not the 3× the older rows suggested. The
-doors lane learned this and said so; this lane had not, and its per-question
+transports lane learned this and said so; this lane had not, and its per-question
 seconds were being read as a property of the configuration when they were a
 property of the afternoon.
 
@@ -547,9 +547,9 @@ start` is enough on macOS — and `npm i isolated-vm` in `bench/sandbox/` for th
 isolate row. Each row says so and is skipped rather than guessed when its
 dependency is absent.
 
-`self/run.sh` and `doors/run.sh` build and start the binary themselves and need
-nothing fetched. `doors/run.sh` measures round-robin rather than door by door:
-measured in blocks the three rows disagreed about which door was fastest on
+`self/run.sh` and `transport/run.sh` build and start the binary themselves and need
+nothing fetched. `transport/run.sh` measures round-robin rather than transport by transport:
+measured in blocks the three rows disagreed about which transport was fastest on
 every run, because drift between phases on a busy machine is larger than the
 difference being measured.
 

@@ -4,7 +4,7 @@ What leaves the machine.
 
 `self/` measures whether you can have the software. This measures whether having
 it means anyone else hears about it. The binary is started with no
-configuration, every door is asked for an operation sixty times, and the whole
+configuration, every transport is asked for an operation sixty times, and the whole
 time two observers watch what it connects to.
 
 ```
@@ -52,7 +52,7 @@ the run knows it was watching the server rather than an empty process id.
 ## What this does and does not say
 
 **It says nothing left, under this configuration, while serving this.** Thirteen
-operations over three doors, with no account, no key and no subsystem
+operations over three transports, with no account, no key and no subsystem
 configured. That is the shape most people run first and it is the shape a
 competitor's hosted product cannot offer at all.
 
