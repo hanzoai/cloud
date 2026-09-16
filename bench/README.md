@@ -198,18 +198,27 @@ place, and that is a goroutine rather than a container.
 | | measured here | attributed elsewhere |
 |---|---|---|
 | per live agent | **601 bytes** of heap | isolated-vm: 1.2 MB — and 1.00 MiB measured |
-| spawn | **187 ns** | 2.79 ms — and 0.59 ms measured |
-| wake 1M | 114 ms (114 ns each) | — |
-| wazero (WASM) | 8.9 µs instantiate, 23 ns call | — |
-| goja (JavaScript) | 2.7 µs per VM, 818 ns warm eval | — |
-| gpython (Python) | 29.9 µs per context | — |
+| spawn | **125 ns** | 2.79 ms — and 0.59 ms measured |
+| wake 1M | 107 ms (107 ns each) | — |
+| wazero (WASM) | 7.8 µs instantiate, 20 ns call | — |
+| goja (JavaScript) | 2.4 µs per VM, 740 ns warm eval | — |
+| gpython (Python) | 25.0 µs per context | — |
 
 601 bytes against a 128 MB container floor is ~223,000×. Against a V8 isolate it
-is ~1,700× — and that one is a goroutine against a JavaScript VM, so read it as
+is ~1,745× — and that one is a goroutine against a JavaScript VM, so read it as
 what each primitive costs rather than as one beating the other. Memory was
-identical on all five runs; the timings are medians. Benchmark a **built
-binary** — under `go run` the compile is counted and spawn reads 253 ns instead
-of 187 ns.
+identical on every run; the timings are medians of eight.
+
+**The spawn row was 187 ns and is 125 ns, because the old one timed the program
+starting.** A built binary's FIRST run reads 202, 210 and 201 ns on three fresh
+builds and 123, 125 and 123 ns on the next — the same 200,000 goroutines in a 41
+ms window rather than a 25 ms one, so it is one fixed cost per binary (text-segment
+paging, the kernel's first-exec signature check), not a cost per goroutine. The
+lane now discards a warm-up round and names it. This is the neighbour of the note
+that used to sit here — *benchmark a built binary, under `go run` the compile is
+counted*, which reads 253 ns — and that note stopped one step short. The
+correction favours us, which is why the method is printed beside it. See
+`goroutine/README.md`.
 
 WASM is not one language: CPython, QuickJS for TypeScript, Rust and Go all
 target it. A V8 isolate is JavaScript only.

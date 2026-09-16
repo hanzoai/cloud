@@ -60,17 +60,42 @@ func main() {
 	fmt.Printf("  host: %s/%s, %d cores\n\n", runtime.GOOS, runtime.GOARCH, runtime.NumCPU())
 
 	// ── 1. Spawn latency. One agent, started, doing nothing yet.
+	//
+	// THE FIRST ROUND IS THROWN AWAY, and that is the whole of why this number
+	// moved. Measured as the first thing the process did, spawn read 202, 210 and
+	// 201 ns on three freshly built binaries, and 123, 125 and 123 ns when the
+	// same binary ran again — a 1.65x step, three times out of three, with each
+	// side tight. It is not the spawn that costs more: the window is 41 ms rather
+	// than 25 ms for the same 200,000 goroutines, so it is a fixed cost inside the
+	// measurement — first-touch paging of the text segment and the kernel's
+	// signature check on first exec, both of which happen once per binary and
+	// never again.
+	//
+	// So the old number was the cost of STARTING THIS PROGRAM, divided by 200,000
+	// and printed as the cost of starting a goroutine. The suite already knew the
+	// neighbouring version of this — "benchmark a built binary, under `go run` the
+	// compile is counted" — and stopped one step short: a built binary's first run
+	// is inflated too.
+	//
+	// A warm round is the honest one because it is the case being claimed. An
+	// agent fleet spawns continuously in a process that is already up; nobody
+	// pays this twice.
 	const spawns = 200_000
-	var wg sync.WaitGroup
-	wg.Add(spawns)
-	start := time.Now()
-	for i := 0; i < spawns; i++ {
-		go func() { wg.Done() }()
+	spawn := func() time.Duration {
+		var wg sync.WaitGroup
+		wg.Add(spawns)
+		start := time.Now()
+		for i := 0; i < spawns; i++ {
+			go func() { wg.Done() }()
+		}
+		wg.Wait()
+		return time.Since(start)
 	}
-	wg.Wait()
-	per := time.Since(start).Nanoseconds() / int64(spawns)
-	fmt.Printf("  spawn                 %d ns per agent  (%s for %s)\n",
-		per, time.Since(start).Round(time.Millisecond), fmtN(spawns))
+	cold := spawn()
+	took := spawn()
+	per := took.Nanoseconds() / int64(spawns)
+	fmt.Printf("  spawn                 %d ns per agent  (%s for %s · first round %s, discarded)\n",
+		per, took.Round(time.Millisecond), fmtN(spawns), cold.Round(time.Millisecond))
 
 	// ── 2. A whole fleet, resident and parked. Every goroutine is alive and
 	// blocked on a channel — the shape of an agent waiting for its next turn.

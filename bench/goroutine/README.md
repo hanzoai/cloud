@@ -14,22 +14,61 @@ FLEET=5000000 go run .  # bigger fleet
 
 ## Measured — M-series laptop, 16 cores, Go 1.26.5
 
-| | cold start | vs isolated-vm |
-|---|---|---|
-| goroutine | **145 ns** | 19,241× faster |
-| goja — JavaScript | **3.2 µs** | 872× faster |
-| wazero — WASM | **8.9 µs** | 313× faster |
-| gpython — Python | **42.5 µs** | 66× faster |
+Medians of eight runs, September 2026. Memory was identical on every run.
+
+| | cold start | vs an isolate on THIS machine | vs their published figure |
+|---|---|---|---|
+| goroutine | **125 ns** | 4,720× | 22,300× |
+| goja — JavaScript | **2.4 µs** | 246× | 1,163× |
+| wazero — WASM | **7.8 µs** | 76× | 358× |
+| gpython — Python | **25.0 µs** | 24× | 112× |
 
 | a fleet of 1,000,000 | |
 |---|---|
-| resident memory | **573 MB — 601 bytes per agent** |
-| against their 1.2 MB | **2,092× smaller** |
-| spawn all | 518 ms (1.9M/s) |
-| wake all | 109 ms (109 ns each) |
+| resident memory | **573.0 MB — 601 bytes per agent** |
+| against an isolate measured here (1.00 MiB) | **1,745× smaller** |
+| against their published 1.2 MB | 1,997× smaller |
+| spawn all | 446 ms (2.24M/s) |
+| wake all | 107 ms (107 ns each) |
 
-Warm paths, for the case where an agent is already up: **897 ns** per goja eval,
-**27 ns** to call into a WASM sandbox.
+Warm paths, for the case where an agent is already up: **740 ns** per goja eval,
+**20 ns** to call into a WASM sandbox.
+
+**TWO COLUMNS, BECAUSE ONLY ONE OF THEM IS CONTROLLED.** Their 2.79 ms and 1.2 MB
+were measured on an m7i.8xlarge; everything here is a laptop. Running the same
+library they attribute those to — isolated-vm 7.0.1 — on this machine gives 0.59
+ms and 1.00 MiB (`../sandbox`), and that is the only comparison where the
+hardware is held still. The right-hand column is printed because it is the figure
+being cited at us, not because it is evidence. It is also flattering, which is
+the reason to keep it in the weaker column rather than the headline.
+
+And a goroutine is not an isolate: one is a scheduled stack in a Go process, the
+other a JavaScript heap. Read these as what each primitive costs, not as one
+beating the other.
+
+### The first run of a fresh binary is not the number
+
+This table used to read 145 ns, and `../README.md` read 187 ns for the same
+quantity — two published values of one measurement, and the multipliers were
+computed from the older one.
+
+Neither was noise. Measured as the first thing the process does, spawn reads
+**202, 210 and 201 ns** on three freshly built binaries, and **123, 125 and 123
+ns** when the same binary runs again: a 1.65× step, three times out of three,
+tight on both sides. The spawn did not get cheaper — the window is 41 ms rather
+than 25 ms for the same 200,000 goroutines, so it is one fixed cost inside the
+measurement, paid once per binary: first-touch paging of the text segment and
+the kernel's signature check on first exec.
+
+So the old figure was the cost of *starting this program*, divided by 200,000
+and printed as the cost of starting a goroutine. `main.go` now runs the round
+twice and reports the second, naming the discarded one; a fresh binary's first
+run reads 124–133 ns, the same as its tenth.
+
+This is the neighbour of something the suite already knew — *benchmark a built
+binary, under `go run` the compile is counted* — which stopped one step short. A
+built binary's first run is inflated too. The correction happens to favour us,
+which is exactly when the method has to be published beside the number.
 
 ## Why this is the comparison that matters
 
