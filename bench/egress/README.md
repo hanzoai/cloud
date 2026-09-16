@@ -21,6 +21,28 @@ Taken on an M-series laptop, 2026-09-11.
 | control: the catcher saw | 1 attempt from one caller |
 | control: sampling saw | 1 peer |
 
+**Re-run 2026-09-16: the same six rows, both controls green** — and getting there
+took three fixes, because the lane had been failing its own control and saying
+the wrong thing about why.
+
+The readiness probe was `grep -q ready`, and that is TRUE OF ITS OWN FAILURE:
+`OSError: [Errno 48] Address already in use` contains the word inside "already".
+A catcher that could not bind reported itself started, the run went on with
+nothing watching, and the control then said the caller had not used the catcher —
+blaming the subject for the instrument. The token is now matched as a whole line.
+
+It could not bind because the port was a constant, `18099`, and an unrelated
+process had held it for seven hours. The port is now asked of the kernel.
+
+And every run leaked its server. `cleanup` ran `kill "$p"` without `|| true`
+inside a trap, `set -e` is in force there, and `kill` returns non-zero for a pid
+that has already exited — which `$WATCH` always has, since it runs to a deadline
+and returns on its own. So the first kill aborted the handler before it reached
+the server, which kept :18090, and the NEXT run died with no message at all.
+
+None of the three changed a measurement. All three decided whether the
+measurement meant anything.
+
 ## Two observers, because one of them can miss
 
 **A listener standing in for the internet.** Go's `net/http` honours

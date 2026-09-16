@@ -46,12 +46,18 @@ remote_only() {
     grep -vE '^(127\.0\.0\.1|\[?::1\]?|localhost)[:.]' || true
 }
 
-P=${P:-18090}; ZP=${ZP:-19663}; HP=${HP:-19091}; AP=${AP:-18091}; CP=${CP:-18099}
+P=${P:-18090}; ZP=${ZP:-19663}; HP=${HP:-19091}; AP=${AP:-18091}
 DATA=$(mktemp -d); BIN=$(mktemp -u); PID=""; WATCH=""; CATCH=""
 cleanup() {
   for p in "$WATCH" "$CATCH" "$PID"; do
     [ -n "$p" ] || continue
-    kill "$p" 2>/dev/null
+    # `|| true` OR THE HANDLER DIES HERE. set -e is in force inside a trap, and
+    # kill returns non-zero for a pid that has already exited — which $WATCH
+    # always has, because watch_sockets runs to a deadline and returns on its
+    # own. So the first kill failed, cleanup aborted before it reached the
+    # server, and every run left one behind holding :18090. The next run then
+    # could not bind and died with no message at all.
+    kill "$p" 2>/dev/null || true
     # Reaped here, or the shell reports the signal over the last row of output.
     wait "$p" 2>/dev/null || true
   done
@@ -63,8 +69,32 @@ export GOWORK=off
 go build -o "$BIN" ./cmd/cloud
 
 : >"$DATA/caught"
+
+# AN OBSERVER THAT NEVER STARTED IS NOT AN OBSERVER THAT SAW NOTHING, and this
+# loop could not tell them apart. It waited five seconds for `ready`, then went on
+# whatever happened; the run reached its control, found an empty log, and reported
+# that the caller had not used the catcher — blaming the subject for the
+# instrument. On 2026-09-16 the port was simply taken by an unrelated process that
+# had held it for seven hours, and the lane said the caller did not phone home.
+#
+# So the failure is named where it happens, and the port is not a constant. A
+# fixed CP is a standing appointment with whatever else on the machine likes that
+# number; asking the kernel for a free one removes the whole class.
+if [ -z "${CP:-}" ]; then
+  CP=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')
+fi
 python3 bench/egress/catcher.py "$CP" "$DATA/caught" >"$DATA/catcher.out" 2>&1 & CATCH=$!
-for _ in $(seq 1 100); do grep -q ready "$DATA/catcher.out" 2>/dev/null && break; sleep 0.05; done
+# ANCHORED, because the unanchored probe matched the failure. `grep -q ready`
+# is true of "OSError: [Errno 48] Address already in use" — the word is inside
+# "already" — so a catcher that could not bind reported itself started, the run
+# went on with nothing watching, and the control blamed the caller for an empty
+# log. The readiness token is a whole line or it is not a token.
+for _ in $(seq 1 100); do grep -qx ready "$DATA/catcher.out" 2>/dev/null && break; sleep 0.05; done
+if ! grep -qx ready "$DATA/catcher.out" 2>/dev/null; then
+  echo "the catcher never started on port $CP, so nothing was watching:" >&2
+  sed 's/^/  /' "$DATA/catcher.out" >&2
+  exit 1
+fi
 
 export CLOUD_DEV_UNENCRYPTED=1
 export CLOUD_LISTEN=":$P" CLOUD_ZAP_LISTEN="127.0.0.1:$ZP"

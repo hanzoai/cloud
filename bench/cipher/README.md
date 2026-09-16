@@ -41,7 +41,7 @@ writes the same magic seven times.
 The second column is not a comparison with a competitor. It is the proof that
 the first column measures anything at all: the same binary, the same two writes,
 the same search, on a store that is deliberately not encrypted. It finds the
-canary in two files. Without that, a zero on the left could mean the write never
+canary in one file. Without that, a zero on the left could mean the write never
 reached the disk, or that the search does not work on the file — and both of
 those happened while this lane was being written.
 
