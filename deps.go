@@ -1,10 +1,8 @@
 // Package cloud is the unified Hanzo Cloud binary per HIP-0106.
 //
-// One Go binary mounts every Hanzo-native subsystem (iam, base, kms,
-// commerce, ai, gateway, o11y, vfs, mq, dns, amqp, mcp, ...) via the
-// canonical Mount(app *zip.App, deps cloud.Deps) error contract. Brand,
-// enabled subsystems, and org scope are deployment configuration; the
-// binary is the same artifact across every white-label deployment.
+// One Go binary mounts every subsystem (base, kms, tasks, functions, code,
+// flags, gateway, ...) via the canonical Mount(app *zip.App, deps cloud.Deps)
+// error contract. Enabled subsystems and org scope are configuration.
 //
 // Per HIP-0106 — github.com/hanzoai/HIPs/blob/main/HIPs/hip-0106-unified-hanzo-cloud-binary.md.
 package cloud
@@ -37,13 +35,11 @@ type Deps struct {
 	// response header (see middleware.ProductionHeaders wiring in serve.go).
 	Version string
 
-	// Env is the deployment environment (mainnet|testnet|devnet). Subsystems
-	// that meter usage stamp it for per-env attribution; it never gates or
-	// bypasses billing (every env bills against its own commerce ledger).
+	// Env is the deployment environment label (CLOUD_ENV), empty when unset.
 	Env string
 
-	// Domain is the deployment's primary domain (e.g. "api.hanzo.ai",
-	// "api.osage.cloud"). Subsystems use this to scope URLs in responses.
+	// Domain is the deployment's primary host (default 127.0.0.1:8080).
+	// Subsystems use this to scope URLs in responses.
 	Domain string
 
 	// IAMIssuer is the canonical OIDC issuer (JWKS source) for this brand,
@@ -56,63 +52,25 @@ type Deps struct {
 	// land at {DataDir}/orgs/{orgSlug}/{service}.db per HIP-0302.
 	DataDir string
 
-	// Durable is the per-deployment HA-durability factory an OrgStore wires
-	// WithDurable: the shared ha election + vfs FencedStore over the SeaweedFS S3
-	// gateway + per-org envelope Cipher. nil ⇒ local-only (no object store creds,
-	// dev/single-node), and every OrgStore is exactly the pre-durability cache.
-	Durable *Durability
-
 	// AIDefaultModel is the served model a subsystem uses when a caller supplies
-	// none (CLOUD_AI_DEFAULT_MODEL, default deepseek-v4-flash). It is the ONE
-	// cloud-side model default, sourced from config so no subsystem hardcodes a
-	// model id. The agents subsystem stores it on an agent created without an
-	// explicit model, so a bot launched without a model still runs on a valid
-	// catalog model. Model routing itself stays the gateway's job.
+	// none (CLOUD_AI_DEFAULT_MODEL). It is the ONE cloud-side model default,
+	// sourced from config so no subsystem hardcodes a model id. Model routing
+	// itself stays the gateway's job.
 	AIDefaultModel string
-
-	// AIFallbackModel is the reliable model the agent runner fails over to when an
-	// agent's own model stays throttled after retries (CLOUD_AI_FALLBACK_MODEL,
-	// default "best"). Only the autonomous agent/bot run path uses it; interactive
-	// chat is untouched. Empty disables failover.
-	AIFallbackModel string
 
 	// Subsystem clients — populated by BuildDeps based on enabled subsystems.
 	// Each is an interface with both in-process and ZAP-RPC implementations.
-	IAM IAMClient
-	KMS KMSClient
-	// K8s is the cluster control plane, absent by default. platform and validators
-	// are the only consumers; both fail closed with the reason from Ready().
-	K8s      K8sClient
-	Base     BaseClient
-	Commerce CommerceClient
-	// AI runs CHAT COMPLETIONS (a WRITE endpoint): agents, guide, crm, content,
-	// sitegen, code /ask. It authenticates with the binary's IAM M2M identity — a
-	// completions-capable credential — NEVER the read-only publishable (pk-) embed
-	// key, which the gateway 403s on any write endpoint.
-	AI AIClient
-	// Embed runs EMBEDDINGS (a READ-ONLY endpoint): code-index + KB knowledge. This
-	// is the ONLY consumer of the read-only publishable (pk-) key (CLOUD_AI_API_KEY),
-	// the correct least-privilege credential for a read-only call. Split from AI so a
-	// pk- embed key can never leak onto the completions path (the intermittent-403
-	// bug). Falls back to the AI (M2M) resolution when no static embed key is set.
+	IAM  IAMClient
+	KMS  KMSClient
+	Base BaseClient
+	// AI runs CHAT COMPLETIONS (code /ask synthesis) and Embed runs EMBEDDINGS
+	// (code index). Both reach a gateway over ZAP (CLOUD_AI_ZAP_ADDR) or fail
+	// closed; a run records an honest error, never fakes one.
+	AI    AIClient
 	Embed AIClient
 	O11y  O11yClient
 	VFS   VFSClient
 	MQ    MQClient
-	// Runs is the executor that places bot runs in sandboxes. The bot registry
-	// asks it for the runs it holds so that one roster answers for both halves
-	// of the same question — the runs on people's own machines, which announce
-	// themselves here, and the runs out there, which do not. Nil means this
-	// deployment places none, which is the OSS default: /v1/bot/runs then lists
-	// exactly what announced itself, and asking to start a run says plainly
-	// that there is nothing here to start one in.
-	Runs RunClient
-
-	// Payments + Vault stay out-of-process (PCI scope isolation per
-	// HIP-0106). These clients always resolve to ZAP-RPC implementations,
-	// never in-process.
-	Payments PaymentsClient
-	Vault    VaultClient
 
 	// Audit is the tamper-evident, append-only audit trail Recorder (FedRAMP AU-*
 	// / SOC 2 CC-*). Serve constructs it once, wires the AuditTrail middleware to
@@ -141,15 +99,10 @@ type Deps struct {
 type IAMClient = types.IAMClient
 type KMSClient = types.KMSClient
 type BaseClient = types.BaseClient
-type CommerceClient = types.CommerceClient
 type AIClient = types.AIClient
 type O11yClient = types.O11yClient
 type VFSClient = types.VFSClient
 type MQClient = types.MQClient
-type PaymentsClient = types.PaymentsClient
-type VaultClient = types.VaultClient
-type K8sClient = types.K8sClient
-type RunClient = types.RunClient
 
 // --- placeholder types (replaced by ZAP-generated types per subsystem) ---
 //
@@ -165,22 +118,9 @@ type Org = types.Org
 type OrgRef = types.OrgRef
 type DBHandle = types.DBHandle
 
-// OrgConfig and LicenseEntitlement are the two values CommerceClient's methods
-// name. Both are aliased here for the same reason the interface is: a subsystem
-// that implements CommerceClient (or fakes it in a test) must be able to spell
-// its signature using only this package. LicenseEntitlement was aliased and
-// OrgConfig was not, which made the exported interface unimplementable from
-// outside without reaching into cloud/types — an omission, not a boundary.
-type OrgConfig = types.OrgConfig
-type LicenseEntitlement = types.LicenseEntitlement
 type ChatRequest = types.ChatRequest
 type ChatResponse = types.ChatResponse
 type EmbedRequest = types.EmbedRequest
 type Counter = types.Counter
 type Timing = types.Timing
 type Span = types.Span
-type IntentRequest = types.IntentRequest
-type IntentResponse = types.IntentResponse
-type IntentStatus = types.IntentStatus
-type VaultChargeRequest = types.VaultChargeRequest
-type VaultChargeResponse = types.VaultChargeResponse

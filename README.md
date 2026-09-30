@@ -1,12 +1,13 @@
 # Hanzo Cloud
 
-The open-source Hanzo Cloud — one Go binary that runs a complete local cloud:
-a document store, a key/value store, SQL, a task queue, functions, secrets,
-object storage, DNS, code search, a gateway edge, feature flags, audit, and a
-plugin runtime. Every subsystem mounts from one composition root (`apps.Wire()`).
+The open-source Hanzo Cloud local dev server — one Go binary that runs a
+complete local cloud: a document store, a key/value store, SQL, a task queue,
+functions, secrets, object storage, code search, a gateway edge, feature flags,
+audit, and a plugin runtime. Every subsystem mounts from one composition root
+(`apps.Wire()`).
 
 No Kubernetes. No cluster. No network. No Rust toolchain. A data directory is
-the whole dependency.
+the whole dependency, and every default address is on this machine.
 
 ## Run locally
 
@@ -53,8 +54,7 @@ curl 127.0.0.1:8080/v1/openapi.json     # every route this process serves
 | `CLOUD_HEALTH_LISTEN` | `127.0.0.1:9090` | `/healthz`, `/readyz`, `/metrics` |
 | `CLOUD_ZAP_LISTEN` | `127.0.0.1:9653` | ZAP, the same routes as HTTP |
 
-`CLOUD_ADMIN_LISTEN` (default `:8081`) is read, but nothing listens on it. A
-second cloud on the same machine needs its own address for all three:
+A second cloud on the same machine needs its own address for all three:
 
 ```bash
 CLOUD_HEALTH_LISTEN=127.0.0.1:19090 CLOUD_ZAP_LISTEN=127.0.0.1:19653 CGO_ENABLED=0 make dev PORT=18080
@@ -62,22 +62,28 @@ CLOUD_HEALTH_LISTEN=127.0.0.1:19090 CLOUD_ZAP_LISTEN=127.0.0.1:19653 CGO_ENABLED
 
 ### IAM and KMS
 
-This edition has no IAM of its own. It accepts JWTs issued by Hanzo IAM and
-checks them against `https://hanzo.id/v1/iam/.well-known/jwks`. `/v1/base` needs
-no token. `/v1/kms/orgs/{org}/secrets` does: without one it answers 403
-`no validated principal`. With a Hanzo account it works locally, for the org in
-the token's `owner` claim:
+This edition has no IAM of its own. It accepts JWTs issued by
+[Hanzo IAM](https://github.com/hanzoai/iam) and checks them against
+`{CLOUD_IAM_ISSUER}/v1/iam/.well-known/jwks`. The default issuer is a Hanzo IAM
+on the same machine, run in its dev mode:
 
 ```bash
-TOKEN=$(hanzo auth token)        # after `hanzo auth login`
+# in a checkout of github.com/hanzoai/iam
+IAM_DEV_HOST_RELATIVE=1 go run . serve --http http://127.0.0.1:8000 --init-data init_data.json
+```
+
+`/v1/base` needs no token. `/v1/kms/orgs/{org}/secrets` does: without one it
+answers 403 `no validated principal`. With a token from that IAM it works for
+the org in the token's `owner` claim:
+
+```bash
 curl -H "Authorization: Bearer $TOKEN" 127.0.0.1:8080/v1/kms/orgs/<org>/secrets \
   -d '{"name":"API_KEY","env":"dev","value":"example"}'
 curl -H "Authorization: Bearer $TOKEN" '127.0.0.1:8080/v1/kms/orgs/<org>/secrets/API_KEY?env=dev'
 ```
 
-Secrets are sealed under the master key in `.dev/data/orgs/<org>/kms.db`. Without
-a Hanzo account, or offline, KMS is not usable yet
-([#2](https://github.com/hanzoai/cloud/issues/2)).
+To accept tokens from another IAM instead, set `CLOUD_IAM_ISSUER` to its issuer
+URL. Secrets are sealed under the master key in `.dev/data/orgs/<org>/kms.db`.
 
 ### The hanzo CLI
 
@@ -90,7 +96,7 @@ HTTP API directly until then.
 
 ## The local apps
 
-Three apps run entirely on the embedded store. They are real implementations,
+These apps run entirely on the embedded store. They are real implementations,
 not proxies to a cluster — the same addresses the hosted product serves, backed
 by local SQLite.
 
@@ -99,7 +105,6 @@ by local SQLite.
 | `/v1/base` | collections of JSON documents — the local store, and so also the local key/value and the local SQL |
 | `/v1/tasks` | durable queue with lease/ack |
 | `/v1/functions` | function registry and runner *(staged — see below)* |
-| `/v1/bot` | the protocol a control UI speaks, and under it the bot runs that are going |
 
 There is deliberately no `/v1/kv` and no `/v1/sql`. Base is already both: a
 document under a collection is the key/value store, and it is SQLite underneath.
@@ -108,36 +113,6 @@ Two more doors onto one room would be two more names to keep in agreement.
 `/v1/kms` is here too, serving from an embedded `luxfi/kms` — secrets belong in
 KMS locally exactly as they do in production, never in an env file. Its secret
 routes need a Hanzo IAM token; see [IAM and KMS](#iam-and-kms).
-
-A bot is a loop, and one instance of that loop is a run. `/v1/bot/runs` is where
-your runs are, wherever they happen to be: start one where you have a machine
-for it and that machine says so (`POST /v1/bot/runs` with `where: local`), and
-it is listed, reachable, and stoppable from the same place as a run in a
-sandbox. Nothing in this edition places a sandbox, so asking it to start a run
-in the cloud answers 501 and says what is absent rather than minting a run
-nobody is carrying out; a deployment that does have an executor hands it to the
-registry (`cloud.Deps.Runs`) and its runs join the same list.
-
-A run can park. Suspending one hands back whatever it needs to come back as
-itself — a checkpoint reference, opaque here — and the gateway holds that token
-without reading it, so the same run can resume on the machine it left or on
-another. That is the difference between a registry and a liveness ping, and it
-is why a run can move between a laptop and the cloud. Stopping is a separate
-door and there is only one of it: the heartbeat refuses the status and names
-`/stop`, and forgetting a run ends it through the same halt on its way to
-disposing of everything it held.
-
-`/v1/bot` itself is the protocol a control UI speaks — a WebSocket on the
-upgrade, one request frame on the POST. Asking to upgrade is a fact about the
-request rather than a flag beside it, so the socket needs no name of its own,
-and `/v1/bot/runs` is one segment down where it cannot collide with the other
-addresses published under `/v1/bot`.
-
-The protocol answers a subset and says so: `hello-ok` carries `features.methods`,
-and a UI hides any surface whose method is absent. Advertising exactly what
-works is therefore the growth path rather than a compromise — a method that is
-merely stubbed should not be listed at all, because a hidden palette reads as a
-small server and an empty one reads as a broken one.
 
 Every operation is a **typed op**, which is why they need no separate
 integration work: one declaration projects into the OpenAPI document, the MCP
@@ -200,14 +175,23 @@ reports which ones have actually loaded.
 | — | `CLOUD_ENABLE_STAGED` | — | additionally enable staged subsystems |
 | — | `CLOUD_KMS_MASTER_KEY_REF` | — | base64 of 32 bytes |
 | `-brand` | `CLOUD_BRAND` | `hanzo` | white-label brand |
-| `-domain` | `CLOUD_DOMAIN` | `api.hanzo.ai` | primary domain |
-| `-iam-issuer` | `CLOUD_IAM_ISSUER` | the brand's issuer, `https://hanzo.id` for `hanzo` | JWKS issuer |
+| `-domain` | `CLOUD_DOMAIN` | `localhost:8080` | host named in the OpenAPI document |
+| `-iam-issuer` | `CLOUD_IAM_ISSUER` | `http://127.0.0.1:8000` | Hanzo IAM issuer (JWKS source) |
 
-Where a plane the private build injects is absent, the subsystem mounts
-fail-closed and says so rather than pretending to work:
+Subsystems that talk to a service beside the binary default to this machine and
+fail closed when it is not there:
+
+| subsystem | env | default |
+|---|---|---|
+| `/v1/s3` | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | `127.0.0.1:9000` (a local [Hanzo S3](https://github.com/hanzoai/s3)) |
+| `/v1/dns` | `HANZO_DNS_URL` | `http://127.0.0.1:8443` |
+| `/v1/exec` | `CODE_EXEC_UPSTREAM`, `CODE_EXEC_API_KEY` | `http://127.0.0.1:8100` |
+| AI (code `/ask`) | `CLOUD_AI_ZAP_ADDR` | none — disabled |
+
+An absent service is reported, never faked:
 
 ```
-s3 subsystem mounted fail-closed: S3_ADMIN_ACCESS_KEY not set (all ops 503 until provisioned)
+s3 subsystem mounted fail-closed: S3_ACCESS_KEY/S3_SECRET_KEY not set (all ops 503 until set)
 ```
 
 ## Develop
@@ -221,10 +205,12 @@ make hooks          # install the pre-push guard — do this once
 ```
 
 `make hooks` points git at `.githooks`, which refuses any push to `origin`
-carrying commits or imports from the private enterprise edition. This repository
-and that one have unrelated history and must never merge; the hook is what makes
-a mistyped push a non-event instead of a licence incident.
+carrying history from another remote or an import of a non-public module. It
+runs git, grep and awk only.
+
+Benchmarks for this server live in
+[hanzoai/benchmarks](https://github.com/hanzoai/benchmarks).
 
 ## Licence
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0 OR MIT, at your option. See [LICENSE](LICENSE).

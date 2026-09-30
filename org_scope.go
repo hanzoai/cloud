@@ -22,9 +22,8 @@ package cloud
 // theirs). This IS the "project-membership check UNDER the validated org" the
 // data plane always required of per-project scope.
 //
-// DEPENDENCY INVERSION (why a resolver, not an import). The project registries
-// (clients/projects, clients/platform) import THIS package, so cloud must not
-// import them. Each registry registers a OrgScopeResolver at its Mount —
+// DEPENDENCY INVERSION (why a resolver, not an import). A project registry
+// imports THIS package, so cloud must not import it. Each registry registers a OrgScopeResolver at its Mount —
 // exactly like sites.SetResolver — and the boundary consults the registered set
 // per request. With no registry mounted, nothing is ever "foreign", so the guard
 // is a no-op passthrough (an unmounted registry owns nothing), never a crash.

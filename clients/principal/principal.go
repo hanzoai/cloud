@@ -7,9 +7,8 @@
 // X-User-Id / X-User-IsAdmin request headers. In production the gateway
 // (hanzoai/gateway) is the sole minter of those headers — it strips any
 // client-supplied copy and re-injects them from a validated IAM JWT (HIP-0026).
-// But cloud-api is ALSO reachable WITHOUT the gateway in front: directly
-// in-cluster (cloud-api.hanzo.svc:8000, used by console's BFF) and, until the
-// ingress is locked down, on the public host api.cloud.hanzo.ai. The identity
+// But cloud is ALSO reachable WITHOUT the gateway in front, as on a laptop. The
+// identity
 // middleware (SanitizeIdentity, ../../middleware_identity.go) closes the
 // forgeable-ADMIN hole on every path — X-User-IsAdmin is NEVER restored from
 // client input — but on the bearer-less "Phase-1 data" path it RESTORES the

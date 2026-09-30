@@ -58,15 +58,6 @@ func (disabledBase) Open(_ context.Context, _, _ string) (types.DBHandle, error)
 	return nil, &disabledErr{"base"}
 }
 
-type disabledCommerce struct{}
-
-func (disabledCommerce) GetOrgConfig(_ context.Context, _ string) (*types.OrgConfig, error) {
-	return nil, &disabledErr{"commerce"}
-}
-func (disabledCommerce) CheckEntitlement(_ context.Context, _, _ string) (*types.LicenseEntitlement, error) {
-	return nil, &disabledErr{"commerce"}
-}
-
 type disabledAI struct{}
 
 func (disabledAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*types.ChatResponse, error) {
@@ -106,24 +97,6 @@ func (disabledMQ) Subscribe(_ context.Context, _ string, _ func([]byte) error) e
 	return &disabledErr{"mq"}
 }
 
-type disabledPayments struct{}
-
-func (disabledPayments) CreateIntent(_ context.Context, _ *types.IntentRequest) (*types.IntentResponse, error) {
-	return nil, &disabledErr{"payments"}
-}
-func (disabledPayments) ConfirmIntent(_ context.Context, _ string) (*types.IntentResponse, error) {
-	return nil, &disabledErr{"payments"}
-}
-func (disabledPayments) GetIntentStatus(_ context.Context, _ string) (*types.IntentStatus, error) {
-	return nil, &disabledErr{"payments"}
-}
-
-type disabledVault struct{}
-
-func (disabledVault) Charge(_ context.Context, _ *types.VaultChargeRequest) (*types.VaultChargeResponse, error) {
-	return nil, &disabledErr{"vault"}
-}
-
 // --- noop telemetry handles so callers don't have to nil-check ----------
 
 type noopCounter struct{}
@@ -149,9 +122,6 @@ func DisabledKMS() types.KMSClient { return disabledKMS{} }
 // DisabledBase returns a fail-closed Base client.
 func DisabledBase() types.BaseClient { return disabledBase{} }
 
-// DisabledCommerce returns a fail-closed Commerce client.
-func DisabledCommerce() types.CommerceClient { return disabledCommerce{} }
-
 // DisabledAI returns a fail-closed AI client.
 func DisabledAI() types.AIClient { return disabledAI{} }
 
@@ -165,9 +135,3 @@ func DisabledVFS() types.VFSClient { return disabledVFS{} }
 
 // DisabledMQ returns a fail-closed MQ client.
 func DisabledMQ() types.MQClient { return disabledMQ{} }
-
-// DisabledPayments returns a fail-closed Payments client.
-func DisabledPayments() types.PaymentsClient { return disabledPayments{} }
-
-// DisabledVault returns a fail-closed Vault client.
-func DisabledVault() types.VaultClient { return disabledVault{} }

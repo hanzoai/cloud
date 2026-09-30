@@ -69,15 +69,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// surface mounts health/config only.
 	kc, _ := deps.KMS.(*Client)
 	// tokenURL is IAM's client_credentials endpoint the login broker exchanges a
-	// per-tenant machine credential at. It MUST be reachable FROM INSIDE THE CLUSTER:
-	// the broker runs in-cluster and the public issuer host (e.g. https://hanzo.id) is
-	// fronted by Cloudflare, which 403s a server-side (non-browser) loopback POST — so
-	// brokering against the PUBLIC issuer URL fails 401 and the whole per-tenant KMS
-	// secret sync silently stays pending (root-caused 2026-07-04: in-cluster POST to
-	// https://hanzo.id/v1/iam/oauth/token → 403, while http://iam.hanzo.svc/... → 200).
-	// Prefer, in order: an explicit override (CLOUD_KMS_IAM_TOKEN_URL), the in-cluster
-	// IAM service base (IAM_URL — already wired to http://iam.hanzo.svc for JWKS), then
-	// the public issuer as a last resort (single-process / no split-horizon deploys).
+	// per-tenant machine credential at. It must be reachable from this process, which
+	// is not always the issuer's public host. Prefer, in order: an explicit override
+	// (CLOUD_KMS_IAM_TOKEN_URL), the IAM service base (IAM_URL), then the issuer.
 	tokenURL := strings.TrimSpace(os.Getenv("CLOUD_KMS_IAM_TOKEN_URL"))
 	if tokenURL == "" {
 		if base := strings.TrimRight(strings.TrimSpace(os.Getenv("IAM_URL")), "/"); base != "" {
@@ -110,10 +104,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// not the org: this route runs before any validated principal exists, so there is
 	// no owner to key on (and X-Org-Id has already been stripped by SanitizeIdentity).
 	// The key is the REAL TCP peer (cloud sets no trusted-proxy header, so a forged
-	// X-Forwarded-For cannot inflate the key space), and cloud-api is fronted by the
-	// gateway/ingress — so the limiter's per-key bucket map is bounded by that small
-	// peer set, not by arbitrary internet IPs. loginMaxConnsPerHost is the hard bound
-	// on the actual IAM fan-out regardless.
+	// X-Forwarded-For cannot inflate the key space). loginMaxConnsPerHost is the hard
+	// bound on the actual IAM fan-out regardless.
 	app.Group("/v1/kms/auth", middleware.RateLimit(middleware.RateLimitConfig{
 		Limit:  loginRateLimit,
 		Window: loginRateWindow,
@@ -175,10 +167,6 @@ func newEmbeddedClient(cfg *cloud.Config, log luxlog.Logger) (cloud.KMSClient, e
 		MasterKeyB64: cfg.KMSMasterKeyRef,
 		MPCAddr:      cfg.KMSMPCAddr,
 		MPCVaultID:   cfg.KMSMPCVaultID,
-		// Reader HA role opens the per-org KMS files READ-ONLY (mutations fail
-		// closed); per-org SQLite is WAL-shareable, so no exclusive lock is taken.
-		// Writer (default) opens writable exactly as before.
-		ReadOnly: cfg.Role.IsReader(),
 	}, log)
 	if err != nil {
 		return nil, err

@@ -14,7 +14,7 @@ import (
 // between subsystems.
 type rpcEndpoint struct {
 	subsystem string
-	addr      string // e.g. "payments.hanzo.svc:9653"
+	addr      string // host:port of the subsystem's ZAP listener
 }
 
 func (e *rpcEndpoint) errf(verb string) error {
@@ -59,15 +59,6 @@ func (c *rpcBase) Open(_ context.Context, _, _ string) (types.DBHandle, error) {
 	return nil, c.errf("Open")
 }
 
-type rpcCommerce struct{ rpcEndpoint }
-
-func (c *rpcCommerce) GetOrgConfig(_ context.Context, _ string) (*types.OrgConfig, error) {
-	return nil, c.errf("GetOrgConfig")
-}
-func (c *rpcCommerce) CheckEntitlement(_ context.Context, _, _ string) (*types.LicenseEntitlement, error) {
-	return nil, c.errf("CheckEntitlement")
-}
-
 type rpcAI struct{ rpcEndpoint }
 
 func (c *rpcAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*types.ChatResponse, error) {
@@ -107,24 +98,6 @@ func (c *rpcMQ) Subscribe(_ context.Context, _ string, _ func([]byte) error) err
 	return c.errf("Subscribe")
 }
 
-type rpcPayments struct{ rpcEndpoint }
-
-func (c *rpcPayments) CreateIntent(_ context.Context, _ *types.IntentRequest) (*types.IntentResponse, error) {
-	return nil, c.errf("CreateIntent")
-}
-func (c *rpcPayments) ConfirmIntent(_ context.Context, _ string) (*types.IntentResponse, error) {
-	return nil, c.errf("ConfirmIntent")
-}
-func (c *rpcPayments) GetIntentStatus(_ context.Context, _ string) (*types.IntentStatus, error) {
-	return nil, c.errf("GetIntentStatus")
-}
-
-type rpcVault struct{ rpcEndpoint }
-
-func (c *rpcVault) Charge(_ context.Context, _ *types.VaultChargeRequest) (*types.VaultChargeResponse, error) {
-	return nil, c.errf("Charge")
-}
-
 // --- constructors --------------------------------------------------------
 
 // IAMRPCAt returns a ZAP-RPC IAM client targeting addr.
@@ -140,11 +113,6 @@ func KMSRPCAt(addr string) types.KMSClient {
 // BaseRPCAt returns a ZAP-RPC Base client targeting addr.
 func BaseRPCAt(addr string) types.BaseClient {
 	return &rpcBase{rpcEndpoint{subsystem: "base", addr: addr}}
-}
-
-// CommerceRPCAt returns a ZAP-RPC Commerce client targeting addr.
-func CommerceRPCAt(addr string) types.CommerceClient {
-	return &rpcCommerce{rpcEndpoint{subsystem: "commerce", addr: addr}}
 }
 
 // AIRPCAt returns a ZAP-RPC AI client targeting addr.
@@ -165,18 +133,4 @@ func VFSRPCAt(addr string) types.VFSClient {
 // MQRPCAt returns a ZAP-RPC MQ client targeting addr.
 func MQRPCAt(addr string) types.MQClient {
 	return &rpcMQ{rpcEndpoint{subsystem: "mq", addr: addr}}
-}
-
-// PaymentsRPCAt returns a ZAP-RPC Payments client targeting addr.
-// Payments is ALWAYS split-deployed (PCI scope isolation per HIP-0106
-// solo-vault CDE), so there is no in-process variant.
-func PaymentsRPCAt(addr string) types.PaymentsClient {
-	return &rpcPayments{rpcEndpoint{subsystem: "payments", addr: addr}}
-}
-
-// VaultRPCAt returns a ZAP-RPC Vault client targeting addr. Vault is
-// ALWAYS split-deployed (PCI-CDE, the only system that touches PAN),
-// so there is no in-process variant.
-func VaultRPCAt(addr string) types.VaultClient {
-	return &rpcVault{rpcEndpoint{subsystem: "vault", addr: addr}}
 }

@@ -1,9 +1,7 @@
 // cloud is the unified Hanzo Cloud binary per HIP-0106.
 //
-// One binary. Many subsystems. Deployment configuration determines
-// which subsystems mount at startup. Same artifact powers
-// api.hanzo.ai, api.osage.cloud, api.lux.cloud, api.zoo.cloud, and
-// every other white-label resold cloud surface.
+// One binary. Many subsystems. Configuration determines which subsystems
+// mount at startup; the defaults run a complete local cloud on one machine.
 //
 // The serve body lives in cloud.Serve (one place, shared with the `hanzo`
 // subcommand dispatcher); main() is just its full-surface entrypoint. The
@@ -18,9 +16,7 @@ import (
 
 	// The subsystem set is defined ONCE in the subsystems bundle (shared with
 	// cmd/hanzo). apps.Wire() returns it in mount order; main threads that
-	// slice into cloud.Serve — the composition root, no init()-registry. Linking
-	// subsystems also links clients/o11y, whose init() registers the telemetry
-	// bootstrap cloud.Serve runs (cloud.RegisterTelemetryInstaller).
+	// slice into cloud.Serve — the composition root, no init()-registry.
 	"github.com/hanzoai/cloud/apps"
 )
 

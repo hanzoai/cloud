@@ -3,7 +3,7 @@ package cloud
 // service.go — the ONE subsystem abstraction.
 //
 // Every /v1 subsystem used to declare its own `type svc struct { … }` holding a
-// re-plumbed copy of the shared deps (log, kms, billing, brand) plus its own
+// re-plumbed copy of the shared deps (log, kms, brand) plus its own
 // state, hang handler methods off it, and hand-write a Mount body. That is the
 // same shape copied ~40 times. This collapses it to one generic value.
 //
@@ -14,33 +14,26 @@ package cloud
 // to a route. Generics carry the state type; functions carry the behaviour.
 
 import (
-	"errors"
 	"fmt"
-	"net/http"
 
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
 // Base is the shared dependency set every subsystem needs, derived ONCE from
-// Deps at mount. It is embedded in Service, so a handler reaches Log/KMS/Bill/
-// Brand directly (s.Log, s.Bill, …) with no package re-plumbing them.
+// Deps at mount. It is embedded in Service, so a handler reaches Log/KMS/Brand
+// directly (s.Log, s.KMS, …) with no package re-plumbing them.
 type Base struct {
 	Log     luxlog.Logger
 	KMS     KMSClient
-	Bill    *ResourceMeter
 	Brand   string
 	Env     string
 	Domain  string
 	DataDir string
-	// Durable is the deployment's HA-durability factory (nil ⇒ local-only). A
-	// subsystem opening per-org SQLite passes it to NewOrgStore(WithDurable) to make
-	// its stores survive rolling deploys/replicas.
-	Durable *Durability
 }
 
-// NewBase derives the shared deps for a named subsystem: a scoped child logger,
-// the embedded KMS client, and the per-org resource meter (provider = name).
+// NewBase derives the shared deps for a named subsystem: a scoped child logger
+// and the embedded KMS client.
 //
 // Most packages never call this — cloud.Mount does. It is exported for the few
 // subsystems whose Mount is more than build+routes (a background reconciler, a
@@ -51,12 +44,10 @@ func NewBase(deps Deps, name string) Base {
 	return Base{
 		Log:     deps.Logger.New("subsystem", name),
 		KMS:     deps.KMS,
-		Bill:    NewResourceMeter(deps, name),
 		Brand:   deps.Brand,
 		Env:     deps.Env,
 		Domain:  deps.Domain,
 		DataDir: deps.DataDir,
-		Durable: deps.Durable,
 	}
 }
 
@@ -96,32 +87,4 @@ func Mount[S any](app *zip.App, deps Deps, name string, build func(Base) (S, err
 // handlers and register them with `app.Get("/path", cloud.Handle(s, myHandler))`.
 func Handle[S any](s *Service[S], h func(*Service[S], *zip.Ctx) error) func(*zip.Ctx) error {
 	return func(c *zip.Ctx) error { return h(s, c) }
-}
-
-// Terminal wraps a handler so a returned *zip.HTTPError is written in-band (its
-// status + the {status,code,error} JSON zip's default errorHandler would emit)
-// and nil is returned, instead of propagating the error up the middleware chain.
-//
-// It exists for routes mounted UNDER an outer error-flattening filter. The
-// commerce embed installs one: mountCommerce (apps) registers ErrorHandlerJSON on
-// an app.Group("/v1") whose middleware rewrites ANY error a downstream /v1 handler
-// PROPAGATES into a hardcoded HTTP 500 — so a reject that returns zip.ErrUnauthorized
-// (401) or zip.ErrBadRequest (400) up the chain surfaces to the client as 500. A
-// subsystem mounted after commerce (git, sync, integrations, …) whose reject path
-// must keep its real 4xx wraps its handler here: the status is written before the
-// filter runs, so the filter's c.Next() sees nil and has nothing to flatten. A
-// non-HTTPError (a genuine unexpected failure) passes through unchanged — those are
-// 500s regardless. Compose with Handle: cloud.Terminal(cloud.Handle(s, fn)).
-func Terminal(h func(*zip.Ctx) error) func(*zip.Ctx) error {
-	return func(c *zip.Ctx) error {
-		err := h(c)
-		var he *zip.HTTPError
-		if errors.As(err, &he) {
-			if he.Status == 0 {
-				he.Status = http.StatusInternalServerError
-			}
-			return c.JSON(he.Status, he)
-		}
-		return err
-	}
 }

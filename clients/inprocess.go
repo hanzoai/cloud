@@ -35,10 +35,6 @@ func KMSInProcess(impl types.KMSClient) types.KMSClient { return impl }
 // BaseInProcess wraps a co-resident Base implementation.
 func BaseInProcess(impl types.BaseClient) types.BaseClient { return impl }
 
-// CommerceInProcess wraps a co-resident Commerce implementation.
-func CommerceInProcess(impl types.CommerceClient) types.CommerceClient { return impl }
-
-
 // AIInProcess wraps a co-resident AI implementation.
 func AIInProcess(impl types.AIClient) types.AIClient { return impl }
 
@@ -50,8 +46,3 @@ func VFSInProcess(impl types.VFSClient) types.VFSClient { return impl }
 
 // MQInProcess wraps a co-resident MQ implementation.
 func MQInProcess(impl types.MQClient) types.MQClient { return impl }
-
-// Payments is NEVER in-process — see PaymentsRPCAt for the only
-// allowed wiring. Vault is the same. The interfaces exist on
-// cloud.Deps so subsystems can call them, but the underlying client
-// always reaches the split-deployed PCI process via ZAP RPC.

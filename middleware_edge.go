@@ -1,8 +1,8 @@
 package cloud
 
-// Edge policy middleware — the in-process "gateway role" cloud absorbs so it can
-// serve the public api.hanzo.ai edge DIRECTLY, with no separate KrakenD gateway
-// hop (hanzoai/gateway). It is two ORTHOGONAL concerns, each a distinct slot:
+// Edge policy middleware — the in-process "gateway role" cloud takes so it can
+// serve a public edge DIRECTLY, with no separate gateway hop (hanzoai/gateway).
+// It is two ORTHOGONAL concerns, each a distinct slot:
 //
 //	EdgeCORS      — browser CORS at the /v1 edge (the gateway routes.go role).
 //	EdgeRateLimit — per-client-IP flood cap BEFORE identity (the gateway
@@ -24,7 +24,6 @@ package cloud
 //   - Authenticated per-org rate ceiling            → ScopeRateLimit
 //     (middleware_ratelimit.go), keyed on the VALIDATED principal, now also
 //     honoring the /v1/gateway per-org OrgRPM.
-//   - Balance / spend-cap quota                        → BillingGate.
 //
 // EdgeRateLimit fills the ONE gap those post-auth gates leave: an ANONYMOUS flood
 // (no valid JWT ⇒ no org to key on) is invisible to ScopeRateLimit, which keys on
@@ -65,14 +64,11 @@ const (
 // allowlist is the PLATFORM policy's CORSOrigins, read live (recompiled only when
 // it changes) so a SuperAdmin can add/remove origins via PUT /v1/gateway/config.
 //
-// DEFAULT OFF (empty allowlist ⇒ no-op passthrough). On the RECOMMENDED rollout —
-// the shared Traefik ingress keeps fronting api.hanzo.ai and its `cors-allow-all`
-// middleware already answers CORS there — enabling cloud CORS too would emit a
-// SECOND Access-Control-Allow-Origin header and break every browser preflight. So
-// CORS stays owned by exactly ONE layer: the ingress until/unless the edge moves to
-// a direct DO-LB→cloud path (cloud terminates TLS for api.hanzo.ai), at which point
-// the operator sets CLOUD_CORS_ORIGINS (or PUTs it) and cloud becomes the sole CORS
-// authority. One policy, one place — never both.
+// DEFAULT OFF (empty allowlist ⇒ no-op passthrough). When a proxy in front already
+// answers CORS, enabling cloud CORS too would emit a SECOND
+// Access-Control-Allow-Origin header and break every browser preflight. So CORS
+// stays owned by exactly ONE layer: set CLOUD_CORS_ORIGINS (or PUT it) only where
+// cloud is the edge. One policy, one place — never both.
 //
 // When enabled it handles the OPTIONS preflight itself (204, short-circuit) and
 // reflects the allowlisted Origin on the actual response, then continues the chain.
@@ -197,13 +193,10 @@ func (m *originMatcher) allowed(origin string) bool {
 // primitive that ScopeRateLimit reuses: that primitive never evicts, which is fine
 // for a bounded per-org keyspace but would grow without bound keyed on raw IPs).
 //
-// SCOPE = public edge only. A request with NO X-Forwarded-For is an IN-CLUSTER
-// direct caller (console BFF, sibling service hitting cloud.svc:8000) — it never
-// transited the ingress/LB, exactly the traffic the standalone gateway never saw,
-// so it is not IP-limited here (parity: the gateway only ever rate-limited public
-// traffic). Only proxied edge traffic, which carries the real client IP in XFF,
-// is throttled. A per_ip_rpm of 0 (env CLOUD_EDGE_RATELIMIT=false at boot) is a
-// live no-op.
+// SCOPE = proxied edge only. A request with NO X-Forwarded-For is a direct
+// caller — it never transited a proxy, so it is not IP-limited here. Only
+// proxied edge traffic, which carries the real client IP in XFF, is throttled. A
+// per_ip_rpm of 0 (env CLOUD_EDGE_RATELIMIT=false at boot) is a live no-op.
 func EdgeRateLimit(pol *edge.Store) zip.Handler {
 	rl := &edgeIPLimiter{policy: pol, buckets: map[string]*edgeBucket{}}
 	return rl.handler
@@ -290,4 +283,17 @@ func itoaEdge(n int) string {
 		n /= 10
 	}
 	return string(b[pos:])
+}
+
+// ClientIP extracts the originating client IP from X-Forwarded-For; the
+// left-most entry is the real client. Empty for a direct caller.
+func ClientIP(c *zip.Ctx) string {
+	xff := c.Header("X-Forwarded-For")
+	if xff == "" {
+		return ""
+	}
+	if i := strings.IndexByte(xff, ','); i > 0 {
+		return strings.TrimSpace(xff[:i])
+	}
+	return strings.TrimSpace(xff)
 }

@@ -56,18 +56,6 @@ func RegisterDurableEngine(e DurableEngine) {
 // the no-op default. Never nil.
 func Durable() DurableEngine { return durableEngine }
 
-// firstNonEmptyStr returns the first non-empty string, else the last.
-func firstNonEmptyStr(vals ...string) string {
-	last := ""
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-		last = v
-	}
-	return last
-}
-
 // wireDurableIngest is the OSS no-op boot hook Serve calls after MountAll. In the
 // private build this embeds the tasks engine and wires ai's durable ingest; in the
 // OSS core there is no ai subsystem and no embedded engine, so it only logs that

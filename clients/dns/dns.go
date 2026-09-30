@@ -1,8 +1,7 @@
 // Package dns forwards the console's DNS dashboard traffic (/v1/dns/*) to the
 // Hanzo DNS control plane (dns/plugin/hanzodns), which owns the authoritative
-// zone/record store. cloud serves console.hanzo.ai (the DnsModule) but holds no
-// DNS state of its own, so without this thin head console.hanzo.ai/v1/dns/* 404s
-// and the dashboard shows empty zones.
+// zone/record store. cloud holds no DNS state of its own; this thin head relays
+// to the plane at HANZO_DNS_URL.
 //
 // SHAPE. One prefix (/v1/dns/*), every verb, full path passthrough, forwarded to a
 // service whose base URL comes from env (HANZO_DNS_URL) -- the SAME shape and env
@@ -32,10 +31,9 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// defaultDNSURL is the in-cluster DNS control-plane API -- the operator's
-// DNSConnector default endpoint (the API listens on :8443). Used when HANZO_DNS_URL
-// is unset so a standard cluster deployment forwards without extra config.
-const defaultDNSURL = "http://coredns-hanzodns.dns-system.svc:8443"
+// defaultDNSURL is a DNS control-plane API on this machine (the API listens on
+// :8443). HANZO_DNS_URL points the relay anywhere else.
+const defaultDNSURL = "http://127.0.0.1:8443"
 
 // maxDNSBody bounds the upstream response read: zone/record listings are small
 // JSON, so this caps a hostile or runaway upstream body.
@@ -73,7 +71,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-// dnsURL is the DNS control-plane base URL, from env with an in-cluster default.
+// dnsURL is the DNS control-plane base URL, from env with a local default.
 func dnsURL() string {
 	if v := strings.TrimSpace(os.Getenv("HANZO_DNS_URL")); v != "" {
 		return v

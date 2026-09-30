@@ -49,24 +49,19 @@ import (
 // so it can never alias a real org's file.
 const reservedPlatformSlug = "_platform"
 
-// errReadOnly is returned by a reader-mode store when a mutation is attempted. A
-// reader must never fork the authoritative writer's state.
-var errReadOnly = errors.New("kms: store is read-only (reader HA role)")
-
 // secretStore holds the lazily-opened, cached per-org SQLite handles. Each file
 // is opened + migrated once on first touch and cached by org slug. Opens are
 // serialized so a concurrent first touch opens exactly once — the same shape as
 // clients/finance.
 type secretStore struct {
-	dataDir  string
-	readOnly bool
+	dataDir string
 
 	mu  sync.Mutex
 	dbs map[string]*sql.DB // key: fileOrg(path) → open handle for that org's kms.db
 }
 
-func newSecretStore(dataDir string, readOnly bool) *secretStore {
-	return &secretStore{dataDir: dataDir, readOnly: readOnly, dbs: map[string]*sql.DB{}}
+func newSecretStore(dataDir string) *secretStore {
+	return &secretStore{dataDir: dataDir, dbs: map[string]*sql.DB{}}
 }
 
 // fileOrg extracts the org whose file holds a secret path. A path shaped
@@ -92,14 +87,10 @@ func fileOrg(path string) string {
 //   - create=false (read/list/delete) → return (nil, nil); the caller treats
 //     absence as "no such secret" and NEVER litters an empty store shell for an
 //     org that only had a read attempted.
-// A reader (s.readOnly) never creates: create is forced false, and it performs no
-// DDL (the writer already migrated). The org is folded through the injective
-// slugger inside cloud.OrgDB, so a path can never traverse out of {DataDir}/orgs
-// or reach another tenant.
+//
+// The org is folded through the injective slugger inside cloud.OrgDB, so a path
+// can never traverse out of {DataDir}/orgs or reach another tenant.
 func (s *secretStore) dbFor(path string, create bool) (*sql.DB, error) {
-	if s.readOnly {
-		create = false
-	}
 	org := fileOrg(path)
 
 	s.mu.Lock()
@@ -125,11 +116,9 @@ func (s *secretStore) dbFor(path string, create bool) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("kms: open org store %q: %w", org, err)
 	}
-	if !s.readOnly {
-		if err := migrateSecrets(db); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("kms: migrate org store %q: %w", org, err)
-		}
+	if err := migrateSecrets(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("kms: migrate org store %q: %w", org, err)
 	}
 	s.dbs[org] = db
 	return db, nil
@@ -182,9 +171,6 @@ CREATE TABLE IF NOT EXISTS kms_secrets (
 // ciphertext/wrapped-DEK (a re-seal always mints a fresh per-secret DEK) and bumps
 // updated_at while preserving created_at.
 func (s *secretStore) put(sec *kmsstore.Secret) error {
-	if s.readOnly {
-		return errReadOnly
-	}
 	db, err := s.dbFor(sec.Path, true)
 	if err != nil {
 		return err
@@ -264,9 +250,6 @@ func (s *secretStore) list(path, env string) ([]*kmsstore.Secret, error) {
 // del removes a secret, returning ErrSecretNotFound (verbatim) when it was absent
 // so the REST layer maps a missing delete to 404 rather than 200.
 func (s *secretStore) del(path, name, env string) error {
-	if s.readOnly {
-		return errReadOnly
-	}
 	db, err := s.dbFor(path, false)
 	if err != nil {
 		return err
@@ -286,27 +269,6 @@ func (s *secretStore) del(path, name, env string) error {
 		return kmsstore.ErrSecretNotFound
 	}
 	return nil
-}
-
-// hasRestoredStore reports whether any per-org kms.db already exists under
-// {dataDir}/orgs — the reader's boot-time "is there anything to serve?" check, so
-// a reader with an empty data dir fails closed at New rather than opening nothing
-// and answering as if healthy.
-func hasRestoredStore(dataDir string) bool {
-	root := filepath.Join(dataDir, "orgs")
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return false
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		if _, err := os.Stat(filepath.Join(root, e.Name(), "kms.db")); err == nil {
-			return true
-		}
-	}
-	return false
 }
 
 // close closes every cached per-org handle (best-effort), returning the first

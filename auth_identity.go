@@ -4,13 +4,9 @@ package cloud
 //
 // This MIRRORS github.com/hanzoai/gateway/v2/iamauth, the canonical edge
 // validator, but cloud deliberately does NOT import that package: iamauth lives
-// in the heavyweight gateway module (KrakenD/gin/traefik) AND gateway/v2 already
-// imports github.com/hanzoai/cloud, so importing it back would braid a module
-// cycle and pull the gateway's whole dependency tree into cloud for ~150 lines
-// of validation. The gateway remains the PRIMARY edge authority — in production
-// it fronts cloud-api (universe routes.yaml). This validator is the in-binary
-// defense-in-depth layer for the in-cluster / direct path, kept tiny and
-// auditable on go-jose alone (already in cloud's module graph).
+// in the heavyweight gateway module AND gateway/v2 already imports
+// github.com/hanzoai/cloud, so importing it back would braid a module cycle. The
+// validator here is kept tiny and auditable on go-jose alone.
 //
 // What it enforces, exactly like iamauth.ValidateToken: signature against the
 // IAM JWKS, issuer (strict), audience (allowlist, OR semantics), and expiry —
@@ -40,13 +36,13 @@ import (
 type idClaims struct {
 	jwt.Claims
 
-	Owner             string       `json:"owner"`              // org slug (the org)
-	Project           string       `json:"project"`            // org SUB-SCOPE within owner (empty ⟹ default project)
-	BillingAccount    string       `json:"billing_account"`    // WHO PAYS, stated by IAM (empty ⟹ pre-claim token)
-	Name              string       `json:"name"`               // display name (id fallback)
-	PreferredUsername string       `json:"preferred_username"` // id fallback
-	Email             string       `json:"email"`
-	IsAdmin           bool         `json:"isAdmin"`
+	Owner             string   `json:"owner"`              // org slug (the org)
+	Project           string   `json:"project"`            // org SUB-SCOPE within owner (empty ⟹ default project)
+	BillingAccount    string   `json:"billing_account"`    // WHO PAYS, stated by IAM (empty ⟹ pre-claim token)
+	Name              string   `json:"name"`               // display name (id fallback)
+	PreferredUsername string   `json:"preferred_username"` // id fallback
+	Email             string   `json:"email"`
+	IsAdmin           bool     `json:"isAdmin"`
 	Orgs              []OrgRef `json:"orgs"` // membership SET (home first); empty on legacy tokens
 }
 
@@ -116,23 +112,18 @@ var jwtSigAlgs = []gojose.SignatureAlgorithm{
 }
 
 // identityValidator validates an IAM JWT against a cached JWKS. Issuer (any of a
-// trusted SET) + audience + expiry are always enforced.
+// trusted SET) + expiry are always enforced.
 //
-// The issuer is a SET so ONE cloud binary validates every white-label brand's
-// tokens (hanzo iss=hanzo.id AND lux iss=lux.id, ...). Signature verification is
-// unaffected: the in-cluster IAM serves EVERY brand's signing cert in one JWKS
-// (cert-hanzo/cert-lux/cert-zoo/...), keyed by the token kid, so a single
-// jwksURL verifies all brands. Only the issuer-string comparison had to widen.
+// The issuer is a SET so one binary can validate several brands' tokens when
+// their IAM serves every brand's signing cert in one JWKS, keyed by the token
+// kid; only the issuer-string comparison widens.
 type identityValidator struct {
 	issuers []string
 	cache   *jwksCache
-	keys    keyResolver // resolves an opaque API key to a principal; nil ⟹ keys stay anonymous
 }
 
 // newIdentityValidator builds a validator whose trusted-issuer set is the primary
-// issuer UNIONED with every white-label brand issuer (BrandIssuers) plus any
-// WHITELABEL_ISSUERS override. ttl<=0 uses the 15m JWKS default. The union is
-// fail-secure: it only ADDS the known-good brand issuers, never an arbitrary one.
+// issuer plus any WHITELABEL_ISSUERS override. ttl<=0 uses the 15m JWKS default.
 //
 // Trust is IAM-native: signature (JWKS) + issuer (this set) + expiry. There is NO
 // per-app audience allowlist — the `aud` (a minting app's client_id) is IAM's to
@@ -141,7 +132,6 @@ func newIdentityValidator(issuer, jwksURL string, ttl time.Duration) *identityVa
 	return &identityValidator{
 		issuers: trustedIssuers(issuer),
 		cache:   newJWKSCache(jwksURL, ttl),
-		keys:    sharedKeys(), // ONE resolver+cache, shared with OrgForKey (analytics capture)
 	}
 }
 
@@ -212,10 +202,9 @@ func (v *identityValidator) validate(raw string) (*idClaims, error) {
 	}
 
 	// Fail SECURE on a misconfigured (empty) trust set: with no trusted issuer every
-	// token must be REJECTED, never silently admitted. In production the set is always
-	// non-empty (the primary issuer + BrandIssuers, unioned in config.go so it is
-	// "never empty"), so this fires ONLY on an operator misconfiguration — and then it
-	// denies, it never admits (I2).
+	// token must be REJECTED, never silently admitted. The set always holds the
+	// primary issuer, so this fires ONLY on a misconfiguration — and then it denies,
+	// it never admits.
 	if len(v.issuers) == 0 {
 		return nil, fmt.Errorf("identity validator misconfigured: empty issuer set")
 	}
@@ -412,11 +401,10 @@ func basicFromAuth(auth string) string {
 }
 
 // trustedIssuers returns the full trusted-issuer set for the in-binary validator:
-// the PRIMARY issuer (the deployment's own brand, cfg.IAMIssuer) UNIONED with every
-// white-label brand issuer (BrandIssuers) and any WHITELABEL_ISSUERS override
-// (comma-separated). Fail-secure: it only ADDS known-good issuers; a nil/empty
-// result is impossible when a primary is set, so the issuer check is always
-// enforced. Duplicates are removed; order is primary-first.
+// the PRIMARY issuer (cfg.IAMIssuer) plus any WHITELABEL_ISSUERS override
+// (comma-separated). A nil/empty result is impossible when a primary is set, so
+// the issuer check is always enforced. Duplicates are removed; order is
+// primary-first.
 func trustedIssuers(primary string) []string {
 	out := make([]string, 0, 6)
 	add := func(v string) {
@@ -432,9 +420,6 @@ func trustedIssuers(primary string) []string {
 		out = append(out, v)
 	}
 	add(primary)
-	for _, iss := range BrandIssuers() {
-		add(iss)
-	}
 	for _, iss := range splitTrim(os.Getenv("WHITELABEL_ISSUERS")) {
 		add(iss)
 	}

@@ -14,9 +14,7 @@ package cloud
 // per-org limit and routes the request to the bucket for that limit — one
 // zip.RateLimit instance per distinct rpm, its buckets keyed by the org.
 //
-// The OSS core caps on the operator-set OrgRPM alone. The private build layers a
-// plan-configured commerce ceiling on top (most-restrictive-wins); that path is
-// not part of the OSS binary.
+// The cap is the operator-set OrgRPM.
 
 import (
 	"sync"

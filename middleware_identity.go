@@ -6,18 +6,16 @@ package cloud
 // / X-User-Id request headers verbatim. In production the gateway
 // (hanzoai/gateway) is the sole minter of those headers: it strips any
 // client-supplied copy and re-injects them from a validated IAM JWT (HIP-0026).
-// cloud TRUSTS that contract. But cloud-api is also reachable WITHOUT the gateway
-// in front — directly in-cluster (cloud-api.hanzo.svc:8000, used by console's
-// BFF) and historically on the public host cloud-api.hanzo.ai. On those paths a
-// caller can simply send `X-User-IsAdmin: true` and every cloud admin gate
-// (c.IsAdmin()) believes it. That is the forgeable-admin trust boundary.
+// cloud TRUSTS that contract. But cloud is also reachable WITHOUT the gateway in
+// front — directly, as on a laptop. On that path a caller can simply send
+// `X-User-IsAdmin: true` and every cloud admin gate (c.IsAdmin()) believes it.
+// That is the forgeable-admin trust boundary.
 //
-// THE FIX. This middleware runs FIRST — before BillingGate and every subsystem —
+// THE FIX. This middleware runs FIRST — before every subsystem —
 // and rewrites the request's identity headers so each downstream c.IsAdmin() /
 // c.Org() / c.User() reflects a VALIDATED principal, never a raw client header.
-// It is ONE place; every existing IsAdmin()/Org() reader (pricing admin
-// catalog + /v1/pricing/sync, provisioning, ml, eval, plan) becomes
-// trustworthy without touching a single handler.
+// It is ONE place; every existing IsAdmin()/Org() reader becomes trustworthy
+// without touching a single handler.
 //
 // ADMIN IS SUPERADMIN. The gateway mints X-User-IsAdmin from the JWT `isAdmin`
 // bool, which IAM also sets true for ORG admins (an org owner). The cloud admin
@@ -45,7 +43,7 @@ import (
 // namespace is ever derived from an invisible-character identifier.
 //
 // Case / '-' / '.' / other visible punctuation are deliberately NOT unsafe:
-// those fold INJECTIVELY through the org-slug hash (provisioning.SanitizeOrg).
+// those fold INJECTIVELY through the org-slug hash (SanitizeOrg).
 // Only the invisible / edge-trimmable class — which no injective fold can
 // survive once transport strips it — is rejected here. A legitimate IAM org
 // slug never contains such a rune, so no real caller is affected.
@@ -352,14 +350,10 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 	if tok == "" {
 		return nil
 	}
-	// An opaque API key is not a JWT: resolve it to the same principal a JWT yields,
-	// so key auth and session auth mint one identity. An unresolved key stays
-	// anonymous (nil) — a bad key never grants trust.
+	// An opaque API key is not a JWT and this edition resolves none: it stays
+	// anonymous (nil) — a key never grants trust here.
 	if isAPIKey(tok) {
-		if v.keys == nil {
-			return nil
-		}
-		return v.keys.resolve(c.Context(), tok)
+		return nil
 	}
 	claims, err := v.validate(tok)
 	if err != nil {

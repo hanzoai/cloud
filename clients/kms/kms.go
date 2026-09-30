@@ -7,7 +7,7 @@
 //	             subsystems call via deps.KMS. No RPC, no external DB. Built once by
 //	             the factory this package registers (init, mount.go), filled into
 //	             deps.KMS by build.go's BuildDeps before MountAll, and reused by Mount.
-//	/v1/kms/*  — the secrets-manager REST surface the KMS console (kms.hanzo.ai)
+//	/v1/kms/*  — the secrets-manager REST surface the KMS console
 //	             calls, mounted onto cloud's Fiber app: JWT-gated, org-scoped
 //	             secrets CRUD + a real health probe + the SPA admin config (mount.go).
 //
@@ -58,7 +58,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"path/filepath"
+
 	"strings"
 
 	"github.com/hanzoai/cloud/types"
@@ -123,14 +123,6 @@ type Config struct {
 	MasterKeyB64 string // base64 of the 32-byte master key (CLOUD_KMS_MASTER_KEY_REF)
 	MPCAddr      string // MPC daemon host:port(,...) — CLOUD_KMS_MPC_ADDR
 	MPCVaultID   string // MPC vault id — CLOUD_KMS_MPC_VAULT_ID
-
-	// ReadOnly opens the store in reader mode: mutations fail closed so a replica
-	// never forks the authoritative writer's state, and a reader with no restored
-	// store under {DataDir}/orgs fails closed at New rather than serving nothing.
-	// Set by the reader HA role. Unlike the former ZapDB store, per-org SQLite is
-	// RO-shareable over WAL, so a reader CAN open the files locally — the reader
-	// no longer needs to reverse-proxy KMS to the writer (see the package report).
-	ReadOnly bool
 }
 
 // New opens the embedded KMS store under cfg.DataDir and returns the in-process
@@ -161,22 +153,9 @@ func New(cfg Config, log luxlog.Logger) (*Client, error) {
 	// brick). The former ZapDB KEYREGISTRY brick foot-gun is gone: cek rotates by
 	// re-wrapping a per-file sidecar (no page is rewritten), and a wrong/absent key
 	// makes cek.Open FAIL at first access — never a silent plaintext downgrade.
-	//
-	// Reader HA role fails CLOSED at New (not at first read) so a mis-provisioned
-	// reader never boots "healthy" over nothing:
-	//   no master key → cannot decrypt any file at rest → refuse.
-	//   no restored store under {DataDir}/orgs → nothing to serve → refuse.
-	if cfg.ReadOnly {
-		if keyErr != nil {
-			return nil, fmt.Errorf("kms.New: reader mode requires a master key to open the encrypted store: %w", keyErr)
-		}
-		if !hasRestoredStore(dir) {
-			return nil, fmt.Errorf("kms.New: reader mode but no restored store under %s — hydrate before serving KMS reads", filepath.Join(dir, "orgs"))
-		}
-	}
 
 	c := &Client{
-		store:     newSecretStore(dir, cfg.ReadOnly),
+		store:     newSecretStore(dir),
 		masterKey: masterKey, // nil when keyErr != nil
 		mpcAddr:   strings.TrimSpace(cfg.MPCAddr),
 		vaultID:   strings.TrimSpace(cfg.MPCVaultID),
@@ -185,12 +164,11 @@ func New(cfg Config, log luxlog.Logger) (*Client, error) {
 	if keyErr != nil {
 		c.log.Warn("kms master key not configured; secret ops fail closed (health-only mode)", "err", keyErr)
 	}
-	// One-time cutover from the legacy embedded ZapDB store to per-org SQLite. Writer
-	// + keyed only: a reader must not migrate, and the encrypted-at-rest legacy store
-	// can only be read with the master key. FATAL on error — booting the empty per-org
+	// One-time cutover from the legacy embedded ZapDB store to per-org SQLite. Keyed
+	// only: the encrypted-at-rest legacy store can only be read with the master key. FATAL on error — booting the empty per-org
 	// store while legacy secrets sit unmigrated would orphan every secret (cloud KMS is
 	// the source the kms-operator syncs out), so refuse to serve rather than lose them.
-	if !cfg.ReadOnly && keyErr == nil {
+	if keyErr == nil {
 		if err := migrateLegacyZapDB(dir, masterKey, c.store, c.log); err != nil {
 			return nil, fmt.Errorf("kms.New: legacy ZapDB migration: %w", err)
 		}

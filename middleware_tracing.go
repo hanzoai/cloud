@@ -56,9 +56,9 @@ func traceSkip(path string) bool {
 
 // traceable reports whether a request path gets a span. Scope is the versioned
 // API surface (/v1/*) — the LLM/agent/data plane the o11y Monitoring tab tracks —
-// minus the health noise above. Non-API paths (the console SPA, published
-// <slug>.hanzo.app sites, the /zap WebSocket) are not traced here: they are not
-// the api.hanzo.ai/v1 request plane this instrumentation exists to observe.
+// minus the health noise above. Non-API paths (the console SPA, the /zap
+// WebSocket) are not traced here: they are not the /v1 request plane this
+// instrumentation exists to observe.
 func traceable(path string) bool {
 	if !strings.HasPrefix(path, "/v1/") {
 		return false
@@ -67,7 +67,7 @@ func traceable(path string) bool {
 }
 
 // TracingMiddleware emits ONE OpenTelemetry SERVER span per /v1/* request through
-// the global (ZAP) tracer provider, so every api.hanzo.ai request lands in
+// the global (ZAP) tracer provider, so every /v1 request lands in
 // hanzoai/datastore over the ZAP wire alongside the log pipeline. It records the
 // OTel HTTP semantic-convention attributes (method, route, status), sets the span
 // status on error/5xx, and — critically — PROPAGATES the span context onto the

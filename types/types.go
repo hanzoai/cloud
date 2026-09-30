@@ -66,48 +66,6 @@ type OrgRef struct {
 // DBHandle is the per-org database handle Base hands out.
 type DBHandle interface{ Close() error }
 
-// OrgConfig is the commerce-served org settings struct.
-type OrgConfig struct {
-	OrgID string
-	Brand string
-}
-
-// LicenseEntitlement is commerce's answer to "does this org/user hold an
-// active entitlement for licensed product X, and what does its plan grant?".
-//
-// It is the inter-subsystem transport for the entitlement-flow that gates
-// licensing token issuance (commerce → licensing → engine). The licensing
-// subsystem copies Features verbatim into the signed token's `features`
-// list so the proprietary engine's offline release gate (hasFeatures)
-// enforces exactly the plan the buyer paid for.
-//
-// Features is the FLAT capability list produced from the canonical
-// entitlement vocabulary by the data plane's toLicenseFeatures contract
-// (@hanzo/plans entitlements.mjs): licensing.engine_features verbatim,
-// plus derived capability tokens (e.g. "ai.premium", "training",
-// "tools.<name>"), plus scoping tokens ("licensing.app:<id>",
-// "licensing.product:<id>"). Numeric quotas (tokens_per_min, seats,
-// max_vms, …) ride out of band and are NOT encoded here.
-type LicenseEntitlement struct {
-	// ProductID is the licensed product the entitlement was checked for
-	// (e.g. "engine", "engine-rocm", a plugin id).
-	ProductID string
-	// Active reports whether the entitlement is currently valid (paid,
-	// not lapsed/cancelled). Licensing refuses to mint when false.
-	Active bool
-	// Plan is the resolved plan/tier id (e.g. "developer", "pro", "max",
-	// "enterprise"). Surfaced for logging/audit; not load-bearing for the
-	// release gate.
-	Plan string
-	// Features is the flat license-feature list per the toLicenseFeatures
-	// vocab contract — copied verbatim into License.Features at issue.
-	Features []string
-	// ExpiresUnix bounds the entitlement (unix seconds, 0 = no bound). The
-	// issued token's exp is clamped to it so a token never outlives the
-	// entitlement.
-	ExpiresUnix int64
-}
-
 // ChatRequest mirrors the AI subsystem's chat-completion request. Org and Project
 // are the billing SCOPE — who this inference is metered against. The metering
 // decorator wrapping deps.AI reads them to authorize the org's balance/budget
@@ -169,39 +127,6 @@ type (
 	Span    interface{ End() }
 )
 
-// IntentRequest creates a payments intent. Commerce never sees PAN;
-// it only ever passes the vault token + amount + currency.
-type IntentRequest struct {
-	Token       string
-	Currency    string
-	AmountCents int64
-}
-
-// IntentResponse acknowledges intent creation / state.
-type IntentResponse struct {
-	ID     string
-	Status string
-}
-
-// IntentStatus is the status-poll response.
-type IntentStatus struct{ Status string }
-
-// VaultChargeRequest is the payments→vault charge request. Vault is
-// the only system that sees PAN — it dereferences the token and
-// makes the processor call.
-type VaultChargeRequest struct {
-	Token       string
-	ProcessorID string
-	Currency    string
-	AmountCents int64
-}
-
-// VaultChargeResponse is the vault→payments charge response.
-type VaultChargeResponse struct {
-	ProcessorRef string
-	Status       string
-}
-
 // IAMClient is the inter-subsystem interface to IAM. Co-resident:
 // direct Go call. Split: ZAP-RPC.
 type IAMClient interface {
@@ -220,23 +145,6 @@ type KMSClient interface {
 // BaseClient is the inter-subsystem interface to Base.
 type BaseClient interface {
 	Open(ctx context.Context, orgID, serviceName string) (DBHandle, error)
-}
-
-// CommerceClient is the inter-subsystem interface to Commerce (entitlements +
-// org config). Money is NOT here — a subject's prepaid balance/deposit/usage is
-// the orthogonal BillingClient, so commerce (catalog/subscriptions/licensing) and
-// billing (the money ledger) never braid. Every method is a DIRECT in-process call
-// to the embedded commerce datastore (co-resident) or a ZAP RPC (split-deploy).
-type CommerceClient interface {
-	GetOrgConfig(ctx context.Context, orgID string) (*OrgConfig, error)
-	// CheckEntitlement reports whether org `orgID` holds an active
-	// entitlement for licensed product `productID`, and returns the plan's
-	// flat license-features per the toLicenseFeatures vocab contract. Used
-	// by the licensing subsystem to gate + scope token issuance. orgID is
-	// the org the buyer acts as (X-Org-Id); when callers only have a
-	// user subject they pass it through here and commerce resolves the
-	// owning org.
-	CheckEntitlement(ctx context.Context, orgID, productID string) (*LicenseEntitlement, error)
 }
 
 // DurableEngine is the OSS seam for a durable workflow/queue engine — the
@@ -300,120 +208,3 @@ type MQClient interface {
 	Publish(ctx context.Context, subject string, payload []byte) error
 	Subscribe(ctx context.Context, subject string, handler func([]byte) error) error
 }
-
-// PaymentsClient is the inter-subsystem interface to payments. Always
-// ZAP-RPC; never co-resident (PCI scope isolation).
-type PaymentsClient interface {
-	CreateIntent(ctx context.Context, req *IntentRequest) (*IntentResponse, error)
-	ConfirmIntent(ctx context.Context, intentID string) (*IntentResponse, error)
-	GetIntentStatus(ctx context.Context, intentID string) (*IntentStatus, error)
-}
-
-// VaultClient is the inter-subsystem interface to vault. The ONLY
-// system that touches PAN. Always ZAP-RPC; never co-resident.
-type VaultClient interface {
-	Charge(ctx context.Context, req *VaultChargeRequest) (*VaultChargeResponse, error)
-}
-
-// ── Kubernetes seam ──────────────────────────────────────────────────────────
-//
-// K8sClient is the OSS seam for the cluster control plane, and it exists so this
-// binary links no Kubernetes client at all. Two subsystems talk to a cluster —
-// platform (reconciles App CRs) and validators (writes node CRs) — and both used to
-// import k8s.io/client-go directly. That made "runs anywhere, no Kubernetes" a
-// claim about configuration rather than a property of the build: the dependency
-// was linked whether or not a cluster existed.
-//
-// It follows the same inversion as every other product plane here (IAMClient,
-// CommerceClient, DurableEngine): the interface lives in the core, the private
-// build registers a dynamic-client implementation, and the OSS default is
-// unavailable-but-honest rather than absent.
-//
-// SHAPES. Objects cross as decoded-JSON maps — exactly what
-// unstructured.Unstructured wraps, so neither side marshals. A GroupVersionResource
-// crosses as three strings. The only patch shape either caller uses is an RFC-7386
-// JSON merge patch, so it is named rather than parameterised.
-//
-// NUMBERS. A map destined for the cluster must use int64 for integers, not int:
-// the dynamic client deep-copies through a JSON-shaped conversion that panics on
-// plain int. Callers keep their int64(...) casts; an implementation may normalise.
-type K8sClient interface {
-	// Get returns one object. Missing objects yield ErrK8sNotFound.
-	Get(ctx context.Context, group, version, resource, namespace, name string) (map[string]any, error)
-	// List returns the objects in a namespace. limit <= 0 means unlimited. A
-	// missing CRD or namespace yields ErrK8sNotFound — callers rely on being able
-	// to tell "no cluster state yet" from "the request failed".
-	List(ctx context.Context, group, version, resource, namespace string, limit int64) ([]map[string]any, error)
-	// Create creates one object. A losing race yields ErrK8sAlreadyExists, which
-	// callers treat as success.
-	Create(ctx context.Context, group, version, resource, namespace string, obj map[string]any) error
-	// MergePatch applies an RFC-7386 JSON merge patch.
-	MergePatch(ctx context.Context, group, version, resource, namespace, name string, patch []byte) error
-	// Ready reports cluster reachability and, when false, WHY. The reason is
-	// surfaced verbatim to operators (the platform health route reports it), so
-	// "unavailable" is never silent — the whole point of failing closed here is
-	// that somebody can find out what is missing.
-	Ready() (ok bool, reason string)
-}
-
-// The cluster-error sentinels. They stand in for apierrors.IsNotFound and
-// friends so no caller needs the k8s error package. An implementation MUST wrap
-// the underlying error (%w) rather than replacing it: callers print the original
-// text into health payloads and 502 bodies, and losing it would turn a precise
-// RBAC message into a shrug.
-var (
-	ErrK8sNotFound      = errors.New("k8s: resource not found")
-	ErrK8sAlreadyExists = errors.New("k8s: resource already exists")
-	ErrK8sForbidden     = errors.New("k8s: forbidden (RBAC)")
-)
-
-// ── the run executor ─────────────────────────────────────────────────────────
-//
-// RunClient is the interface to the service that executes bot runs. A run is a
-// bot instance: a loop doing somebody's work, either on their own machine or in
-// a sandbox this cloud placed it in. The ones on people's own machines announce
-// themselves to the registry in clients/bot and are held there. The ones in
-// sandboxes are held by whatever placed them, and this is how the registry asks
-// about those, so one roster answers for both.
-//
-// Nil means this deployment places no sandboxes, and the roster is then exactly
-// what has announced itself. That is the whole of the OSS build: there is no
-// executor here, and the registry says so rather than pretending a run could be
-// started.
-type RunClient interface {
-	// Runs lists one org's live runs. The org is the caller's validated org and
-	// never a value the caller chose, so one tenant cannot enumerate another's.
-	//
-	// An error is an error and never an empty list: "this org has no runs" and
-	// "we could not ask" are different answers, and a console shows a different
-	// thing for each.
-	Runs(ctx context.Context, org string) ([]Run, error)
-	// Stop terminates one of an org's runs. ErrNoRun means this org has no run
-	// by that id — the same answer an id that never existed gets, so the address
-	// tells nobody which ids another tenant holds. Any other error means the
-	// executor did not answer, and the caller must not report a stop it cannot
-	// know happened.
-	Stop(ctx context.Context, org, run string) error
-}
-
-// Run is one run as the executor reports it. Every field is the executor's, and
-// the registry adds nothing to it beyond saying that a run held out there is
-// running in the cloud rather than on somebody's own machine.
-type Run struct {
-	// ID is the run's id, and the id its live session is registered under.
-	ID string
-	// Task is the instruction the run is carrying out.
-	Task string
-	// Surface is what the run drives: the desktop or terminal it has.
-	Surface string
-	// Status is the run's state in the executor's own words.
-	Status string
-	// SessionURL is the live session a console embeds to watch or attach.
-	SessionURL string
-	// StartedAt is when the run began, RFC 3339, as the executor stamped it.
-	StartedAt string
-}
-
-// ErrNoRun is the sentinel a WORKING executor returns when an org has no run by
-// that id. Every other error means the executor could not be asked.
-var ErrNoRun = errors.New("run: no such run")

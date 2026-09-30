@@ -7,11 +7,8 @@
 // subsystem is a one-line edit to Wire(), read top-to-bottom. cmd/cloud calls
 // Wire() and threads the slice into cloud.Serve — the set is defined ONCE, here.
 //
-// This is the OSS subset (compute / backend control plane). The private Hanzo
-// Cloud build ships a superset Wire() that additionally mounts the SaaS planes
-// (iam, commerce, ai, o11y, the bus, billing, and the product surfaces), each of
-// which pulls a private hanzoai/* module the OSS core deliberately does not
-// depend on.
+// This is the local dev server: every subsystem here runs on one machine with a
+// data directory as its only dependency.
 //
 // (This package must NOT live in package cloud: the subsystems import cloud for
 // Deps + Typed, so a root-package bundle would form an import cycle. As a sibling
@@ -28,10 +25,8 @@ import (
 	// owns process-lifetime resources, a Shutdown); Wire references them directly.
 	"github.com/hanzoai/cloud/clients/auditlog"
 	"github.com/hanzoai/cloud/clients/base"
-	"github.com/hanzoai/cloud/clients/bot"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/dns"
-	"github.com/hanzoai/cloud/clients/do"
 	"github.com/hanzoai/cloud/clients/exec"
 	"github.com/hanzoai/cloud/clients/flags"
 	"github.com/hanzoai/cloud/clients/functions"
@@ -39,15 +34,11 @@ import (
 	"github.com/hanzoai/cloud/clients/ingress"
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/kv"
-	"github.com/hanzoai/cloud/clients/platform"
 	"github.com/hanzoai/cloud/clients/plugin"
 	"github.com/hanzoai/cloud/clients/security"
 	"github.com/hanzoai/cloud/clients/session"
-	"github.com/hanzoai/cloud/clients/share"
 	"github.com/hanzoai/cloud/clients/storage"
 	"github.com/hanzoai/cloud/clients/tasks"
-	"github.com/hanzoai/cloud/clients/validators"
-	"github.com/hanzoai/cloud/clients/zt"
 )
 
 // Wire returns every linked subsystem as a cloud.MountSpec, in mount order. The
@@ -67,25 +58,11 @@ func Wire() []cloud.MountSpec {
 		{Name: "ingress", Mount: ingress.Mount, Shutdown: ingress.Shutdown},
 		// /v1/s3/buckets/* + /v1/s3/health. OwnsHealth (real fail-closed probe).
 		{Name: "storage", Mount: storage.Mount, OwnsHealth: true},
-		// Connect-a-cloud-account plane /v1/cloud/*: an org links its DigitalOcean
-		// account (labeled, KMS-sealed); Hanzo discovers and folds its resources.
-		{Name: "do", Mount: do.Mount},
 		// The /v1/dns forward head: relays the console DNS dashboard to the DNS
 		// control plane under the caller's own validated bearer.
 		{Name: "dns", Mount: dns.Mount},
-		{Name: "platform", Mount: platform.Mount, OwnsHealth: true},
-		// GDA/SDM validator onboarding /v1/validators/*. Owns a DB handle.
-		{Name: "validators", Mount: validators.Mount, Shutdown: ctxShutdown(validators.Shutdown)},
 		{Name: "code", Mount: code.Mount, Shutdown: code.Shutdown},
 		{Name: "session", Mount: session.Mount, Shutdown: ctxShutdown(session.Shutdown)},
-		// /v1/bot: the gateway protocol a control UI drives this cloud through,
-		// on the WebSocket upgrade and on the POST of the same path; and one
-		// segment under it, /v1/bot/runs, the roster of which bot runs are going,
-		// parked or stopped, wherever each one is running.
-		{Name: "bot", Mount: bot.Mount, Shutdown: ctxShutdown(bot.Shutdown)},
-		{Name: "zero-trust", Mount: zt.Mount},
-		// ngrok-native public sharing: /v1/share/* provisions a per-org zrok account.
-		{Name: "share", Mount: share.Mount},
 		{Name: "security", Mount: security.Mount, Shutdown: ctxShutdown(security.Shutdown), OwnsHealth: true},
 		{Name: "exec", Mount: exec.Mount},
 		{Name: "gateway", Mount: gateway.Mount},
@@ -96,7 +73,7 @@ func Wire() []cloud.MountSpec {
 		// product on a laptop with no network, and an app that only forwards
 		// somewhere else would make it a client for a thing you do not have.
 		//
-		// Every route in these three is a typed op, which is why they need no
+		// Every route in these is a typed op, which is why they need no
 		// per-app integration work: one declaration is simultaneously the REST
 		// route, the OpenAPI schema, the MCP tool and the generated SDK method.
 		{Name: "base", Mount: base.Mount, Shutdown: base.Shutdown},

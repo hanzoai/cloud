@@ -3,6 +3,7 @@ package cloud
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,10 +13,7 @@ import (
 	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/role"
-	"github.com/hanzoai/cloud/writerpin"
 	"github.com/hanzoai/cloud/zapface"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 )
@@ -53,79 +51,12 @@ func Serve(specs []MountSpec, enable []string) error {
 		return fmt.Errorf("storage lockdown: %w", err)
 	}
 
-	// HA role. Unset CLOUD_ROLE ⇒ Writer ⇒ byte-identical to the single-pod
-	// deployment. Fail CLOSED on an explicitly-invalid role rather than guess: a
-	// wrong guess either demotes the real writer or risks a second writer opening
-	// the RWO stores. This gates KMS into read-only reader mode (pickKMSClient);
-	// see the Red Handoff for the reader subsystems still to be gated.
-	resolvedRole, roleErr := role.FromEnv()
-	if roleErr != nil {
-		return fmt.Errorf("ha role: %w", roleErr)
-	}
-	cfg.Role = resolvedRole
-
-	// Reader role: a transparent, always-ready reverse proxy to the writer. It
-	// opens NO stores (the KMS ZapDB store is not RO-shareable while the writer is
-	// live — clients/kms.TestConcurrentOpen_LiveWriterStoreIsNotROShareable) and
-	// forwards every request to CLOUD_WRITER_URL, retrying dial-only across the
-	// writer's roll gap so the edge never blips. Returns here — never reaches
-	// BuildDeps. Unset CLOUD_ROLE ⇒ Writer, so this is inert by default.
-	if cfg.Role.IsReader() {
-		return serveReaderProxy(cfg)
-	}
-
-	// Writer role, optional lease. When CLOUD_WRITER_LEASE is set (the surge/
-	// overlap roll topology), take the exclusive writer lease BEFORE opening the
-	// RWO stores and release it LAST (after every store is closed) so a surge
-	// writer never double-opens the exclusive-lock ZapDB/audit stores. Default
-	// OFF: a Recreate single-writer never overlaps and needs no lease, so an unset
-	// variable is byte-identical to today.
-	if cfg.WriterLease {
-		release, lerr := acquireWriterLease(cfg.DataDir, 90*time.Second, luxlog.New("cloud").New("subsystem", "writer-lease"))
-		if lerr != nil {
-			return fmt.Errorf("writer lease: %w", lerr)
-		}
-		// Released after the shutdown path closes every store (app.Shutdown's
-		// subsystem teardown hooks + audit + gateway-policy) below; defer is the
-		// store-close backstop that also covers early error returns (the kernel
-		// reclaims on exit regardless).
-		defer func() { _ = release() }()
-	}
-
 	deps := BuildDeps(cfg)
 
-	// Surface the resolved role and the writer-pin backing it. The pin is
-	// SingleWriter today (k8s StatefulSet replicas:1 guarantees one writer);
-	// consensus (Quasar) election is stubbed (writerpin.ConsensusPin) and NOT yet
-	// gating store opens — logged here so operators see the real posture.
-	deps.Logger.Info("HA role resolved",
-		"role", cfg.Role.String(),
-		"writer_pin", writerpin.Resolve().Kind(),
-		"kms_read_only", cfg.Role.IsReader())
-
-	// Horizontal-scale shard router. When CLOUD_PEERS names >1 pod, each org is
-	// pinned to its rendezvous-hash owner pod: THIS pod is the single writer for the
-	// orgs it owns (writerpin.SingleWriter is correct PER SHARD), and any other org's
-	// request is forwarded to its owner. nil ⇒ single-pod (no-op middleware below).
-	// This is what lifts the deployment off replicas:1 without any shared RWX volume —
-	// per-pod RWO PVC + org→owner routing = one writer per tenant file. See
-	// shardrouter.go.
-	shardRtr := newShardRouter(cfg, deps.Logger)
-	if shardRtr != nil {
-		deps.Logger.Info("shard routing ENABLED (horizontal writer scale)",
-			"self", shardRtr.self, "peers", shardRtr.peerIDs(),
-			"writer_pin", "single-writer-per-shard")
-	}
-
-	// Telemetry bootstrap — the ONE site. Install the process-global OTel tracer
-	// provider (wired to the o11y in-process trace sink by clients/o11y) and ADOPT it
-	// into the embedded ai module, so ai emits its gen_ai span per LLM call through the
-	// SAME provider. Runs BEFORE MountAll mounts ai (ai's object.InitTelemetry reads
-	// the adopted-ready flag at mount), and on EVERY entrypoint — cmd/cloud AND every
-	// `hanzo <svc>` share this body — replacing the cmd/cloud-only bootstrap that left
-	// `hanzo <svc>` telemetry-dark. No-op (non-nil shutdown) when clients/o11y isn't
-	// linked or no sink/endpoint is configured. clients/o11y installs the concrete
-	// bootstrap via cloud.RegisterTelemetryInstaller (the cycle-free inversion).
+	// Telemetry bootstrap — the ONE site. Installs the process-global OTel tracer
+	// provider when an installer is registered (cloud.RegisterTelemetryInstaller);
+	// a no-op (non-nil shutdown) otherwise. Runs BEFORE MountAll, on every
+	// entrypoint.
 	telemetryShutdown := installTelemetry(context.Background(), "hanzo-cloud")
 
 	// Data-plane encryption posture (cek). On an encryption-capable build a
@@ -157,18 +88,8 @@ func Serve(specs []MountSpec, enable []string) error {
 			"; store opens fail closed until one is set (or " + cek.DevUnencryptedEnv + "=1)")
 	}
 
-	// ReadBufferSize raises the fasthttp header ceiling above the 4 KiB fiber
-	// default so a multi-domain SSO session (admin-guard Domain=.hanzo.ai
-	// cookies on every subdomain) no longer 431s legitimate requests at the
-	// public edge. Env GATEWAY_READ_BUFFER_SIZE, default 32 KiB (see config.go).
-	//
-	// BodyLimit is the same shape of bug one layer down: the framework default is
-	// 4 MiB, and a full-context chat request is BIGGER than that. A 1M-token
-	// prompt serializes to ~4.3 MB of JSON, so the 1M-context models we route to
-	// (deepseek-v4-pro, and anything glm-5.2 overflows into) were unreachable —
-	// fasthttp rejected the body before any handler ran, and its wire error is the
-	// opaque 400 "Error when parsing request", which reads like a malformed
-	// payload rather than a size cap. Env GATEWAY_BODY_LIMIT (see config.go).
+	// ReadBufferSize raises the fasthttp header ceiling above the 4 KiB default,
+	// and BodyLimit raises the 4 MiB body default (see config.go).
 	app := zip.New(zip.Config{
 		Logger:         deps.Logger,
 		ReadBufferSize: cfg.ReadBufferSize,
@@ -187,7 +108,7 @@ func Serve(specs []MountSpec, enable []string) error {
 	//  2. RequestID       — generate / propagate X-Request-Id
 	//  3. Tracing         — one OTel SERVER span per /v1/* request, over ZAP
 	//  4. Logger          — request-line log
-	//  5. SanitizeIdentity — establish a VALIDATED principal (see below)
+	//  5. IdentityMiddleware — establish a VALIDATED principal (see below)
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 
@@ -233,69 +154,29 @@ func Serve(specs []MountSpec, enable []string) error {
 
 	app.Use(middleware.Logger(deps.Logger))
 
-	// (A Reader never reaches here — it returns at serveReaderProxy above, opening
-	// no stores and no middleware pipeline. This body is the Writer path only.)
-
-	// Public site edge (clients/sites). Installed FIRST — after Recover/RequestID/
-	// Logger, BEFORE SanitizeIdentity + BillingGate — so a request whose Host is a
-	// published-site host (`<slug>.hanzo.app`) is served the site's static bytes
-	// from OUR S3 and returns HERE, never entering the authenticated/billed API
-	// pipeline. A published site is a PUBLIC artifact: no IAM JWT, no balance gate.
-	// For every other Host this middleware calls Continue() and the pipeline below
-	// runs unchanged. The slug→{org,bucket,prefix} resolver is the projects store,
-	// (The private build installs the vanity published-sites host router here; the
-	// OSS core ships no sites plane, so every Host enters the API pipeline below.)
-
-	// Edge policy — the "gateway role" cloud absorbs to serve the public
-	// api.hanzo.ai edge directly (no KrakenD gateway hop). Runs BEFORE identity by
-	// design:
+	// Edge policy. Runs BEFORE identity by design:
 	//   - EdgeCORS answers the browser OPTIONS preflight (which carries no
 	//     credentials) and short-circuits it, so a preflight never reaches auth.
-	//     No-op unless CLOUD_CORS_ORIGINS is set (the shared ingress owns CORS on
-	//     the recommended rollout — enabling both would double the ACAO header).
+	//     No-op unless CLOUD_CORS_ORIGINS is set.
 	//   - EdgeRateLimit caps an ANONYMOUS per-IP flood before the JWKS/validate/
 	//     downstream work it would trigger — the one gap ScopeRateLimit (which keys
 	//     on the validated org, below) structurally can't see. Keyed on the
-	//     public client IP; in-cluster direct callers (no X-Forwarded-For) are
-	//     exempt, matching the standalone gateway's public-only scope. See
-	//     middleware_edge.go.
+	//     forwarded client IP; a direct caller (no X-Forwarded-For) is exempt.
+	//     See middleware_edge.go.
 	app.Use(EdgeCORS(deps.GatewayPolicy))
 	app.Use(EdgeRateLimit(deps.GatewayPolicy))
 
-	// Identity trust boundary. Runs before BillingGate (which reads c.User()/
-	// c.Org()) and every subsystem, so a downstream c.IsAdmin()/c.Org()/c.User()
-	// reflects a VALIDATED IAM principal — never a raw client header. This makes
-	// the gateway's "X-User-IsAdmin is never client-supplied" contract hold even
-	// when cloud-api is reached directly (in-cluster) instead of through the
-	// gateway, closing the forgeable-admin trust boundary. The admin claim is
-	// granted ONLY to a validated SuperAdmin (owner == AdminOrg). See
-	// middleware_identity.go / auth_identity.go.
+	// Identity trust boundary. Runs before every subsystem, so a downstream
+	// c.IsAdmin()/c.Org()/c.User() reflects a VALIDATED IAM principal — never a
+	// raw client header. The admin claim is granted ONLY to a validated
+	// SuperAdmin (owner == AdminOrg). See middleware_identity.go /
+	// auth_identity.go.
 	app.Use(IdentityMiddleware(cfg))
 
-	// Console identity = the ONE validated principal, not the embedded casibase account
-	// model. When a principal is present, /v1/get-account reflects it so the operator
-	// UI's SuperAdmin gate sees the same owner+isAdmin every /v1/admin/* route already
-	// authorizes on (a PKCE session is not a casibase session — without this the UI
-	// bounced to login despite valid admin API access). No principal → casibase path
-	// unchanged. Runs AFTER IdentityMiddleware, BEFORE MountAll's casibase mount.
-	app.Use(AccountFromPrincipal())
-
-	// Shard router (horizontal writer scale). Runs IMMEDIATELY after SanitizeIdentity
-	// — so it keys on the VALIDATED, server-minted X-Org-Id (never a raw client
-	// header) — and BEFORE audit/rate-limit/billing/subsystems, so a request whose
-	// org this pod does not own is forwarded to the owner and NONE of the downstream
-	// per-org work (audit append, per-org rate ceiling, prepaid billing debit, every
-	// per-org SQLite store) runs on the wrong pod. No-op (shardRtr==nil) on a
-	// single-pod deployment: byte-identical to today. See shardrouter.go.
-	if shardRtr != nil {
-		app.Use(shardRtr.Middleware())
-	}
-
-	// Audit trail (FedRAMP AU-* / SOC 2 CC-*). Runs AFTER SanitizeIdentity so the
+	// Audit trail (FedRAMP AU-* / SOC 2 CC-*). Runs AFTER identity so the
 	// actor/isAdmin it records come from a VALIDATED principal (never a raw
-	// header), and BEFORE BillingGate + every subsystem so it wraps the whole
-	// chain and observes the final outcome — including a billing 402/503 and an
-	// admin 403 denial. It is the ONE place every security-relevant request is
+	// header), and BEFORE every subsystem so it wraps the whole chain and
+	// observes the final outcome — including an admin 403 denial. It is the ONE place every security-relevant request is
 	// recorded to the tamper-evident, append-only store (see audit_middleware.go /
 	// audit/). A write failure fails the request CLOSED (AU-5). Constructed here
 	// so the Recorder lives for the process and the /v1/admin/audit query + verify
@@ -314,9 +195,7 @@ func Serve(specs []MountSpec, enable []string) error {
 	// Per-scope rate limit (issue #70). Runs AFTER identity (needs the validated
 	// principal to key on org) and AFTER audit (so a 429 is recorded). Honors the
 	// /v1/gateway per-org OrgRPM (deps.GatewayPolicy): the runtime-mutable per-org
-	// ceiling an operator sets. No-op when no policy store is present. (The private
-	// build layers a plan-configured commerce ceiling on top; the OSS core caps on
-	// the operator-set OrgRPM alone.)
+	// ceiling an operator sets. No-op when no policy store is present.
 	app.Use(ScopeRateLimit(deps.GatewayPolicy))
 
 	// HIP-0106 liveness contract: every enabled subsystem answers
@@ -350,15 +229,6 @@ func Serve(specs []MountSpec, enable []string) error {
 		Logger:         deps.Logger,
 	}))
 
-	// IAM edge — front the standalone Hanzo IAM at /v1/iam/* (org-scoped) so the
-	// one-binary console can read org members + projects. Mounted ONLY when IAM is
-	// not folded in-process (else that subsystem already owns /v1/iam/*, via
-	// MountAll above — no double-mount) and an IAM origin is configured. Before the
-	// console catch-all, so a real IAM segment answers JSON, not the SPA shell.
-	if !cfg.Enabled("iam") && iamHost() != "" {
-		newIamEdge().mount(app)
-	}
-
 	// GET /v1/openapi.json — the THIRD projection of the same route table. ZAP
 	// replays the /v1 handlers, the console renders them, and this DESCRIBES
 	// them; all three read the one router, so none can drift from it. Mounted
@@ -376,7 +246,7 @@ func Serve(specs []MountSpec, enable []string) error {
 				"below is a route this process actually serves. Tagged by product: the first " +
 				"path segment after /v1/.",
 		},
-		openapi.Server{URL: "https://" + cfg.Domain},
+		openapi.Server{URL: serverURL(cfg.Domain)},
 	)
 
 	// Install zip's own deferred projections of the typed-op registry — the MCP
@@ -405,9 +275,8 @@ func Serve(specs []MountSpec, enable []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Durable ingest: embed the ONE tasks engine in-process + inject the per-org dialer
-	// into ai (long github/crawl/s3 ingests run as durable workflows; upload stays
-	// inline). Fail-soft — inline fallback if the engine can't start. See durable.go.
+	// Durable engine boot hook. The no-op default runs durable work inline; a
+	// registered engine takes over. See durable.go.
 	wireDurableIngest(ctx, deps)
 
 	// The rule every operation answers to, installed once and here because this
@@ -418,13 +287,10 @@ func Serve(specs []MountSpec, enable []string) error {
 	// is not (note.go).
 	app.Authorize(Rule())
 
-	// Health/metrics listener (HealthListenAddr, default :9090). Serves the
-	// liveness/readiness contract the platform probes hit (/healthz, /readyz)
-	// on a port SEPARATE from the public API, so a saturated/again-starting API
-	// surface never flaps liveness. Previously HealthListenAddr was declared but
-	// never bound; the operator's probes target :9090, so without this the pod
-	// fails liveness and CrashLoops. Runs in its own goroutine; a bind failure
-	// is fatal (propagated via listenErr) so a misconfigured port fails loud.
+	// Health/metrics listener (HealthListenAddr, default 127.0.0.1:9090). Serves
+	// the liveness/readiness contract (/healthz, /readyz) on a port SEPARATE from
+	// the API, so a saturated API surface never flaps liveness. A bind failure is
+	// fatal (propagated via listenErr) so a misconfigured port fails loud.
 	healthSrv := &http.Server{
 		Addr:              cfg.HealthListenAddr,
 		Handler:           healthMux(),
@@ -446,10 +312,9 @@ func Serve(specs []MountSpec, enable []string) error {
 			"brand", cfg.Brand,
 			"domain", cfg.Domain,
 		)
-		// ONE app, TWO transports: ZAP is the primary machine transport
-		// (PLAINTEXT TCP over :9653 — parity with prior HTTP; needs mesh mTLS), plain HTTP the edge/browser extra. Both serve the
-		// identical route surface, so /v1/* answers over either. Serve returns
-		// the first listener error.
+		// ONE app, TWO transports: ZAP (plaintext TCP, loopback by default) and
+		// HTTP. Both serve the identical route surface, so /v1/* answers over
+		// either. Serve returns the first listener error.
 		listenErr <- app.Listen(cfg.ZAPListenAddr, "http://"+cfg.ListenAddr)
 	}()
 
@@ -463,10 +328,9 @@ func Serve(specs []MountSpec, enable []string) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	_ = healthSrv.Shutdown(shutdownCtx)
-	// Flush the tracer provider FIRST — before app.ShutdownWithContext runs the o11y
-	// trace sink's teardown hook (a subsystem) — so the batch processor's buffered
-	// spans drain through the still-mounted in-process sink to datastore rather than
-	// hitting ErrNoRoute.
+	// Flush the tracer provider FIRST — before app.ShutdownWithContext runs the
+	// subsystem teardown hooks — so buffered spans drain while every sink is
+	// still mounted.
 	telemetryShutdown(shutdownCtx)
 	// Close the audit store so any in-flight append has drained through the
 	// serialized writer and the SQLite file is flushed cleanly.
@@ -481,11 +345,8 @@ func Serve(specs []MountSpec, enable []string) error {
 	// Graceful stop, owned by zip: it stops the listeners accepting, drains
 	// in-flight requests, THEN runs each subsystem's teardown hook LIFO (reverse
 	// mount order) — the hooks MountAll registered via app.OnShutdown. Draining
-	// BEFORE teardown is the fix for the old hand-rolled reverse-loop, which tore
-	// subsystems down while the listener still accepted: e.g. the agents scheduler
-	// now drains its in-flight runs (InsertRun + debit land) and closes its store
-	// only after requests quiesce. A hook error is joined into the returned error,
-	// never fatal to the others.
+	// BEFORE teardown means no subsystem is torn down while a request still uses
+	// it. A hook error is joined into the returned error, never fatal to the others.
 	return app.ShutdownWithContext(shutdownCtx)
 }
 
@@ -512,4 +373,17 @@ func healthMux() *http.ServeMux {
 		_, _ = w.Write([]byte("# HELP cloud_up 1 if the process is serving.\n# TYPE cloud_up gauge\ncloud_up 1\n"))
 	})
 	return mux
+}
+
+// serverURL is the base URL the OpenAPI document names for domain: plain HTTP on
+// a loopback host, HTTPS anywhere else.
+func serverURL(domain string) string {
+	host := domain
+	if h, _, err := net.SplitHostPort(domain); err == nil {
+		host = h
+	}
+	if host == "localhost" || net.ParseIP(host).IsLoopback() {
+		return "http://" + domain
+	}
+	return "https://" + domain
 }

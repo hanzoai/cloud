@@ -6,22 +6,22 @@
 // (@librechat/agents CodeExecutor): it POSTs {lang, code, files?} to
 // `${LIBRECHAT_CODE_BASEURL}/exec` with header `X-API-Key`, and uses the sibling
 // paths /exec/programmatic, /upload, /download/{id}, /files/{sid}. The response
-// is {session_id, stdout, stderr, files:[{name}]}. cloud-api is the single edge
-// that owns api.hanzo.ai/v1, so this subsystem mounts those paths and forwards
-// each request UNCHANGED to a sandboxed executor upstream. No code runs here —
+// is {session_id, stdout, stderr, files:[{name}]}. This subsystem mounts those
+// paths on /v1 and forwards each request UNCHANGED to a sandboxed executor
+// upstream. No code runs here —
 // this is a reverse proxy identical in shape to clients/o11y, so there is zero
 // request/response drift from the contract.
 //
 // SANDBOX: the upstream MUST be an isolated executor (Hanzo Runtime / a
 // per-call container sandbox). This binary NEVER shells out; there is no
 // os/exec anywhere in this package. Point CODE_EXEC_UPSTREAM at the sandbox
-// service's in-cluster DNS. The executor is the isolation boundary; cloud only
-// adds auth + the unified surface.
+// service. The executor is the isolation boundary; cloud only adds auth + the
+// unified surface.
 //
 // AUTH: the gateway (order 80) bypasses these paths (the credential is an opaque
 // service key on X-API-Key, not a JWT), so this subsystem enforces the key
-// itself with a constant-time compare against CODE_EXEC_API_KEY (KMS-sourced,
-// synced into the pod env). Endpoints are never open: an unset key fails closed.
+// itself with a constant-time compare against CODE_EXEC_API_KEY. Endpoints are
+// never open: an unset key fails closed.
 package exec
 
 import (
@@ -38,10 +38,10 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// defaultUpstream is the in-cluster address of the sandboxed code executor.
-// Overridable via CODE_EXEC_UPSTREAM. It must speak the LibreChat
-// code-interpreter contract (/exec, /files/{sid}, /upload, /download/{id}).
-const defaultUpstream = "http://code-exec.hanzo.svc.cluster.local:8000"
+// defaultUpstream is a sandboxed code executor on this machine. Overridable via
+// CODE_EXEC_UPSTREAM. It must speak the LibreChat code-interpreter contract
+// (/exec, /files/{sid}, /upload, /download/{id}).
+const defaultUpstream = "http://127.0.0.1:8100"
 
 // prefixes are the code-interpreter path surfaces this subsystem owns on /v1.
 // Each is forwarded verbatim to the executor (no path rewrite: the executor
@@ -82,7 +82,7 @@ func newProxy(rawURL string) (http.Handler, error) {
 	base := proxy.Director
 	proxy.Director = func(r *http.Request) {
 		base(r)              // sets scheme/host to target; joins paths
-		r.Host = target.Host // upstream vhost, not api.hanzo.ai
+		r.Host = target.Host // upstream vhost, not this edge's
 	}
 	// Code execution can be slow (installs, compute) but must not hang a worker
 	// forever; bound the wait on the executor's response headers.

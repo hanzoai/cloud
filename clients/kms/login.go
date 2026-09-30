@@ -5,8 +5,7 @@ package kms
 // The kms-operator's universalAuth transport (github.com/luxfi/kms-operator
 // packages/kmsapi) authenticates by POSTing {clientId, clientSecret} to
 // {hostAPI}/v1/kms/auth/login and expecting {accessToken, expiresIn, tokenType}.
-// cloud hosts the operator's KMS at cloud.hanzo.svc, so cloud must serve that
-// endpoint — this is it.
+// cloud serves that endpoint — this is it.
 //
 // cloud is NOT a token issuer. It cannot mint a bearer its own SanitizeIdentity
 // would validate (that requires IAM's signing key). So login BROKERS: it exchanges

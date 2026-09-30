@@ -18,10 +18,6 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// meterKind is the commerce meter key for a scan (product=security). One scan =
-// one metered unit; a metering.Client publish bills it when configured.
-const meterKind = "security.scan"
-
 // maxFiles / maxBytes bound a single scan submission so one request can't OOM
 // the process or wedge the engine. A caller with more source splits it into
 // multiple scans.
@@ -35,13 +31,10 @@ const (
 var projectRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 // state is security's own data; shared deps live in the embedded cloud.Base.
-// It holds the findings store, the (nil-safe) audit recorder and the billing
-// meter — kept here (not in Base.Bill) because its commerce provider label is
-// meterKind ("security.scan"), NOT the subsystem name.
+// It holds the findings store and the (nil-safe) audit recorder.
 type state struct {
 	store *Store
 	audit *audit.Recorder
-	bill  *cloud.ResourceMeter
 }
 
 // mounted is the process-wide handle so Shutdown can flush the store (mirrors
@@ -75,7 +68,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		State: state{
 			store: store,
 			audit: deps.Audit,
-			bill:  cloud.NewResourceMeter(deps, meterKind),
 		},
 	}
 	mounted = s
@@ -249,9 +241,6 @@ func submitScan(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(500, "save scan: %v", err)
 	}
 
-	// One metered unit per scan (product=security). Nil/disabled meter → no-op.
-	s.State.bill.Meter(principal.HomeOrg(c), principal.Project(c), meterKind, 0, c.RequestID(), clientIP(c))
-
 	// Audit: the scan happened, by whom, with what tally. The redacted findings
 	// (never the secrets) are the evidence; the tally is the AU-3 outcome.
 	emitAudit(s, c, org, sc)
@@ -375,7 +364,7 @@ func projectScope(c *zip.Ctx) string {
 	return p
 }
 
-// clientIP is the best-effort source IP for audit/metering. Prefers the
+// clientIP is the best-effort source IP for audit. Prefers the
 // gateway-forwarded header, falls back to the socket peer.
 func clientIP(c *zip.Ctx) string {
 	if xff := c.Header("X-Forwarded-For"); xff != "" {
