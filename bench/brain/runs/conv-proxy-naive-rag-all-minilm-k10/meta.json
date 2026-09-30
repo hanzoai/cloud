@@ -1,8 +1,0 @@
-{
- "bench": "locomo-conv (proxy: original LoCoMo QA pool; paper styles unreleased)",
- "protocol": "arXiv 2609.03467: raw turns, top-k, recall=|ret∩gold|/|gold| with verbatim containment",
- "embed": "all-minilm",
- "k": 10,
- "memories": "speaker: text",
- "when": "2026-09-15T14:42:55.252Z"
-}

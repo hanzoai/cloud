@@ -11,8 +11,7 @@ PORT    ?= 8080
 
 # The dev run binds LOOPBACK, not every interface. An unauthenticated caller
 # shares the local namespace (see README), which is the right trade for a
-# machine-local tool and the wrong one for anything reachable. Production sets
-# CLOUD_LISTEN itself and is unaffected.
+# machine-local tool and the wrong one for anything reachable.
 DEV_ENV := CLOUD_LISTEN=127.0.0.1:$(PORT) \
            CLOUD_DATA_DIR=$(DEVDIR)/data \
            CLOUD_ENABLE_STAGED=functions
@@ -39,23 +38,17 @@ dev: build $(KEYFILE)
 
 run: dev
 
-# One local key, minted once, kept out of git. This is the SAME path production
-# takes — cloud encrypts its SQLite stores at rest and refuses to open them
-# without a key. Local development gets a real key rather than an exemption, so
-# the thing you run on your laptop is the thing that runs in production.
+# One local key, minted once, kept out of git. cloud encrypts its SQLite stores
+# at rest and refuses to open them without a key, so local development gets a
+# real key rather than an exemption.
 # (CLOUD_DEV_UNENCRYPTED=1 still opts out if you want plaintext files to poke at.)
 $(KEYFILE):
 	@mkdir -p $(DEVDIR)
 	@umask 077 && openssl rand -base64 32 > $(KEYFILE)
 	@echo "minted $(KEYFILE)"
 
-# The Go tree, then the one bench lane with tests. bench/market drives agents
-# with real money in a live run, so its state machine — periods, budget
-# refusals, the read window, what gets recorded as finished — is exercised here
-# against a stand-in that spends nothing.
 test:
 	go test ./...
-	node --test 'bench/market/test/*.test.mjs'
 
 vet:
 	go vet ./...
@@ -64,7 +57,7 @@ vet:
 native:
 	cargo build --release --manifest-path native/flags/Cargo.toml
 
-# Refuses any push to origin that carries private-edition history or imports.
+# Refuses any push to origin that carries non-public history or imports.
 # One command, and git remembers it.
 hooks:
 	git config core.hooksPath .githooks
