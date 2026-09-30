@@ -1,26 +1,21 @@
 #!/bin/sh
-# Refuse to publish the private enterprise edition to the public Apache-2.0 repo.
+# Keep the public repo (github.com/hanzoai/cloud) public-only.
 #
-# The public repo (github.com/hanzoai/cloud) and the private one share no
-# history. One mistyped command in this checkout -- `git push origin HEAD:main`
-# after fetching a private branch, or `git merge forge/main` -- relicenses the
-# private tree. Two checks, run only when the destination is the public repo:
+# This repo shares no history with any private tree. Two checks, run only when
+# the destination is the public repo:
 #
-#   HISTORY  no pushed commit may be reachable from a private remote's ref.
+#   HISTORY  no pushed commit may be reachable from a non-origin remote's ref.
 #   IMPORTS  no pushed .go / go.mod blob may reference a private module.
 #
-# Private == every refs/remotes/ namespace that is not origin. Naming the
-# remotes individually would miss the stale ones: this checkout carries
-# forgeall/* and incx/*, left by removed remotes, holding thousands of
-# private commits.
+# Non-origin == every refs/remotes/ namespace that is not origin, including
+# ones left behind by removed remotes. The hook runs git, grep and awk only.
 
 set -u
 
 remote_name=${1-}
 remote_url=${2-}
 
-# Guard the public repo only. Everything else -- forge, gh, inc, inc2 -- is
-# already private, and people push those from sibling checkouts.
+# Guard the public repo only.
 guard=no
 [ "$remote_name" = origin ] && guard=yes
 case $remote_url in
@@ -30,12 +25,11 @@ esac
 
 is_zero() { case $1 in *[!0]*) return 1 ;; *) return 0 ;; esac; }
 
-# A module path is private if it lives under hanzo-inc, or is one of the three
-# closed-source libraries. Boundary class keeps `hanzoai/authz` from matching a
-# longer name; github.com/luxfi/kms is public and matches nothing here.
-private_import='github\.com/hanzo-inc/|hanzoai/(authz|licensing|metrics)([^0-9A-Za-z_-]|$)'
+# A module path is private if it lives under hanzo-inc, or is hanzoai/licensing.
+# The boundary class keeps `hanzoai/licensing` from matching a longer name.
+private_import='github\.com/hanzo-inc/|hanzoai/licensing([^0-9A-Za-z_-]|$)'
 # Same set, but matching the whole module path so the refusal can quote it.
-private_import_show='(github\.com/)?hanzo-inc/[0-9A-Za-z._/-]*|(github\.com/)?hanzoai/(authz|licensing|metrics)[0-9A-Za-z._/-]*'
+private_import_show='(github\.com/)?hanzo-inc/[0-9A-Za-z._/-]*|(github\.com/)?hanzoai/licensing[0-9A-Za-z._/-]*'
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/prepush.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
@@ -80,7 +74,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 			echo "  private history: $(printf '%s\n' "$bad" | wc -l) of $total pushed commits are reachable from a private remote."
 			echo "    $(git log -1 --format='%h %s' "$first")"
 			echo "    also on: ${where:-a private ref}"
-			echo "  The public and private editions share no history. Do not merge or push across them."
+			echo "  This repo shares no history with a private tree. Do not merge or push across them."
 			fail=1
 			continue
 		fi
@@ -118,7 +112,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 		[ -n "$hit" ] || continue
 		echo "    $path  ($(git rev-parse --short "$commit"))  ->  $hit"
 	done | sort -u | head -20
-	echo "  These modules are closed source. The public edition must not reference them."
+	echo "  These modules are not public. This repo must not reference them."
 	fail=1
 done
 

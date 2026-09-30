@@ -1,10 +1,10 @@
-pre-push guards the public Apache-2.0 repo (origin, github.com/hanzoai/cloud).
+pre-push guards the public repo (origin, github.com/hanzoai/cloud).
 It refuses a push to origin when either is true:
-  HISTORY  a pushed commit is reachable from a private remote's ref. Private
-           means every refs/remotes/ namespace except origin -- forge, gh,
-           inc, inc2 and stale leftovers. Refs you never fetched are not
-           consulted, so a fresh clone still pushes.
-  IMPORTS  a pushed .go or go.mod blob references github.com/hanzo-inc/...,
-           hanzoai/authz, hanzoai/licensing or hanzoai/metrics. It reads the
-           commits' trees, not your working tree. luxfi/kms is public.
-Other remotes and branch deletions are not checked.  Install:  git config core.hooksPath .githooks
+  HISTORY  a pushed commit is reachable from a non-origin remote's ref.
+           Refs you never fetched are not consulted, so a fresh clone still
+           pushes.
+  IMPORTS  a pushed .go or go.mod blob references github.com/hanzo-inc/...
+           or hanzoai/licensing. It reads the commits' trees, not your working
+           tree.
+The hook runs git, grep and awk only. Other remotes and branch deletions are
+not checked.  Install:  git config core.hooksPath .githooks
