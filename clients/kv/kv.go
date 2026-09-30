@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Package kv provides the local Key-Value store over embedded SQLite.
 package kv
