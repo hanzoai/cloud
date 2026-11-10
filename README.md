@@ -15,18 +15,18 @@ Requires Go 1.26.5 and `openssl`.
 
 ```bash
 git clone https://github.com/hanzoai/cloud && cd cloud
-CGO_ENABLED=0 make dev
+make dev
 ```
 
 This builds `./cloud`, writes a random key to `.dev/master.key` (mode 0600,
 gitignored) the first time, and serves <http://127.0.0.1:8080> with its data in
 `.dev/data`. The console is embedded.
 
-Stores are encrypted at rest with SQLCipher, and today only the pure-Go SQLite
-backend can do that, hence `CGO_ENABLED=0`. A default cgo build refuses to start
-with a key ([#3](https://github.com/hanzoai/cloud/issues/3)). Keep
-`.dev/master.key`: the stores open only with the key that created them.
-`CLOUD_DEV_UNENCRYPTED=1` runs without a key and says so on every boot.
+Stores are encrypted at rest with SQLCipher via the pure-Go SQLite backend.
+`Makefile` defaults to `CGO_ENABLED=0` so `make dev` works out of the box with
+no external C dependencies. Keep `.dev/master.key`: the stores open only with
+the key that created them. `CLOUD_DEV_UNENCRYPTED=1` runs without a key and
+says so on every boot.
 
 The same run without make, for a launcher script:
 
@@ -57,7 +57,7 @@ curl 127.0.0.1:8080/v1/openapi.json     # every route this process serves
 A second cloud on the same machine needs its own address for all three:
 
 ```bash
-CLOUD_HEALTH_LISTEN=127.0.0.1:19090 CLOUD_ZAP_LISTEN=127.0.0.1:19653 CGO_ENABLED=0 make dev PORT=18080
+CLOUD_HEALTH_LISTEN=127.0.0.1:19090 CLOUD_ZAP_LISTEN=127.0.0.1:19653 make dev PORT=18080
 ```
 
 ### IAM and KMS
@@ -88,7 +88,7 @@ URL. Secrets are sealed under the master key in `.dev/data/orgs/<org>/kms.db`.
 ### The hanzo CLI
 
 `hanzo network use local` points the [hanzo CLI](https://github.com/hanzoai/cli)
-at `http://localhost:3690`, and `CGO_ENABLED=0 make dev PORT=3690` serves there.
+at `http://localhost:3690`, and `make dev PORT=3690` serves there.
 The CLI still does not reach it: on a loopback network it starts a separate
 `host` binary that this repository does not build, and stops with
 `no local cloud host` ([#4](https://github.com/hanzoai/cloud/issues/4)). Call the
@@ -197,16 +197,23 @@ s3 subsystem mounted fail-closed: S3_ACCESS_KEY/S3_SECRET_KEY not set (all ops 5
 ## Develop
 
 ```bash
-make build          # go build, no Rust needed; CGO_ENABLED=0 for a binary that can encrypt
+make build          # go build, no Rust needed; defaults to CGO_ENABLED=0 for encryption
 make test           # go test ./...
 make native         # optional: cargo build the Rust flag evaluator
-make build TAGS=flags_native
+CGO_ENABLED=1 make build TAGS=flags_native  # it links over cgo; see below
 make hooks          # install the pre-push guard — do this once
 ```
 
 `make hooks` points git at `.githooks`, which refuses any push to `origin`
 carrying history from another remote or an import of a non-public module. It
 runs git, grep and awk only.
+
+The flag evaluator is Rust linked over cgo, so `TAGS=flags_native` needs
+`CGO_ENABLED=1`, and the Makefile stops rather than quietly building without
+it. A cgo build links ordinary SQLite and cannot encrypt, so that binary starts
+only with `CLOUD_DEV_UNENCRYPTED=1`. To keep encryption, link libsqlcipher as
+well: `CGO_ENABLED=1 make build TAGS=flags_native,libsqlite3`, with
+`CGO_CFLAGS` and `CGO_LDFLAGS` pointing at it.
 
 Benchmarks for this server live in
 [hanzoai/benchmarks](https://github.com/hanzoai/benchmarks).

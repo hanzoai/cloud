@@ -135,14 +135,17 @@ func SetMasterKey(k []byte) {
 //	               on an encryption-capable build. The last is the production
 //	               fail-closed: a capable binary never silently ships plaintext.
 //
-// EVERY BUILD IS CAPABLE TODAY, and the error text must not say otherwise.
-// hanzoai/sqlite reports EncryptionAvailable() == true under BOTH build tags: the
-// cgo backend links libsqlcipher, and the pure-Go backend encrypts through the
-// hanzoai/sqlcipher codec VFS. There is no longer a plaintext-only backend, so
-// the no-key branch below is the one every build takes.
+// EVERY BUILD REPORTS THAT IT CAN ENCRYPT, BUT NOT EVERY BUILD CAN. hanzoai/sqlite
+// v0.3.2 returns EncryptionAvailable() == true under both backends, so the no-key
+// branch below is the one every build takes. Two builds really encrypt: the
+// pure-Go backend (CGO_ENABLED=0, the Makefile default) through the
+// hanzoai/sqlcipher codec VFS, and a cgo build with -tags libsqlite3 linked
+// against libsqlcipher. A default cgo build links ordinary SQLite, which ignores
+// the key and writes plaintext; nothing here can see that from the flag, so
+// Capable() measures it at boot and refuses.
 //
-// This used to be untrue, and the refusal still carried the advice from back
-// then: "or run a pure-Go dev build". That route is gone. Following it landed you
+// The no-key refusal once carried the advice "or run a pure-Go dev build", from
+// when the pure-Go backend could not encrypt. That route is gone. Following it landed you
 // on a build that refuses for exactly the same reason, having just logged that
 // encryption was off — the message named a cure for the disease it was
 // describing. The advice is removed rather than the refusal relaxed: a build that
@@ -270,9 +273,9 @@ func Capable() error {
 	}
 	if classify(path) != stateEncrypted {
 		return fmt.Errorf("cek: this build cannot encrypt a store — a keyed database " +
-			"was written with a plaintext header. Build with CGO_ENABLED=1 -tags libsqlite3 " +
-			"linked against libsqlcipher, or set " + DevUnencryptedEnv + "=1 to run unencrypted " +
-			"on purpose")
+			"was written with a plaintext header. Build with CGO_ENABLED=0 (pure-Go SQLCipher), " +
+			"or build with CGO_ENABLED=1 -tags libsqlite3 linked against libsqlcipher, " +
+			"or set " + DevUnencryptedEnv + "=1 to run unencrypted on purpose")
 	}
 	return nil
 }

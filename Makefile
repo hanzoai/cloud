@@ -4,6 +4,14 @@
 # key if there isn't one, serve on http://127.0.0.1:8080. No cluster, no
 # network, no Rust toolchain, nothing to configure.
 
+# Default to the pure-Go SQLite backend, which encrypts with no C library
+# installed. A default cgo build links ordinary SQLite, cannot encrypt, and
+# refuses to start with the key `make dev` mints (#3). A cgo build encrypts only
+# with -tags libsqlite3 linked against libsqlcipher. Override with
+# CGO_ENABLED=1 make build ...
+CGO_ENABLED ?= 0
+export CGO_ENABLED
+
 BIN     := cloud
 DEVDIR  := .dev
 KEYFILE := $(DEVDIR)/master.key
@@ -30,6 +38,16 @@ build:
 TAGS ?=
 ifneq ($(TAGS),)
 build: export GOFLAGS += -tags=$(TAGS)
+endif
+
+# The native evaluator links Rust over cgo (engine.go is `cgo && flags_native`).
+# Under the CGO_ENABLED=0 default the tag would select engine_stub.go without a
+# word, so stop instead.
+comma := ,
+ifneq ($(filter flags_native,$(subst $(comma), ,$(TAGS))),)
+ifeq ($(CGO_ENABLED),0)
+$(error TAGS=flags_native needs cgo: CGO_ENABLED=1 make build TAGS=flags_native, and add libsqlite3 linked against libsqlcipher if the binary must encrypt)
+endif
 endif
 
 dev: build $(KEYFILE)
