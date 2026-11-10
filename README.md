@@ -9,6 +9,8 @@ audit, and a plugin runtime. Every subsystem mounts from one composition root
 No Kubernetes. No cluster. No network. No Rust toolchain. A data directory is
 the whole dependency, and every default address is on this machine.
 
+> **Full local / air-gapped stack:** Pair this server with [`hanzoai/engine`](https://github.com/hanzoai/engine) (`:1234`, local open-weight LLM serving + offline `/ui` chat) and optional [`hanzoai/iam`](https://github.com/hanzoai/iam) (`:8000`, OIDC / JWKS). Step-by-step instructions and air-gapped bundle staging live in the **[Self-Hosting & Air-Gapped Guide](https://docs.hanzo.ai/docs/self-hosting)**.
+
 ## Run locally
 
 Requires Go 1.26.5 and `openssl`.
@@ -68,8 +70,11 @@ This edition has no IAM of its own. It accepts JWTs issued by
 on the same machine, run in its dev mode:
 
 ```bash
-# in a checkout of github.com/hanzoai/iam
-IAM_DEV_HOST_RELATIVE=1 go run . serve --http http://127.0.0.1:8000 --init-data init_data.json
+# in a checkout of github.com/hanzoai/iam (generate dev signing key + seed once, then serve on :8000)
+mkdir -p .dev/keys && openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out .dev/keys/cert-dev
+printf '{"organizations":[{"owner":"admin","name":"hanzo"}],"certs":[{"owner":"admin","name":"cert-dev","cryptoAlgorithm":"RS256"}],"applications":[{"owner":"admin","name":"hanzo-dev","clientId":"hanzo-dev","organization":"hanzo","enablePassword":true}]}\n' > .dev/init_data.json
+IAM_DEV_HOST_RELATIVE=1 IAM_SIGNING_KEYS=.dev/keys \
+  go run . serve --http http://127.0.0.1:8000 --zap 127.0.0.1:19653 --init-data .dev/init_data.json
 ```
 
 `/v1/base` needs no token. `/v1/kms/orgs/{org}/secrets` does: without one it
