@@ -1,0 +1,11 @@
+.git
+.dev
+.githooks
+bin
+bench
+cloud
+*.db
+*.db-shm
+*.db-wal
+*.dek
+*.lock

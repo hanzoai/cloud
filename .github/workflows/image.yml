@@ -1,0 +1,122 @@
+name: Publish OCI Image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: [linux-amd64]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build multi-arch static binaries (CGO_ENABLED=0)
+        env:
+          CGO_ENABLED: "0"
+          GOWORK: "off"
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA::7}"
+          VERSION="${GITHUB_REF_NAME}-${SHORT_SHA}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
+
+          go vet ./...
+
+          for arch in amd64 arm64; do
+            mkdir -p "dist/linux-${arch}"
+            GOOS=linux GOARCH="${arch}" go build -trimpath \
+              -ldflags="-s -w -X github.com/hanzoai/cloud.Version=${VERSION}" \
+              -o "dist/linux-${arch}/cloud" ./cmd/cloud
+            chmod 0755 "dist/linux-${arch}/cloud"
+            tar --owner=65532 --group=65532 -cf "dist/layer-${arch}.tar" -C "dist/linux-${arch}" cloud
+          done
+
+      - name: Install crane and publish multi-arch OCI index
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BIN="${HOME}/.local/bin"
+          mkdir -p "${BIN}"
+          export PATH="${BIN}:${PATH}"
+
+          if ! command -v crane >/dev/null 2>&1; then
+            CRANE_VER="v0.20.3"
+            curl -fsSL "https://github.com/google/go-containerregistry/releases/download/${CRANE_VER}/go-containerregistry_Linux_x86_64.tar.gz" \
+              | tar xz -C "${BIN}" crane
+          fi
+          crane version
+
+          printf '%s' "${GITHUB_TOKEN}" | crane auth login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+          REPO="ghcr.io/hanzoai/cloud-oss"
+          BASE_AMD64="gcr.io/distroless/static-debian12:nonroot@sha256:52dcfbabb7457ea47c82f6e13af8c8a4a1d9f7b0145142b3ecab20f2b888411d"
+          BASE_ARM64="gcr.io/distroless/static-debian12:nonroot@sha256:06c3c14b7fa252d9f4285242d2d665ce3b51f74b02d3c529464f220f2912aecb"
+
+          AMD64_TAG="${REPO}:sha-${SHORT_SHA}-amd64"
+          ARM64_TAG="${REPO}:sha-${SHORT_SHA}-arm64"
+
+          crane mutate "${BASE_AMD64}" \
+            --append dist/layer-amd64.tar \
+            --entrypoint /cloud \
+            -u 65532:65532 \
+            -e CLOUD_LISTEN=:8080 \
+            -e CLOUD_DATA_DIR=/var/lib/cloud \
+            -l org.opencontainers.image.source=https://github.com/hanzoai/cloud \
+            -l org.opencontainers.image.title="Hanzo Cloud (OSS)" \
+            -l org.opencontainers.image.licenses="Apache-2.0 OR MIT" \
+            -l org.opencontainers.image.revision="${GITHUB_SHA}" \
+            -l org.opencontainers.image.version="${VERSION}" \
+            -t "${AMD64_TAG}"
+
+          crane mutate "${BASE_ARM64}" \
+            --append dist/layer-arm64.tar \
+            --entrypoint /cloud \
+            -u 65532:65532 \
+            -e CLOUD_LISTEN=:8080 \
+            -e CLOUD_DATA_DIR=/var/lib/cloud \
+            -l org.opencontainers.image.source=https://github.com/hanzoai/cloud \
+            -l org.opencontainers.image.title="Hanzo Cloud (OSS)" \
+            -l org.opencontainers.image.licenses="Apache-2.0 OR MIT" \
+            -l org.opencontainers.image.revision="${GITHUB_SHA}" \
+            -l org.opencontainers.image.version="${VERSION}" \
+            -t "${ARM64_TAG}"
+
+          SHA_TAG="${REPO}:sha-${SHORT_SHA}"
+          crane index append -m "${AMD64_TAG}" -m "${ARM64_TAG}" -t "${SHA_TAG}"
+
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            crane index append -m "${AMD64_TAG}" -m "${ARM64_TAG}" -t "${REPO}:main"
+            crane index append -m "${AMD64_TAG}" -m "${ARM64_TAG}" -t "${REPO}:latest"
+          fi
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            crane index append -m "${AMD64_TAG}" -m "${ARM64_TAG}" -t "${REPO}:${VERSION}"
+            crane index append -m "${AMD64_TAG}" -m "${ARM64_TAG}" -t "${REPO}:v${VERSION}"
+          fi
+
+      - name: Check anonymous pull token status
+        run: |
+          curl -sS "https://ghcr.io/token?scope=repository:hanzoai/cloud-oss:pull&service=ghcr.io" | head -c 200
+          echo ""
