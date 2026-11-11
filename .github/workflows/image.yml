@@ -21,12 +21,31 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Configure git credentials for Go modules
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          CFG="${RUNNER_TEMP}/gitconfig-ci"
+          : > "${CFG}"
+          if [ -n "${GH_PAT:-}" ]; then
+            GIT_CONFIG_GLOBAL="${CFG}" git config --global \
+              url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+          fi
+          {
+            echo "GIT_CONFIG_GLOBAL=${CFG}"
+            echo "GIT_CONFIG_NOSYSTEM=1"
+            echo "GONOSUMDB=github.com/luxfi/*,github.com/hanzoai/*,github.com/hanzos3/*"
+          } >> "$GITHUB_ENV"
 
       - name: Build multi-arch static binaries (CGO_ENABLED=0)
         env:
