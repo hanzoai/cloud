@@ -21,6 +21,13 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "version", "--version", "-V", "-v":
+			fmt.Printf("hanzo-cloud %s\n", cloud.Version)
+			return
+		}
+	}
 	// Telemetry is bootstrapped inside cloud.Serve (one site, every entrypoint —
 	// cmd/cloud AND every `hanzo <svc>`), so main() is just the full-surface
 	// entrypoint. nil ⇒ honor cfg.Enable from flags/env (empty = all subsystems).
