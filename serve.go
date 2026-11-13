@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -215,6 +217,12 @@ func Serve(specs []MountSpec, enable []string) error {
 		})
 	}
 
+	// Top-level liveness/readiness on the main app so callers over the ZAP socket
+	// (`hanzo network start` probes GET /healthz on host.zap.sock; #4) and over the
+	// HTTP API listener get `200 {"status":"ok"}` instead of falling through to the
+	// console SPA catch-all.
+	mountHealth(app)
+
 	if err := MountAll(app, specs, cfg, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
 	}
@@ -305,6 +313,10 @@ func Serve(specs []MountSpec, enable []string) error {
 		}
 	}()
 	go func() {
+		if strings.HasPrefix(cfg.ZAPListenAddr, "/") || strings.HasSuffix(cfg.ZAPListenAddr, ".sock") {
+			_ = os.MkdirAll(filepath.Dir(cfg.ZAPListenAddr), 0o700)
+			_ = os.Remove(cfg.ZAPListenAddr)
+		}
 		deps.Logger.Info("listening",
 			"http", cfg.ListenAddr,
 			"zap", cfg.ZAPListenAddr,
@@ -312,9 +324,9 @@ func Serve(specs []MountSpec, enable []string) error {
 			"brand", cfg.Brand,
 			"domain", cfg.Domain,
 		)
-		// ONE app, TWO transports: ZAP (plaintext TCP, loopback by default) and
-		// HTTP. Both serve the identical route surface, so /v1/* answers over
-		// either. Serve returns the first listener error.
+		// ONE app, TWO transports: ZAP (plaintext TCP or unix socket) and
+		// HTTP. Both serve the identical route surface, so /v1/* and /healthz
+		// answer over either. Serve returns the first listener error.
 		listenErr <- app.Listen(cfg.ZAPListenAddr, "http://"+cfg.ListenAddr)
 	}()
 
@@ -348,6 +360,17 @@ func Serve(specs []MountSpec, enable []string) error {
 	// BEFORE teardown means no subsystem is torn down while a request still uses
 	// it. A hook error is joined into the returned error, never fatal to the others.
 	return app.ShutdownWithContext(shutdownCtx)
+}
+
+// mountHealth registers /healthz and /readyz on the main zip.App so both the
+// ZAP listener (including the CLI's unix socket) and the HTTP API listener
+// answer liveness/readiness probes directly (#4).
+func mountHealth(app *zip.App) {
+	ok := func(c *zip.Ctx) error {
+		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	}
+	app.Get("/healthz", ok)
+	app.Get("/readyz", ok)
 }
 
 // healthMux is the liveness/readiness + metrics contract on the ops port

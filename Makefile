@@ -12,10 +12,11 @@
 CGO_ENABLED ?= 0
 export CGO_ENABLED
 
-BIN     := cloud
-DEVDIR  := .dev
-KEYFILE := $(DEVDIR)/master.key
-PORT    ?= 8080
+BIN      := cloud
+HOST_BIN := bin/host
+DEVDIR   := .dev
+KEYFILE  := $(DEVDIR)/master.key
+PORT     ?= 8080
 
 # The dev run binds LOOPBACK, not every interface. An unauthenticated caller
 # shares the local namespace (see README), which is the right trade for a
@@ -24,7 +25,7 @@ DEV_ENV := CLOUD_LISTEN=127.0.0.1:$(PORT) \
            CLOUD_DATA_DIR=$(DEVDIR)/data \
            CLOUD_ENABLE_STAGED=functions
 
-.PHONY: all build dev run test vet native hooks clean
+.PHONY: all build host plugin dev run test vet native hooks clean
 
 all: build
 
@@ -34,10 +35,19 @@ all: build
 build:
 	go build -o $(BIN) ./cmd/cloud
 
+# Local network host daemon (`hanzo network start` looks for bin/host and tells
+# the user to run `make host plugin`; #4). All subsystems are wired in-binary via
+# apps.Wire(), so `plugin` is a no-op alias kept for CLI compatibility.
+host:
+	@mkdir -p $(dir $(HOST_BIN))
+	go build -o $(HOST_BIN) ./cmd/host
+
+plugin: host
+
 # Rebuild with the native evaluator: make native && make build TAGS=flags_native
 TAGS ?=
 ifneq ($(TAGS),)
-build: export GOFLAGS += -tags=$(TAGS)
+build host: export GOFLAGS += -tags=$(TAGS)
 endif
 
 # The native evaluator links Rust over cgo (engine.go is `cgo && flags_native`).
@@ -82,5 +92,5 @@ hooks:
 	@echo "pre-push guard active"
 
 clean:
-	rm -f $(BIN)
-	rm -rf $(DEVDIR)
+	rm -f $(BIN) $(HOST_BIN)
+	rm -rf $(DEVDIR) bin

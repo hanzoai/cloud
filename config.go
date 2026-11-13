@@ -194,6 +194,7 @@ func LoadConfig() *Config {
 		flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "data root")
 		flag.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "HTTP listener")
 		flag.StringVar(&cfg.ListenAddr, "addr", cfg.ListenAddr, "HTTP listener (alias for -listen)")
+		flag.StringVar(&cfg.ZAPListenAddr, "zap", cfg.ZAPListenAddr, "ZAP-RPC listener (TCP address or unix socket path)")
 		flag.Parse()
 	})
 

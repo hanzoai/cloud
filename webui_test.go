@@ -27,6 +27,7 @@ func get(t *testing.T, app *zip.App, path string) (*http.Response, string) {
 
 func TestTmpConsole(t *testing.T) {
 	app := zip.New(zip.Config{})
+	mountHealth(app)
 	app.Get("/v1/kv/:key", func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"k": c.Param("key")}) })
 	if err := mountConsole(app); err != nil {
 		t.Fatal(err)
@@ -44,6 +45,8 @@ func TestTmpConsole(t *testing.T) {
 		{"/kv", 200, "text/html", "<title>"},
 		{"/deep/client/route", 200, "text/html", "console.js"},
 		{"/../webui.go", 200, "text/html", "<title>"},
+		{"/healthz", 200, "application/json", `{"status":"ok"}`},
+		{"/readyz", 200, "application/json", `{"status":"ok"}`},
 		{"/v1/nope", 404, "application/json", `{"error":{"code":"not_found","message":"no such route"}}`},
 		{"/v1", 404, "application/json", "not_found"},
 		{"/zap/x", 404, "application/json", "not_found"},
