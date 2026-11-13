@@ -5,10 +5,9 @@ go 1.26.8
 // Dependencies will be added as subsystems are mounted per HIP-0106.
 
 require (
-	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/s3-go v1.0.0
-	github.com/hanzoai/sqlite v0.3.2
+	github.com/hanzoai/sqlite v0.5.10
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.5.0
 	github.com/luxfi/zapdb v1.10.1
@@ -20,16 +19,21 @@ require (
 )
 
 require (
-	github.com/hanzoai/csqlite v0.1.0 // indirect
-	github.com/hanzoai/sqlcipher v0.1.0 // indirect
+	github.com/hanzoai/csqlite v0.1.2 // indirect
+	github.com/hanzoai/sqlcipher v0.1.1 // indirect
 	github.com/hanzos3/go-sdk v1.0.2 // indirect
 	github.com/zap-proto/http v0.3.1 // indirect
 )
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.2.0 // indirect
+	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/segmentio/fasthash v1.0.3 // indirect
+	modernc.org/libc v1.72.3 // indirect
+	modernc.org/mathutil v1.7.1 // indirect
+	modernc.org/memory v1.11.0 // indirect
+	modernc.org/sqlite v1.51.0 // indirect
 )
 
 require (
@@ -47,7 +51,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-python/gpython v0.2.0
+	github.com/go-python/gpython v0.2.0 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
@@ -73,7 +77,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
-	github.com/tetratelabs/wazero v1.12.0
+	github.com/tetratelabs/wazero v1.12.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
@@ -100,7 +104,7 @@ require (
 	github.com/valyala/fasthttp v1.72.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/sys v0.50.0
 	golang.org/x/text v0.40.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )

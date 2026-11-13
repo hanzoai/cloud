@@ -193,6 +193,7 @@ func LoadConfig() *Config {
 		flag.StringVar(&cfg.KMSMasterKeyRef, "kms-master-key-ref", cfg.KMSMasterKeyRef, "KMS master key reference")
 		flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "data root")
 		flag.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "HTTP listener")
+		flag.StringVar(&cfg.ListenAddr, "addr", cfg.ListenAddr, "HTTP listener (alias for -listen)")
 		flag.Parse()
 	})
 
@@ -295,6 +296,9 @@ func contains(list []string, name string) bool {
 // PORT=127.0.0.1:3000 binds loopback and a malformed value fails loudly at the
 // listener instead of being quietly rewritten into something that works.
 func listenDefault() string {
+	if addr := strings.TrimSpace(os.Getenv("CLOUD_ADDR")); addr != "" {
+		return addr
+	}
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
 		return ":8080"

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"testing"
 	"time"
@@ -385,7 +386,13 @@ func TestInvokeBash(t *testing.T) {
 			if out.Status != tc.status {
 				t.Fatalf("status = %q, want %q (stderr %q)", out.Status, tc.status, out.Stderr)
 			}
-			if out.ExitCode != tc.exitCode {
+			if goruntime.GOOS == "windows" && tc.exitCode == noExit {
+				// MSYS2/Git Bash on Windows encodes POSIX SIGKILL (9) as exit code 9<<8 = 2304
+				// rather than reporting Unix WaitStatus.Signaled() via ExitCode() == -1.
+				if out.ExitCode != noExit && out.ExitCode != 2304 {
+					t.Fatalf("exitCode = %d, want %d or 2304", out.ExitCode, noExit)
+				}
+			} else if out.ExitCode != tc.exitCode {
 				t.Fatalf("exitCode = %d, want %d", out.ExitCode, tc.exitCode)
 			}
 			if out.Stdout != tc.stdout {

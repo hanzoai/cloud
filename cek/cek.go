@@ -67,7 +67,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	sqlitedrv "github.com/hanzoai/sqlite"
@@ -108,7 +107,7 @@ const (
 
 // principalType domain-separates cloud's platform databases from IAM's org/user
 // stores in the shared HKDF namespace.
-const principalType = sqlitedrv.PrincipalGlobal
+const principalType = principalGlobal
 
 var (
 	masterOnce     sync.Once
@@ -253,7 +252,7 @@ func Capable() error {
 	path := filepath.Join(dir, "probe.db")
 	// The driver's own key, so the probe exercises the same material a real store
 	// would be given rather than a plausible-looking one.
-	dek, err := sqlitedrv.NewDEK()
+	dek, err := newDEK()
 	if err != nil {
 		return fmt.Errorf("cek: capability probe: %w", err)
 	}
@@ -390,10 +389,10 @@ func mintSidecar(master []byte) (dek, sidecar []byte, err error) {
 		return nil, nil, err
 	}
 	defer zero(kek)
-	if dek, err = sqlitedrv.NewDEK(); err != nil {
+	if dek, err = newDEK(); err != nil {
 		return nil, nil, fmt.Errorf("cek: new DEK: %w", err)
 	}
-	wrapped, err := sqlitedrv.WrapDEK(kek, dek, aad)
+	wrapped, err := wrapDEK(kek, dek, aad)
 	if err != nil {
 		zero(dek)
 		return nil, nil, fmt.Errorf("cek: wrap DEK: %w", err)
@@ -415,7 +414,7 @@ func unwrapSidecar(master, sidecar []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer zero(kek)
-	dek, err := sqlitedrv.UnwrapDEK(kek, wrapped, aad)
+	dek, err := unwrapDEK(kek, wrapped, aad)
 	if err != nil {
 		return nil, fmt.Errorf("cek: unwrap DEK (wrong master key or corrupt sidecar): %w", err)
 	}
@@ -426,11 +425,11 @@ func unwrapSidecar(master, sidecar []byte) ([]byte, error) {
 // hex(fileID) so the id — not any path or config value — is the sole identity.
 func deriveFor(master, fileID []byte) (kek, aad []byte, err error) {
 	id := hex.EncodeToString(fileID)
-	kek, err = sqlitedrv.DeriveKey(master, principalType, id)
+	kek, err = deriveKey(master, principalType, id)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cek: derive KEK: %w", err)
 	}
-	return kek, sqlitedrv.PrincipalAAD(principalType, id), nil
+	return kek, principalAAD(principalType, id), nil
 }
 
 // ── open paths ───────────────────────────────────────────────────────────────
@@ -939,28 +938,6 @@ func syncDir(dir string) {
 		_ = d.Sync()
 		_ = d.Close()
 	}
-}
-
-// flock takes an exclusive advisory lock on <path>.cek.lock, serializing
-// first-touch and migration for the SAME database across processes/goroutines
-// (different databases never contend). Returns an unlock func.
-func flock(path string) (func(), error) {
-	lockPath := path + lockSuffix
-	if err := os.MkdirAll(filepath.Dir(lockPath), 0o700); err != nil {
-		return nil, fmt.Errorf("cek: create lock dir: %w", err)
-	}
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return nil, fmt.Errorf("cek: open lock %q: %w", lockPath, err)
-	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		_ = f.Close()
-		return nil, fmt.Errorf("cek: acquire lock %q: %w", lockPath, err)
-	}
-	return func() {
-		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-		_ = f.Close()
-	}, nil
 }
 
 func zero(b []byte) {

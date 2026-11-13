@@ -17,7 +17,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -125,10 +124,7 @@ func run(ctx context.Context, name, code, input string, timeout time.Duration) r
 	// got its timeout — on a surface anyone can call, that is a way to pile up work
 	// the host never agreed to. The sweep after Wait catches the same trick from a
 	// function that backgrounds something and then exits 0.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return killGroup(cmd) }
-	runErr := cmd.Run()
-	_ = killGroup(cmd)
+	runErr := runIsolated(cmd)
 
 	r := result{
 		duration:  time.Since(started),
@@ -152,21 +148,6 @@ func run(ctx context.Context, name, code, input string, timeout time.Duration) r
 		}
 	}
 	return r
-}
-
-// killGroup SIGKILLs the run's whole process group. The NEGATIVE pid is the
-// group, and the child leads one, so a single signal reaches the interpreter and
-// everything it spawned. A group that is already gone answers os.ErrProcessDone,
-// which is what os/exec reads as "nothing left to cancel" — returning the raw
-// ESRCH instead would turn a run that finished on its own into a reported error.
-func killGroup(cmd *exec.Cmd) error {
-	if cmd.Process == nil {
-		return os.ErrProcessDone
-	}
-	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
-		return os.ErrProcessDone
-	}
-	return nil
 }
 
 // unavailable is the outcome when nothing ran. The reason goes on stderr, which

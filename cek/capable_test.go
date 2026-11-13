@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	sqlitedrv "github.com/hanzoai/sqlite"
 )
 
 // WHAT A KEYED STORE LOOKS LIKE ON DISK IS THE ONLY ANSWER THAT COUNTS.
@@ -19,7 +17,7 @@ func TestCapableAgreesWithTheFileItWrote(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "probe.db")
 
-	dek, err := sqlitedrv.NewDEK()
+	dek, err := newDEK()
 	if err != nil {
 		t.Fatalf("key: %v", err)
 	}

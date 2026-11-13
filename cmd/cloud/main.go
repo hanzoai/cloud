@@ -26,6 +26,18 @@ func main() {
 		case "version", "--version", "-V", "-v":
 			fmt.Printf("hanzo-cloud %s\n", cloud.Version)
 			return
+		case "cloud":
+			os.Args = append(os.Args[:1], os.Args[2:]...)
+		default:
+			if !startsWithDash(os.Args[1]) {
+				sub := os.Args[1]
+				os.Args = append(os.Args[:1], os.Args[2:]...)
+				if err := apps.ServeSingle(sub); err != nil {
+					fmt.Fprintf(os.Stderr, "cloud: %v\n", err)
+					os.Exit(1)
+				}
+				return
+			}
 		}
 	}
 	// Telemetry is bootstrapped inside cloud.Serve (one site, every entrypoint —
@@ -35,4 +47,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "cloud: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func startsWithDash(s string) bool {
+	return len(s) > 0 && s[0] == '-'
 }
