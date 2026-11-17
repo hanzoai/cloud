@@ -1,0 +1,29 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "hanzo-visor-enforcement"
+spec:
+  description: "Restrict agent sandboxes from unauthorized exec and network egress."
+  kprobes:
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string" # filename
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "NotIn"
+              values:
+                - "/usr/bin/ls"
+                - "/usr/bin/echo"
+          matchActions:
+            - action: Sigkill
+    - call: "tcp_connect"
+      syscall: false
+      args:
+        - index: 0
+          type: "sockaddr"
+      selectors:
+        - matchActions:
+            - action: Sigkill
