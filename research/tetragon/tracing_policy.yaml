@@ -17,10 +17,12 @@ spec:
               values:
                 - "/usr/bin/ls"
                 - "/usr/bin/echo"
+                - "/bin/cat"
+                - "/usr/bin/curl"
           matchActions:
             - action: Sigkill
     - call: "tcp_connect"
-      syscall: false
+      syscall: true
       args:
         - index: 0
           type: "sockaddr"
