@@ -6,11 +6,11 @@ import (
 )
 
 // TestEscapeAttempt simulates a malicious agent trying to break out of the sandbox.
-// When Tetragon is active with the provided policy, these tests should trigger a SIGKILL.
+// Note: These tests require a running Tetragon daemon with the corresponding TracingPolicy.
 func TestEscapeAttempt(t *testing.T) {
 	t.Run("UnauthorizedExec", func(t *testing.T) {
-		// Attempting to run 'cat' which is not in the allow-list
-		cmd := exec.Command("cat", "/etc/shadow")
+		// Attempting to run 'whoami' which is not in the allow-list
+		cmd := exec.Command("whoami")
 		err := cmd.Run()
 		if err == nil {
 			t.Errorf("Security Failure: Managed to execute unauthorized binary")
