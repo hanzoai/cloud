@@ -9,7 +9,7 @@ spec:
       syscall: true
       args:
         - index: 0
-          type: "string" # filename
+          type: "string"
       selectors:
         - matchArgs:
             - index: 0
@@ -22,6 +22,14 @@ spec:
           matchActions:
             - action: Sigkill
     - call: "tcp_connect"
+      syscall: true
+      args:
+        - index: 0
+          type: "sockaddr"
+      selectors:
+        - matchActions:
+            - action: Sigkill
+    - call: "tcp_connect_v6"
       syscall: true
       args:
         - index: 0
