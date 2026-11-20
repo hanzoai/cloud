@@ -1,0 +1,56 @@
+apiVersion: cilium.io/v1
+kind: TracingPolicy
+metadata:
+  name: "hanzo-visor-sandbox"
+spec:
+  description: "Enforce sandbox boundaries for Hanzo AI agents"
+  kprobes:
+    # 1. Process Enforcement: Block unauthorized executions
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string" # filename
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "NotIn"
+              values:
+                - "/usr/bin/python3"
+                - "/usr/bin/node"
+                - "/app/cloud"
+          matchActions:
+            - action: Sigkill
+
+    # 2. Network Enforcement: Block outbound connections to non-S3/Internal IPs
+    - call: "tcp_connect"
+      syscall: false
+      args:
+        - index: 0
+          type: "sock"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "NotDnsName"
+              values:
+                - "s3.amazonaws.com"
+                - "localhost"
+          matchActions:
+            - action: Sigkill
+
+    # 3. File System Enforcement: Protect sensitive paths
+    - call: "sys_openat"
+      syscall: true
+      args:
+        - index: 1
+          type: "string" # filename
+      selectors:
+        - matchArgs:
+            - index: 1
+              operator: "Prefix"
+              values:
+                - "/etc/"
+                - "/root/"
+                - ".dev/master.key"
+          matchActions:
+            - action: Sigkill
