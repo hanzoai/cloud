@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/07/schema#",
+  "$id": "https://hanzo.ai/schemas/cloud-39-provenance-results.json",
+  "title": "cloud#39 verifiable agent-produced artifacts — provenance documents and bench results",
+  "description": "Schema for the provenance documents signed/verified by research/provenanceverification and the committed raw results of the cloud#39 research harness.",
+  "definitions": {
+    "provenance_document": {
+      "type": "object",
+      "required": ["schema", "subject_id", "source_revision", "toolchain_digest", "runtime_digest", "output_digest", "tenant_salt", "signature"],
+      "properties": {
+        "schema": { "type": "string", "pattern": "^slsa-provenance/" },
+        "subject_id": { "type": "string", "minLength": 1 },
+        "source_revision": { "type": "string", "minLength": 1 },
+        "toolchain_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "runtime_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "output_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "tenant_salt": { "type": "string", "minLength": 1 },
+        "signature": { "type": "string", "description": "base64-encoded Ed25519 signature over the canonical form (JSON []byte encoding)" }
+      }
+    },
+    "verify_result": {
+      "type": "object",
+      "required": ["document", "outcome"],
+      "properties": {
+        "document": { "$ref": "#/definitions/provenance_document" },
+        "outcome": {
+          "type": "string",
+          "enum": ["accepted", "rejected-tamper", "rejected-substitution", "rejected-tenant", "rejected-structure"]
+        },
+        "error": { "type": "string" },
+        "latency_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+    "bench_result": {
+      "type": "object",
+      "required": ["iters", "elapsed_ms", "per_op_us"],
+      "properties": {
+        "iters": { "type": "integer", "minimum": 1 },
+        "elapsed_ms": { "type": "number", "minimum": 0 },
+        "per_op_us": { "type": "number", "minimum": 0 },
+        "h3_bound_ms": { "type": "number", "const": 100 },
+        "host": {
+          "type": "object",
+          "properties": {
+            "os": { "type": "string" },
+            "arch": { "type": "string" },
+            "go_version": { "type": "string" }
+          }
+        }
+      }
+    },
+    "cosign_crosscheck": {
+      "type": "object",
+      "required": ["cosign_version", "fixture", "outcome"],
+      "properties": {
+        "cosign_version": { "type": "string" },
+        "fixture": { "type": "string" },
+        "outcome": {
+          "type": "string",
+          "enum": ["cross-verified", "rejected", "skipped-no-cosign"]
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}
