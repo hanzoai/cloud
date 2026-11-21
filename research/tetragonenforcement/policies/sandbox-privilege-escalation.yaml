@@ -1,0 +1,40 @@
+# RESEARCH-ONLY — do not apply to production as-is.
+# These TracingPolicies were authored for the cloud#33 research harness
+# (escape-attempt + policy-regression study, HIP-1349 draft). The kill
+# scope is deliberately narrow (processes outside the host PID namespace)
+# and the allowlists are placeholders; promoting any of them to a live
+# sandbox requires an FP audit pass per results/PROTOCOL.md §6 and a
+# review of the egress allowlist and the /etc/shadow probe.
+
+# Derived from cilium/tetragon (Apache-2.0) examples:
+#   examples/tracingpolicy/sys_setuid.yaml  (syscall kprobe shape)
+#   examples/tracingpolicy/modules-nohost.yaml (matchNamespaces host-ns scoping)
+# Scope: kill setuid-to-root attempts from processes that are NOT in the
+# host PID namespace (i.e. sandbox/agent processes). Host-namespace admin
+# tools (su, sudo) are untouched.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "sandbox-privilege-escalation"
+  annotations:
+    description: "Sigkill setuid(0) attempts from processes outside the host PID namespace"
+spec:
+  kprobes:
+  - call: "sys_setuid"
+    syscall: true
+    args:
+    - index: 0
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "Equal"
+        values:
+        - "0" # setuid(0): attempt to become root
+      matchNamespaces:
+      - namespace: Pid
+        operator: "NotIn"
+        values:
+        - "host_ns"
+      matchActions:
+      - action: Sigkill

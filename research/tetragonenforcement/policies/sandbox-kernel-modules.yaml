@@ -1,0 +1,95 @@
+# RESEARCH-ONLY — do not apply to production as-is.
+# These TracingPolicies were authored for the cloud#33 research harness
+# (escape-attempt + policy-regression study, HIP-1349 draft). The kill
+# scope is deliberately narrow (processes outside the host PID namespace)
+# and the allowlists are placeholders; promoting any of them to a live
+# sandbox requires an FP audit pass per results/PROTOCOL.md §6 and a
+# review of the egress allowlist and the /etc/shadow probe.
+
+# Derived from cilium/tetragon (Apache-2.0) example
+# examples/tracingpolicy/modules-nohost.yaml (kernel module loading
+# enforcement), with the k8s podSelector dropped for the non-Kubernetes
+# Visor sandbox deployment. Scope: module loads are allowed only from
+# processes in the host PID namespace; sandbox/agent processes are killed.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "sandbox-kernel-modules"
+  annotations:
+    description: "Override+Sigkill kernel module loading from processes outside the host PID namespace"
+spec:
+  kprobes:
+  - call: "security_kernel_module_request"
+    message: "Kernel module requested and is being loaded automatically"
+    syscall: false
+    return: true
+    args:
+    - index: 0
+      type: "string"
+    returnArg:
+      index: 0
+      type: "int"
+    selectors:
+    - matchNamespaces:
+      - namespace: Pid
+        operator: "NotIn"
+        values:
+        - "host_ns"
+      matchActions:
+      - action: Override
+        argError: -1
+      - action: Sigkill
+  - call: "security_kernel_read_file"
+    message: "Kernel module is being loaded via finit_module()"
+    # Explicit module loading using a file descriptor (finit_module()):
+    # arg 1 == 2 is READING_MODULE.
+    syscall: false
+    return: true
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+    returnArg:
+      index: 0
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: "Equal"
+        values:
+        - "2" # READING_MODULE
+      matchNamespaces:
+      - namespace: Pid
+        operator: "NotIn"
+        values:
+        - "host_ns"
+      matchActions:
+      - action: Override
+        argError: -1
+      - action: Sigkill
+  - call: "security_kernel_load_data"
+    message: "Kernel module is being loaded via init_module()/kernel read"
+    syscall: false
+    return: true
+    args:
+    - index: 0
+      type: "int"
+    returnArg:
+      index: 0
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "Equal"
+        values:
+        - "2" # READING_MODULE
+      matchNamespaces:
+      - namespace: Pid
+        operator: "NotIn"
+        values:
+        - "host_ns"
+      matchActions:
+      - action: Override
+        argError: -1
+      - action: Sigkill

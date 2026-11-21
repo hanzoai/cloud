@@ -1,0 +1,37 @@
+# RESEARCH-ONLY — do not apply to production as-is.
+# These TracingPolicies were authored for the cloud#33 research harness
+# (escape-attempt + policy-regression study, HIP-1349 draft). The kill
+# scope is deliberately narrow (processes outside the host PID namespace)
+# and the allowlists are placeholders; promoting any of them to a live
+# sandbox requires an FP audit pass per results/PROTOCOL.md §6 and a
+# review of the egress allowlist and the /etc/shadow probe.
+
+# Derived from cilium/tetragon (Apache-2.0) examples:
+#   examples/tracingpolicy/sys_setuid.yaml  (syscall kprobe shape)
+#   examples/tracingpolicy/modules-nohost.yaml (matchNamespaces host-ns scoping)
+# Scope: kill setns(2) attempts from processes outside the host PID
+# namespace. Namespace surgery (nsenter into host namespaces) is an admin
+# capability, never a sandbox capability.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "sandbox-namespace-escape"
+  annotations:
+    description: "Sigkill setns(2) attempts from processes outside the host PID namespace"
+spec:
+  kprobes:
+  - call: "sys_setns"
+    syscall: true
+    args:
+    - index: 0
+      type: "int" # fd of the target namespace
+    - index: 1
+      type: "int" # nstype (0 = any)
+    selectors:
+    - matchNamespaces:
+      - namespace: Pid
+        operator: "NotIn"
+        values:
+        - "host_ns"
+      matchActions:
+      - action: Sigkill

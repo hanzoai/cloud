@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/07/schema#",
+  "$id": "https://hanzo.ai/schemas/cloud-33-tetragon-enforcement-results.json",
+  "title": "cloud#33 Tetragon enforcement research results",
+  "description": "Raw results of the escape-matrix passes and the syscall-overhead microbenchmarks committed by research/tetragonenforcement. Committed result files must validate against run_result or bench_reports.",
+  "definitions": {
+    "probe_status": {
+      "type": "string",
+      "enum": ["blocked", "completed", "timeout", "error", "skipped"]
+    },
+    "run_mode": {
+      "type": "string",
+      "enum": ["none", "monitor", "enforcement"]
+    },
+    "host_info": {
+      "type": "object",
+      "required": ["os", "arch", "btf_detected", "go_version"],
+      "properties": {
+        "os": { "type": "string" },
+        "arch": { "type": "string" },
+        "hostname": { "type": "string" },
+        "kernel": { "type": "string" },
+        "btf_detected": { "type": "boolean" },
+        "go_version": { "type": "string" },
+        "tetragon_version": { "type": "string" }
+      }
+    },
+    "probe_result": {
+      "type": "object",
+      "required": ["probe_id", "kind", "policy_file", "mode", "status", "exit_code", "duration_ms"],
+      "properties": {
+        "probe_id": { "type": "string" },
+        "kind": { "type": "string" },
+        "title": { "type": "string" },
+        "policy_file": { "type": "string" },
+        "mode": { "$ref": "#/definitions/run_mode" },
+        "status": { "$ref": "#/definitions/probe_status" },
+        "exit_code": { "type": "integer" },
+        "signal": { "type": "string" },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "stdout_tail": { "type": "string" },
+        "stderr_tail": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total", "blocked", "leaked", "false_positives", "observed", "completed", "timeouts", "errors", "skipped"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "leaked": { "type": "integer", "minimum": 0 },
+        "false_positives": { "type": "integer", "minimum": 0 },
+        "observed": { "type": "integer", "minimum": 0 },
+        "completed": { "type": "integer", "minimum": 0 },
+        "timeouts": { "type": "integer", "minimum": 0 },
+        "errors": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "run_result": {
+      "type": "object",
+      "required": ["run_id", "started_utc", "mode", "host", "probes", "summary"],
+      "properties": {
+        "run_id": { "type": "string" },
+        "started_utc": { "type": "string", "format": "date-time" },
+        "mode": { "$ref": "#/definitions/run_mode" },
+        "host": { "$ref": "#/definitions/host_info" },
+        "probes": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/probe_result" }
+        },
+        "summary": { "$ref": "#/definitions/summary" }
+      }
+    },
+    "bench_sample": {
+      "type": "object",
+      "required": ["workload", "mode", "workers", "duration_s", "ops", "ops_per_sec", "ns_per_op"],
+      "properties": {
+        "workload": { "type": "string", "enum": ["open-close", "loopback-connect"] },
+        "mode": { "$ref": "#/definitions/run_mode" },
+        "workers": { "type": "integer", "minimum": 1 },
+        "duration_s": { "type": "number", "exclusiveMinimum": 0 },
+        "ops": { "type": "integer", "minimum": 0 },
+        "ops_per_sec": { "type": "number", "minimum": 0 },
+        "ns_per_op": { "type": "number", "minimum": 0 },
+        "host_kernel": { "type": "string" }
+      }
+    },
+    "bench_report": {
+      "type": "object",
+      "required": ["workload", "baseline"],
+      "properties": {
+        "workload": { "type": "string", "enum": ["open-close", "loopback-connect"] },
+        "baseline": { "$ref": "#/definitions/bench_sample" },
+        "monitor": { "$ref": "#/definitions/bench_sample" },
+        "enforcement": { "$ref": "#/definitions/bench_sample" },
+        "overhead_monitor_pct": { "type": "number" },
+        "overhead_enforcement_pct": { "type": "number" },
+        "noise": { "type": "boolean" }
+      }
+    },
+    "bench_reports": {
+      "type": "object",
+      "required": ["run_id", "started_utc", "host", "workloads"],
+      "properties": {
+        "run_id": { "type": "string" },
+        "started_utc": { "type": "string", "format": "date-time" },
+        "host": { "$ref": "#/definitions/host_info" },
+        "workloads": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/bench_report" }
+        }
+      }
+    }
+  }
+}

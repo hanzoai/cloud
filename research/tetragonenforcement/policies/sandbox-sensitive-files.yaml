@@ -1,0 +1,74 @@
+# RESEARCH-ONLY — do not apply to production as-is.
+# These TracingPolicies were authored for the cloud#33 research harness
+# (escape-attempt + policy-regression study, HIP-1349 draft). The kill
+# scope is deliberately narrow (processes outside the host PID namespace)
+# and the allowlists are placeholders; promoting any of them to a live
+# sandbox requires an FP audit pass per results/PROTOCOL.md §6 and a
+# review of the egress allowlist and the /etc/shadow probe.
+
+# Derived from cilium/tetragon (Apache-2.0) example
+# examples/quickstart/file_monitoring_enforce.yaml (security_file_permission
+# read/write enforcement), trimmed to sandbox-critical paths and re-scoped
+# from Kubernetes namespace identity to the non-Kubernetes sandbox model
+# with matchNamespaces host-ns scoping. arg 1 == 4 is MAY_READ, 2 is
+# MAY_WRITE (kernel MSGBITS). In-kernel argument filtering means non-
+# matching file operations generate no events.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "sandbox-sensitive-files"
+  annotations:
+    description: "Sigkill reads of host credential material and writes to system paths from processes outside the host PID namespace"
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    return: true
+    args:
+    - index: 0
+      type: "file" # (struct file *) used for getting the path
+    - index: 1
+      type: "int" # MAY_READ (0x04) / MAY_WRITE (0x02)
+    returnArg:
+      index: 0
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/etc/shadow"    # host password hashes
+        - "/etc/sudoers"   # host sudo configuration
+        - "/root/.ssh"     # host SSH keys
+        - "/boot"          # kernel image/initrd
+      - index: 1
+        operator: "Equal"
+        values:
+        - "4" # MAY_READ
+      matchNamespaces:
+      - namespace: Pid
+        operator: "NotIn"
+        values:
+        - "host_ns"
+      matchActions:
+      - action: Sigkill
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/etc"           # system configuration
+        - "/boot"
+        - "/usr/bin"       # system binaries (persistence target)
+        - "/usr/sbin"
+        - "/root/.ssh"
+      - index: 1
+        operator: "Equal"
+        values:
+        - "2" # MAY_WRITE
+      matchNamespaces:
+      - namespace: Pid
+        operator: "NotIn"
+        values:
+        - "host_ns"
+      matchActions:
+      - action: Sigkill
