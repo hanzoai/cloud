@@ -100,6 +100,22 @@ type ChatRequest struct {
 	// bills the org that owns the agent, so a row may name a person in one org
 	// while the ledger names the org that paid for them.
 	Actor string
+
+	// RuntimeDigest is a content digest of the agent runtime that issued this
+	// completion — the build/version identity of the code making the call. It is
+	// ATTRIBUTION and nothing else: it never reaches the gateway, and the client
+	// stamps it on the call's gen_ai span as gen_ai.hanzo.runtime_digest so a
+	// model call can be tied to the exact runtime that produced it. Empty is a
+	// completion no runtime claims.
+	RuntimeDigest string
+
+	// CacheConnector names the prompt-cache connector in front of the model for
+	// this completion, when one is. ATTRIBUTION and nothing else, like
+	// RuntimeDigest: it never reaches the gateway, and the client stamps it on
+	// the call's gen_ai span as gen_ai.hanzo.cache_connector so a cache hit can
+	// be told apart from a cold call on the span plane. Empty is a completion
+	// with no cache connector.
+	CacheConnector string
 }
 
 // Chat roles — the OpenAI-compatible vocabulary the gateway speaks.

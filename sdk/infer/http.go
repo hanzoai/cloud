@@ -104,6 +104,29 @@ func setFeatureAttr(span trace.Span, feature string) {
 	}
 }
 
+// setRuntimeDigestAttr records the content digest of the agent runtime that issued
+// a model call, when one was (ChatRequest.RuntimeDigest). It rides the call's own
+// gen_ai span as gen_ai.hanzo.runtime_digest so a completion can be tied to the
+// exact runtime build that produced it — a filter on the span plane rather than a
+// guess from a parent walk. Empty is a completion no runtime claims, and carries
+// no attribute rather than an empty one that would read as a runtime named "".
+func setRuntimeDigestAttr(span trace.Span, digest string) {
+	if digest != "" {
+		span.SetAttributes(attribute.String("gen_ai.hanzo.runtime_digest", digest))
+	}
+}
+
+// setCacheConnectorAttr names the prompt-cache connector in front of the model for
+// a call, when one was (ChatRequest.CacheConnector). It rides the call's own
+// gen_ai span as gen_ai.hanzo.cache_connector so a cache hit can be told apart
+// from a cold call on the span plane. Empty is a call with no cache connector,
+// and carries no attribute rather than an empty one.
+func setCacheConnectorAttr(span trace.Span, connector string) {
+	if connector != "" {
+		span.SetAttributes(attribute.String("gen_ai.hanzo.cache_connector", connector))
+	}
+}
+
 // httpAI is the real, in-process Client: it runs chat completions
 // against an OpenAI-compatible endpoint — the Hanzo LLM gateway
 // (https://api.hanzo.ai/v1). This is the ONE concrete inference client the
@@ -355,6 +378,8 @@ func (a *httpAI) chatOnce(ctx context.Context, req *ChatRequest, model string) (
 	ctx, span := StartGenAISpan(ctx, "hanzo", "chat", model, req.Org, req.Project)
 	setRunAttr(span, req.RunID)
 	setFeatureAttr(span, req.Feature)
+	setRuntimeDigestAttr(span, req.RuntimeDigest)
+	setCacheConnectorAttr(span, req.CacheConnector)
 	defer span.End()
 
 	ctx, cancel := context.WithTimeout(ctx, aiHTTPTimeout)
@@ -760,6 +785,8 @@ func (a *httpAI) streamOnce(ctx context.Context, req *ChatRequest, model string,
 	ctx, span := StartGenAISpan(ctx, "hanzo", "chat", model, req.Org, req.Project)
 	setRunAttr(span, req.RunID)
 	setFeatureAttr(span, req.Feature)
+	setRuntimeDigestAttr(span, req.RuntimeDigest)
+	setCacheConnectorAttr(span, req.CacheConnector)
 	defer span.End()
 
 	// The idle gap, not a wall clock (streamIdle): every frame re-arms it, and a

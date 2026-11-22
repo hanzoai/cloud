@@ -65,6 +65,15 @@ const (
 	AttrResumed = "hanzo.session.resumed"
 	// AttrSurface is which plane made the session ready ("sandbox").
 	AttrSurface = "hanzo.session.surface"
+	// AttrReactivationMs is how long the session took to be made ready, in
+	// milliseconds — the reactivation latency, recorded as an attribute of the
+	// activation's own span so it is readable as a number on the span plane
+	// (a filter, a percentile) and not only as the span's duration. It is the
+	// same interval the span spans (Start to End), surfaced as a value so a
+	// reader does not have to derive it from timestamps. It is recorded apart
+	// from gen_ai.latency.ttft_ms: readiness and first-token latency are two
+	// facts that never share a row.
+	AttrReactivationMs = "hanzo.session.reactivation_ms"
 	// attrOrg is the tenant, under the key the plane reads a row's org from
 	// (apps/o11y planeOrg), so an activation is scoped like every other span.
 	attrOrg = "hanzo.org"
@@ -129,10 +138,15 @@ func (c *Clock) End(ctx context.Context, surface, org string, err error, attrs .
 	// found first.
 	_, span := otel.Tracer(tracerName).Start(ctx, Span,
 		trace.WithTimestamp(c.at), trace.WithSpanKind(trace.SpanKindInternal))
+	// The reactivation latency as a number on the span, apart from the span's own
+	// duration: a reader filters and percentiles on the attribute without deriving
+	// it from timestamps, and it never shares a row with gen_ai.latency.ttft_ms.
+	reactivationMs := float64(time.Since(c.at)) / float64(time.Millisecond)
 	span.SetAttributes(
 		attribute.String(AttrKind, string(kind)),
 		attribute.Bool(AttrResumed, resumed),
 		attribute.String(AttrSurface, surface),
+		attribute.Float64(AttrReactivationMs, reactivationMs),
 	)
 	if org != "" {
 		span.SetAttributes(attribute.String(attrOrg, org))
