@@ -129,10 +129,14 @@ func (c *Clock) End(ctx context.Context, surface, org string, err error, attrs .
 	// found first.
 	_, span := otel.Tracer(tracerName).Start(ctx, Span,
 		trace.WithTimestamp(c.at), trace.WithSpanKind(trace.SpanKindInternal))
+	
+	reactivation_ms := time.Since(c.at).Milliseconds()
+	
 	span.SetAttributes(
 		attribute.String(AttrKind, string(kind)),
 		attribute.Bool(AttrResumed, resumed),
 		attribute.String(AttrSurface, surface),
+		attribute.Int64("hanzo.session.reactivation_ms", reactivation_ms),
 	)
 	if org != "" {
 		span.SetAttributes(attribute.String(attrOrg, org))

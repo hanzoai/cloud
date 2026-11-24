@@ -1,6 +1,7 @@
 package infer
 
 import (
+	"os"
 	"bytes"
 	"cmp"
 	"context"
@@ -72,6 +73,8 @@ func StartGenAISpan(ctx context.Context, system, operation, model, org, project 
 		attribute.String("gen_ai.system", system),
 		attribute.String("gen_ai.operation.name", operation),
 		attribute.String("gen_ai.request.model", model),
+		attribute.String("gen_ai.hanzo.runtime_digest", os.Getenv("HANZO_RUNTIME_DIGEST")),
+		attribute.String("gen_ai.hanzo.cache_connector", os.Getenv("HANZO_CACHE_CONNECTOR")),
 	)
 	setScopeAttrs(span, org, project)
 	return ctx, span
