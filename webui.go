@@ -73,6 +73,15 @@ func serveFS(app *zip.App, fsys fs.FS) error {
 			c.SetHeader("Content-Type", contentType(clean))
 			return c.Bytes(http.StatusOK, b)
 		}
+		// Embedded sub-applications (e.g. /fanclub or /fanclub/) ship their own
+		// index.html inside fsys; resolve directory indexes before falling back to
+		// the root console shell.
+		if clean != "" {
+			if b, err := fs.ReadFile(fsys, path.Join(clean, "index.html")); err == nil {
+				c.SetHeader("Content-Type", "text/html; charset=utf-8")
+				return c.Bytes(http.StatusOK, b)
+			}
+		}
 		// A missing asset under a bundler build-output subtree is a stale shell
 		// asking for a purged chunk and must 404 (uncached) rather than hand a
 		// <script> or <link> tag 200 text/html under strict MIME checking.

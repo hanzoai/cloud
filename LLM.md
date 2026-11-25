@@ -47,8 +47,8 @@ make hooks    # git config core.hooksPath .githooks (public-only pre-push guard)
 
 1. **Typed Operations Only**: Declare operations as typed ops so a single registration projects simultaneously into REST routes, `/v1/openapi.json`, `/mcp` JSON-RPC tools, CLI commands, and SDKs. Never add untyped ad-hoc HTTP handlers for API operations.
 2. **Namespace Isolation**: Authenticated requests (JWTs verified against `{CLOUD_IAM_ISSUER}/v1/iam/.well-known/jwks`) run inside the token's `owner` org namespace; unauthenticated requests operate in the local namespace (`""`), which is why `make dev` binds `127.0.0.1`.
-3. **Staged Subsystems**: Subsystems that execute arbitrary code or alter ingress (`functions`, `iam`, `ingress`) only mount when explicitly listed in `CLOUD_ENABLE_STAGED`.
-4. **Fail-Closed External Integrations**: Optional sibling services (`S3_*`, `HANZO_DNS_URL`, `CODE_EXEC_UPSTREAM`, `CLOUD_AI_ZAP_ADDR`) report 503 clearly when unconfigured rather than faking success.
+3. **Staged Subsystems**: Subsystems that execute arbitrary code, alter ingress, or mount optional reference apps (`functions`, `iam`, `ingress`, `fanclub`) only mount when explicitly listed in `CLOUD_ENABLE_STAGED`.
+4. **Fail-Closed External Integrations**: Optional sibling services (`S3_*`, `HANZO_DNS_URL`, `CODE_EXEC_UPSTREAM`, `CLOUD_AI_BASE_URL`, `CLOUD_AI_ZAP_ADDR`) report 503 clearly when unconfigured rather than faking success.
 5. **Public-Only Repository Guard**: `.githooks/pre-push` enforces that `github.com/hanzoai/cloud` carries zero commits from non-public remotes and zero non-public Go module imports (`Apache-2.0 OR MIT`).
 
 ## sdk: the shared framework

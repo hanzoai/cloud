@@ -18,7 +18,7 @@ import (
 	"io/fs"
 )
 
-//go:embed index.html console.css console.js
+//go:embed index.html console.css console.js fanclub/index.html fanclub/styles.css fanclub/app.js
 var files embed.FS
 
 // FS is the console's asset tree, rooted where index.html lives. Naming each

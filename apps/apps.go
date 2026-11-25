@@ -18,19 +18,24 @@ package apps
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/blueprint"
+	"github.com/hanzoai/cloud/apps/fanclub"
 	"github.com/hanzoai/cloud/apps/template"
 	"github.com/hanzoai/cloud/apps/x402"
 	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/clients/principal"
 
 	// In-repo subsystem packages (clients/*). Each exports a Mount (and, where it
@@ -108,6 +113,11 @@ func Wire() []cloud.MountSpec {
 
 		{Name: "template", Mount: templates, Shutdown: template.Shutdown, Description: "Starter kits you can deploy as they come, and your org's own."},
 
+		// Opt-in Cloud-native FanClub AI organization intelligence app
+		// (CLOUD_ENABLE_STAGED=fanclub). Persists exclusively in Cloud Base,
+		// enforces Hanzo IAM identity, and routes inference through deps.AI.
+		{Name: "fanclub", Mount: fanclubApp, Description: "Organization intelligence reference app over Cloud Base, IAM, Tasks, MCP, and AI."},
+
 		// Runtime wasm/proxy plugins — mounts dead last.
 		{Name: "plugins", Mount: plugin.Mount, Description: "Runtime plugins, wasm and proxy, mounted under /v1/plugins."},
 	}
@@ -167,6 +177,150 @@ func templates(app *zip.App, deps cloud.Deps) error {
 		Org:    principal.OrgFrom,
 		Acting: principal.Acting,
 		Open:   opener(deps.DataDir, "templates"),
+	})
+}
+
+// fanclubBase adapts Cloud Base's in-process store to apps/fanclub.BaseStore so
+// FanClub holds zero database of its own — all fc_members, fc_proposals, and
+// fc_audit records live in Cloud Base (base.db) under the caller's IAM org.
+type fanclubBase struct{}
+
+func (fanclubBase) Collections(ctx context.Context, org string) ([]fanclub.BaseCollectionCount, error) {
+	cols, err := base.CollectionsOrg(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]fanclub.BaseCollectionCount, len(cols))
+	for i, c := range cols {
+		out[i] = fanclub.BaseCollectionCount{Name: c.Name, Records: c.Records}
+	}
+	return out, nil
+}
+
+func (fanclubBase) List(ctx context.Context, org, collection string, limit, offset int) ([]fanclub.BaseRecord, error) {
+	recs, err := base.ListOrg(ctx, org, collection, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]fanclub.BaseRecord, len(recs))
+	for i, r := range recs {
+		out[i] = fanclub.BaseRecord{Collection: r.Collection, ID: r.ID, Doc: r.Doc, Created: r.Created, Updated: r.Updated}
+	}
+	return out, nil
+}
+
+func (fanclubBase) Get(ctx context.Context, org, collection, id string) (*fanclub.BaseRecord, error) {
+	r, err := base.GetOrg(ctx, org, collection, id)
+	if err != nil {
+		return nil, err
+	}
+	return &fanclub.BaseRecord{Collection: r.Collection, ID: r.ID, Doc: r.Doc, Created: r.Created, Updated: r.Updated}, nil
+}
+
+func (fanclubBase) Create(ctx context.Context, org, collection string, doc json.RawMessage) (*fanclub.BaseRecord, error) {
+	r, err := base.CreateOrg(ctx, org, collection, doc)
+	if err != nil {
+		return nil, err
+	}
+	return &fanclub.BaseRecord{Collection: r.Collection, ID: r.ID, Doc: r.Doc, Created: r.Created, Updated: r.Updated}, nil
+}
+
+func (fanclubBase) Update(ctx context.Context, org, collection, id string, doc json.RawMessage) (*fanclub.BaseRecord, error) {
+	r, err := base.UpdateOrg(ctx, org, collection, id, doc)
+	if err != nil {
+		return nil, err
+	}
+	return &fanclub.BaseRecord{Collection: r.Collection, ID: r.ID, Doc: r.Doc, Created: r.Created, Updated: r.Updated}, nil
+}
+
+func fanclubRedirects(domain string) []string {
+	if raw := strings.TrimSpace(os.Getenv("FANCLUB_OAUTH_REDIRECT_URIS")); raw != "" {
+		var out []string
+		for _, part := range strings.Split(raw, ",") {
+			if p := strings.TrimSpace(part); p != "" {
+				out = append(out, p)
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	scheme := "https://"
+	host := domain
+	if h, _, err := net.SplitHostPort(domain); err == nil {
+		host = h
+	}
+	if host == "localhost" || net.ParseIP(host).IsLoopback() {
+		scheme = "http://"
+	}
+	baseURL := scheme + domain
+	return []string{
+		baseURL + "/fanclub/index.html",
+		baseURL + "/fanclub/",
+	}
+}
+
+// fanclubApp adapts apps/fanclub to cloud.Deps: IAM TokenValidator, Cloud Base
+// collections, Cloud Tasks durable queue, and Cloud AIClient with bearer relay.
+func fanclubApp(app *zip.App, deps cloud.Deps) error {
+	adminOrg := strings.TrimSpace(os.Getenv("IAM_ADMIN_ORG"))
+	if adminOrg == "" {
+		adminOrg = "admin"
+	}
+	validator := cloud.NewTokenValidator(deps.IAMIssuer)
+	infConfigured := deps.AITransport != "" && deps.AI != nil
+
+	return fanclub.Mount(app, fanclub.Deps{
+		Log:                 deps.Logger.New("subsystem", "fanclub"),
+		IAMIssuer:           deps.IAMIssuer,
+		AdminOrg:            adminOrg,
+		ClientID:            strings.TrimSpace(os.Getenv("FANCLUB_IAM_CLIENT_ID")),
+		RedirectURIs:        fanclubRedirects(deps.Domain),
+		DefaultModel:        deps.AIDefaultModel,
+		InferenceConfigured: infConfigured,
+		InferenceTransport:  deps.AITransport,
+		ValidateToken: func(raw string) (fanclub.VerifiedIdentity, error) {
+			v, err := validator.Validate(raw)
+			if err != nil {
+				return fanclub.VerifiedIdentity{}, err
+			}
+			return fanclub.VerifiedIdentity{
+				Org:          v.Owner,
+				User:         v.User,
+				Username:     v.Username,
+				Email:        v.Email,
+				Issuer:       v.Issuer,
+				IsOrgAdmin:   v.IsAdmin,
+				IsSuperAdmin: v.Owner != "" && v.Owner == adminOrg,
+			}, nil
+		},
+		Store: fanclubBase{},
+		EnqueueTask: func(ctx context.Context, org, kind string, payload json.RawMessage) (string, error) {
+			return tasks.EnqueueOrg(ctx, org, kind, payload)
+		},
+		Chat: func(ctx context.Context, req fanclub.ChatRequest) (fanclub.ChatResponse, error) {
+			if deps.AI == nil {
+				return fanclub.ChatResponse{}, errors.New("ai client unavailable")
+			}
+			callCtx := clients.WithAIBearer(ctx, cloud.BearerFrom(ctx))
+			resp, err := deps.AI.ChatCompletion(callCtx, &cloud.ChatRequest{
+				Model:      req.Model,
+				Prompt:     req.Prompt,
+				Org:        req.Org,
+				BillingOrg: req.BillingOrg,
+				Project:    req.Project,
+			})
+			if err != nil {
+				return fanclub.ChatResponse{}, err
+			}
+			return fanclub.ChatResponse{
+				Content:          resp.Content,
+				Model:            req.Model,
+				PromptTokens:     resp.PromptTokens,
+				CompletionTokens: resp.CompletionTokens,
+				TotalTokens:      resp.TotalTokens,
+			}, nil
+		},
 	})
 }
 

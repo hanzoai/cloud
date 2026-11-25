@@ -69,10 +69,11 @@ func BuildDeps(cfg *Config) Deps {
 	deps.IAM = pick(cfg, logger, "iam", "IAM", cfg.IAMZAPAddr, clients.IAMRPCAt, clients.DisabledIAM)
 	deps.KMS = pickKMSClient(cfg, logger)
 	deps.Base = pick(cfg, logger, "base", "Base", cfg.BaseZAPAddr, clients.BaseRPCAt, clients.DisabledBase)
-	// AI (completions) and Embed (embeddings) resolve to their out-of-process ZAP
-	// clients or the fail-closed stub: point them at a gateway via the ZAP
-	// address, or they stay disabled (a run records an honest error, never fakes one).
-	deps.AI = pickCompletionsClient(cfg, logger)
+	// AI (completions) and Embed (embeddings) resolve to their HTTP or ZAP
+	// clients or the fail-closed stub: point them at Hanzo AI / Engine via
+	// CLOUD_AI_BASE_URL or CLOUD_AI_ZAP_ADDR, or they stay disabled (a run
+	// records an honest error, never fakes one).
+	deps.AI, deps.AITransport = pickCompletionsClient(cfg, logger)
 	deps.Embed = pickEmbedClient(cfg, logger)
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
@@ -179,23 +180,28 @@ func RegisterKMSClientFactory(f func(cfg *Config, log luxlog.Logger) (KMSClient,
 }
 
 // pickCompletionsClient resolves deps.AI — the CHAT COMPLETIONS client. The OSS
-// core has no in-process inference gateway: it returns the out-of-process ZAP
-// client when an address is configured (an operator points it at their own
-// gateway), else the fail-closed stub — a run records an honest error, never
+// core has no in-process inference gateway: it uses Hanzo's OpenAI-compatible
+// HTTP /v1 endpoint (CLOUD_AI_BASE_URL) or ZAP client (CLOUD_AI_ZAP_ADDR) when
+// configured, else the fail-closed stub — a run records an honest error, never
 // fakes one.
-func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
+func pickCompletionsClient(cfg *Config, log luxlog.Logger) (AIClient, string) {
+	if cfg.AIBaseURL != "" {
+		log.Info("deps.AI (completions) → HTTP /v1", "base_url", cfg.AIBaseURL)
+		return clients.AIHTTPAt(cfg.AIBaseURL, cfg.AIAPIKey), "http"
+	}
 	if cfg.AIZAPAddr != "" {
 		log.Info("deps.AI (completions) → ZAP RPC", "addr", cfg.AIZAPAddr)
-		return clients.AIRPCAt(cfg.AIZAPAddr)
+		return clients.AIRPCAt(cfg.AIZAPAddr), "zap"
 	}
 	log.Info("deps.AI (completions) → disabled (no gateway configured)")
-	return clients.DisabledAI()
+	return clients.DisabledAI(), ""
 }
 
 // pickEmbedClient resolves deps.Embed — the EMBEDDINGS client. Shares the
-// completions resolution (ZAP / fail-closed) in the OSS core.
+// completions resolution (HTTP / ZAP / fail-closed) in the OSS core.
 func pickEmbedClient(cfg *Config, log luxlog.Logger) AIClient {
-	return pickCompletionsClient(cfg, log)
+	c, _ := pickCompletionsClient(cfg, log)
+	return c
 }
 
 func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {

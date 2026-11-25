@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0f1210">
+  <meta name="description" content="FanClub AI — Cloud-native organization intelligence over Hanzo IAM, Cloud Base, Cloud Tasks, MCP, and Hanzo AI">
+  <title>FanClub AI — Hanzo Cloud</title>
+  <link rel="stylesheet" href="/fanclub/styles.css">
+  <script src="/fanclub/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">f<span>c</span></div>
+        <div><div class="brand-title">FanClub <b>AI</b></div><div class="brand-subtitle">HANZO CLOUD NATIVE</div></div>
+      </div>
+      <div class="workspace-label">IAM ORGANIZATION</div>
+      <div class="workspace-card">
+        <span id="org-dot" class="workspace-dot"></span>
+        <div>
+          <div id="org-name" class="workspace-name">Sign in required</div>
+          <div id="org-role" class="workspace-sector">Hanzo IAM boundary</div>
+        </div>
+      </div>
+      <div class="auth-actions" id="auth-actions"></div>
+      <div class="sidebar-section">WORKSPACE</div>
+      <nav id="nav" aria-label="Main navigation">
+        <button type="button" data-view="overview" class="nav-item selected"><span class="nav-icon">◫</span>Overview</button>
+        <button type="button" data-view="members" class="nav-item"><span class="nav-icon">♙</span><span class="nav-text">People &amp; records</span></button>
+        <button type="button" data-view="journeys" class="nav-item"><span class="nav-icon">⌁</span>Journeys</button>
+        <button type="button" data-view="approvals" class="nav-item"><span class="nav-icon">✓</span>Approvals<span id="approval-count" class="nav-count">0</span></button>
+        <button type="button" data-view="assistant" class="nav-item"><span class="nav-icon">✧</span>AI Studio</button>
+        <button type="button" data-view="evaluation" class="nav-item"><span class="nav-icon">◈</span>Model Lab</button>
+      </nav>
+      <div class="sidebar-section">INFRASTRUCTURE</div>
+      <nav aria-label="Infrastructure navigation">
+        <button type="button" data-view="stack" class="nav-item"><span class="nav-icon">▤</span>Hanzo Cloud Stack</button>
+        <button type="button" data-view="audit" class="nav-item"><span class="nav-icon">≡</span>Audit trail</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="privacy-panel"><span class="privacy-lock">⌑</span><div><b>IAM-isolated tenancy</b><span>Cloud Base · fail-closed AI</span></div></div>
+        <div class="sidebar-by">HOSTED IN <b>HANZO CLOUD</b><br><small>IAM · Base · Tasks · MCP · AI</small></div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="top-crumb">FANCLUB AI <span>/</span> <span id="top-current">OVERVIEW</span></div>
+        <div class="topbar-right">
+          <span class="demo-pill" id="mode-pill"><i></i> CLOUD NATIVE</span>
+          <span class="top-date" id="iam-issuer-label">Hanzo IAM</span>
+          <div class="avatar" id="user-avatar" aria-label="Authenticated operator">--</div>
+        </div>
+      </header>
+      <div class="view-content" id="content" aria-live="polite"><div class="loading-state">Connecting to Hanzo Cloud…</div></div>
+      <footer class="footer"><span>FANCLUB AI · HANZO CLOUD SUBSYSTEM</span><span>SYNTHETIC FIXTURES &amp; SIMULATION-ONLY APPROVALS</span></footer>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

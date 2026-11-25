@@ -124,6 +124,15 @@ type Config struct {
 	// this is the ONLY cloud-side model default.
 	AIDefaultModel string
 
+	// AIBaseURL configures an OpenAI-compatible Hanzo AI / Engine HTTP base URL
+	// (e.g. https://api.hanzo.ai or http://127.0.0.1:36900) via CLOUD_AI_BASE_URL.
+	// Empty leaves completions disabled unless AIZAPAddr is set.
+	AIBaseURL string
+
+	// AIAPIKey is an optional service bearer token (CLOUD_AI_API_KEY) used when
+	// calling AIBaseURL without a caller IAM bearer on the request context. Never logged.
+	AIAPIKey string
+
 	// ZAP RPC endpoints for subsystems that are NOT enabled in this process but
 	// are still needed by an enabled subsystem. Empty means "no remote endpoint"
 	// — the client falls back to the disabled stub, which fails closed with a
@@ -172,6 +181,8 @@ func LoadConfig() *Config {
 		KMSMPCVaultID:   getenv("CLOUD_KMS_MPC_VAULT_ID", ""),
 		DataDir:         getenv("CLOUD_DATA_DIR", "/var/lib/cloud"),
 		AIDefaultModel:  getenv("CLOUD_AI_DEFAULT_MODEL", "deepseek-v4-flash"),
+		AIBaseURL:       getenv("CLOUD_AI_BASE_URL", ""),
+		AIAPIKey:        getenv("CLOUD_AI_API_KEY", ""),
 		IAMZAPAddr:      getenv("CLOUD_IAM_ZAP_ADDR", ""),
 		KMSZAPAddr:      getenv("CLOUD_KMS_ZAP_ADDR", ""),
 		BaseZAPAddr:     getenv("CLOUD_BASE_ZAP_ADDR", ""),
@@ -255,7 +266,9 @@ func LoadConfig() *Config {
 // execution endpoint. `make dev` names it.
 //
 // "ingress" starts edge listeners, which a default run should not open.
-var stagedSubsystems = map[string]bool{"ingress": true, "functions": true}
+//
+// "fanclub" is the opt-in Cloud-native organization intelligence reference app.
+var stagedSubsystems = map[string]bool{"ingress": true, "functions": true, "fanclub": true}
 
 // Enabled reports whether subsystem `name` is enabled in this config.
 // Empty Enable list = all subsystems enabled, EXCEPT staged subsystems

@@ -58,6 +58,11 @@ type Deps struct {
 	// itself stays the gateway's job.
 	AIDefaultModel string
 
+	// AITransport records how deps.AI is wired ("http", "zap", or "" when
+	// unconfigured) so subsystems can report honest inference configuration
+	// status without guessing or probing upstream.
+	AITransport string
+
 	// Subsystem clients — populated by BuildDeps based on enabled subsystems.
 	// Each is an interface with both in-process and ZAP-RPC implementations.
 	IAM  IAMClient

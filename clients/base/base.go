@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -65,8 +66,22 @@ CREATE TABLE IF NOT EXISTS records (
 // state is base's own data; shared deps live in the embedded cloud.Base.
 type state struct{ db *sql.DB }
 
-// mounted is the open store, kept for Shutdown. build is its only writer.
-var mounted *sql.DB
+// mounted is the open store, kept for Shutdown and co-resident in-process
+// consumers (e.g. apps/fanclub) that persist records in the same Base table.
+var (
+	mountedMu sync.RWMutex
+	mounted   *sql.DB
+)
+
+func mountedDB() (*sql.DB, error) {
+	mountedMu.RLock()
+	db := mounted
+	mountedMu.RUnlock()
+	if db == nil {
+		return nil, zip.Errorf(503, "base store is not mounted")
+	}
+	return db, nil
+}
 
 // Mount wires the document store onto app.
 func Mount(app *zip.App, deps cloud.Deps) error {
@@ -91,18 +106,22 @@ func build(b cloud.Base) (state, error) {
 		_ = db.Close()
 		return state{}, fmt.Errorf("create schema: %w", err)
 	}
+	mountedMu.Lock()
 	mounted = db
+	mountedMu.Unlock()
 	return state{db: db}, nil
 }
 
 // Shutdown closes the store. Idempotent.
 func Shutdown(context.Context) error {
-	if mounted == nil {
+	mountedMu.Lock()
+	db := mounted
+	mounted = nil
+	mountedMu.Unlock()
+	if db == nil {
 		return nil
 	}
-	err := mounted.Close()
-	mounted = nil
-	return err
+	return db.Close()
 }
 
 // routes is the ONE registration point. Static paths precede their :param

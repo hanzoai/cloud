@@ -65,6 +65,16 @@ func Request(ctx context.Context) (*zip.Ctx, bool) {
 	return c, ok && c != nil
 }
 
+// BearerFrom returns the caller's validated JWT bearer from a typed-op context
+// populated by Carry, or "" when no request or JWT bearer is present.
+func BearerFrom(ctx context.Context) string {
+	c, ok := Request(ctx)
+	if !ok {
+		return ""
+	}
+	return CallerBearer(c)
+}
+
 // Note records which operation this invoke is, on the request that carried it.
 // It answers nothing and refuses nothing — it is a fact about the invoke, put
 // where the code that writes the record can reach it. With no request behind the
