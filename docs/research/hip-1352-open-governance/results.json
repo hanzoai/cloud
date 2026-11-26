@@ -1,0 +1,218 @@
+{
+  "schema_version": "hip-1352.bench.v1",
+  "generated_at": "2026-11-26T15:41:49Z",
+  "go_version": "go1.27.1",
+  "goos": "linux",
+  "goarch": "amd64",
+  "num_cpu": 2,
+  "scenario_summary": {
+    "dao_participants": 25,
+    "parameter_before": "250",
+    "parameter_after": "175",
+    "timelock_delay_ms": 1800000,
+    "treasury_disbursed_micro_usd": 15000000000,
+    "treasury_remaining_micro_usd": 85000000000,
+    "model_registered": "zen-open-7b",
+    "verifier_profile_registered": "cryptographic-proof-v1",
+    "emergency_ratified_and_lifted": true,
+    "hanzo_admin_override_present": false,
+    "hanzo_hosted_deps_required": 0
+  },
+  "adversarial_matrix": {
+    "total_attacks": 18,
+    "rejected_attacks": 18,
+    "rejection_rate_pct": 100,
+    "cases": [
+      {
+        "name": "premature_timelock_execution",
+        "category": "timelock",
+        "rejected": true,
+        "error_detail": "governance: timelock delay has not elapsed: proposal \"dao-prop-fee-175\" ready at 2026-11-26T13:36:01Z, current time 2026-11-26T13:06:01Z"
+      },
+      {
+        "name": "admin_override_config",
+        "category": "admin_override",
+        "rejected": true,
+        "error_detail": "governance: permanent admin override is forbidden by protocol"
+      },
+      {
+        "name": "admin_override_proposal",
+        "category": "admin_override",
+        "rejected": true,
+        "error_detail": "governance: permanent admin override is forbidden by protocol: parameter \"hanzo_admin_override\" cannot be modified"
+      },
+      {
+        "name": "quorum_floor_violation",
+        "category": "protocol_invariant",
+        "rejected": true,
+        "error_detail": "governance: immutable protocol safety invariant violated: quorum_bps 100 violates floor [1000, 10000]"
+      },
+      {
+        "name": "zero_timelock_attack",
+        "category": "protocol_invariant",
+        "rejected": true,
+        "error_detail": "governance: immutable protocol safety invariant violated: min_timelock_delay_ms must be positive int64"
+      },
+      {
+        "name": "parameter_out_of_bounds",
+        "category": "invalid_proposal",
+        "rejected": true,
+        "error_detail": "governance: invalid proposal: \"max_inference_fee_bps\" value 9999 above max 1000"
+      },
+      {
+        "name": "flash_loan_post_snapshot_transfer",
+        "category": "quorum_attack",
+        "rejected": true,
+        "error_detail": "governance: insufficient voting power: member \"dao-member-23\" has zero voting power at snapshot 2"
+      },
+      {
+        "name": "double_vote_attack",
+        "category": "voting_integrity",
+        "rejected": true,
+        "error_detail": "governance: voter already cast ballot on proposal: member \"dao-member-00\" on proposal \"atk-flash-target\""
+      },
+      {
+        "name": "nonce_replay_attack",
+        "category": "cryptography",
+        "rejected": true,
+        "error_detail": "governance: nonce already used"
+      },
+      {
+        "name": "insufficient_quorum_queue",
+        "category": "quorum_attack",
+        "rejected": true,
+        "error_detail": "governance: invalid proposal state transition: proposal \"atk-flash-target\" is defeated, must be succeeded before queueing"
+      },
+      {
+        "name": "emergency_treasury_drain",
+        "category": "emergency_abuse",
+        "rejected": true,
+        "error_detail": "governance: emergency action violates safeguard bounds: emergency action kind \"drain_treasury\" is forbidden (only pause_subsystem or circuit_breaker allowed)"
+      },
+      {
+        "name": "emergency_permanent_pause",
+        "category": "emergency_abuse",
+        "rejected": true,
+        "error_detail": "governance: emergency action violates safeguard bounds: duration 240h0m0s violates bounded emergency ceiling 4h0m0s"
+      },
+      {
+        "name": "emergency_pause_governance",
+        "category": "emergency_abuse",
+        "rejected": true,
+        "error_detail": "governance: emergency action violates safeguard bounds: target subsystem \"governance\" cannot be paused by emergency guardian"
+      },
+      {
+        "name": "emergency_rolling_repause_cooldown",
+        "category": "emergency_abuse",
+        "rejected": true,
+        "error_detail": "governance: emergency cooldown active for target subsystem: subsystem \"model_registry\" is in cooldown until 2026-11-27T04:11:06Z"
+      },
+      {
+        "name": "treasury_unallowlisted_recipient",
+        "category": "treasury_policy",
+        "rejected": true,
+        "error_detail": "governance: treasury disbursement violates policy: recipient \"rogue-account\" is not allowlisted"
+      },
+      {
+        "name": "treasury_epoch_cap_exceeded",
+        "category": "treasury_policy",
+        "rejected": true,
+        "error_detail": "governance: treasury disbursement violates policy: epoch 0 spend 15000000000 + 12000000000 exceeds cap 25000000000"
+      },
+      {
+        "name": "tampered_sovereign_bundle",
+        "category": "sovereignty_integrity",
+        "rejected": true,
+        "error_detail": "governance: invalid or tampered sovereign bundle: state_digest mismatch (state tampered)"
+      },
+      {
+        "name": "cross_fork_signature_replay",
+        "category": "sovereignty_integrity",
+        "rejected": true,
+        "error_detail": "governance: invalid ed25519 signature"
+      }
+    ]
+  },
+  "fork_replay": {
+    "exported_bundle_bytes": 97474,
+    "exported_ledger_entries": 86,
+    "bundle_hash": "d51c557a649cff3bb74b30bb62092cd8e85ca4bc1192ce3154208219e51ac723",
+    "ledger_head_hash": "46c02f19ba888aba9ac8182be4374cb944a875e494444dd161b25066907b88e8",
+    "lossless_state_parity": true,
+    "cross_fork_replay_rejected": true,
+    "post_fork_proposal_executed": true,
+    "gen2_bundle_verified": true,
+    "fork_protocol_id": "hanzo-community-fork-1",
+    "parent_protocol_id": "hanzo-open-governance-mainnet-sim"
+  },
+  "performance": {
+    "proposal_submit_latency": {
+      "samples": 10,
+      "batch_size": 50,
+      "mean_us": 125.478,
+      "p50_us": 117.982,
+      "p95_us": 153.122,
+      "p99_us": 153.122,
+      "min_us": 110.015,
+      "max_us": 153.122
+    },
+    "vote_cast_latency": {
+      "samples": 20,
+      "batch_size": 50,
+      "mean_us": 110.509,
+      "p50_us": 105.698,
+      "p95_us": 138.424,
+      "p99_us": 153.442,
+      "min_us": 98.3,
+      "max_us": 153.442
+    },
+    "queue_execute_latency": {
+      "samples": 10,
+      "batch_size": 10,
+      "mean_us": 216.438,
+      "p50_us": 208.244,
+      "p95_us": 253.535,
+      "p99_us": 253.535,
+      "min_us": 198.154,
+      "max_us": 253.535
+    },
+    "bundle_export_verify_latency": {
+      "samples": 20,
+      "batch_size": 1,
+      "mean_us": 9082.163,
+      "p50_us": 8304.663,
+      "p95_us": 11182.265,
+      "p99_us": 11682.225,
+      "min_us": 7878.85,
+      "max_us": 11682.225
+    },
+    "ledger_verify_latency": {
+      "samples": 50,
+      "batch_size": 1,
+      "mean_us": 6581.567,
+      "p50_us": 6269.777,
+      "p95_us": 9463.084,
+      "p99_us": 10403.185,
+      "min_us": 2218.497,
+      "max_us": 10403.185
+    },
+    "proposals_per_sec": 7969.181,
+    "votes_per_sec": 9048.455,
+    "bundle_verifications_per_sec": 110.102
+  },
+  "resources": {
+    "heap_alloc_bytes": 4913136,
+    "total_alloc_bytes": 3991168,
+    "bytes_per_vote": 3991.168,
+    "num_gc": 1
+  },
+  "bounty_dimensions": {
+    "cost_notes": "Measured single-core CPU cost at $0.05/vCPU-hr commodity baseline; zero external RPC or L1 gas fees for off-chain signed governance ops",
+    "estimated_governance_cpu_usd_per_1k_tx": 0.000001535,
+    "amortized_usd_per_million_tokens": 1.53e-10,
+    "trust_rejection_rate_pct": 100,
+    "decentralization_independent_pct": 100,
+    "sovereignty_lossless_fork_pct": 100,
+    "completion_rate_pct": 100
+  }
+}

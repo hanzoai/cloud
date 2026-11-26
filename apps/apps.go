@@ -32,6 +32,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/blueprint"
 	"github.com/hanzoai/cloud/apps/fanclub"
+	"github.com/hanzoai/cloud/apps/governance"
 	"github.com/hanzoai/cloud/apps/template"
 	"github.com/hanzoai/cloud/apps/x402"
 	"github.com/hanzoai/cloud/cek"
@@ -113,6 +114,8 @@ func Wire() []cloud.MountSpec {
 
 		{Name: "template", Mount: templates, Shutdown: template.Shutdown, Description: "Starter kits you can deploy as they come, and your org's own."},
 
+		{Name: "governance", Mount: governanceApp, OwnsHealth: true, Description: "Open protocol governance, timelocked treasury disbursements, and sovereign forkability."},
+
 		// Opt-in Cloud-native FanClub AI organization intelligence app
 		// (CLOUD_ENABLE_STAGED=fanclub). Persists exclusively in Cloud Base,
 		// enforces Hanzo IAM identity, and routes inference through deps.AI.
@@ -177,6 +180,17 @@ func templates(app *zip.App, deps cloud.Deps) error {
 		Org:    principal.OrgFrom,
 		Acting: principal.Acting,
 		Open:   opener(deps.DataDir, "templates"),
+	})
+}
+
+// governanceApp adapts apps/governance to cloud.Deps: validated caller/org come
+// from the host identity boundary (never JSON body fields), with zero mandatory
+// Hanzo-admin override.
+func governanceApp(app *zip.App, deps cloud.Deps) error {
+	return governance.Mount(app, governance.Deps{
+		Log:    deps.Logger.New("subsystem", "governance"),
+		Org:    principal.OrgFrom,
+		Acting: principal.Acting,
 	})
 }
 
