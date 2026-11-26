@@ -1,0 +1,156 @@
+{
+  "schema_version": "hip-1350-x402/v1",
+  "hip": "HIP-1350",
+  "issue": "hanzoai/cloud#16",
+  "timestamp_utc": "2026-11-25T13:34:52Z",
+  "environment": {
+    "goos": "linux",
+    "goarch": "amd64",
+    "go_version": "go1.27.1",
+    "num_cpu": 2
+  },
+  "parameters": {
+    "requests": 200,
+    "concurrency": 8,
+    "tokens_per_request": 1000,
+    "inference_price_usd": 0.002,
+    "erc3009_gas_units": 65000,
+    "l2_gas_fee_per_tx_usd": 0.00018,
+    "l1_gas_fee_per_tx_usd": 2.925,
+    "batch_amortization_n": 100,
+    "independent_facilitator_count": 2
+  },
+  "cost": {
+    "total_useful_tokens": 200000,
+    "total_inference_settled_usd": 0.4,
+    "inference_only_usd_per_1m_tokens": 2,
+    "l2_per_request_total_usd_per_1m_tokens": 2.18,
+    "l2_per_request_fee_overhead_pct": 8.2569,
+    "l2_batched_100_total_usd_per_1m_tokens": 2.0018,
+    "l2_batched_100_fee_overhead_pct": 0.0899,
+    "l1_per_request_total_usd_per_1m_tokens": 2927,
+    "l1_per_request_fee_overhead_pct": 99.9317,
+    "l2_break_even_ticket_10pct_fee_usd": 0.0018,
+    "l1_break_even_ticket_10pct_fee_usd": 29.25
+  },
+  "performance": {
+    "attempted": 200,
+    "completed": 200,
+    "completion_rate_pct": 100,
+    "elapsed_seconds": 0.6078,
+    "throughput_rps": 329.0532,
+    "unguarded_baseline_p50_ms": 0.116,
+    "ttft_p50_ms": 16.986,
+    "ttft_p95_ms": 32.674,
+    "ttft_p99_ms": 38.064,
+    "e2e_p50_ms": 24.039,
+    "e2e_p95_ms": 41.557,
+    "e2e_p99_ms": 44.467,
+    "added_x402_overhead_p50_ms": 16.87
+  },
+  "trust": {
+    "probes_injected": 9,
+    "probes_caught": 9,
+    "fraud_detection_rate_pct": 100,
+    "double_spends_allowed": 0,
+    "failed_infer_charged_usd": 0,
+    "probes": [
+      {
+        "name": "tampered_quote_amount",
+        "caught": true,
+        "detail": "http=402"
+      },
+      {
+        "name": "tampered_request_body_hash",
+        "caught": true,
+        "detail": "http=402"
+      },
+      {
+        "name": "expired_quote",
+        "caught": true,
+        "detail": "http=402"
+      },
+      {
+        "name": "invalid_eip712_signature",
+        "caught": true,
+        "detail": "http=402"
+      },
+      {
+        "name": "wrong_recipient",
+        "caught": true,
+        "detail": "http=402"
+      },
+      {
+        "name": "replayed_nonce",
+        "caught": true,
+        "detail": "initial=200 replay=402"
+      },
+      {
+        "name": "concurrent_double_spend_16x",
+        "caught": true,
+        "detail": "ok=1 blocked=15"
+      },
+      {
+        "name": "settlement_reversal_reconciliation",
+        "caught": true,
+        "detail": "spoofRejected=true status=REFUND_REQUIRED charged=0"
+      },
+      {
+        "name": "failed_inference_non_charge",
+        "caught": true,
+        "detail": "http=500 settledDelta=0 voidedReceipts=1"
+      }
+    ]
+  },
+  "decentralization": {
+    "total_settled_requests": 200,
+    "facilitator_a_settled": 100,
+    "facilitator_b_settled": 100,
+    "hanzo_operated_settled": 0,
+    "hanzo_independent_share_pct": 100,
+    "independent_facilitators_active": 2,
+    "mandatory_hanzo_dependencies": 0
+  },
+  "sovereignty": {
+    "exported_entries": 204,
+    "verified_signatures": 204,
+    "hash_chain_intact": true,
+    "signatures_intact": true,
+    "export_tamper_detected": true,
+    "live_migration_completed": 10,
+    "live_migration_zero_downtime": true,
+    "post_migration_replay_blocked": true,
+    "export_head_hash": "0xc8325c110b92af6017720595ca6c454fcb9aa75a651640894d0c9a5b39d61f99"
+  },
+  "negative_regimes": {
+    "micro_prompt_l1_gas_dominance": {
+      "requests": 40,
+      "tokens_per_prompt": 64,
+      "ticket_usd": 0.0001,
+      "total_useful_tokens": 2560,
+      "l1_fee_overhead_pct": 99.9966,
+      "l1_total_usd_per_1m_tokens": 45704.6875,
+      "l2_per_request_fee_overhead_pct": 64.2857,
+      "l2_total_usd_per_1m_tokens": 4.375,
+      "l2_batched_100_fee_overhead_pct": 1.7682,
+      "l2_batched_100_total_usd_per_1m_tokens": 1.5906,
+      "finding": "At $0.0001/prompt, per-request L1 settlement gas ($2.925/tx) accounts for 99.997% of total cost; even L2 per-request ($0.00018/tx) is 64.29% overhead, proving batched/channel amortization is required for sub-cent micro-prompts."
+    },
+    "optimistic_unverified_settlement_negative": {
+      "concurrent_replay_attempts": 16,
+      "unauthorized_served": 16,
+      "replay_drain_rate_pct": 100,
+      "defense_rate_pct": 0,
+      "finding": "Skipping synchronous pre-inference EIP-712 verification and atomic NonceReplayStore reservation allows 100% replay drain under concurrent load."
+    },
+    "facilitator_outage_failover": {
+      "total_requests": 40,
+      "pre_outage_facilitator_a_settled": 20,
+      "post_outage_facilitator_b_settled": 20,
+      "auto_failovers_triggered": 1,
+      "completion_rate_pct": 100,
+      "hanzo_fallback_count": 0,
+      "finding": "Closing Facilitator A mid-run triggers automatic failover to independent Facilitator B, sustaining 100% completion with 0 Hanzo-operated infrastructure."
+    }
+  }
+}

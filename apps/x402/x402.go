@@ -37,6 +37,7 @@
 package x402
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -44,6 +45,7 @@ import (
 	"io"
 	"path"
 	"strings"
+	"time"
 
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -64,19 +66,53 @@ type Config struct {
 	// Facilitator verifies and settles payments. A host that settles on its own
 	// books passes its own; Load builds one that speaks to a facilitator by URL.
 	Facilitator protocol.Facilitator
+	// Facilitators configures two or more independent facilitators with automatic
+	// failover or round-robin routing. When non-empty and Facilitator is nil, Mount
+	// composes them into a MultiFacilitator with zero mandatory Hanzo or Circle dependency.
+	Facilitators []NamedFacilitator
+	// RoutingStrategy selects how MultiFacilitator chooses among Facilitators
+	// ("failover" or "round_robin"). Defaults to "failover".
+	RoutingStrategy RoutingStrategy
+	// QuoteSigner, when non-nil, signs exact price quotes bound to the request body
+	// hash and rejects tampered or expired quotes prior to inference.
+	QuoteSigner QuoteSigner
+	// NonceStore, when non-nil, enforces persistent/concurrent ERC-3009 replay
+	// protection and Idempotency-Key deduplication.
+	NonceStore NonceReplayStore
+	// Ledger, when non-nil, records hash-chained provider-signed receipts,
+	// failed-inference voids, and facilitator reversal reconciliations.
+	Ledger ReceiptLedger
+	// ReversalVerifier, when non-nil, authenticates or independently verifies
+	// reversal events submitted to POST /v1/x402/reconcile before mutating Ledger.
+	ReversalVerifier func(ctx context.Context, ev ReversalEvent) error
+	// FacilitatorSigners maps facilitator IDs (case-insensitive) to their trusted
+	// secp256k1 signer addresses so POST /v1/x402/reconcile can cryptographically
+	// authenticate facilitator-signed ReversalEvents.
+	FacilitatorSigners map[string]string
+	// Now overrides wall clock time for deterministic testing.
+	Now func() time.Time
+}
+
+// facilitatorEntry is one independent facilitator entry in the operator JSON file.
+type facilitatorEntry struct {
+	ID       string `json:"id"`
+	Operator string `json:"operator,omitempty"`
+	URL      string `json:"url"`
 }
 
 // file is the JSON an operator writes.
 type file struct {
-	Facilitator string                    `json:"facilitator"`
-	Assets      []protocol.Asset          `json:"assets"`
-	Prices      map[string]protocol.Price `json:"prices"`
+	Facilitator     string                    `json:"facilitator,omitempty"`
+	Facilitators    []facilitatorEntry        `json:"facilitators,omitempty"`
+	RoutingStrategy RoutingStrategy           `json:"routingStrategy,omitempty"`
+	Assets          []protocol.Asset          `json:"assets"`
+	Prices          map[string]protocol.Price `json:"prices"`
 }
 
 // Load reads an operator's JSON configuration. A field it does not know is an error:
-// a misspelled key must not leave a route unpriced. The facilitator is reached at
-// the URL named, without credentials; a facilitator that needs them is wired by the
-// host with its own Config.Facilitator.
+// a misspelled key must not leave a route unpriced. Facilitators are reached at
+// the URLs named, without credentials; a facilitator that needs them is wired by
+// the host with its own Config.Facilitator or Config.Facilitators.
 func Load(r io.Reader) (Config, error) {
 	var f file
 	dec := json.NewDecoder(r)
@@ -87,10 +123,45 @@ func Load(r io.Reader) (Config, error) {
 	if dec.More() {
 		return Config{}, errors.New("x402: config: trailing data after the document")
 	}
+	cfg := Config{
+		Assets:          f.Assets,
+		Prices:          f.Prices,
+		RoutingStrategy: f.RoutingStrategy,
+	}
+	if len(f.Facilitators) > 0 {
+		named := make([]NamedFacilitator, 0, len(f.Facilitators))
+		for _, fe := range f.Facilitators {
+			if !strings.HasPrefix(fe.URL, "https://") && !strings.HasPrefix(fe.URL, "http://") {
+				return Config{}, fmt.Errorf("x402: config: facilitator %q url must be an http(s) URL", fe.ID)
+			}
+			id := strings.TrimSpace(fe.ID)
+			if id == "" {
+				return Config{}, errors.New("x402: config: every facilitator entry requires an id")
+			}
+			op := strings.TrimSpace(fe.Operator)
+			if op == "" {
+				op = "independent"
+			}
+			named = append(named, NamedFacilitator{
+				ID:          id,
+				Operator:    op,
+				Endpoint:    fe.URL,
+				Facilitator: protocol.Remote{URL: fe.URL},
+			})
+		}
+		mf, err := NewMultiFacilitator(f.RoutingStrategy, named...)
+		if err != nil {
+			return Config{}, fmt.Errorf("x402: config: %w", err)
+		}
+		cfg.Facilitators = named
+		cfg.Facilitator = mf
+		return cfg, nil
+	}
 	if !strings.HasPrefix(f.Facilitator, "https://") && !strings.HasPrefix(f.Facilitator, "http://") {
 		return Config{}, errors.New("x402: config: facilitator must be an http(s) URL")
 	}
-	return Config{Assets: f.Assets, Prices: f.Prices, Facilitator: protocol.Remote{URL: f.Facilitator}}, nil
+	cfg.Facilitator = protocol.Remote{URL: f.Facilitator}
+	return cfg, nil
 }
 
 // Mount charges for the configured routes. It must be mounted before the routes it
@@ -101,7 +172,19 @@ func Mount(app *zip.App, log luxlog.Logger, cfg Config) error {
 	if app == nil {
 		return errors.New("x402: nil app")
 	}
-	if cfg.Facilitator == nil {
+	var multi *MultiFacilitator
+	fac := cfg.Facilitator
+	if fac == nil && len(cfg.Facilitators) > 0 {
+		var err error
+		multi, err = NewMultiFacilitator(cfg.RoutingStrategy, cfg.Facilitators...)
+		if err != nil {
+			return err
+		}
+		fac = multi
+	} else if mf, ok := fac.(*MultiFacilitator); ok {
+		multi = mf
+	}
+	if fac == nil {
 		return errors.New("x402: no facilitator")
 	}
 	if len(cfg.Prices) == 0 {
@@ -120,9 +203,53 @@ func Mount(app *zip.App, log luxlog.Logger, cfg Config) error {
 			return err
 		}
 	}
-	gate := &protocol.Gate{Table: table, Facilitator: cfg.Facilitator}
-	app.Use(protocol.Paywall(gate, pricedKey(table)))
-	app.Group("/v1/x402").Get("/prices", ops{table: table}.prices)
+
+	enhanced := cfg.QuoteSigner != nil || cfg.NonceStore != nil || cfg.Ledger != nil || multi != nil
+	if enhanced {
+		nonceStore := cfg.NonceStore
+		if nonceStore == nil {
+			nonceStore = NewMemoryNonceStore()
+		}
+		guard := &SettlementGuard{
+			Table:       table,
+			Facilitator: fac,
+			QuoteSigner: cfg.QuoteSigner,
+			NonceStore:  nonceStore,
+			Ledger:      cfg.Ledger,
+			Now:         cfg.Now,
+		}
+		app.Use(guard.ZipPaywall(pricedKey(table)))
+	} else {
+		gate := &protocol.Gate{Table: table, Facilitator: fac, Now: cfg.Now}
+		app.Use(protocol.Paywall(gate, pricedKey(table)))
+	}
+
+	var facSigners map[string]string
+	if len(cfg.FacilitatorSigners) > 0 {
+		facSigners = make(map[string]string, len(cfg.FacilitatorSigners))
+		for k, v := range cfg.FacilitatorSigners {
+			facSigners[strings.ToLower(strings.TrimSpace(k))] = strings.TrimSpace(v)
+		}
+	}
+
+	o := ops{
+		table:              table,
+		quoteSigner:        cfg.QuoteSigner,
+		ledger:             cfg.Ledger,
+		multi:              multi,
+		reversalVerifier:   cfg.ReversalVerifier,
+		facilitatorSigners: facSigners,
+	}
+	g := app.Group("/v1/x402")
+	g.Get("/prices", o.prices)
+	if enhanced {
+		g.Post("/quote", o.quote)
+		g.Get("/receipts", o.receipts)
+		g.Get("/receipts/export", o.exportReceipts)
+		g.Post("/reconcile", o.reconcile)
+		g.Get("/facilitators", o.facilitators)
+	}
+
 	log.Info("x402 mounted", "priced", len(cfg.Prices), "assets", len(cfg.Assets))
 	return nil
 }
@@ -156,7 +283,14 @@ func pricedKey(t *protocol.Table) func(method, p string) string {
 
 // ops binds the typed ops. A typed handler takes no service parameter, so the table
 // arrives as a receiver.
-type ops struct{ table *protocol.Table }
+type ops struct {
+	table              *protocol.Table
+	quoteSigner        QuoteSigner
+	ledger             ReceiptLedger
+	multi              *MultiFacilitator
+	reversalVerifier   func(ctx context.Context, ev ReversalEvent) error
+	facilitatorSigners map[string]string
+}
 
 // noIn is the input of an op that takes nothing.
 type noIn struct{}
@@ -177,4 +311,180 @@ type priceTable struct {
 // credential, so a client can price a route before it has an account.
 func (o ops) prices(_ context.Context, _ *noIn) (*priceTable, error) {
 	return &priceTable{X402Version: protocol.Version, Prices: o.table.Listing()}, nil
+}
+
+type quoteIn struct {
+	Resource        string `json:"resource"`
+	Model           string `json:"model,omitempty"`
+	MaxTokens       int    `json:"maxTokens,omitempty"`
+	RequestBodyHash string `json:"requestBodyHash"`
+	Network         string `json:"network,omitempty"`
+}
+
+type quoteOut struct {
+	InterfaceVersion string           `json:"interfaceVersion"`
+	Quote            SignedPriceQuote `json:"quote"`
+}
+
+func (o ops) quote(ctx context.Context, in *quoteIn) (*quoteOut, error) {
+	if o.quoteSigner == nil {
+		return nil, zip.Errorf(503, "x402: quote signer not configured")
+	}
+	if in == nil || strings.TrimSpace(in.Resource) == "" || strings.TrimSpace(in.RequestBodyHash) == "" {
+		return nil, zip.ErrBadRequest("x402: resource and requestBodyHash are required")
+	}
+	method, p, ok := strings.Cut(strings.TrimSpace(in.Resource), " ")
+	if !ok {
+		return nil, zip.ErrBadRequest("x402: resource must be \"METHOD /path\"")
+	}
+	key := pricedKey(o.table)(strings.ToUpper(method), p)
+	if key == "" {
+		return nil, zip.ErrNotFound("x402: resource is not priced")
+	}
+	accepts, _, ok := o.table.Quote(key)
+	if !ok || len(accepts) == 0 {
+		return nil, zip.ErrNotFound("x402: no payment requirements for resource")
+	}
+	chosen := accepts[0]
+	if in.Network != "" {
+		matched := false
+		for _, a := range accepts {
+			if strings.EqualFold(a.Network, in.Network) {
+				chosen = a
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return nil, zip.ErrBadRequest("x402: requested network is not offered for this resource")
+		}
+	}
+	q, err := o.quoteSigner.SignQuote(ctx, QuoteRequest{
+		Resource:        key,
+		Model:           in.Model,
+		MaxTokens:       in.MaxTokens,
+		RequestBodyHash: in.RequestBodyHash,
+		Network:         chosen.Network,
+		Asset:           chosen.Asset,
+		AmountAtomic:    chosen.Amount,
+		PayTo:           chosen.PayTo,
+		TTLSeconds:      chosen.MaxTimeoutSeconds,
+	})
+	if err != nil {
+		return nil, zip.ErrInternal(err.Error())
+	}
+	return &quoteOut{InterfaceVersion: InterfaceVersion, Quote: q}, nil
+}
+
+type receiptsIn struct {
+	FacilitatorID string        `query:"facilitatorId"`
+	Status        ReceiptStatus `query:"status"`
+	Payer         string        `query:"payer"`
+}
+
+type receiptsOut struct {
+	InterfaceVersion string    `json:"interfaceVersion"`
+	Count            int       `json:"count"`
+	Receipts         []Receipt `json:"receipts"`
+}
+
+func (o ops) receipts(ctx context.Context, in *receiptsIn) (*receiptsOut, error) {
+	if o.ledger == nil {
+		return nil, zip.Errorf(503, "x402: receipt ledger not configured")
+	}
+	var filter ReceiptFilter
+	if in != nil {
+		filter = ReceiptFilter{
+			FacilitatorID: in.FacilitatorID,
+			Status:        in.Status,
+			Payer:         in.Payer,
+		}
+	}
+	list := o.ledger.List(ctx, filter)
+	if !zip.CallerOf(ctx).Admin {
+		for i := range list {
+			list[i].IdempotencyKey = ""
+		}
+	}
+	return &receiptsOut{
+		InterfaceVersion: InterfaceVersion,
+		Count:            len(list),
+		Receipts:         list,
+	}, nil
+}
+
+type exportOut struct {
+	InterfaceVersion string `json:"interfaceVersion"`
+	Format           string `json:"format"`
+	JSONL            string `json:"jsonl"`
+}
+
+func (o ops) exportReceipts(_ context.Context, _ *noIn) (*exportOut, error) {
+	if o.ledger == nil {
+		return nil, zip.Errorf(503, "x402: receipt ledger not configured")
+	}
+	var buf bytes.Buffer
+	if err := o.ledger.ExportJSONL(&buf); err != nil {
+		return nil, zip.ErrInternal(err.Error())
+	}
+	return &exportOut{
+		InterfaceVersion: InterfaceVersion,
+		Format:           "jsonl",
+		JSONL:            buf.String(),
+	}, nil
+}
+
+type reconcileOut struct {
+	InterfaceVersion string  `json:"interfaceVersion"`
+	Receipt          Receipt `json:"receipt"`
+}
+
+func (o ops) reconcile(ctx context.Context, in *ReversalEvent) (*reconcileOut, error) {
+	if o.ledger == nil {
+		return nil, zip.Errorf(503, "x402: receipt ledger not configured")
+	}
+	if in == nil {
+		return nil, zip.ErrBadRequest("x402: reversal event is required")
+	}
+	if o.reversalVerifier != nil {
+		if err := o.reversalVerifier(ctx, *in); err != nil {
+			return nil, zip.ErrForbidden(err.Error())
+		}
+	} else if signerAddr, ok := o.facilitatorSigners[strings.ToLower(strings.TrimSpace(in.FacilitatorID))]; ok && signerAddr != "" {
+		if err := VerifyReversalEventSignature(*in, signerAddr); err != nil {
+			return nil, zip.ErrForbidden(err.Error())
+		}
+	} else if !zip.CallerOf(ctx).Admin {
+		return nil, zip.ErrForbidden("x402: reversal reconciliation requires operator authorization or trusted facilitator signature")
+	}
+	rec, err := o.ledger.ReconcileReversal(ctx, *in)
+	if err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
+	}
+	return &reconcileOut{
+		InterfaceVersion: InterfaceVersion,
+		Receipt:          rec,
+	}, nil
+}
+
+type facilitatorsOut struct {
+	InterfaceVersion string             `json:"interfaceVersion"`
+	Failovers        int64              `json:"failovers"`
+	Migrations       int64              `json:"migrations"`
+	Facilitators     []FacilitatorStats `json:"facilitators"`
+}
+
+func (o ops) facilitators(_ context.Context, _ *noIn) (*facilitatorsOut, error) {
+	if o.multi == nil {
+		return &facilitatorsOut{
+			InterfaceVersion: InterfaceVersion,
+			Facilitators:     []FacilitatorStats{},
+		}, nil
+	}
+	return &facilitatorsOut{
+		InterfaceVersion: InterfaceVersion,
+		Failovers:        o.multi.TotalFailovers(),
+		Migrations:       o.multi.Migrations(),
+		Facilitators:     o.multi.Stats(),
+	}, nil
 }
