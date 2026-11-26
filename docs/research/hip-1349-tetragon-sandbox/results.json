@@ -1,0 +1,452 @@
+{
+  "schemaVersion": "hip-1349-sandboxpolicy-v1",
+  "generatedAt": "2026-11-26T21:01:38Z",
+  "host": {
+    "goos": "linux",
+    "goarch": "amd64",
+    "goVersion": "go1.27.1",
+    "numCpu": 2,
+    "gitCommit": "efb15e233bf21ebb9dc6b898cda61d825bc27016",
+    "seed": 1349
+  },
+  "corpus": {
+    "repoRoot": "cloud",
+    "filesSampled": 48,
+    "corpusSha256": "6845fa7d089690fcba2db6dfe09287f7637395991737f7ed4f303ac8ebc4425e"
+  },
+  "boundaryMatrix": {
+    "totalCases": 20,
+    "syscallCases": 8,
+    "processCases": 6,
+    "networkCases": 6,
+    "auditOnly": {
+      "totalCases": 20,
+      "blockedCount": 0,
+      "blockRatePct": 0,
+      "auditAlertCount": 20,
+      "denyCount": 0,
+      "sigkillCount": 0,
+      "auditRecordedCount": 20,
+      "auditVisibilityPct": 100,
+      "auditChainValid": true,
+      "bpfChecked": 8,
+      "bpfParityPct": 100
+    },
+    "enforceDeny": {
+      "totalCases": 20,
+      "blockedCount": 20,
+      "blockRatePct": 100,
+      "auditAlertCount": 0,
+      "denyCount": 20,
+      "sigkillCount": 0,
+      "auditRecordedCount": 20,
+      "auditVisibilityPct": 100,
+      "auditChainValid": true,
+      "bpfChecked": 8,
+      "bpfParityPct": 100
+    },
+    "enforceSigkill": {
+      "totalCases": 20,
+      "blockedCount": 20,
+      "blockRatePct": 100,
+      "auditAlertCount": 0,
+      "denyCount": 2,
+      "sigkillCount": 18,
+      "auditRecordedCount": 20,
+      "auditVisibilityPct": 100,
+      "auditChainValid": true,
+      "bpfChecked": 8,
+      "bpfParityPct": 100
+    },
+    "cases": [
+      {
+        "id": "escape-sys-ptrace",
+        "domain": "syscall",
+        "description": "ptrace attach to host/sibling process",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "sys-deny-ptrace",
+        "bpfParity": true
+      },
+      {
+        "id": "escape-sys-mount",
+        "domain": "syscall",
+        "description": "mount host procfs/cgroup inside sandbox",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "sys-deny-mount",
+        "bpfParity": true
+      },
+      {
+        "id": "escape-sys-bpf",
+        "domain": "syscall",
+        "description": "load unprivileged eBPF program from sandbox",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "sys-deny-bpf",
+        "bpfParity": true
+      },
+      {
+        "id": "escape-sys-init-module",
+        "domain": "syscall",
+        "description": "load Linux kernel module via init_module",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "sys-deny-init-module",
+        "bpfParity": true
+      },
+      {
+        "id": "escape-sys-open-by-handle-at",
+        "domain": "syscall",
+        "description": "Shocker container rootfs escape via open_by_handle_at",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "sys-deny-open-by-handle-at",
+        "bpfParity": true
+      },
+      {
+        "id": "escape-sys-setns",
+        "domain": "syscall",
+        "description": "join host PID/MNT namespace via setns",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "sys-deny-setns",
+        "bpfParity": true
+      },
+      {
+        "id": "escape-sys-clone-userns",
+        "domain": "syscall",
+        "description": "clone with CLONE_NEWUSER user-namespace flag",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "sys-deny-clone-ns",
+        "bpfParity": true
+      },
+      {
+        "id": "escape-sys-socket-packet",
+        "domain": "syscall",
+        "description": "raw L2 packet capture via socket(AF_PACKET)",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "DENY",
+        "ruleId": "sys-deny-socket-packet",
+        "bpfParity": true
+      },
+      {
+        "id": "escape-proc-sudo",
+        "domain": "process",
+        "description": "direct execution of /usr/bin/sudo",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "proc-deny-sudo"
+      },
+      {
+        "id": "escape-proc-traversal-nsenter",
+        "domain": "process",
+        "description": "path traversal /workspace/../usr/bin/nsenter",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "proc-deny-nsenter"
+      },
+      {
+        "id": "escape-proc-symlink-unshare",
+        "domain": "process",
+        "description": "symlink /workspace/.bin/helper -\u003e /usr/bin/unshare",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "proc-deny-unshare"
+      },
+      {
+        "id": "escape-proc-host-proc-root",
+        "domain": "process",
+        "description": "host filesystem read via /proc/1/root/etc/shadow",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "proc-deny-arg-proc-root"
+      },
+      {
+        "id": "escape-proc-reverse-shell-arg",
+        "domain": "process",
+        "description": "bash /dev/tcp reverse shell argument",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "proc-deny-arg-dev-tcp"
+      },
+      {
+        "id": "escape-proc-privesc-uid-cap",
+        "domain": "process",
+        "description": "UID 1000-\u003e0 + CAP_SYS_ADMIN + no_new_privs=false escalation",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "priv_esc_refused"
+      },
+      {
+        "id": "escape-net-imds-v4",
+        "domain": "network",
+        "description": "AWS/GCP/Azure IPv4 metadata endpoint 169.254.169.254:80",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "net-deny-imds-v4"
+      },
+      {
+        "id": "escape-net-imds-v4in6-bypass",
+        "domain": "network",
+        "description": "IPv4-mapped IPv6 metadata bypass ::ffff:169.254.169.254:80",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "net-deny-imds-v4"
+      },
+      {
+        "id": "escape-net-imds-v6",
+        "domain": "network",
+        "description": "AWS IPv6 metadata endpoint fd00:ec2::254:80",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "net-deny-imds-v6"
+      },
+      {
+        "id": "escape-net-k8s-internal",
+        "domain": "network",
+        "description": "internal Kubernetes cluster API 10.96.0.1:443",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "DENY",
+        "ruleId": "net-deny-rfc1918-10"
+      },
+      {
+        "id": "escape-net-loopback-docker",
+        "domain": "network",
+        "description": "host Docker daemon loopback 127.0.0.1:2375",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "net-deny-loopback-docker"
+      },
+      {
+        "id": "escape-net-reverse-shell-4444",
+        "domain": "network",
+        "description": "unauthorized egress to C2/reverse-shell port 4444",
+        "auditOnly": "AUDIT_ALERT",
+        "enforceDeny": "DENY",
+        "enforceSigkill": "SIGKILL",
+        "ruleId": "default_deny_network"
+      }
+    ]
+  },
+  "benignMatrix": {
+    "totalOperations": 240,
+    "syscallOperations": 120,
+    "processOperations": 72,
+    "networkOperations": 48,
+    "allowedCount": 240,
+    "falsePositiveBlocks": 0,
+    "falsePositiveRatePct": 0,
+    "allowRatePct": 100,
+    "syscallBpfParityPct": 100,
+    "modeEvaluated": "enforce_sigkill"
+  },
+  "overheadMatrix": {
+    "unmonitoredBaseline": {
+      "samples": 4000,
+      "p50Ns": 27,
+      "p95Ns": 28,
+      "p99Ns": 44,
+      "meanNs": 27.48,
+      "throughputEventsPerSec": 11967770.79
+    },
+    "ruleScales": [
+      {
+        "activeRules": 10,
+        "bpfInsnCount": 15,
+        "indexed": {
+          "samples": 4000,
+          "p50Ns": 686,
+          "p95Ns": 2841,
+          "p99Ns": 10611,
+          "meanNs": 4056.2,
+          "throughputEventsPerSec": 242903.47
+        },
+        "bpfVm": {
+          "samples": 4000,
+          "p50Ns": 57,
+          "p95Ns": 58,
+          "p99Ns": 75,
+          "meanNs": 57.13,
+          "throughputEventsPerSec": 9416993.91
+        }
+      },
+      {
+        "activeRules": 100,
+        "bpfInsnCount": 75,
+        "indexed": {
+          "samples": 4000,
+          "p50Ns": 749,
+          "p95Ns": 3028,
+          "p99Ns": 8658,
+          "meanNs": 2633.32,
+          "throughputEventsPerSec": 370982.11
+        },
+        "bpfVm": {
+          "samples": 4000,
+          "p50Ns": 177,
+          "p95Ns": 189,
+          "p99Ns": 190,
+          "meanNs": 185.94,
+          "throughputEventsPerSec": 4097504.21
+        }
+      },
+      {
+        "activeRules": 1000,
+        "bpfInsnCount": 675,
+        "indexed": {
+          "samples": 4000,
+          "p50Ns": 881,
+          "p95Ns": 3778,
+          "p99Ns": 6276,
+          "meanNs": 2644.75,
+          "throughputEventsPerSec": 364464.79
+        },
+        "bpfVm": {
+          "samples": 4000,
+          "p50Ns": 1253,
+          "p95Ns": 1391,
+          "p99Ns": 1402,
+          "meanNs": 1747.06,
+          "throughputEventsPerSec": 549419.38
+        }
+      }
+    ]
+  },
+  "negativeRegime1UnindexedAndOverbroad": {
+    "description": "Compares indexed O(1)/bitmask-CIDR enforcement against unindexed linear rule scanning across 10, 100, and 1,000 rules, and evaluates false-positive blast radius of an over-broad regex/CIDR policy.",
+    "scalingRows": [
+      {
+        "activeRules": 10,
+        "indexed": {
+          "samples": 4000,
+          "p50Ns": 686,
+          "p95Ns": 2841,
+          "p99Ns": 10611,
+          "meanNs": 4056.2,
+          "throughputEventsPerSec": 242903.47
+        },
+        "unindexed": {
+          "samples": 4000,
+          "p50Ns": 606,
+          "p95Ns": 2488,
+          "p99Ns": 6988,
+          "meanNs": 1985.08,
+          "throughputEventsPerSec": 490051.47
+        },
+        "p50SlowdownRatio": 0.88,
+        "p99SlowdownRatio": 0.66
+      },
+      {
+        "activeRules": 100,
+        "indexed": {
+          "samples": 4000,
+          "p50Ns": 749,
+          "p95Ns": 3028,
+          "p99Ns": 8658,
+          "meanNs": 2633.32,
+          "throughputEventsPerSec": 370982.11
+        },
+        "unindexed": {
+          "samples": 4000,
+          "p50Ns": 1474,
+          "p95Ns": 2986,
+          "p99Ns": 6520,
+          "meanNs": 2511.81,
+          "throughputEventsPerSec": 388696.44
+        },
+        "p50SlowdownRatio": 1.97,
+        "p99SlowdownRatio": 0.75
+      },
+      {
+        "activeRules": 1000,
+        "indexed": {
+          "samples": 4000,
+          "p50Ns": 881,
+          "p95Ns": 3778,
+          "p99Ns": 6276,
+          "meanNs": 2644.75,
+          "throughputEventsPerSec": 364464.79
+        },
+        "unindexed": {
+          "samples": 4000,
+          "p50Ns": 5996,
+          "p95Ns": 12996,
+          "p99Ns": 52731,
+          "meanNs": 12602.05,
+          "throughputEventsPerSec": 78895.93
+        },
+        "p50SlowdownRatio": 6.81,
+        "p99SlowdownRatio": 8.4
+      }
+    ],
+    "overbroadPolicy": {
+      "totalBenignOps": 240,
+      "falsePositiveBlocks": 91,
+      "falsePositiveRatePct": 37.92,
+      "notes": "Over-broad unanchored arg regex + IPv4-only egress allowlist breaks benign go test, git status, npm test, IPv6 HTTPS, and httptest loopback binds."
+    }
+  },
+  "negativeRegime2AuditRingBackpressure": {
+    "description": "Userspace simulation of a 50,000 events/sec tight benign read/newfstatat loop against a 4,096-entry RingDropNewest buffer drained at 12,000 events/sec, comparing userspace audit-all emission (Engine.Evaluate + ring append) against the userspace Go cBPF VM interpreter (EvalBPF, AuditAllowEvents=false) simulating ring-bypassing allowlist filtering. Does not install a kernel filter or issue raw kernel syscalls.",
+    "measurementMethod": "userspace_go_cbpf_vm_simulation",
+    "userspaceAuditAll": {
+      "totalEvents": 50000,
+      "simulatedRateEps": 50000,
+      "consumerDrainRateEps": 12000,
+      "ringCapacity": 4096,
+      "auditEmitted": 50000,
+      "auditDropped": 34144,
+      "dropRatePct": 68.29,
+      "retainedEvents": 4096,
+      "latency": {
+        "samples": 50000,
+        "p50Ns": 595,
+        "p95Ns": 2735,
+        "p99Ns": 6743,
+        "meanNs": 2715.29,
+        "throughputEventsPerSec": 358266.25
+      }
+    },
+    "simulatedBpfVmFilter": {
+      "totalEvents": 50000,
+      "simulatedRateEps": 50000,
+      "consumerDrainRateEps": 12000,
+      "ringCapacity": 4096,
+      "auditEmitted": 0,
+      "auditDropped": 0,
+      "dropRatePct": 0,
+      "retainedEvents": 0,
+      "latency": {
+        "samples": 50000,
+        "p50Ns": 470,
+        "p95Ns": 557,
+        "p99Ns": 563,
+        "meanNs": 689.46,
+        "throughputEventsPerSec": 1324135.36
+      }
+    },
+    "p50SpeedupFactor": 1.27,
+    "throughputGain": 3.7
+  }
+}

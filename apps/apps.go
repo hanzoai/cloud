@@ -32,6 +32,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/blueprint"
 	"github.com/hanzoai/cloud/apps/fanclub"
+	"github.com/hanzoai/cloud/apps/sandboxpolicy"
 	"github.com/hanzoai/cloud/apps/template"
 	"github.com/hanzoai/cloud/apps/x402"
 	"github.com/hanzoai/cloud/cek"
@@ -113,6 +114,8 @@ func Wire() []cloud.MountSpec {
 
 		{Name: "template", Mount: templates, Shutdown: template.Shutdown, Description: "Starter kits you can deploy as they come, and your org's own."},
 
+		{Name: "sandboxpolicy", Mount: sandboxpolicyApp, OwnsHealth: true, Description: "Tetragon-inspired runtime enforcement (syscall/process/network) and hash-chained audit for agent sandboxes."},
+
 		// Opt-in Cloud-native FanClub AI organization intelligence app
 		// (CLOUD_ENABLE_STAGED=fanclub). Persists exclusively in Cloud Base,
 		// enforces Hanzo IAM identity, and routes inference through deps.AI.
@@ -177,6 +180,17 @@ func templates(app *zip.App, deps cloud.Deps) error {
 		Org:    principal.OrgFrom,
 		Acting: principal.Acting,
 		Open:   opener(deps.DataDir, "templates"),
+	})
+}
+
+// sandboxpolicyApp adapts apps/sandboxpolicy to cloud.Deps: authenticated org
+// isolation comes strictly from the host's validated identity boundary
+// (principal), never from untrusted request fields.
+func sandboxpolicyApp(app *zip.App, deps cloud.Deps) error {
+	return sandboxpolicy.Mount(app, sandboxpolicy.Deps{
+		Log:    deps.Logger.New("subsystem", "sandboxpolicy"),
+		Org:    principal.OrgFrom,
+		Acting: principal.Acting,
 	})
 }
 
