@@ -30,6 +30,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/agenttrace"
 	"github.com/hanzoai/cloud/apps/blueprint"
 	"github.com/hanzoai/cloud/apps/fanclub"
 	"github.com/hanzoai/cloud/apps/template"
@@ -113,6 +114,8 @@ func Wire() []cloud.MountSpec {
 
 		{Name: "template", Mount: templates, Shutdown: template.Shutdown, Description: "Starter kits you can deploy as they come, and your org's own."},
 
+		{Name: "agenttrace", Mount: agenttraceApp, Shutdown: agenttrace.Shutdown, OwnsHealth: true, Description: "Unified OpenTelemetry GenAI agent execution tracing under one task id across all six Hanzo subsystems."},
+
 		// Opt-in Cloud-native FanClub AI organization intelligence app
 		// (CLOUD_ENABLE_STAGED=fanclub). Persists exclusively in Cloud Base,
 		// enforces Hanzo IAM identity, and routes inference through deps.AI.
@@ -177,6 +180,27 @@ func templates(app *zip.App, deps cloud.Deps) error {
 		Org:    principal.OrgFrom,
 		Acting: principal.Acting,
 		Open:   opener(deps.DataDir, "templates"),
+	})
+}
+
+// agenttraceApp adapts apps/agenttrace to cloud.Deps: authenticated org isolation
+// comes strictly from the host's validated identity boundary (principal), never
+// from untrusted request fields. Global exporter diagnostics additionally require
+// validated platform SuperAdmin authority.
+func agenttraceApp(app *zip.App, deps cloud.Deps) error {
+	return agenttrace.Mount(app, agenttrace.Deps{
+		Log:    deps.Logger.New("subsystem", "agenttrace"),
+		Org:    principal.OrgFrom,
+		Acting: principal.Acting,
+		Operator: func(ctx context.Context) error {
+			if _, err := principal.Acting(ctx); err != nil {
+				return err
+			}
+			if !zip.CallerOf(ctx).Admin {
+				return zip.ErrForbidden("platform SuperAdmin authority required for global trace diagnostics")
+			}
+			return nil
+		},
 	})
 }
 
