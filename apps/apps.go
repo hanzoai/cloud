@@ -32,6 +32,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/blueprint"
 	"github.com/hanzoai/cloud/apps/fanclub"
+	"github.com/hanzoai/cloud/apps/provenance"
 	"github.com/hanzoai/cloud/apps/template"
 	"github.com/hanzoai/cloud/apps/x402"
 	"github.com/hanzoai/cloud/cek"
@@ -113,6 +114,8 @@ func Wire() []cloud.MountSpec {
 
 		{Name: "template", Mount: templates, Shutdown: template.Shutdown, Description: "Starter kits you can deploy as they come, and your org's own."},
 
+		{Name: "provenance", Mount: provenanceApp, OwnsHealth: true, Description: "Verifiable agent-produced artifacts: SLSA v1.2 provenance, DSSE signing, Fulcio-style OIDC certs, and Merkle transparency log."},
+
 		// Opt-in Cloud-native FanClub AI organization intelligence app
 		// (CLOUD_ENABLE_STAGED=fanclub). Persists exclusively in Cloud Base,
 		// enforces Hanzo IAM identity, and routes inference through deps.AI.
@@ -177,6 +180,24 @@ func templates(app *zip.App, deps cloud.Deps) error {
 		Org:    principal.OrgFrom,
 		Acting: principal.Acting,
 		Open:   opener(deps.DataDir, "templates"),
+	})
+}
+
+// provenanceApp adapts apps/provenance to cloud.Deps: authenticated caller and org
+// come strictly from the host's validated identity boundary (principal), never from
+// untrusted request fields.
+func provenanceApp(app *zip.App, deps cloud.Deps) error {
+	return provenance.Mount(app, provenance.Deps{
+		Log:    deps.Logger.New("subsystem", "provenance"),
+		Org:    principal.OrgFrom,
+		Acting: principal.Acting,
+		Caller: func(ctx context.Context) (string, bool) {
+			u := strings.TrimSpace(zip.CallerOf(ctx).User)
+			if u == "" {
+				return "", false
+			}
+			return strings.Clone(u), true
+		},
 	})
 }
 

@@ -1,0 +1,410 @@
+{
+  "schemaVersion": "hip-1349.provenance-bench.v1",
+  "generatedAt": "2026-11-26T17:22:38.246173006Z",
+  "environment": {
+    "goVersion": "go1.27.1",
+    "goos": "linux",
+    "goarch": "amd64",
+    "numCpu": 2,
+    "gitCommit": "0f3125493818da9f324b83c6ae62dea2297be530",
+    "gitTree": "29b42374a792e1deab0e814285c2657702eacac7",
+    "toolchainPath": "/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go",
+    "toolchainSha256": "30969f97169d7f43fe6a085873d75613adc21e30818a8c61d95bd27275df4624",
+    "toolchainBytes": 17142188,
+    "iterations": 250,
+    "seed": 1349
+  },
+  "corpus": {
+    "artifactCount": 12,
+    "totalBytes": 68633041,
+    "artifacts": [
+      {
+        "name": "bin/cloud",
+        "path": "bin/cloud",
+        "bytes": 68374667,
+        "sha256": "95d60348d32a731e7f09d1f32d6b1174c8d79ce01f6581cc8cd17e2b8c9c9cdc"
+      },
+      {
+        "name": "go.mod",
+        "path": "go.mod",
+        "bytes": 7775,
+        "sha256": "804c95ad38e4c4f8d2d3aed2f167d5810704d17f09a7017ea69e8c685f23ed8b"
+      },
+      {
+        "name": "go.sum",
+        "path": "go.sum",
+        "bytes": 38876,
+        "sha256": "08bce05e2b9957af8f2aee3a511cc0265a9f2be9d8103cb207735637082dc45c"
+      },
+      {
+        "name": "Makefile",
+        "path": "Makefile",
+        "bytes": 3232,
+        "sha256": "536945ef56037e49856b627b54aa307e3994fd78e7ae5d6dcb52dd1b8f53eac9"
+      },
+      {
+        "name": "README.md",
+        "path": "README.md",
+        "bytes": 10427,
+        "sha256": "ae84e03adf2f14ecf552131238d1e35effdb1af895e1a2e0131fe09e80374a71"
+      },
+      {
+        "name": "apps/apps.go",
+        "path": "apps/apps.go",
+        "bytes": 16574,
+        "sha256": "f7b76d7b8de544b79e1a284d7f2402f6a893014d34f31c31503f88ac7b7efe41"
+      },
+      {
+        "name": "apps/template/catalog.json",
+        "path": "apps/template/catalog.json",
+        "bytes": 82519,
+        "sha256": "c9153c957eaa9349e2a6c34bba6e9ee17388189fbff3b956731803154db6e326"
+      },
+      {
+        "name": "apps/provenance/slsa.go",
+        "path": "apps/provenance/slsa.go",
+        "bytes": 12258,
+        "sha256": "fa4bd69e1e7be35f1a1be2ee3ffbf7e68693496aa95923fa53a2a12ab58bab3c"
+      },
+      {
+        "name": "apps/provenance/dsse.go",
+        "path": "apps/provenance/dsse.go",
+        "bytes": 21155,
+        "sha256": "331437d1d26bcc2491183f2bd7eb8ca501aa97521ca930d426fc4a7991c18d29"
+      },
+      {
+        "name": "apps/provenance/tlog.go",
+        "path": "apps/provenance/tlog.go",
+        "bytes": 19223,
+        "sha256": "fd86bd48c76d1a65c0aa00bb88c143bbd5a274c4167f2ed9fcccb1c9a18a675b"
+      },
+      {
+        "name": "apps/provenance/verifier.go",
+        "path": "apps/provenance/verifier.go",
+        "bytes": 22049,
+        "sha256": "dd4969a6412d484c5b2d13ec786a7c5da5db6dee70c09ed21fa7c947c2fe23d6"
+      },
+      {
+        "name": "apps/provenance/http.go",
+        "path": "apps/provenance/http.go",
+        "bytes": 24286,
+        "sha256": "6fadb802fd23ea93fd9eb833a5af466bb757e404c8180c137efbfca18fed5bf4"
+      }
+    ]
+  },
+  "performance": {
+    "unsignedSha256Baseline": {
+      "samples": 250,
+      "minUs": 223429.74,
+      "p50Us": 235605.6,
+      "p95Us": 267275.7,
+      "p99Us": 300356.83,
+      "meanUs": 239576.54,
+      "opsPerSec": 4.17,
+      "allocBytesPerOp": 33176,
+      "mallocsPerOp": 8
+    },
+    "ed25519KeylessAttest": {
+      "samples": 250,
+      "minUs": 366.31,
+      "p50Us": 411.09,
+      "p95Us": 622.3,
+      "p99Us": 1585.9,
+      "meanUs": 455.93,
+      "opsPerSec": 2193.33,
+      "allocBytesPerOp": 46278,
+      "mallocsPerOp": 528,
+      "bundleSizeBytes": 4479,
+      "proofHashesCount": 6
+    },
+    "ed25519KeylessVerify": {
+      "samples": 250,
+      "minUs": 331.88,
+      "p50Us": 386.27,
+      "p95Us": 540.24,
+      "p99Us": 1126.19,
+      "meanUs": 415.75,
+      "opsPerSec": 2405.27,
+      "allocBytesPerOp": 21230,
+      "mallocsPerOp": 183
+    },
+    "ed25519KeylessVerifyWithPinnedCheckpoint": {
+      "samples": 250,
+      "minUs": 435.18,
+      "p50Us": 487.93,
+      "p95Us": 627.2,
+      "p99Us": 1068.84,
+      "meanUs": 507.42,
+      "opsPerSec": 1970.75,
+      "allocBytesPerOp": 22414,
+      "mallocsPerOp": 203,
+      "proofHashesCount": 8
+    },
+    "ecdsaP256KeylessAttest": {
+      "samples": 250,
+      "minUs": 330.49,
+      "p50Us": 429.24,
+      "p95Us": 925.36,
+      "p99Us": 1309.2,
+      "meanUs": 486.28,
+      "opsPerSec": 2056.44,
+      "allocBytesPerOp": 54575,
+      "mallocsPerOp": 625,
+      "bundleSizeBytes": 4637,
+      "proofHashesCount": 7
+    },
+    "ecdsaP256KeylessVerify": {
+      "samples": 250,
+      "minUs": 320.15,
+      "p50Us": 401.84,
+      "p95Us": 585.74,
+      "p99Us": 1238.67,
+      "meanUs": 431.7,
+      "opsPerSec": 2316.43,
+      "allocBytesPerOp": 22792,
+      "mallocsPerOp": 210
+    },
+    "ed25519DirectKeyAttest": {
+      "samples": 250,
+      "minUs": 91.12,
+      "p50Us": 107.63,
+      "p95Us": 191.83,
+      "p99Us": 555.47,
+      "meanUs": 123.15,
+      "opsPerSec": 8120.12,
+      "allocBytesPerOp": 14797,
+      "mallocsPerOp": 77,
+      "bundleSizeBytes": 3457
+    },
+    "ed25519DirectKeyVerify": {
+      "samples": 250,
+      "minUs": 177.65,
+      "p50Us": 213.36,
+      "p95Us": 293.78,
+      "p99Us": 526.41,
+      "meanUs": 226.92,
+      "opsPerSec": 4406.92,
+      "allocBytesPerOp": 10232,
+      "mallocsPerOp": 77
+    }
+  },
+  "adversarial": {
+    "totalVectors": 16,
+    "refusedCount": 16,
+    "passedCount": 16,
+    "refusalRatePct": 100,
+    "vectors": [
+      {
+        "id": "V01_artifact_1bit_flip",
+        "category": "artifact_tamper",
+        "description": "Single-bit flip in real compiled binary bytes",
+        "expectedCode": "DIGEST_MISMATCH",
+        "actualCode": "DIGEST_MISMATCH",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: artifact digest mismatch: artifact \"bin/cloud\" sha256 does not match signed provenance"
+      },
+      {
+        "id": "V02_unauthorized_key_substitution",
+        "category": "signer_substitution",
+        "description": "Valid Ed25519 DSSE signature from untrusted rogue key",
+        "expectedCode": "UNTRUSTED_SIGNER",
+        "actualCode": "UNTRUSTED_SIGNER",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: signer key or OIDC identity is not trusted: keyid \"sha256:7cafe7a6541ead13b26940935476888af4f323147ec2563761435334c0b45139\" not in TrustedKeys"
+      },
+      {
+        "id": "V03_unauthorized_oidc_san",
+        "category": "signer_substitution",
+        "description": "Valid Fulcio-style cert from trusted CA for unauthorized OIDC SAN",
+        "expectedCode": "UNTRUSTED_SIGNER",
+        "actualCode": "UNTRUSTED_SIGNER",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: signer key or OIDC identity is not trusted: certificate identity \"https://hanzo.ai/principals/attacker/evil-agent\" not allowed"
+      },
+      {
+        "id": "V04_untrusted_ca_substitution",
+        "category": "signer_substitution",
+        "description": "Valid X.509 cert minted by untrusted rogue Root CA claiming authorized SAN",
+        "expectedCode": "CERT_INVALID",
+        "actualCode": "CERT_INVALID",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: certificate chain or validity window invalid: x509 verify at 2026-11-26T12:00:04Z failed: x509: certificate signed by unknown authority"
+      },
+      {
+        "id": "V05_disallowed_builder_id",
+        "category": "builder_substitution",
+        "description": "Valid signature from runner outside AllowedBuilders allowlist",
+        "expectedCode": "BUILDER_MISMATCH",
+        "actualCode": "BUILDER_MISMATCH",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: builder ID is not allowed by policy: builder \"https://hanzo.ai/forge/runners/linux-amd64-v1\" not in AllowedBuilders"
+      },
+      {
+        "id": "V06_source_repo_uri_substitution",
+        "category": "source_substitution",
+        "description": "Artifact built from unauthorized repository URI",
+        "expectedCode": "SOURCE_MISMATCH",
+        "actualCode": "SOURCE_MISMATCH",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: source repository or revision does not satisfy policy: source URI \"git+https://github.com/hanzoai/cloud\" not in AllowedSourceURIs"
+      },
+      {
+        "id": "V07_source_commit_substitution",
+        "category": "source_substitution",
+        "description": "Artifact built from unpinned Git commit SHA",
+        "expectedCode": "SOURCE_MISMATCH",
+        "actualCode": "SOURCE_MISMATCH",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: source repository or revision does not satisfy policy: source commit \"0f3125493818da9f324b83c6ae62dea2297be530\" != required \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\""
+      },
+      {
+        "id": "V08_toolchain_digest_mismatch",
+        "category": "toolchain_tamper",
+        "description": "Go compiler digest differs from pinned trusted toolchain SHA-256",
+        "expectedCode": "TOOLCHAIN_MISMATCH",
+        "actualCode": "TOOLCHAIN_MISMATCH",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: build toolchain digest does not satisfy policy: toolchain \"go\" digest 30969f97169d7f43fe6a085873d75613adc21e30818a8c61d95bd27275df4624 != required 569107ef91af202f38db52026840432e60e1b5fbc48a66152dfaf0d5405641e6"
+      },
+      {
+        "id": "V09_dsse_payload_type_confusion",
+        "category": "dsse_tamper",
+        "description": "Valid signature over wrong DSSE payloadType (application/json)",
+        "expectedCode": "PAYLOAD_TYPE_MISMATCH",
+        "actualCode": "PAYLOAD_TYPE_MISMATCH",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: unexpected DSSE payloadType: got \"application/json\", want \"application/vnd.in-toto+json\""
+      },
+      {
+        "id": "V10_dsse_pae_signature_tamper",
+        "category": "dsse_tamper",
+        "description": "Tampered DSSE PAE signature bytes even when re-logged into TLog",
+        "expectedCode": "INVALID_SIGNATURE",
+        "actualCode": "INVALID_SIGNATURE",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: invalid DSSE cryptographic signature: ed25519 verification failed"
+      },
+      {
+        "id": "V11_replayed_swapped_provenance",
+        "category": "replay_attack",
+        "description": "Valid bundle for primary binary replayed against different repository artifact",
+        "expectedCode": "ARTIFACT_NOT_IN_SUBJECT",
+        "actualCode": "ARTIFACT_NOT_IN_SUBJECT",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: artifact not listed in statement subjects: artifact \"go.mod\" absent from signed subjects"
+      },
+      {
+        "id": "V12_forged_merkle_inclusion_proof",
+        "category": "tlog_tamper",
+        "description": "1-bit corruption in RFC 6962 Merkle inclusion audit path",
+        "expectedCode": "TLOG_INVALID",
+        "actualCode": "TLOG_INVALID",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: transparency log proof or checkpoint invalid: inclusion proof root mismatch"
+      },
+      {
+        "id": "V13_tlog_split_view_equivocation",
+        "category": "tlog_tamper",
+        "description": "Equivocating forked transparency log violating pinned checkpoint consistency",
+        "expectedCode": "TLOG_INVALID",
+        "actualCode": "TLOG_INVALID",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: transparency log proof or checkpoint invalid: consistency proof firstRoot mismatch"
+      },
+      {
+        "id": "V14_expired_cert_outside_tlog_time",
+        "category": "cert_expiry",
+        "description": "Short-lived X.509 certificate expired before transparency log integratedTime",
+        "expectedCode": "CERT_INVALID",
+        "actualCode": "CERT_INVALID",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: certificate chain or validity window invalid: x509 verify at 2026-11-26T12:00:07Z failed: x509: certificate has expired or is not yet valid: current time 2026-11-26T12:00:07Z is after 2026-11-26T11:40:00Z"
+      },
+      {
+        "id": "V15_revoked_cert_serial",
+        "category": "revocation",
+        "description": "Certificate serial number present in org revocation list",
+        "expectedCode": "REVOKED_SIGNER",
+        "actualCode": "REVOKED_SIGNER",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: signer key, identity, or certificate is revoked: certificate or signer identity revoked"
+      },
+      {
+        "id": "V16_revoked_signer_key",
+        "category": "revocation",
+        "description": "Signer SPKI KeyID present in org revocation list",
+        "expectedCode": "REVOKED_SIGNER",
+        "actualCode": "REVOKED_SIGNER",
+        "refused": true,
+        "passed": true,
+        "errorDetail": "provenance: signer key, identity, or certificate is revoked: certificate or signer identity revoked"
+      }
+    ]
+  },
+  "negativeRegimes": {
+    "inlineRawBlobVsDigestOnly": [
+      {
+        "blobSizeBytes": 65536,
+        "digestOnlyAttestUs": 404.07,
+        "digestOnlyBundleBytes": 3798,
+        "inlineBlobAttestUs": 557.28,
+        "inlineBlobBundleBytes": 88560,
+        "sizeAmplificationX": 23.32,
+        "latencyRatioX": 1.38
+      },
+      {
+        "blobSizeBytes": 1048576,
+        "digestOnlyAttestUs": 3839.8,
+        "digestOnlyBundleBytes": 3868,
+        "inlineBlobAttestUs": 13599.73,
+        "inlineBlobBundleBytes": 1399280,
+        "sizeAmplificationX": 361.76,
+        "latencyRatioX": 3.54
+      },
+      {
+        "blobSizeBytes": 4194304,
+        "digestOnlyAttestUs": 22547.93,
+        "digestOnlyBundleBytes": 3868,
+        "inlineBlobAttestUs": 83787.66,
+        "inlineBlobBundleBytes": 5593584,
+        "sizeAmplificationX": 1446.12,
+        "latencyRatioX": 3.72
+      },
+      {
+        "blobSizeBytes": 16777216,
+        "digestOnlyAttestUs": 58807.45,
+        "digestOnlyBundleBytes": 3939,
+        "inlineBlobAttestUs": 431455.32,
+        "inlineBlobBundleBytes": 22370800,
+        "sizeAmplificationX": 5679.31,
+        "latencyRatioX": 7.34
+      }
+    ],
+    "smallFilesBatching": {
+      "fileCount": 1000,
+      "perFileTotalMs": 509.82,
+      "perFileBundleBytes": 4145682,
+      "perFileTLogEntries": 1000,
+      "batchedTotalMs": 10.81,
+      "batchedBundleBytes": 166298,
+      "batchedTLogEntries": 1,
+      "batchSpeedupX": 47.15,
+      "bundleSizeReductionX": 24.93
+    }
+  }
+}
