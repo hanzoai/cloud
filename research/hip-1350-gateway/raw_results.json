@@ -1,0 +1,389 @@
+{
+  "timestampUtc": "2026-11-26T10:44:36Z",
+  "protocolVersion": "enso-gateway/v1",
+  "goVersion": "go1.27.1",
+  "goos": "linux",
+  "goarch": "amd64",
+  "numCpu": 2,
+  "cost": {
+    "vcpuHourlyRateUsd": 0.04,
+    "usefulTokensPerRequest": 136,
+    "measuredVerifyMicrosPerReq": 501.273,
+    "verifyCpuSecondsPer1mTok": 3.6858,
+    "tiers": [
+      {
+        "tier": "Hanzo Convenience Gateway (25 bps)",
+        "operatorType": "hanzo",
+        "gatewayFeeBps": 25,
+        "baseComputeUsdPer1mTok": 0.28,
+        "gatewayFeeUsdPer1mTok": 0.0007,
+        "verifyCryptoCpuUsdPer1mTok": 0.000041,
+        "totalUsdPer1mTok": 0.280741
+      },
+      {
+        "tier": "Independent Community Gateway (10 bps)",
+        "operatorType": "community",
+        "gatewayFeeBps": 10,
+        "baseComputeUsdPer1mTok": 0.28,
+        "gatewayFeeUsdPer1mTok": 0.00028,
+        "verifyCryptoCpuUsdPer1mTok": 0.000041,
+        "totalUsdPer1mTok": 0.280321
+      },
+      {
+        "tier": "Self-Hosted / Forked Community Gateway (0 bps)",
+        "operatorType": "community",
+        "gatewayFeeBps": 0,
+        "baseComputeUsdPer1mTok": 0.28,
+        "gatewayFeeUsdPer1mTok": 0,
+        "verifyCryptoCpuUsdPer1mTok": 0.000041,
+        "totalUsdPer1mTok": 0.280041
+      }
+    ]
+  },
+  "performance": {
+    "sequentialRequests": 120,
+    "sequentialCompleted": 120,
+    "completionRate": 1,
+    "sequentialReqPerSec": 256.39,
+    "sequentialTokPerSec": 34868.65,
+    "ttft": {
+      "samples": 120,
+      "minMs": 0,
+      "p50Ms": 3.696,
+      "p95Ms": 8,
+      "p99Ms": 11.538,
+      "maxMs": 12.001,
+      "meanMs": 2.952
+    },
+    "providerReportedTtft": {
+      "samples": 120,
+      "minMs": 0,
+      "p50Ms": 0,
+      "p95Ms": 3.519,
+      "p99Ms": 3.667,
+      "maxMs": 3.672,
+      "meanMs": 0.219
+    },
+    "endToEndLatency": {
+      "samples": 120,
+      "minMs": 0,
+      "p50Ms": 4,
+      "p95Ms": 8,
+      "p99Ms": 11.921,
+      "maxMs": 12.001,
+      "meanMs": 3.367
+    },
+    "concurrentClients": 16,
+    "concurrentRequests": 112,
+    "concurrentCompleted": 112,
+    "concurrentReqPerSec": 378.34,
+    "concurrentTokPerSec": 51454.82,
+    "concurrentLatency": {
+      "samples": 111,
+      "minMs": 8,
+      "p50Ms": 40.003,
+      "p95Ms": 64.005,
+      "p99Ms": 68.006,
+      "maxMs": 68.088,
+      "meanMs": 40.268
+    },
+    "failoverDrills": 20,
+    "failoverCompleted": 20,
+    "failoverCompletionRate": 1,
+    "failoverLatency": {
+      "samples": 20,
+      "minMs": 1.935,
+      "p50Ms": 2.244,
+      "p95Ms": 4.167,
+      "p99Ms": 4.388,
+      "maxMs": 4.388,
+      "meanMs": 2.462
+    },
+    "strategies": [
+      {
+        "strategy": "lowest_cost",
+        "requests": 20,
+        "completed": 20,
+        "completionRate": 1,
+        "primaryProviderChosen": "worker-alpha-lowcost",
+        "effectivePriceUsdPer1m": 0.28028,
+        "latency": {
+          "samples": 20,
+          "minMs": 0,
+          "p50Ms": 1.977,
+          "p95Ms": 11.433,
+          "p99Ms": 12.001,
+          "maxMs": 12.001,
+          "meanMs": 3.274
+        },
+        "ttft": {
+          "samples": 20,
+          "minMs": 0,
+          "p50Ms": 1.544,
+          "p95Ms": 10.947,
+          "p99Ms": 12.001,
+          "maxMs": 12.001,
+          "meanMs": 2.749
+        },
+        "providerReportedTtft": {
+          "samples": 20,
+          "minMs": 0,
+          "p50Ms": 0,
+          "p95Ms": 0.118,
+          "p99Ms": 8.219,
+          "maxMs": 8.219,
+          "meanMs": 0.436
+        }
+      },
+      {
+        "strategy": "lowest_ttft",
+        "requests": 20,
+        "completed": 20,
+        "completionRate": 1,
+        "primaryProviderChosen": "worker-beta-lowttft",
+        "effectivePriceUsdPer1m": 0.44044,
+        "latency": {
+          "samples": 20,
+          "minMs": 1.681,
+          "p50Ms": 2.116,
+          "p95Ms": 4.846,
+          "p99Ms": 6.158,
+          "maxMs": 6.158,
+          "meanMs": 2.416
+        },
+        "ttft": {
+          "samples": 20,
+          "minMs": 1.405,
+          "p50Ms": 1.875,
+          "p95Ms": 4.612,
+          "p99Ms": 5.859,
+          "maxMs": 5.859,
+          "meanMs": 2.154
+        },
+        "providerReportedTtft": {
+          "samples": 20,
+          "minMs": 0.103,
+          "p50Ms": 0.12,
+          "p95Ms": 0.193,
+          "p99Ms": 0.237,
+          "maxMs": 0.237,
+          "meanMs": 0.138
+        }
+      },
+      {
+        "strategy": "weighted_slo_score",
+        "requests": 20,
+        "completed": 20,
+        "completionRate": 1,
+        "primaryProviderChosen": "worker-alpha-lowcost",
+        "effectivePriceUsdPer1m": 0.28028,
+        "latency": {
+          "samples": 20,
+          "minMs": 1.87,
+          "p50Ms": 2.204,
+          "p95Ms": 3.909,
+          "p99Ms": 4.217,
+          "maxMs": 4.217,
+          "meanMs": 2.412
+        },
+        "ttft": {
+          "samples": 20,
+          "minMs": 1.629,
+          "p50Ms": 1.953,
+          "p95Ms": 3.651,
+          "p99Ms": 3.913,
+          "maxMs": 3.913,
+          "meanMs": 2.141
+        },
+        "providerReportedTtft": {
+          "samples": 20,
+          "minMs": 0.106,
+          "p50Ms": 0.146,
+          "p95Ms": 0.217,
+          "p99Ms": 0.243,
+          "maxMs": 0.243,
+          "meanMs": 0.154
+        }
+      },
+      {
+        "strategy": "failover_resilient",
+        "requests": 20,
+        "completed": 20,
+        "completionRate": 1,
+        "primaryProviderChosen": "worker-gamma-balanced",
+        "effectivePriceUsdPer1m": 0.34034,
+        "latency": {
+          "samples": 20,
+          "minMs": 1.816,
+          "p50Ms": 2.181,
+          "p95Ms": 2.721,
+          "p99Ms": 3.945,
+          "maxMs": 3.945,
+          "meanMs": 2.283
+        },
+        "ttft": {
+          "samples": 20,
+          "minMs": 1.561,
+          "p50Ms": 1.942,
+          "p95Ms": 2.396,
+          "p99Ms": 3.641,
+          "maxMs": 3.641,
+          "meanMs": 2.015
+        },
+        "providerReportedTtft": {
+          "samples": 20,
+          "minMs": 0.103,
+          "p50Ms": 0.112,
+          "p95Ms": 0.187,
+          "p99Ms": 0.195,
+          "maxMs": 0.195,
+          "meanMs": 0.131
+        }
+      }
+    ]
+  },
+  "trust": {
+    "verificationClass": "cryptographic_signed_commitment_sha256",
+    "passed": 7,
+    "total": 7,
+    "detectionRate": 1,
+    "cases": [
+      {
+        "name": "forged_quote_signature_rejected",
+        "passed": true,
+        "errorDetail": "ErrSignerMismatch (recovered signer != declared provider)"
+      },
+      {
+        "name": "high_s_malleated_quote_rejected",
+        "passed": true,
+        "errorDetail": "ErrInvalidSignature (invalid or non-canonical EIP-2 high-S signature)"
+      },
+      {
+        "name": "expired_quote_rejected",
+        "passed": true,
+        "errorDetail": "ErrQuoteExpired (quote expiresAt \u003c now)"
+      },
+      {
+        "name": "mismatched_output_hash_receipt_rejected",
+        "passed": true,
+        "errorDetail": "ErrOutputHashMismatch (signed receipt OutputHash != SHA-256 of returned text)"
+      },
+      {
+        "name": "corrupted_output_content_rejected",
+        "passed": true,
+        "errorDetail": "ErrOutputHashMismatch (signed receipt OutputHash != SHA-256 of returned text)"
+      },
+      {
+        "name": "replay_nonce_rejected",
+        "passed": true,
+        "errorDetail": "ErrReplayNonce (duplicate quote nonce rejected by local replay guard)"
+      },
+      {
+        "name": "tampered_worker_record_rejected",
+        "passed": true,
+        "errorDetail": "ErrSignerMismatch (recovered signer != declared provider)"
+      }
+    ]
+  },
+  "decentralization": {
+    "dualGatewayOpenaiParity": true,
+    "zipDualGatewayParity": true,
+    "killSwitchRequests": 60,
+    "killSwitchCompleted": 60,
+    "hanzoClientCallsAfterKill": 0,
+    "hanzoServerCallsAfterKill": 0,
+    "communityCallsAfterKill": 60,
+    "independentWorkloadShare": 1
+  },
+  "sovereignty": {
+    "exportBundleBytes": 3601,
+    "offlineVerifyMicros": 511.35,
+    "tamperedBundleRejected": true,
+    "forkHydrationMicros": 790.79,
+    "forkedGatewayRequests": 20,
+    "forkedGatewayCompleted": 20,
+    "forkedGatewayCompletionRate": 1,
+    "forkedGatewayHanzoCalls": 0,
+    "forkedGatewayFeeBps": 0,
+    "zeroSharedSessionState": true
+  },
+  "negativeRegimes": [
+    {
+      "name": "unverified_receipt_negative",
+      "category": "negative_control",
+      "trials": 40,
+      "validated": true,
+      "observedRate": 1,
+      "controlRate": 1,
+      "corruptedAccepted": 40,
+      "corruptedRejected": 40,
+      "summary": "Without receipt verification, 100.0% (40/40) of silently corrupted provider outputs slipped through undetected; with fail-closed VerifyReceipt enabled, 100.0% (40/40) were rejected with ErrOutputHashMismatch."
+    },
+    {
+      "name": "single_provider_no_failover_negative",
+      "category": "negative_control",
+      "trials": 40,
+      "validated": true,
+      "observedRate": 0.7,
+      "controlRate": 1,
+      "completed": 28,
+      "failed": 12,
+      "summary": "Under 30% provider fault injection with failover disabled, completion collapsed to 70.0% (28/40 completed, 12 failed); enabling stateless multi-provider failover restored 100.0% (40/40) completion."
+    },
+    {
+      "name": "stale_quote_storm_boundary",
+      "category": "boundary_regime",
+      "trials": 40,
+      "validated": true,
+      "observedRate": 0,
+      "controlRate": 0.7,
+      "boundaryPoints": [
+        {
+          "ttlMs": 5,
+          "requests": 40,
+          "totalWorkerQuotes": 160,
+          "cacheHits": 0,
+          "cacheHitRate": 0,
+          "avgQuoteRefreshMs": 3.094525,
+          "avgTotalLatencyMs": 3.8783000000000003,
+          "completionRate": 1,
+          "quotesPerRequest": 4
+        },
+        {
+          "ttlMs": 25,
+          "requests": 40,
+          "totalWorkerQuotes": 82,
+          "cacheHits": 26,
+          "cacheHitRate": 0.65,
+          "avgQuoteRefreshMs": 2.136625,
+          "avgTotalLatencyMs": 3.1399500000000002,
+          "completionRate": 1,
+          "quotesPerRequest": 2.05
+        },
+        {
+          "ttlMs": 150,
+          "requests": 40,
+          "totalWorkerQuotes": 76,
+          "cacheHits": 28,
+          "cacheHitRate": 0.7,
+          "avgQuoteRefreshMs": 1.2951000000000001,
+          "avgTotalLatencyMs": 1.6999749999999998,
+          "completionRate": 1,
+          "quotesPerRequest": 1.9
+        },
+        {
+          "ttlMs": 1000,
+          "requests": 40,
+          "totalWorkerQuotes": 76,
+          "cacheHits": 28,
+          "cacheHitRate": 0.7,
+          "avgQuoteRefreshMs": 1.278275,
+          "avgTotalLatencyMs": 1.654075,
+          "completionRate": 1,
+          "quotesPerRequest": 1.9
+        }
+      ],
+      "summary": "Under rapid price churn (every 4 quotes across 4 workers), 5ms TTL forced 4.00 quotes/req (0.0% cache hit, 3.095 ms avg quote refresh) vs 1000ms TTL at 1.90 quotes/req (70.0% cache hit, 1.278 ms avg quote refresh) while maintaining 100% completion and strict single-use execution nonces."
+    }
+  ]
+}
