@@ -72,6 +72,12 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		maxPayload = int32(n)
 	}
 
+	// The file store the plane may hold, when the deployment states one. See budget.go.
+	store, err := declared()
+	if err != nil {
+		return fmt.Errorf("pubsub.Use:  %w", err)
+	}
+
 	host := env.Or("CLOUD_PUBSUB_HOST", "0.0.0.0")
 
 	// Claim the address BEFORE handing it to the embedded server, because the
@@ -107,6 +113,15 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("pubsub.Use:  open embedded server (fail-closed): %w", err)
 	}
 	srv = s
+	// State what the plane can hold before anything is told it is serving, so the
+	// first stream declared on it is sized for this node. A limit the server will
+	// not take is a plane whose streams would be refused one by one: boot stops.
+	held, err := budget(s.NATS(), store)
+	if err != nil {
+		srv = nil
+		s.Shutdown()
+		return fmt.Errorf("pubsub.Use:  the store budget (fail-closed): %w", err)
+	}
 	// Say so, so a co-resident client dials this server in memory rather than over
 	// TCP. bus cannot ask — asking would mean importing this package, which is the
 	// import that put a NATS server in 27 binaries.
@@ -116,7 +131,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// plane is UP, so a served route always has a real bus behind it.
 	routes(app, &cloud.Service[state]{Base: cloud.NewBase(deps, "pubsub")})
 
-	log.Info("pubsub embedded server serving", "client_url", s.ClientURL(), "store_dir", dataDir, "port", port, "door", "/v1/pubsub")
+	log.Info("pubsub embedded server serving", "client_url", s.ClientURL(), "store_dir", dataDir, "port", port, "door", "/v1/pubsub",
+		"store_limit", held, "store_declared", store)
 	return nil
 }
 

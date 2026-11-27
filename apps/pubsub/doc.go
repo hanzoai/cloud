@@ -49,6 +49,13 @@
 //	                   0.0.0.0). It is NOT a dial address: URL always dials
 //	                   127.0.0.1, because 0.0.0.0 names every interface to a
 //	                   listener and none to a client.
+//	CLOUD_PUBSUB_MAX_STORE
+//	                   the file store the embedded server may hold, in bytes.
+//	                   Unset, the server holds what is free on its volume when
+//	                   it boots. Either way, a store too small for the
+//	                   platform's stream ceilings is stated on the account, so
+//	                   each stream reserves its share of it (budget.go,
+//	                   sdk/bus/budget.go). A local runtime declares one.
 //
 // There is deliberately no per-app URL variable and no "off". Mount fails boot
 // closed, so a cloud that is up HAS a bus; an app that made its bus optional
