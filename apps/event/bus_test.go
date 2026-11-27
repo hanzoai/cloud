@@ -19,6 +19,7 @@ import (
 	"github.com/hanzoai/commerce/infra"
 	"github.com/hanzoai/pubsub-go/jetstream"
 	psembed "github.com/hanzoai/pubsub/embed"
+	"github.com/hanzoai/pubsub/server"
 )
 
 // planeOn starts an embedded server on an ephemeral port and returns its URL and a client
@@ -87,9 +88,9 @@ func TestEnsureRetiresAnEarlierGeneration(t *testing.T) {
 	// And the configuration is the one THIS package declares, not whatever the stale
 	// stream happened to carry — a retire that left the old limits in place would be
 	// an unbounded plane wearing the right name.
-	if info.Config.MaxAge != streamAge || info.Config.MaxBytes != streamBytes {
+	if info.Config.MaxAge != streamAge || info.Config.MaxBytes != bus.Events.Ceiling {
 		t.Fatalf("%s has age=%v bytes=%d, want age=%v bytes=%d",
-			EventStream, info.Config.MaxAge, info.Config.MaxBytes, streamAge, streamBytes)
+			EventStream, info.Config.MaxAge, info.Config.MaxBytes, streamAge, bus.Events.Ceiling)
 	}
 	if _, err := js.Stream(ctx, "EVENTS"); !errors.Is(err, jetstream.ErrStreamNotFound) {
 		t.Fatalf("EVENTS must be gone, got %v", err)
@@ -188,22 +189,49 @@ func TestPlaneReadyFollowsTheStream(t *testing.T) {
 	}
 }
 
-func TestClampStreamBytesForConstrainedJetStream(t *testing.T) {
-	// Production (18 GB store): half is 9 GB >= 8 GiB, so the full 8 GiB ceiling holds.
-	if got := clampStreamBytes(streamBytes, 18<<30); got != streamBytes {
-		t.Fatalf("18 GiB store: got %d, want full %d", got, streamBytes)
+// TestTheStreamFitsASmallPlane is the regression from a local runtime: the plane's
+// file store was 3.92 GB, the stream asked for its 8 GiB production ceiling, and
+// every consumer's ensure was refused with 10047 every two seconds. On a plane whose
+// account states a small store, the stream holds the event plane's share of it.
+func TestTheStreamFitsASmallPlane(t *testing.T) {
+	const store = 256 << 20
+	srv, err := psembed.Open(psembed.Options{Port: -1, StoreDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("embed pubsub: %v", err)
 	}
-	// Unbounded / unknown ceiling keeps streamBytes.
-	if got := clampStreamBytes(streamBytes, -1); got != streamBytes {
-		t.Fatalf("unbounded store: got %d, want %d", got, streamBytes)
+	t.Cleanup(func() { srv.Shutdown() })
+	if err := srv.NATS().GlobalAccount().UpdateJetStreamLimits(map[string]server.JetStreamAccountLimits{"": {
+		MaxMemory: -1, MaxStore: store, MaxStreams: -1, MaxConsumers: -1, MaxAckPending: -1,
+		MemoryMaxStreamBytes: -1, StoreMaxStreamBytes: -1,
+	}}); err != nil {
+		t.Fatalf("stating the account's store: %v", err)
 	}
-	// Constrained local VM (~6 GiB JetStream file store): clamps to half (3 GiB) so
-	// EnsureEventStream never fails with NATS 10047 while leaving room for sibling streams.
-	if got := clampStreamBytes(streamBytes, 6<<30); got != 3<<30 {
-		t.Fatalf("6 GiB store: got %d, want %d", got, int64(3<<30))
+	ctx := context.Background()
+	cl, err := infra.NewPubSubClient(ctx, &infra.PubSubConfig{URL: srv.ClientURL(), Name: "bus-test", EnableJetStream: true})
+	if err != nil {
+		t.Fatalf("connect: %v", err)
 	}
-	// Tiny store still stays within MaxStore.
-	if got := clampStreamBytes(streamBytes, 32<<20); got != 32<<20 {
-		t.Fatalf("32 MiB store: got %d, want %d", got, int64(32<<20))
+	t.Cleanup(func() { _ = cl.Close() })
+
+	// The ceiling itself is what this plane refuses: the premise of the test.
+	if _, err := cl.JetStream().CreateStream(ctx, jetstream.StreamConfig{
+		Name: "CEILING", Subjects: []string{"ceiling.>"}, Storage: jetstream.FileStorage, MaxBytes: bus.Events.Ceiling,
+	}); err == nil {
+		t.Fatalf("a %d store took a stream of %d", store, bus.Events.Ceiling)
+	}
+
+	if err := EnsureEventStream(ctx, cl); err != nil {
+		t.Fatalf("the event stream was refused on a %d store: %v", store, err)
+	}
+	st, err := cl.JetStream().Stream(ctx, EventStream)
+	if err != nil {
+		t.Fatalf("read %s: %v", EventStream, err)
+	}
+	info, err := st.Info(ctx)
+	if err != nil {
+		t.Fatalf("info %s: %v", EventStream, err)
+	}
+	if want := bus.Events.Of(store); info.Config.MaxBytes != want {
+		t.Fatalf("%s holds %d of a %d store, want its share %d", EventStream, info.Config.MaxBytes, store, want)
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud/sdk/bus"
 	"github.com/hanzoai/commerce/infra"
 	"github.com/hanzoai/pubsub-go/jetstream"
 	luxlog "github.com/luxfi/log"
@@ -271,7 +272,7 @@ func TestTheStreamRefusesRatherThanEvicts(t *testing.T) {
 		t.Fatal("the event plane discards OLD on a full stream — that is acknowledged data " +
 			"deleted to make room for unacknowledged data, with an error reported to nobody")
 	}
-	if eventStream.MaxBytes != streamBytes || eventStream.MaxAge != streamAge {
+	if eventStream.MaxBytes != bus.Events.Ceiling || eventStream.MaxAge != streamAge {
 		t.Errorf("stream limits drifted from the constants that document them: %d/%s",
 			eventStream.MaxBytes, eventStream.MaxAge)
 	}

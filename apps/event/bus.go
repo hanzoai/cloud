@@ -110,10 +110,11 @@ const EventSignalKey = "signal"
 // Retention. The stream is a HAND-OFF to the consumers, not the system of record — the
 // warehouse is — so it holds enough for a consumer to be down, redeployed or added and
 // still catch up, and no more.
-const (
-	streamAge   = 72 * time.Hour
-	streamBytes = 8 << 30 // 8 GiB, the pod's ceiling for undrained facts
-)
+//
+// How many bytes it may hold is not stated here: it is the event plane's row in the
+// bus's budget (bus.Events), beside the other streams that reserve storage, because
+// the reservations have to fit one store together.
+const streamAge = 72 * time.Hour
 
 // publishTimeout bounds ONE batch's publish so an ingest request cannot hang on a
 // wedged bus; the caller gets an honest 503 instead.
@@ -277,38 +278,20 @@ func EnsureEventStream(ctx context.Context, cl *infra.PubSubClient) error {
 	return err
 }
 
-// minStreamBytes is the floor below which clampStreamBytes only goes when the
-// JetStream account ceiling itself is smaller.
-const minStreamBytes = 64 << 20 // 64 MiB
-
-// clampStreamBytes fits a stream's MaxBytes ceiling inside the JetStream account's
-// available file-storage limit. Production runs an 18 GB store (half = 9 GB >= 8 GiB)
-// so it keeps the full streamBytes ceiling; a constrained local VM (e.g. a 16 GiB
-// microVM where NATS auto-caps JetStream to ~6 GiB) scales down cleanly instead of
-// failing with NATS 10047 ("insufficient storage resources available").
-func clampStreamBytes(want, maxStore int64) int64 {
-	if maxStore <= 0 || want <= 0 {
-		return want
-	}
-	budget := maxStore / 2
-	if want <= budget {
-		return want
-	}
-	if budget < minStreamBytes {
-		if maxStore < minStreamBytes {
-			return maxStore
-		}
-		return minStreamBytes
-	}
-	return budget
-}
-
-// eventStreamConfig returns eventStream with MaxBytes clamped to the live JetStream
-// account's storage ceiling when that ceiling is smaller than 2× streamBytes.
+// eventStreamConfig is eventStream sized for the bus it is declared on: its production
+// ceiling, or the event plane's share of a file store too small to hold that
+// (bus.Events). The store is the JetStream account's limit, which is the one number
+// every client of the bus can read. An embedded server publishes its own there
+// (apps/pubsub); when the account is unlimited the ceiling stands.
+//
+// It used to read the same limit and halve it, but the embedded server never stated
+// one: the account answered -1, the ceiling stayed at 8 GiB, and on a node whose
+// store was smaller every declaration was refused with 10047, by every consumer,
+// every two seconds.
 func eventStreamConfig(ctx context.Context, js jetstream.JetStream) jetstream.StreamConfig {
 	cfg := eventStream
 	if acct, err := js.AccountInfo(ctx); err == nil && acct != nil {
-		cfg.MaxBytes = clampStreamBytes(cfg.MaxBytes, acct.Limits.MaxStore)
+		cfg.MaxBytes = bus.Events.Of(acct.Limits.MaxStore)
 	}
 	return cfg
 }
@@ -383,7 +366,7 @@ var eventStream = withReplicas(jetstream.StreamConfig{
 	Retention: jetstream.LimitsPolicy,
 	Storage:   jetstream.FileStorage,
 	MaxAge:    streamAge,
-	MaxBytes:  streamBytes,
+	MaxBytes:  bus.Events.Ceiling,
 	Discard:   jetstream.DiscardNew,
 })
 

@@ -58,8 +58,19 @@ var usageStreamConfig = jetstream.StreamConfig{
 	Storage:    jetstream.FileStorage,
 	Retention:  jetstream.WorkQueuePolicy,
 	Discard:    jetstream.DiscardNew,
-	MaxBytes:   1 << 30,
+	MaxBytes:   bus.Usage.Ceiling,
 	Duplicates: time.Hour,
+}
+
+// usageStreamFor is that configuration sized for the bus it is declared on: the
+// ceiling, or the usage stream's share of a file store too small to hold it
+// (bus.Usage), read from the account the bus reports.
+func usageStreamFor(ctx context.Context, js jetstream.JetStream) jetstream.StreamConfig {
+	cfg := usageStreamConfig
+	if acct, err := js.AccountInfo(ctx); err == nil && acct != nil {
+		cfg.MaxBytes = bus.Usage.Of(acct.Limits.MaxStore)
+	}
+	return cfg
 }
 
 // debit is one debit on the wire: the plane's RecordIn, which names the Ref, and
@@ -79,7 +90,7 @@ func usageBus(ctx context.Context) (jetstream.JetStream, error) {
 		return nil, err
 	}
 	if !ensured.Load() {
-		if _, err := js.CreateOrUpdateStream(ctx, usageStreamConfig); err != nil {
+		if _, err := js.CreateOrUpdateStream(ctx, usageStreamFor(ctx, js)); err != nil {
 			return nil, fmt.Errorf("stream %s: %w", usageStream, err)
 		}
 		ensured.Store(true)
