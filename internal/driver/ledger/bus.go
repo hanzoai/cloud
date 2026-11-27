@@ -65,12 +65,43 @@ var usageStreamConfig = jetstream.StreamConfig{
 // usageStreamFor is that configuration sized for the bus it is declared on: the
 // ceiling, or the usage stream's share of a file store too small to hold it
 // (bus.Usage), read from the account the bus reports.
+//
+// It is also held to what the other streams leave (bus.Reservation.Within): a store
+// carried over from another budget has them at other sizes.
 func usageStreamFor(ctx context.Context, js jetstream.JetStream) jetstream.StreamConfig {
 	cfg := usageStreamConfig
 	if acct, err := js.AccountInfo(ctx); err == nil && acct != nil {
-		cfg.MaxBytes = bus.Usage.Of(acct.Limits.MaxStore)
+		own, _ := usageReserved(ctx, js)
+		cfg.MaxBytes = bus.Usage.Within(acct.Limits.MaxStore, int64(acct.ReservedStore), own)
 	}
 	return cfg
+}
+
+// usageReserved is what the stream holds of the store now, and whether it exists.
+func usageReserved(ctx context.Context, js jetstream.JetStream) (int64, bool) {
+	st, err := js.Stream(ctx, usageStream)
+	if err != nil {
+		return 0, false
+	}
+	info, err := st.Info(ctx)
+	if err != nil || info == nil {
+		return 0, false
+	}
+	return max(info.Config.MaxBytes, 0), true
+}
+
+// declare makes the usage stream what this bus can hold. A size the store refuses
+// leaves a stream that is already there as it is: it takes debits at the size it
+// has, and a resize refused is no reason to stop writing to it.
+func declare(ctx context.Context, js jetstream.JetStream) error {
+	_, err := js.CreateOrUpdateStream(ctx, usageStreamFor(ctx, js))
+	var api *jetstream.APIError
+	if errors.As(err, &api) && api.ErrorCode == bus.StorageRefused {
+		if _, held := usageReserved(ctx, js); held {
+			return nil
+		}
+	}
+	return err
 }
 
 // debit is one debit on the wire: the plane's RecordIn, which names the Ref, and
@@ -90,7 +121,7 @@ func usageBus(ctx context.Context) (jetstream.JetStream, error) {
 		return nil, err
 	}
 	if !ensured.Load() {
-		if _, err := js.CreateOrUpdateStream(ctx, usageStreamFor(ctx, js)); err != nil {
+		if err := declare(ctx, js); err != nil {
 			return nil, fmt.Errorf("stream %s: %w", usageStream, err)
 		}
 		ensured.Store(true)

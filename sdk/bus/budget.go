@@ -52,6 +52,36 @@ func (r Reservation) Of(store int64) int64 {
 	return min(r.Ceiling, store/100*p+store%100*p/100)
 }
 
+// Within is Of, held to what the store has left beside the other streams. `reserved`
+// is everything the account has reserved and `own` what this stream already holds
+// of that, so the rest is what the others hold.
+//
+// The shares fit together only when every stream holds its share. A store carried
+// over from a build with other sizes, or one whose limit shrank between boots,
+// holds streams at their old sizes; one of them at more than its share leaves less
+// than a share for the next, which was then refused whole, and could not be resized
+// either, since a resize is weighed against the others as they stand. So a stream
+// takes what is left when that is less than its share, and its share again once the
+// others have taken theirs.
+//
+// With nothing left it answers the share, for the bus to refuse: no size it could
+// ask for would be taken, and zero is how JetStream spells "no ceiling".
+func (r Reservation) Within(store, reserved, own int64) int64 {
+	want := r.Of(store)
+	if store <= 0 {
+		return want
+	}
+	if left := store - (reserved - own); left > 0 && left < want {
+		return left
+	}
+	return want
+}
+
+// StorageRefused is JetStream's API error code for a declaration whose reservation
+// the store cannot hold ("insufficient storage resources available"). It is here,
+// beside the budget, so the two stream owners match one number.
+const StorageRefused = 10047
+
 // Need is the store that holds every ceiling at once: below it, a stream is refused
 // unless the shares apply.
 func Need() int64 {

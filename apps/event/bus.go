@@ -268,6 +268,14 @@ func EnsureEventStream(ctx context.Context, cl *infra.PubSubClient) error {
 	}
 	cfg := eventStreamConfig(ctx, js)
 	_, err := js.CreateOrUpdateStream(ctx, cfg)
+	if storageRefused(err) {
+		// The store will not take this size. A stream that is already there is
+		// still the plane, at the size it has: a resize refused is no reason to
+		// stop publishing to it and reading from it.
+		if _, held := reserved(ctx, js); held {
+			return nil
+		}
+	}
 	if !overlaps(err) {
 		return err
 	}
@@ -288,12 +296,35 @@ func EnsureEventStream(ctx context.Context, cl *infra.PubSubClient) error {
 // one: the account answered -1, the ceiling stayed at 8 GiB, and on a node whose
 // store was smaller every declaration was refused with 10047, by every consumer,
 // every two seconds.
+//
+// It is also held to what the other streams leave (bus.Reservation.Within): a store
+// carried over from another budget has them at other sizes.
 func eventStreamConfig(ctx context.Context, js jetstream.JetStream) jetstream.StreamConfig {
 	cfg := eventStream
 	if acct, err := js.AccountInfo(ctx); err == nil && acct != nil {
-		cfg.MaxBytes = bus.Events.Of(acct.Limits.MaxStore)
+		own, _ := reserved(ctx, js)
+		cfg.MaxBytes = bus.Events.Within(acct.Limits.MaxStore, int64(acct.ReservedStore), own)
 	}
 	return cfg
+}
+
+// reserved is what the stream holds of the store now, and whether it exists.
+func reserved(ctx context.Context, js jetstream.JetStream) (int64, bool) {
+	st, err := js.Stream(ctx, EventStream)
+	if err != nil {
+		return 0, false
+	}
+	info, err := st.Info(ctx)
+	if err != nil || info == nil {
+		return 0, false
+	}
+	return max(info.Config.MaxBytes, 0), true
+}
+
+// storageRefused reports whether err is JetStream refusing a reservation.
+func storageRefused(err error) bool {
+	var api *jetstream.APIError
+	return errors.As(err, &api) && api.ErrorCode == bus.StorageRefused
 }
 
 // errSubjectOverlap is JetStream's refusal to bind subjects another stream already

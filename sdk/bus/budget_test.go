@@ -52,3 +52,26 @@ func TestTheReservationsFitTogether(t *testing.T) {
 		}
 	}
 }
+
+// A store carried over from another budget: one stream still holds more than its
+// share, and the other takes what is left rather than being refused its share.
+func TestAStreamTakesWhatTheOthersLeave(t *testing.T) {
+	const mib = int64(1) << 20
+	for _, c := range []struct {
+		name                 string
+		store, reserved, own int64
+		want                 int64
+	}{
+		{"nothing reserved: its share", 2048 * mib, 0, 0, 1024 * mib},
+		{"the others at their shares: its share", 2048 * mib, 204 * mib, 0, 1024 * mib},
+		{"another holds an old ceiling: what is left", 1390 * mib, 1024 * mib, 0, 366 * mib},
+		{"resizing itself beside that one: what is left", 1390 * mib, 2048 * mib, 1024 * mib, 366 * mib},
+		{"resizing itself, alone: its share", 1390 * mib, 1024 * mib, 1024 * mib, 695 * mib},
+		{"nothing left: its share, for the bus to refuse", 1390 * mib, 4096 * mib, 0, 695 * mib},
+		{"an unlimited account: its ceiling", -1, 4096 * mib, 0, 8 * gib},
+	} {
+		if got := Events.Within(c.store, c.reserved, c.own); got != c.want {
+			t.Errorf("%s: Within(%d, %d, %d) = %d, want %d", c.name, c.store, c.reserved, c.own, got, c.want)
+		}
+	}
+}

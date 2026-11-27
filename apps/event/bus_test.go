@@ -235,3 +235,77 @@ func TestTheStreamFitsASmallPlane(t *testing.T) {
 		t.Fatalf("%s holds %d of a %d store, want its share %d", EventStream, info.Config.MaxBytes, store, want)
 	}
 }
+
+// TestTheStreamSurvivesACarriedOverStore is the second regression from a local
+// runtime: the volume kept USAGE at its old 1 GiB while the account's limit had
+// become 1.36 GiB. EVENT could neither be declared at its share nor, where it
+// existed, be resized, since either is weighed against what the others hold; its
+// consumers were refused every two seconds again. Now it takes what is left, and a
+// stream that exists is kept when no resize is taken.
+func TestTheStreamSurvivesACarriedOverStore(t *testing.T) {
+	const mib = int64(1) << 20
+	srv, err := psembed.Open(psembed.Options{Port: -1, StoreDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("embed pubsub: %v", err)
+	}
+	t.Cleanup(func() { srv.Shutdown() })
+	limit := func(store int64) {
+		t.Helper()
+		if err := srv.NATS().GlobalAccount().UpdateJetStreamLimits(map[string]server.JetStreamAccountLimits{"": {
+			MaxMemory: -1, MaxStore: store, MaxStreams: -1, MaxConsumers: -1, MaxAckPending: -1,
+			MemoryMaxStreamBytes: -1, StoreMaxStreamBytes: -1,
+		}}); err != nil {
+			t.Fatalf("stating the account's store at %d: %v", store, err)
+		}
+	}
+	ctx := context.Background()
+	cl, err := infra.NewPubSubClient(ctx, &infra.PubSubConfig{URL: srv.ClientURL(), Name: "bus-test", EnableJetStream: true})
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { _ = cl.Close() })
+	js := cl.JetStream()
+	held := func() int64 {
+		t.Helper()
+		n, ok := reserved(ctx, js)
+		if !ok {
+			t.Fatalf("%s does not exist", EventStream)
+		}
+		return n
+	}
+
+	// Another stream holds more than its share: 300 of a 400 MiB store.
+	limit(400 * mib)
+	if _, err := js.CreateStream(ctx, jetstream.StreamConfig{
+		Name: "OTHER", Subjects: []string{"other.>"}, Storage: jetstream.FileStorage, MaxBytes: 300 * mib,
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := EnsureEventStream(ctx, cl); err != nil {
+		t.Fatalf("the event stream was refused beside a stream over its share: %v", err)
+	}
+	if got := held(); got != 100*mib {
+		t.Fatalf("%s holds %d, want the %d the other left", EventStream, got, 100*mib)
+	}
+
+	// The store shrinks under both: no size the stream could ask for is taken, and
+	// the stream that exists is kept as it is.
+	limit(350 * mib)
+	if err := EnsureEventStream(ctx, cl); err != nil {
+		t.Fatalf("a refused resize took the plane down: %v", err)
+	}
+	if got := held(); got != 50*mib && got != 100*mib {
+		t.Fatalf("%s holds %d after the store shrank", EventStream, got)
+	}
+
+	// The other stream goes: the event stream takes its share again.
+	if err := js.DeleteStream(ctx, "OTHER"); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureEventStream(ctx, cl); err != nil {
+		t.Fatalf("ensure with the store to itself: %v", err)
+	}
+	if got, want := held(), bus.Events.Of(350*mib); got != want {
+		t.Fatalf("%s holds %d with the store to itself, want its share %d", EventStream, got, want)
+	}
+}
