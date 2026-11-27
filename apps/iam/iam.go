@@ -248,6 +248,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// organization's cert can be neither created nor used to sign.
 	iamserver.UseVault(vault{})
 	host.Use(web3Middleware())
+	exposeStats(host)
 	host.Use(iamserver.NewApp(db))
 
 	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — iam-v1 retired)", "store", StorePath(dir), "prefixes", Prefixes)

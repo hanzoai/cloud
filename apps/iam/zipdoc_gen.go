@@ -7,6 +7,13 @@ import (
 )
 
 func init() {
+	zip.Describe("github.com/hanzoai/cloud/apps/iam GET /v1/iam/stats", zip.Doc{
+		Description: "Answers with live aggregate counts of active Hanzo IAM users and\norganizations. Results are cached in-process for 5 minutes and carry public\nedge Cache-Control headers. When the identity store is unavailable, it fails\nclosed with HTTP 503 rather than returning zeroes.",
+		Fields: map[string]string{
+			"PublicStats.organizations": "Organizations is the total number of Hanzo IAM organizations.",
+			"PublicStats.users":         "Users is the total number of active Hanzo IAM user accounts.",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/iam POST /iam/approval", zip.Doc{
 		Description: "Answers with the CALLER'S OWN recorded approvalStatus.\n\nThe subject is the caller's and can never be an argument. A caller able to name\na subject could read another person's waitlist state, which is a small leak on\nits own and a membership oracle in bulk.\n\nIt returns the raw status and judges nothing. Whether \"pending\" gates a person\nis admission's rule, and it lives with the gate — one place decides, and the\nidentity store is not it.\n\nA subject with no user row is a REFUSAL, not an empty status. A machine token's\napp-id subject and a deleted user both land there, and admission reads an empty\nstatus as approved: answering \"\" for a principal the store does not know would\nwave through exactly the callers least entitled to it. The error path is\nadmission's documented fail-open, which is a decision it makes knowingly about\nan IAM it could not reach — not one this handler makes for it silently.",
 	})
