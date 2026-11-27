@@ -260,23 +260,15 @@ opt_code=$(api GET /v1/billing/crypto/options -o /tmp/pay_smoke_opts.json -w '%{
 if [ "$opt_code" = "200" ]; then
   asset_count=$(jq -r '.assets | length' /tmp/pay_smoke_opts.json)
   if [ "$asset_count" -gt 0 ]; then
-    jq -e 'all(.assets[]; (.chain|length)>0 and (.token|length)>0 and (.decimals//0)>0)' /tmp/pay_smoke_opts.json >/dev/null \
+    jq -e 'all(.assets[]; (.chain|length)>0 and (.token|length)>0 and (.decimals//0)>0 and (.confirmations//0)>0 and (.minimumCents//0)>0)' /tmp/pay_smoke_opts.json >/dev/null \
       || { echo "::error::/v1/billing/crypto/options returned incomplete asset metadata (Stripe conflation check failed)"; rm -f /tmp/pay_smoke_opts.json; exit 1; }
-    watched=$(jq -c '[.assets[] | select((.minimumCents//0)>0)][0] // .assets[0]' /tmp/pay_smoke_opts.json)
-    c_chain=$(jq -r '.chain' <<<"$watched")
-    c_token=$(jq -r '.token' <<<"$watched")
-    c_min=$(jq -r 'if (.minimumCents//0) > 500 then .minimumCents else 500 end' <<<"$watched")
-    m1_code=$(api POST /v1/billing/crypto/deposit -d "{\"chain\":\"$c_chain\",\"token\":\"$c_token\",\"amountCents\":$c_min}" -o /tmp/pay_smoke_m1.json -w '%{http_code}' || echo 000)
-    if [ "$m1_code" = "200" ]; then
-      m2=$(api POST /v1/billing/crypto/deposit -d "{\"chain\":\"$c_chain\",\"token\":\"$c_token\",\"amountCents\":$c_min}")
-      [ "$(jq -r '.id' /tmp/pay_smoke_m1.json)" = "$(jq -r '.id' <<<"$m2")" ] && [ -n "$(jq -r '.depositAddress // empty' /tmp/pay_smoke_m1.json)" ] \
-        || { echo "::error::native crypto deposit mint did not reuse open intent cleanly"; rm -f /tmp/pay_smoke_opts.json /tmp/pay_smoke_m1.json; exit 1; }
-    elif [ "$m1_code" != "503" ]; then
-      echo "::error::unexpected HTTP $m1_code from POST /v1/billing/crypto/deposit (want 200 or fail-closed 503)"
-      rm -f /tmp/pay_smoke_opts.json /tmp/pay_smoke_m1.json
-      exit 1
-    fi
-    rm -f /tmp/pay_smoke_m1.json
+    c_chain=$(jq -r '.assets[0].chain' /tmp/pay_smoke_opts.json)
+    c_token=$(jq -r '.assets[0].token' /tmp/pay_smoke_opts.json)
+    c_min=$(jq -r 'if (.assets[0].minimumCents//0) > 500 then .assets[0].minimumCents else 500 end' /tmp/pay_smoke_opts.json)
+    m1=$(api POST /v1/billing/crypto/deposit -d "{\"chain\":\"$c_chain\",\"token\":\"$c_token\",\"amountCents\":$c_min}")
+    m2=$(api POST /v1/billing/crypto/deposit -d "{\"chain\":\"$c_chain\",\"token\":\"$c_token\",\"amountCents\":$c_min}")
+    [ "$(jq -r '.id' <<<"$m1")" = "$(jq -r '.id' <<<"$m2")" ] && [ -n "$(jq -r '.depositAddress // empty' <<<"$m1")" ] \
+      || { echo "::error::native crypto deposit mint did not reuse open intent cleanly"; rm -f /tmp/pay_smoke_opts.json; exit 1; }
   fi
 elif [ "$opt_code" != "503" ]; then
   echo "::error::unexpected HTTP $opt_code from GET /v1/billing/crypto/options (want 200 or fail-closed 503)"
