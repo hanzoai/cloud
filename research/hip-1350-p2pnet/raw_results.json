@@ -1,0 +1,584 @@
+{
+  "protocol_version": "p2pnet/1.0",
+  "seed": 1350,
+  "nodes": 20,
+  "requests_per_run": 80,
+  "generated_at_utc": "2026-11-26T11:36:24Z",
+  "regimes": [
+    {
+      "name": "centralized_registry_baseline",
+      "description": "20-node mesh relying on a single centralized HTTP registration \u0026 provider-lookup service.",
+      "node_count": 20,
+      "bootstrap_nodes": 3,
+      "relay_nodes": 3,
+      "direct_provider_nodes": 10,
+      "nat_relayed_provider_nodes": 2,
+      "client_nodes": 2,
+      "killed_nodes": 0,
+      "convergence_ms": 0,
+      "mean_discovered_peers": 19,
+      "udp_probe_mean_rtt_ms": 0,
+      "pre_kill_requests": 80,
+      "pre_kill_completed": 80,
+      "pre_kill_completion_pct": 100,
+      "post_kill_requests": 0,
+      "post_kill_completed": 0,
+      "post_kill_completion_pct": 0,
+      "total_requests": 80,
+      "total_completed": 80,
+      "overall_completion_pct": 100,
+      "nat_relayed_completed": 24,
+      "hijacked_requests": 0,
+      "hijack_rate_pct": 0,
+      "routing_failovers": 0,
+      "routing_latency_pre_kill": {
+        "p50_ms": 3.77,
+        "p95_ms": 9.72,
+        "p99_ms": 208.47
+      },
+      "routing_latency_post_kill": {
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "routing_latency_overall": {
+        "p50_ms": 3.77,
+        "p95_ms": 9.72,
+        "p99_ms": 208.47
+      },
+      "provider_local_ttft": {
+        "p50_ms": 0.01,
+        "p95_ms": 0.01,
+        "p99_ms": 0.01
+      },
+      "estimated_client_ttft": {
+        "p50_ms": 1.71,
+        "p95_ms": 4.38,
+        "p99_ms": 93.82
+      },
+      "ttft_methodology": "estimated_client_ttft is an analytical estimate (provider_local_ttft + 0.45 * complete_routing_latency); the unary RPC transport buffers full responses rather than streaming client-observed first-token events",
+      "throughput_req_per_sec": 71.21,
+      "throughput_tok_per_sec": 182295.58,
+      "total_verify_ops": 571,
+      "total_bytes_transferred": 780592,
+      "total_gossip_messages": 28,
+      "total_relay_forwards": 30,
+      "adversarial_injected": 0,
+      "adversarial_detected": 0,
+      "adversarial_detection_pct": 0,
+      "hardware_attested_nodes": 0,
+      "hanzo_registry_disabled": false,
+      "hanzo_calls": 100,
+      "completion_without_hanzo_pct": 0,
+      "active_serving_providers": 12,
+      "provider_hhi": 0.1034,
+      "cost": {
+        "useful_tokens": 204800,
+        "compute_micro_usd": 53340,
+        "verify_overhead_micro_usd": 58,
+        "bandwidth_overhead_micro_usd": 16,
+        "registry_overhead_micro_usd": 8668,
+        "total_micro_usd": 62082,
+        "realized_usd_per_1m_tokens": 0.3031
+      },
+      "savings_vs_baseline_pct": 0
+    },
+    {
+      "name": "hip1350_decentralized_p2p_20n",
+      "description": "Primary 20-node decentralized Kademlia DHT + gossip + mutual-TLS 1.3 + UDP probe + circuit-relay mesh with ALL 3 bootstrap nodes and 2 intermediate relays killed mid-run.",
+      "node_count": 20,
+      "bootstrap_nodes": 3,
+      "relay_nodes": 3,
+      "direct_provider_nodes": 10,
+      "nat_relayed_provider_nodes": 2,
+      "client_nodes": 2,
+      "killed_nodes": 5,
+      "convergence_ms": 1850.36,
+      "mean_discovered_peers": 19,
+      "udp_probe_mean_rtt_ms": 0.93,
+      "pre_kill_requests": 40,
+      "pre_kill_completed": 40,
+      "pre_kill_completion_pct": 100,
+      "post_kill_requests": 40,
+      "post_kill_completed": 40,
+      "post_kill_completion_pct": 100,
+      "total_requests": 80,
+      "total_completed": 80,
+      "overall_completion_pct": 100,
+      "nat_relayed_completed": 25,
+      "hijacked_requests": 0,
+      "hijack_rate_pct": 0,
+      "routing_failovers": 1,
+      "routing_latency_pre_kill": {
+        "p50_ms": 2.46,
+        "p95_ms": 6.69,
+        "p99_ms": 9.91
+      },
+      "routing_latency_post_kill": {
+        "p50_ms": 2.56,
+        "p95_ms": 6.57,
+        "p99_ms": 10.16
+      },
+      "routing_latency_overall": {
+        "p50_ms": 2.51,
+        "p95_ms": 6.69,
+        "p99_ms": 10.16
+      },
+      "provider_local_ttft": {
+        "p50_ms": 0.01,
+        "p95_ms": 0.01,
+        "p99_ms": 0.02
+      },
+      "estimated_client_ttft": {
+        "p50_ms": 1.14,
+        "p95_ms": 3.02,
+        "p99_ms": 4.58
+      },
+      "ttft_methodology": "estimated_client_ttft is an analytical estimate (provider_local_ttft + 0.45 * complete_routing_latency); the unary RPC transport buffers full responses rather than streaming client-observed first-token events",
+      "throughput_req_per_sec": 340.79,
+      "throughput_tok_per_sec": 872429.13,
+      "total_verify_ops": 2212,
+      "total_bytes_transferred": 34691212,
+      "total_gossip_messages": 628,
+      "total_relay_forwards": 148,
+      "adversarial_injected": 100,
+      "adversarial_detected": 100,
+      "adversarial_detection_pct": 100,
+      "attack_vectors": [
+        {
+          "vector": "forged_signature",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "tampered_capability_fields",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "expired_ttl",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "sequence_rollback",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "replay_nonce",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "peer_id_mismatch",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "clock_skew_future",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "sybil_flood",
+          "verification_class": "network_liveness_probe",
+          "injected": 16,
+          "detected": 16,
+          "detection_rate_pct": 100
+        }
+      ],
+      "hardware_attested_nodes": 0,
+      "hanzo_registry_disabled": true,
+      "hanzo_calls": 0,
+      "completion_without_hanzo_pct": 100,
+      "active_serving_providers": 12,
+      "provider_hhi": 0.1088,
+      "cost": {
+        "useful_tokens": 204800,
+        "compute_micro_usd": 53570,
+        "verify_overhead_micro_usd": 222,
+        "bandwidth_overhead_micro_usd": 694,
+        "registry_overhead_micro_usd": 0,
+        "total_micro_usd": 54486,
+        "realized_usd_per_1m_tokens": 0.266
+      },
+      "savings_vs_baseline_pct": 12.24,
+      "sovereignty": {
+        "bundle_bytes": 37129,
+        "exported_peers": 19,
+        "exported_bootstraps": 18,
+        "exported_announcements": 21,
+        "export_ms": 0.48,
+        "verify_ms": 2.78,
+        "fork_ms": 7.97,
+        "total_migration_ms": 11.22,
+        "tamper_rejected": true,
+        "post_fork_route_ok": true,
+        "post_fork_hanzo_calls": 0
+      }
+    },
+    {
+      "name": "neg_unverified_advertisements_control",
+      "description": "Negative control with DisableVerification=true: forged and expired advertisements poison routing tables and hijack requests to a rogue sinkhole.",
+      "node_count": 20,
+      "bootstrap_nodes": 3,
+      "relay_nodes": 3,
+      "direct_provider_nodes": 10,
+      "nat_relayed_provider_nodes": 2,
+      "client_nodes": 2,
+      "killed_nodes": 0,
+      "convergence_ms": 1675.77,
+      "mean_discovered_peers": 19,
+      "udp_probe_mean_rtt_ms": 0.33,
+      "pre_kill_requests": 80,
+      "pre_kill_completed": 0,
+      "pre_kill_completion_pct": 0,
+      "post_kill_requests": 0,
+      "post_kill_completed": 0,
+      "post_kill_completion_pct": 0,
+      "total_requests": 80,
+      "total_completed": 0,
+      "overall_completion_pct": 0,
+      "nat_relayed_completed": 0,
+      "hijacked_requests": 80,
+      "hijack_rate_pct": 100,
+      "routing_failovers": 0,
+      "routing_latency_pre_kill": {
+        "p50_ms": 2.28,
+        "p95_ms": 8.72,
+        "p99_ms": 204.65
+      },
+      "routing_latency_post_kill": {
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "routing_latency_overall": {
+        "p50_ms": 2.28,
+        "p95_ms": 8.72,
+        "p99_ms": 204.65
+      },
+      "provider_local_ttft": {
+        "p50_ms": 0.1,
+        "p95_ms": 0.1,
+        "p99_ms": 0.1
+      },
+      "estimated_client_ttft": {
+        "p50_ms": 1.13,
+        "p95_ms": 4.02,
+        "p99_ms": 92.19
+      },
+      "ttft_methodology": "estimated_client_ttft is an analytical estimate (provider_local_ttft + 0.45 * complete_routing_latency); the unary RPC transport buffers full responses rather than streaming client-observed first-token events",
+      "throughput_req_per_sec": 0,
+      "throughput_tok_per_sec": 0,
+      "total_verify_ops": 1788,
+      "total_bytes_transferred": 25319068,
+      "total_gossip_messages": 0,
+      "total_relay_forwards": 0,
+      "adversarial_injected": 100,
+      "adversarial_detected": 0,
+      "adversarial_detection_pct": 0,
+      "attack_vectors": [
+        {
+          "vector": "forged_signature",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 0,
+          "detection_rate_pct": 0
+        },
+        {
+          "vector": "tampered_capability_fields",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 0,
+          "detection_rate_pct": 0
+        },
+        {
+          "vector": "expired_ttl",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 0,
+          "detection_rate_pct": 0
+        },
+        {
+          "vector": "sequence_rollback",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 0,
+          "detection_rate_pct": 0
+        },
+        {
+          "vector": "replay_nonce",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 0,
+          "detection_rate_pct": 0
+        },
+        {
+          "vector": "peer_id_mismatch",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 0,
+          "detection_rate_pct": 0
+        },
+        {
+          "vector": "clock_skew_future",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 0,
+          "detection_rate_pct": 0
+        },
+        {
+          "vector": "sybil_flood",
+          "verification_class": "network_liveness_probe",
+          "injected": 16,
+          "detected": 0,
+          "detection_rate_pct": 0
+        }
+      ],
+      "hardware_attested_nodes": 0,
+      "hanzo_registry_disabled": true,
+      "hanzo_calls": 0,
+      "completion_without_hanzo_pct": 0,
+      "active_serving_providers": 0,
+      "provider_hhi": 0,
+      "cost": {
+        "useful_tokens": 0,
+        "compute_micro_usd": 0,
+        "verify_overhead_micro_usd": 179,
+        "bandwidth_overhead_micro_usd": 507,
+        "registry_overhead_micro_usd": 0,
+        "total_micro_usd": 686,
+        "realized_usd_per_1m_tokens": 0
+      },
+      "savings_vs_baseline_pct": 0
+    },
+    {
+      "name": "neg_central_registry_kill_negative",
+      "description": "Negative control killing the single centralized registry: new discovery and uncached model routing collapse to 0.00% completion.",
+      "node_count": 20,
+      "bootstrap_nodes": 3,
+      "relay_nodes": 3,
+      "direct_provider_nodes": 10,
+      "nat_relayed_provider_nodes": 2,
+      "client_nodes": 2,
+      "killed_nodes": 1,
+      "convergence_ms": 0.31,
+      "mean_discovered_peers": 0,
+      "udp_probe_mean_rtt_ms": 0,
+      "pre_kill_requests": 0,
+      "pre_kill_completed": 0,
+      "pre_kill_completion_pct": 0,
+      "post_kill_requests": 40,
+      "post_kill_completed": 0,
+      "post_kill_completion_pct": 0,
+      "total_requests": 40,
+      "total_completed": 0,
+      "overall_completion_pct": 0,
+      "nat_relayed_completed": 0,
+      "hijacked_requests": 0,
+      "hijack_rate_pct": 0,
+      "routing_failovers": 0,
+      "routing_latency_pre_kill": {
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "routing_latency_post_kill": {
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "routing_latency_overall": {
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "provider_local_ttft": {
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "estimated_client_ttft": {
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "throughput_req_per_sec": 0,
+      "throughput_tok_per_sec": 0,
+      "total_verify_ops": 0,
+      "total_bytes_transferred": 0,
+      "total_gossip_messages": 0,
+      "total_relay_forwards": 0,
+      "adversarial_injected": 0,
+      "adversarial_detected": 0,
+      "adversarial_detection_pct": 0,
+      "hardware_attested_nodes": 0,
+      "hanzo_registry_disabled": false,
+      "hanzo_calls": 18,
+      "completion_without_hanzo_pct": 0,
+      "active_serving_providers": 0,
+      "provider_hhi": 0,
+      "cost": {
+        "useful_tokens": 0,
+        "compute_micro_usd": 0,
+        "verify_overhead_micro_usd": 0,
+        "bandwidth_overhead_micro_usd": 0,
+        "registry_overhead_micro_usd": 0,
+        "total_micro_usd": 0,
+        "realized_usd_per_1m_tokens": 0
+      },
+      "savings_vs_baseline_pct": 0
+    },
+    {
+      "name": "neg_total_partition_eclipse_boundary",
+      "description": "Honest CAP partition/eclipse boundary: 100% of neighbor peers are killed while adversarial eclipse ads are injected. Fails closed with ErrNoRouteFound (0% liveness, 0 forged routes accepted).",
+      "node_count": 5,
+      "bootstrap_nodes": 0,
+      "relay_nodes": 0,
+      "direct_provider_nodes": 4,
+      "nat_relayed_provider_nodes": 0,
+      "client_nodes": 1,
+      "killed_nodes": 4,
+      "convergence_ms": 0,
+      "mean_discovered_peers": 0,
+      "udp_probe_mean_rtt_ms": 0,
+      "pre_kill_requests": 0,
+      "pre_kill_completed": 0,
+      "pre_kill_completion_pct": 0,
+      "post_kill_requests": 40,
+      "post_kill_completed": 0,
+      "post_kill_completion_pct": 0,
+      "total_requests": 40,
+      "total_completed": 0,
+      "overall_completion_pct": 0,
+      "nat_relayed_completed": 0,
+      "hijacked_requests": 0,
+      "hijack_rate_pct": 0,
+      "routing_failovers": 50,
+      "routing_latency_pre_kill": {
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "routing_latency_post_kill": {
+        "p50_ms": 0.06,
+        "p95_ms": 3.8,
+        "p99_ms": 3.9
+      },
+      "routing_latency_overall": {
+        "p50_ms": 0.06,
+        "p95_ms": 3.8,
+        "p99_ms": 3.9
+      },
+      "provider_local_ttft": {
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "estimated_client_ttft": {
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "throughput_req_per_sec": 0,
+      "throughput_tok_per_sec": 0,
+      "total_verify_ops": 91,
+      "total_bytes_transferred": 36895,
+      "total_gossip_messages": 0,
+      "total_relay_forwards": 0,
+      "adversarial_injected": 100,
+      "adversarial_detected": 100,
+      "adversarial_detection_pct": 100,
+      "attack_vectors": [
+        {
+          "vector": "forged_signature",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "tampered_capability_fields",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "expired_ttl",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "sequence_rollback",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "replay_nonce",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "peer_id_mismatch",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "clock_skew_future",
+          "verification_class": "crypto_peer_signature",
+          "injected": 12,
+          "detected": 12,
+          "detection_rate_pct": 100
+        },
+        {
+          "vector": "sybil_flood",
+          "verification_class": "network_liveness_probe",
+          "injected": 16,
+          "detected": 16,
+          "detection_rate_pct": 100
+        }
+      ],
+      "hardware_attested_nodes": 0,
+      "hanzo_registry_disabled": true,
+      "hanzo_calls": 0,
+      "completion_without_hanzo_pct": 0,
+      "active_serving_providers": 0,
+      "provider_hhi": 0,
+      "cost": {
+        "useful_tokens": 0,
+        "compute_micro_usd": 0,
+        "verify_overhead_micro_usd": 0,
+        "bandwidth_overhead_micro_usd": 0,
+        "registry_overhead_micro_usd": 0,
+        "total_micro_usd": 0,
+        "realized_usd_per_1m_tokens": 0
+      },
+      "savings_vs_baseline_pct": 0
+    }
+  ]
+}
