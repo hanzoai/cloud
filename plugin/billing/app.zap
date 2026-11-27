@@ -146,6 +146,11 @@ struct CryptoDeposit {
     Instructions          text @104
     PlanID                text @112
     SubscriptionID        text @120
+    Contract              text @128
+    TxHash                text @136
+    LogIndex              u64  @144
+    SettlementState       text @152
+    SweptTxHash           text @160
 }
 
 struct CryptoOptions {

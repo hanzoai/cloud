@@ -303,3 +303,27 @@ func (ledger) Balance(ctx context.Context, org, subject, currency string, test b
 	}
 	return bal.Cents(), nil
 }
+
+// settleCryptoDepositCash carries a confirmed native on-chain deposit into the
+// finance Cash book via the single sanctioned settlement adapter (ledger.go).
+func settleCryptoDepositCash(ctx context.Context, org, subject, reason, idempotencyKey string, amountCents int64, test bool) error {
+	if amountCents <= 0 {
+		return nil
+	}
+	led := creditledger.Get()
+	if led == nil {
+		return nil
+	}
+	_, _, err := led.Credit(ctx, creditledger.CreditInput{
+		Org:            org,
+		Subject:        subject,
+		Currency:       "usd",
+		Reason:         reason,
+		Tag:            "crypto-deposit",
+		IdempotencyKey: idempotencyKey,
+		AmountCents:    amountCents,
+		Test:           test,
+		Cash:           true,
+	})
+	return err
+}

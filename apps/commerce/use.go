@@ -554,6 +554,11 @@ func Use(app *zip.App, deps cloud.Deps) error {
 		mirrorOrgBook(org)
 	})
 
+	// Heal any stale exchange shared-address collisions on boot so RPC deposit watchers
+	// un-wedge immediately, and start periodic cursor-lag / SLA stall monitoring.
+	healAllWatchedCollisions(context.Background())
+	startWatcherHealthMonitor(context.Background(), lg, deps.Audit)
+
 	// Silence commerce's verbose per-key-encode [DEBUG] log spam outside dev — in prod
 	// commerce emitted 115+ [DEBUG] lines/sec (Encode ...), burning CPU and log ingest.
 	if e := strings.ToLower(strings.TrimSpace(cloud.Env())); e != "dev" && e != "development" {

@@ -48,3 +48,7 @@ test:
     run: |
       set -euo pipefail
       GOWORK=off go test -race ./cmd/cloud/... ./manifest/... ./sdk/coord/... ./apps/iam ./apps/event -count=1
+  - name: commercial-lifecycle
+    run: |
+      set -euo pipefail
+      GOWORK=off bash .hanzo/scripts/pay_smoke.sh --self-test

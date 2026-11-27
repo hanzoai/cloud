@@ -12792,6 +12792,10 @@ components:
             is seen.
           format: int64
           type: integer
+        contract:
+          description: Contract is the exact watched token contract/mint this intent
+            accepts.
+          type: string
         creditedCents:
           description: |-
             CreditedCents is what the transfer this intent confirmed credited, in USD
@@ -12820,6 +12824,9 @@ components:
           description: Instructions says, in one line, what to send where and when
             it is credited.
           type: string
+        logIndex:
+          format: uint64
+          type: integer
         minimumCents:
           description: |-
             MinimumCents is the smallest deposit, in USD cents, that credits anything;
@@ -12837,6 +12844,10 @@ components:
             is credited.
           format: int64
           type: integer
+        settlementState:
+          description: 'SettlementState tracks progression: pending -> confirming
+            -> credited -> swept (or expired).'
+          type: string
         status:
           description: |-
             Status is pending until a transfer to the address is seen, confirming while
@@ -12845,9 +12856,17 @@ components:
           type: string
         subscriptionId:
           type: string
+        sweptTxHash:
+          description: SweptTxHash records the treasury sweep transaction hash once
+            swept.
+          type: string
         token:
           description: Token is the asset to send; this intent credits that token
             alone.
+          type: string
+        txHash:
+          description: TxHash and LogIndex identify the on-chain transfer event being
+            confirmed or credited.
           type: string
       type: object
     billing.CryptoOptions:
@@ -12876,9 +12895,38 @@ components:
       type: object
     billing.CryptoPair:
       properties:
+        addressTagRequired:
+          description: AddressTagRequired reports whether deposits on this chain share
+            one address and require a destination tag.
+          type: boolean
         chain:
           description: Chain is the network, as a deposit names it ("base").
           type: string
+        confirmations:
+          description: Confirmations is how many blocks deep a transfer must be before
+            crediting.
+          format: int64
+          type: integer
+        contract:
+          description: Contract is the on-chain token contract, SPL mint, jetton master,
+            or issuer.
+          type: string
+        decimals:
+          description: Decimals is the token's base-unit precision (e.g. 6 for USDC).
+          format: int64
+          type: integer
+        feeCents:
+          description: FeeCents is deducted from each deposit before crediting.
+          format: int64
+          type: integer
+        minAmount:
+          description: MinAmount is the smallest deposit in raw token base units.
+          type: string
+        minimumCents:
+          description: MinimumCents is the smallest deposit, in USD cents, that credits
+            anything.
+          format: int64
+          type: integer
         token:
           description: Token is the asset on that chain, as a deposit names it ("usdc").
           type: string

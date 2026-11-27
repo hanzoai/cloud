@@ -161,7 +161,7 @@ func (o ops) topupIntent(ctx context.Context, in *topupIntentIn) (*client.TopupI
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "topup intent", func(ctx context.Context) (*client.TopupIntentOut, error) {
+	out, err := ask(ctx, org, "topup intent", func(ctx context.Context) (*client.TopupIntentOut, error) {
 		return commercepeer.BillingTopupIntent(ctx, &client.TopupIntentIn{
 			Subject: subject, Country: country(c, in.Country), AmountCents: in.AmountCents, IdempotencyKey: retryKey(c),
 			Currency: strings.TrimSpace(in.Currency), Method: strings.TrimSpace(in.Method),
@@ -170,6 +170,12 @@ func (o ops) topupIntent(ctx context.Context, in *topupIntentIn) (*client.TopupI
 			Interval: strings.TrimSpace(in.Interval), Coupon: strings.TrimSpace(in.Coupon),
 		})
 	})
+	if err != nil {
+		billingRailMetrics.record("processor_intent", "open", "refused")
+		return nil, err
+	}
+	billingRailMetrics.record("processor_intent", "open", "created")
+	return out, nil
 }
 
 // intentRef names one payment, from the path.
@@ -188,9 +194,15 @@ func (o ops) topupIntentState(ctx context.Context, in *intentRef) (*client.Topup
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "topup intent state", func(ctx context.Context) (*client.TopupIntentState, error) {
+	out, err := ask(ctx, org, "topup intent state", func(ctx context.Context) (*client.TopupIntentState, error) {
 		return commercepeer.BillingTopupIntentState(ctx, &client.TopupIntentRef{Subject: subject, ID: in.ID})
 	})
+	if err != nil {
+		billingRailMetrics.record("processor_intent", "state", "not_found")
+		return nil, err
+	}
+	billingRailMetrics.record("processor_intent", "state", out.State)
+	return out, nil
 }
 
 // topupIntentCancel ends one of the caller's own payments that is not yet confirmed.
@@ -209,9 +221,15 @@ func (o ops) topupIntentCancel(ctx context.Context, in *intentRef) (*client.Topu
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "topup intent cancel", func(ctx context.Context) (*client.TopupIntentCancelled, error) {
+	out, err := ask(ctx, org, "topup intent cancel", func(ctx context.Context) (*client.TopupIntentCancelled, error) {
 		return commercepeer.BillingTopupIntentCancel(ctx, &client.TopupIntentRef{Subject: subject, ID: in.ID})
 	})
+	if err != nil {
+		billingRailMetrics.record("processor_intent", "cancel", "refused")
+		return nil, err
+	}
+	billingRailMetrics.record("processor_intent", "cancel", out.State)
+	return out, nil
 }
 
 // quoteQuery is what a buyer asks the price of, from the query string.

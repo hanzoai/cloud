@@ -29,7 +29,6 @@ import (
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	"github.com/hanzoai/commerce/billing/gateway"
 	"github.com/hanzoai/commerce/payment/x402"
-	commercetypes "github.com/hanzoai/commerce/types"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/client"
@@ -71,18 +70,7 @@ func exposeRails() {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeCryptoOptions(ctx context.Context, _ *cloud.Unit) (*client.CryptoOptions, error) {
-	out, err := commercebilling.GetCryptoOptions(ctx)
-	if err != nil {
-		return nil, zip.Errorf(503, "crypto deposits not configured")
-	}
-	// The pairs, not just the two axes: a chain and a token each on offer are not
-	// a pair on offer, and a picker that crosses them would name an asset the rail
-	// refuses. Never nil — a picker handed null where it expects an array crashes.
-	assets := make([]client.CryptoPair, 0, len(out.Assets))
-	for _, a := range out.Assets {
-		assets = append(assets, client.CryptoPair{Chain: a.Chain, Token: a.Token})
-	}
-	return &client.CryptoOptions{Chains: out.Chains, Tokens: out.Tokens, Assets: assets, Gateway: out.Gateway}, nil
+	return nativeCryptoOptions(ctx)
 }
 
 // Issues a per-payer custody deposit address for one asset.
@@ -103,25 +91,7 @@ func planeCryptoMint(ctx context.Context, in *client.CryptoMintIn) (*client.Cryp
 	if err != nil {
 		return nil, err
 	}
-	d, derr := commercebilling.CreateCryptoDepositForPlan(ctx, org, in.Payer, in.Chain, in.Token, in.AmountCents, commercebilling.CryptoPlanIn{
-		PlanID: in.PlanID, Quantity: in.Quantity, Level: in.Level,
-		Interval: commercetypes.Interval(in.Interval), Coupon: in.Coupon, Promo: promoNow(ctx),
-	})
-	if derr != nil {
-		switch {
-		case commercebilling.IsDepositUnsupported(derr):
-			return nil, zip.Errorf(400, "%v", derr)
-		case commercebilling.IsDepositRefused(derr):
-			// 503 rather than 502, and the difference is what a customer reads:
-			// an edge replaces an origin 502 with its own interstitial, so the
-			// message never arrives. It is also the honest code — the rail is
-			// unavailable, nothing here is a broken gateway.
-			return nil, zip.Errorf(503, "%v", derr)
-		default:
-			return nil, zip.Errorf(500, "failed to record deposit intent")
-		}
-	}
-	return cryptoRow(d), nil
+	return nativeCryptoMint(ctx, org, in)
 }
 
 // Reads one deposit intent back — pending, confirming, or succeeded.
@@ -136,11 +106,7 @@ func planeCryptoDeposit(ctx context.Context, in *client.CryptoDepositIn) (*clien
 	if err != nil {
 		return nil, err
 	}
-	d, derr := commercebilling.GetCryptoDeposit(ctx, org, in.Payer, in.ID)
-	if derr != nil {
-		return nil, zip.Errorf(404, "deposit not found")
-	}
-	return cryptoRow(d), nil
+	return nativeCryptoDeposit(ctx, org, in.Payer, in.ID)
 }
 
 // Renders the receiving bank details for a wire top-up.

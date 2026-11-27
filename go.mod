@@ -50,7 +50,7 @@ require (
 	github.com/hanzoai/framework v0.1.13
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/ha v0.2.0
-	github.com/hanzoai/iam v1.34.200
+	github.com/hanzoai/iam v1.34.202
 	github.com/hanzoai/kafka v1.3.6
 	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
@@ -87,7 +87,9 @@ require (
 	github.com/luxfi/trace v1.4.0
 	github.com/luxfi/zap v1.2.11
 	github.com/luxfi/zapdb v1.10.6
+	github.com/luxwallet/connect/go v0.1.4
 	github.com/mdp/qrterminal/v3 v3.2.1
+	github.com/mr-tron/base58 v1.3.0
 	github.com/nats-io/nats-server/v2 v2.12.3
 	github.com/nats-io/nats.go v1.50.0
 	github.com/oschwald/maxminddb-golang v1.13.0
@@ -501,7 +503,6 @@ require (
 	github.com/luxfi/pulsar v1.9.2 // indirect
 	github.com/luxfi/sampler v1.1.0 // indirect
 	github.com/luxfi/threshold v1.12.16 // indirect
-	github.com/luxwallet/connect/go v0.1.4 // indirect
 	github.com/magefile/mage v1.17.1 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
@@ -533,7 +534,6 @@ require (
 	github.com/molecule-man/go-brrr v1.0.1 // indirect
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/montanaflynn/stats v0.9.0 // indirect
-	github.com/mr-tron/base58 v1.3.0 // indirect
 	github.com/muhlemmer/gu v0.3.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect

@@ -247,6 +247,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// An organization's signing keys are kept in KMS (vault.go); without it an
 	// organization's cert can be neither created nor used to sign.
 	iamserver.UseVault(vault{})
+	host.Use(web3Middleware())
 	host.Use(iamserver.NewApp(db))
 
 	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — iam-v1 retired)", "store", StorePath(dir), "prefixes", Prefixes)
@@ -580,7 +581,7 @@ func sealed(dir string) (orm.DB, *sql.DB, error) {
 		_ = conn.Close()
 		return nil, nil, fmt.Errorf("iam: layer the ORM over the identity store: %w", err)
 	}
-	return db, conn, nil
+	return wrapTxSafe(db), conn, nil
 }
 
 // paths derives the data directory IAM's store lives under and its init_data.json

@@ -147,9 +147,15 @@ func (o ops) cryptoOptions(ctx context.Context, _ *cloud.Unit) (*client.CryptoOp
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "crypto options", func(ctx context.Context) (*client.CryptoOptions, error) {
+	out, err := ask(ctx, org, "crypto options", func(ctx context.Context) (*client.CryptoOptions, error) {
 		return commercepeer.BillingCryptoOptions(ctx)
 	})
+	if err != nil {
+		billingRailMetrics.record("crypto_native", "options", "unavailable")
+		return nil, err
+	}
+	billingRailMetrics.record("crypto_native", "options", "ok")
+	return out, nil
 }
 
 // Issues a deposit address the caller can send crypto to, on the asset they ask
@@ -182,42 +188,99 @@ func (o ops) mintCryptoDeposit(ctx context.Context, in *cryptoAsset) (*client.Cr
 	if err != nil {
 		return nil, err
 	}
+	if in.AmountCents < 0 {
+		billingRailMetrics.record("crypto_native", "mint", "invalid_amount")
+		return nil, zip.ErrBadRequest("amountCents cannot be negative")
+	}
 	offered, err := ask(ctx, org, "crypto options", func(ctx context.Context) (*client.CryptoOptions, error) {
 		return commercepeer.BillingCryptoOptions(ctx)
 	})
 	if err != nil {
+		billingRailMetrics.record("crypto_native", "mint", "unavailable")
 		return nil, err
 	}
-	if err := accepted(offered, in.Chain, in.Token); err != nil {
+	pair, err := accepted(offered, in.Chain, in.Token)
+	if err != nil {
+		if strings.Contains(err.Error(), "not being accepted") {
+			billingRailMetrics.record("crypto_native", "mint", "unavailable")
+		} else {
+			billingRailMetrics.record("crypto_native", "mint", "unsupported_asset")
+		}
 		return nil, err
 	}
-	return ask(ctx, org, "crypto deposit", func(ctx context.Context) (*client.CryptoDeposit, error) {
+	if strings.TrimSpace(in.PlanID) == "" && in.AmountCents > 0 && pair.MinimumCents > 0 && in.AmountCents < pair.MinimumCents {
+		billingRailMetrics.record("crypto_native", "mint", "below_minimum")
+		return nil, zip.ErrBadRequest(fmt.Sprintf(
+			"amountCents (%d) is below the minimum deposit (%d cents) for %s on %s",
+			in.AmountCents, pair.MinimumCents, strings.ToUpper(pair.Token), pair.Chain,
+		)).With(map[string]any{
+			"minimumCents": pair.MinimumCents,
+			"feeCents":     pair.FeeCents,
+			"chain":        pair.Chain,
+			"token":        pair.Token,
+		})
+	}
+	out, err := ask(ctx, org, "crypto deposit", func(ctx context.Context) (*client.CryptoDeposit, error) {
 		return commercepeer.BillingCryptoMint(ctx, &client.CryptoMintIn{
 			Payer: subject, Chain: in.Chain, Token: in.Token, AmountCents: in.AmountCents,
 			PlanID: strings.TrimSpace(in.PlanID), Quantity: in.Quantity, Level: in.Level,
 			Interval: strings.TrimSpace(in.Interval), Coupon: strings.TrimSpace(in.Coupon),
 		})
 	})
+	if err != nil {
+		billingRailMetrics.record("crypto_native", "mint", "error")
+		return nil, err
+	}
+	billingRailMetrics.record("crypto_native", "mint", "ok")
+	return out, nil
 }
 
 // accepted refuses an asset the menu does not offer, with the menu, so a caller
 // can choose again without a second request. Only what the caller named is
 // checked: an empty chain or token takes the rail's default, and the rail
 // answers for that. An empty menu is a shut rail, which is 503 whatever was asked.
-func accepted(menu *client.CryptoOptions, chain, token string) error {
+func accepted(menu *client.CryptoOptions, chain, token string) (client.CryptoPair, error) {
 	if len(menu.Assets) == 0 {
-		return zip.Errorf(http.StatusServiceUnavailable,
+		return client.CryptoPair{}, zip.Errorf(http.StatusServiceUnavailable,
 			"crypto deposits are not being accepted right now; use a card, a signed USDC payment through Circle Gateway, or a bank transfer")
 	}
 	chain = strings.ToLower(strings.TrimSpace(chain))
 	token = strings.ToLower(strings.TrimSpace(token))
-	ok := (chain == "" || slices.Contains(menu.Chains, chain)) &&
-		(token == "" || slices.Contains(menu.Tokens, token))
+	hasChain := chain == "" || slices.ContainsFunc(menu.Chains, func(c string) bool { return strings.EqualFold(c, chain) })
+	hasToken := token == "" || slices.ContainsFunc(menu.Tokens, func(t string) bool { return strings.EqualFold(t, token) })
+	ok := hasChain && hasToken
+	var matched client.CryptoPair
 	if ok && chain != "" && token != "" {
-		ok = slices.Contains(menu.Assets, client.CryptoPair{Chain: chain, Token: token})
+		idx := slices.IndexFunc(menu.Assets, func(a client.CryptoPair) bool {
+			return strings.EqualFold(a.Chain, chain) && strings.EqualFold(a.Token, token)
+		})
+		ok = idx >= 0
+		if ok {
+			matched = menu.Assets[idx]
+		}
+	} else if ok {
+		effChain := chain
+		if effChain == "" {
+			effChain = "ethereum"
+		}
+		effToken := token
+		if effToken == "" {
+			effToken = "usdc"
+		}
+		if idx := slices.IndexFunc(menu.Assets, func(a client.CryptoPair) bool {
+			return strings.EqualFold(a.Chain, effChain) && strings.EqualFold(a.Token, effToken)
+		}); idx >= 0 {
+			matched = menu.Assets[idx]
+		} else if chain != "" {
+			if idx := slices.IndexFunc(menu.Assets, func(a client.CryptoPair) bool {
+				return strings.EqualFold(a.Chain, chain)
+			}); idx >= 0 {
+				matched = menu.Assets[idx]
+			}
+		}
 	}
 	if ok {
-		return nil
+		return matched, nil
 	}
 	var asked string
 	switch {
@@ -232,7 +295,7 @@ func accepted(menu *client.CryptoOptions, chain, token string) error {
 	for _, a := range menu.Assets {
 		pairs = append(pairs, strings.ToUpper(a.Token)+" on "+a.Chain)
 	}
-	return zip.ErrBadRequest(fmt.Sprintf("%s is not accepted; the crypto rail accepts %s", asked, strings.Join(pairs, ", "))).
+	return client.CryptoPair{}, zip.ErrBadRequest(fmt.Sprintf("%s is not accepted; the crypto rail accepts %s", asked, strings.Join(pairs, ", "))).
 		With(map[string]any{"chains": menu.Chains, "tokens": menu.Tokens, "assets": menu.Assets})
 }
 
@@ -275,9 +338,15 @@ func (o ops) cryptoDeposit(ctx context.Context, in *depositRef) (*client.CryptoD
 	if err != nil {
 		return nil, err
 	}
-	return ask(ctx, org, "crypto deposit", func(ctx context.Context) (*client.CryptoDeposit, error) {
+	out, err := ask(ctx, org, "crypto deposit", func(ctx context.Context) (*client.CryptoDeposit, error) {
 		return commercepeer.BillingCryptoDeposit(ctx, &client.CryptoDepositIn{Payer: subject, ID: in.ID})
 	})
+	if err != nil {
+		billingRailMetrics.record("crypto_native", "read", "not_found")
+		return nil, err
+	}
+	billingRailMetrics.record("crypto_native", "read", out.Status)
+	return out, nil
 }
 
 // depositRef names one deposit intent.

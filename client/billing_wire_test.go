@@ -55,7 +55,7 @@ var billingWire = []any{
 	client.Alerts{}, client.Alert{}, client.AlertSpec{}, client.AlertPatch{},
 	client.AlertRef{}, client.Dropped{}, client.CapIn{}, client.CapVerdict{},
 	// rails
-	client.CryptoOptions{}, client.CryptoMintIn{}, client.CryptoDepositIn{},
+	client.CryptoOptions{}, client.CryptoPair{}, client.CryptoMintIn{}, client.CryptoDepositIn{},
 	client.CryptoDeposit{}, client.WireIn{}, client.WireInstructions{},
 	// tier and rollup
 	client.Tier{}, client.TierLimits{}, client.TierBalance{},

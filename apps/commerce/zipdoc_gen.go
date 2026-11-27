@@ -423,6 +423,7 @@ func init() {
 			"CryptoDeposit.amountCents":           "AmountCents is what the payer said they would send, in USD cents, when the\naddress was asked for: a record of intent, not a quote. What is credited is\nwhat arrives. Absent when nothing was named.",
 			"CryptoDeposit.chain":                 "Chain is the network to send on.",
 			"CryptoDeposit.confirmations":         "Confirmations is how deep the transfer being confirmed is now; zero until one\nis seen.",
+			"CryptoDeposit.contract":              "Contract is the exact watched token contract/mint this intent accepts.",
 			"CryptoDeposit.creditedCents":         "CreditedCents is what the transfer this intent confirmed credited, in USD\ncents, once it succeeded. A later transfer to the same address is credited\ntoo, and shows in the balance rather than here.",
 			"CryptoDeposit.depositAddress":        "DepositAddress is where to send it.",
 			"CryptoDeposit.expiresAt":             "ExpiresAt is when this address stops being handed out again (RFC3339). A\ntransfer that arrives after it is still credited.",
@@ -432,8 +433,11 @@ func init() {
 			"CryptoDeposit.minimumCents":          "MinimumCents is the smallest deposit, in USD cents, that credits anything;\nless credits nothing. Absent when nothing is watching this asset now, and\nthen nothing sent to it is credited.",
 			"CryptoDeposit.planId":                "PlanID and SubscriptionID are set when the deposit pays a plan's first period.",
 			"CryptoDeposit.requiredConfirmations": "RequiredConfirmations is how many blocks deep the transfer must be before it\nis credited.",
+			"CryptoDeposit.settlementState":       "SettlementState tracks progression: pending -> confirming -> credited -> swept (or expired).",
 			"CryptoDeposit.status":                "Status is pending until a transfer to the address is seen, confirming while\nthe chain buries it, and succeeded once it is credited as cash in the\npayer's balance (GET /v1/billing/balance, cash).",
+			"CryptoDeposit.sweptTxHash":           "SweptTxHash records the treasury sweep transaction hash once swept.",
 			"CryptoDeposit.token":                 "Token is the asset to send; this intent credits that token alone.",
+			"CryptoDeposit.txHash":                "TxHash and LogIndex identify the on-chain transfer event being confirmed or credited.",
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/crypto/mint", zip.Doc{
@@ -443,6 +447,7 @@ func init() {
 			"CryptoDeposit.amountCents":           "AmountCents is what the payer said they would send, in USD cents, when the\naddress was asked for: a record of intent, not a quote. What is credited is\nwhat arrives. Absent when nothing was named.",
 			"CryptoDeposit.chain":                 "Chain is the network to send on.",
 			"CryptoDeposit.confirmations":         "Confirmations is how deep the transfer being confirmed is now; zero until one\nis seen.",
+			"CryptoDeposit.contract":              "Contract is the exact watched token contract/mint this intent accepts.",
 			"CryptoDeposit.creditedCents":         "CreditedCents is what the transfer this intent confirmed credited, in USD\ncents, once it succeeded. A later transfer to the same address is credited\ntoo, and shows in the balance rather than here.",
 			"CryptoDeposit.depositAddress":        "DepositAddress is where to send it.",
 			"CryptoDeposit.expiresAt":             "ExpiresAt is when this address stops being handed out again (RFC3339). A\ntransfer that arrives after it is still credited.",
@@ -452,17 +457,27 @@ func init() {
 			"CryptoDeposit.minimumCents":          "MinimumCents is the smallest deposit, in USD cents, that credits anything;\nless credits nothing. Absent when nothing is watching this asset now, and\nthen nothing sent to it is credited.",
 			"CryptoDeposit.planId":                "PlanID and SubscriptionID are set when the deposit pays a plan's first period.",
 			"CryptoDeposit.requiredConfirmations": "RequiredConfirmations is how many blocks deep the transfer must be before it\nis credited.",
+			"CryptoDeposit.settlementState":       "SettlementState tracks progression: pending -> confirming -> credited -> swept (or expired).",
 			"CryptoDeposit.status":                "Status is pending until a transfer to the address is seen, confirming while\nthe chain buries it, and succeeded once it is credited as cash in the\npayer's balance (GET /v1/billing/balance, cash).",
+			"CryptoDeposit.sweptTxHash":           "SweptTxHash records the treasury sweep transaction hash once swept.",
 			"CryptoDeposit.token":                 "Token is the asset to send; this intent credits that token alone.",
+			"CryptoDeposit.txHash":                "TxHash and LogIndex identify the on-chain transfer event being confirmed or credited.",
 			"CryptoMintIn.planId":                 "PlanID, Quantity, Level, Interval and Coupon bind the deposit to a plan's first period.",
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/crypto/options", zip.Doc{
 		Description: "Answers which chains and tokens the crypto rail accepts, and the networks a\nUSDC payment may be made on through Circle Gateway.\n\nIt is the intersection of two facts, not a config list: an asset is offered\nonly if something is WATCHING it and the custody processor supports it. An\naddress nobody watches credits nobody, so offering one would take a customer's\nmoney and lose it. With neither rail open it is 503, not an empty menu.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
-			"CryptoOptions.assets": "Assets is every (chain, token) pair the deposit-address rail accepts.\nChains and Tokens are its two axes: a chain and a token each on offer are\nnot a pair on offer, so a picker that crosses them can name an asset the\nrail will refuse.",
-			"CryptoPair.chain":     "Chain is the network, as a deposit names it (\"base\").",
-			"CryptoPair.token":     "Token is the asset on that chain, as a deposit names it (\"usdc\").",
+			"CryptoOptions.assets":          "Assets is every (chain, token) pair the deposit-address rail accepts.\nChains and Tokens are its two axes: a chain and a token each on offer are\nnot a pair on offer, so a picker that crosses them can name an asset the\nrail will refuse.",
+			"CryptoPair.addressTagRequired": "AddressTagRequired reports whether deposits on this chain share one address and require a destination tag.",
+			"CryptoPair.chain":              "Chain is the network, as a deposit names it (\"base\").",
+			"CryptoPair.confirmations":      "Confirmations is how many blocks deep a transfer must be before crediting.",
+			"CryptoPair.contract":           "Contract is the on-chain token contract, SPL mint, jetton master, or issuer.",
+			"CryptoPair.decimals":           "Decimals is the token's base-unit precision (e.g. 6 for USDC).",
+			"CryptoPair.feeCents":           "FeeCents is deducted from each deposit before crediting.",
+			"CryptoPair.minAmount":          "MinAmount is the smallest deposit in raw token base units.",
+			"CryptoPair.minimumCents":       "MinimumCents is the smallest deposit, in USD cents, that credits anything.",
+			"CryptoPair.token":              "Token is the asset on that chain, as a deposit names it (\"usdc\").",
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/commerce POST /billing/customer/price", zip.Doc{

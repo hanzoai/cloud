@@ -154,9 +154,21 @@ func planeTopupIntent(ctx context.Context, in *client.TopupIntentIn) (*client.To
 		Interval: commercetypes.Interval(in.Interval), Coupon: in.Coupon, Promo: promoNow(ctx),
 	})
 	if f != nil {
+		cls := "processor_error"
+		msg := strings.ToLower(f.Message)
+		if strings.Contains(msg, "currency") || strings.Contains(msg, "method") {
+			cls = "currency_method_unsupported"
+		} else if strings.Contains(msg, "waiting on your bank") {
+			cls = "open_intent_cap_exceeded"
+		}
+		RecordProcessorOutcome(in.Currency, in.Method, cls)
 		return nil, fail(f)
 	}
-	return into[client.TopupIntentOut](out)
+	res, err := into[client.TopupIntentOut](out)
+	if err == nil && res != nil {
+		RecordProcessorOutcome(res.Currency, in.Method, ClassifyProcessorOutcome("created", "", "", res.Currency, in.Method))
+	}
+	return res, err
 }
 
 // Answers where one of the subject's own payments stands: created, pending,
@@ -173,7 +185,11 @@ func planeTopupIntentState(ctx context.Context, in *client.TopupIntentRef) (*cli
 	if f != nil {
 		return nil, fail(f)
 	}
-	return into[client.TopupIntentState](st)
+	res, err := into[client.TopupIntentState](st)
+	if err == nil && res != nil {
+		RecordProcessorOutcome("usd", "auto", ClassifyProcessorOutcome(res.State, "", "", "usd", "auto"))
+	}
+	return res, err
 }
 
 // Cancels one of the subject's own top-up payments that has not been confirmed, at the
@@ -190,7 +206,11 @@ func planeTopupIntentCancel(ctx context.Context, in *client.TopupIntentRef) (*cl
 	if f != nil {
 		return nil, fail(f)
 	}
-	return into[client.TopupIntentCancelled](out)
+	res, err := into[client.TopupIntentCancelled](out)
+	if err == nil && res != nil {
+		RecordProcessorOutcome("usd", "auto", ClassifyProcessorOutcome(res.State, "abandoned", "", "usd", "auto"))
+	}
+	return res, err
 }
 
 // Answers the price of what a buyer is about to buy, before any sale: a plan's first
