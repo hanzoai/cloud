@@ -1219,7 +1219,8 @@
  },
  "node": {
   "ops": [
-   "get_node"
+   "get_node",
+   "post_node_by_id_call"
   ]
  },
  "notify": {

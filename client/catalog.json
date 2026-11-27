@@ -4680,6 +4680,10 @@
    "id": "get_node",
    "doc": "Returns the caller org's currently connected bot nodes: what each one\ncalls itself, the platform it runs on, its agent version, when its socket was\nestablished, and the capabilities and commands it reported.\n\nOnly this org's nodes are listed — the org is half of every key in the table it\nreads — and only nodes attached to THIS replica, because the list is of live\nsockets rather than of registrations. The capability and command lists are the\nnode's own self-report: useful to show, never load-bearing, because what a node\nmay actually be asked to do is decided at the socket against the deployment's\nallowlist.",
    "read": true
+  },
+  {
+   "id": "post_node_by_id_call",
+   "doc": "Asks one of the caller org's connected machines to execute a declared\ncommand (such as computer control, browser proxy, or local MCP tool call) and\nreturns the node's JSON answer. Projected into POST /v1/mcp so mobile apps,\ncloud agents, and third-party MCP clients can control linked machines securely\nunder the caller's IAM-validated organization."
   }
  ],
  "notify": [

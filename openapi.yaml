@@ -45156,6 +45156,44 @@ components:
           format: int64
           type: integer
       type: object
+    node.callNodeIn:
+      properties:
+        ID:
+          description: ID is the connected node's identifier within the caller's org
+            (from GET /v1/node).
+          type: string
+        command:
+          description: |-
+            Command is the declared node command to run (e.g. "computer.screenshot",
+            "browser.proxy", "mcp.tools", "mcp.call", "device.info").
+          type: string
+        idempotencyKey:
+          description: IdempotencyKey optionally deduplicates retried invocations.
+          type: string
+        params:
+          description: Params is an optional JSON object of arguments for the command.
+        timeoutMs:
+          description: TimeoutMs bounds how long cloud waits for the node (default
+            30s, max 5m).
+          format: int64
+          type: integer
+      type: object
+    node.invokeView:
+      properties:
+        code:
+          description: Code is the stable error code returned by the node when OK
+            is false.
+          type: string
+        message:
+          description: Message is a human-readable diagnostic returned by the node
+            on failure.
+          type: string
+        ok:
+          description: OK reports whether the node completed the command without error.
+          type: boolean
+        payload:
+          description: Payload is the node's raw JSON answer when valid JSON was returned.
+      type: object
     node.nodeView:
       properties:
         caps:
@@ -143663,6 +143701,50 @@ paths:
       summary: 'Returns the caller org''s currently connected bot nodes: what each
         one calls itself, the platform it runs on, its agent version, when its socket
         was established, and the capabilities and commands it reported.'
+      tags:
+      - node
+      x-app: node
+      x-public: true
+      x-tool: true
+  /v1/node/{id}/call:
+    post:
+      description: |-
+        Asks one of the caller org's connected machines to execute a declared
+        command (such as computer control, browser proxy, or local MCP tool call) and
+        returns the node's JSON answer. Projected into POST /v1/mcp so mobile apps,
+        cloud agents, and third-party MCP clients can control linked machines securely
+        under the caller's IAM-validated organization.
+      operationId: post_node_by_id_call
+      parameters:
+      - description: ID is the connected node's identifier within the caller's org
+          (from GET /v1/node).
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/node.callNodeIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/node.invokeView'
+          description: ok
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problem-details'
+          description: refused
+      summary: Asks one of the caller org's connected machines to execute a declared
+        command (such as computer control, browser proxy, or local MCP tool call)
+        and returns the node's JSON answer.
       tags:
       - node
       x-app: node
