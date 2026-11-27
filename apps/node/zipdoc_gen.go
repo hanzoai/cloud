@@ -23,6 +23,20 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/node GET /v1/node/connect", zip.Doc{
 		Description: "The socket nodes dial. The upgrade itself is refused without a validated\nprincipal: the transport reads the org off the request, and off-gateway that\nheader is a client's claim until a principal proves otherwise — which would\nlet anyone attach a node into any tenant.\n\nUNTYPED BY DESIGN: this is a WebSocket upgrade. It answers 101 and then the\nconnection is a duplex frame stream for the life of the node, which is not a\nstatus a typed op can declare or a value it can return.",
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/node POST /v1/node/:id/call", zip.Doc{
+		Description: "Asks one of the caller org's connected machines to execute a declared\ncommand (such as computer control, browser proxy, or local MCP tool call) and\nreturns the node's JSON answer. Projected into POST /v1/mcp so mobile apps,\ncloud agents, and third-party MCP clients can control linked machines securely\nunder the caller's IAM-validated organization.",
+		Fields: map[string]string{
+			"callNodeIn.ID":             "ID is the connected node's identifier within the caller's org (from GET /v1/node).",
+			"callNodeIn.command":        "Command is the declared node command to run (e.g. \"computer.screenshot\",\n\"browser.proxy\", \"mcp.tools\", \"mcp.call\", \"device.info\").",
+			"callNodeIn.idempotencyKey": "IdempotencyKey optionally deduplicates retried invocations.",
+			"callNodeIn.params":         "Params is an optional JSON object of arguments for the command.",
+			"callNodeIn.timeoutMs":      "TimeoutMs bounds how long cloud waits for the node (default 30s, max 5m).",
+			"invokeView.code":           "Code is the stable error code returned by the node when OK is false.",
+			"invokeView.message":        "Message is a human-readable diagnostic returned by the node on failure.",
+			"invokeView.ok":             "OK reports whether the node completed the command without error.",
+			"invokeView.payload":        "Payload is the node's raw JSON answer when valid JSON was returned.",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/node POST /v1/node/peer/invoke", zip.Doc{
 		Description: "Serves a forwarded invocation against THIS replica's sockets.\n\n# The one place an org arrives in a body\n\nEverywhere else the org comes from the gateway-injected X-Org-Id, precisely so\nno caller can name another tenant's node. Here it arrives in the body, because\nthe request has already crossed the identity boundary on the replica that\nforwarded it — it is a machine hop, not a user call. What makes that safe is\nthe token: it proves the caller is another replica of this binary, which\nderived that org from a validated header. With no token configured the handler\nserves nothing at all, because an unauthenticated endpoint that takes an org\nfrom a body is a cross-tenant invoke primitive for anything that can reach the\npod.\n\nIt invokes strictly LOCALLY, so a hop cannot chain into another hop:\nforwarding is loop-free by construction, with no hop counter to maintain. The\ngate runs here too, because invokeLocal is where it runs — a forwarded\ninvocation is authorized by the replica that knows the node, exactly like a\nlocal one.\n\nMounted POST-only and OUTSIDE the user-identity middleware (node.go). It\nwrites every answer itself and returns nil, so nothing propagates — which is\nwhy it needs no cloud.Terminal. A wrong method never arrives, the route being\nregistered for POST alone.",
 	})

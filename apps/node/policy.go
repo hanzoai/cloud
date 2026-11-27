@@ -104,6 +104,8 @@ const (
 	CommandSystemWhich      = "system.which"
 	CommandSystemNotify     = "system.notify"
 	CommandBrowserProxy     = "browser.proxy"
+	CommandMCPTools         = "mcp.tools"
+	CommandMCPCall          = "mcp.call"
 )
 
 var (
@@ -128,11 +130,58 @@ var (
 	motionCommands        = []string{"motion.activity", "motion.pedometer"}
 	smsDangerous          = []string{"sms.send"}
 
+	// computerCommands are native desktop computer-control and MCP dispatch
+	// commands served by `hanzo-mcp connect` on desktop platforms only. Every
+	// invocation still passes the node's own declared-commands gate and Mode.Deny.
+	computerCommands = []string{
+		CommandMCPTools,
+		CommandMCPCall,
+		"computer.info",
+		"computer.health",
+		"computer.screenshot",
+		"computer.screenshot_region",
+		"computer.get_pixel",
+		"computer.screen_size",
+		"computer.get_screens",
+		"computer.position",
+		"computer.click",
+		"computer.double_click",
+		"computer.right_click",
+		"computer.middle_click",
+		"computer.move",
+		"computer.move_relative",
+		"computer.drag",
+		"computer.drag_relative",
+		"computer.scroll",
+		"computer.type",
+		"computer.write",
+		"computer.press",
+		"computer.key_down",
+		"computer.key_up",
+		"computer.hotkey",
+		"computer.get_active_window",
+		"computer.list_windows",
+		"computer.focus_window",
+		"computer.minimize_window",
+		"computer.maximize_window",
+		"computer.resize_window",
+		"computer.move_window",
+		"computer.close_window",
+		"computer.open_app",
+		"computer.batch",
+		"computer.mac_calendar",
+		"computer.mac_reminders",
+		"computer.mac_notes",
+		"computer.mac_mail_draft",
+		"computer.mac_contacts",
+		"computer.mac_shortcuts",
+	}
+
 	// systemRunCommands are the host-exec surface: they run a program on the
 	// user's machine. Everything else reads or shows something.
 	systemRunCommands = []string{CommandSystemRunPrepare, CommandSystemRun, CommandSystemWhich}
 
-	systemCommands = concat(systemRunCommands, []string{CommandSystemNotify, CommandBrowserProxy})
+	systemCommands = concat(systemRunCommands, []string{CommandSystemNotify, CommandBrowserProxy}, computerCommands)
 
 	// iOS nodes do not implement system.run/which, but they do notify.
 	iosSystemCommands = []string{CommandSystemNotify}

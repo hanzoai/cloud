@@ -166,18 +166,31 @@ func TestCheckRefusesACommandOffThePlatformDefaults(t *testing.T) {
 	assertDeny(t, Check(ios, CommandSystemRun, []string{"echo"}, Mode{}), CodeCommandNotAllowlisted)
 	assertAllow(t, Check(ios, CommandSystemNotify, nil, Mode{}))
 
-	// Linux nodes get host exec and nothing else.
-	linux := nodeSession("linux", CommandSystemRun, "camera.list")
+	// Linux nodes get host exec and desktop computer/MCP commands, never camera.
+	linux := nodeSession("linux", CommandSystemRun, "computer.screenshot", CommandMCPCall, "camera.list")
 	assertAllow(t, Check(linux, CommandSystemRun, []string{"echo"}, Mode{}))
+	assertAllow(t, Check(linux, "computer.screenshot", nil, Mode{}))
+	assertAllow(t, Check(linux, CommandMCPCall, nil, Mode{}))
 	assertDeny(t, Check(linux, "camera.list", nil, Mode{}), CodeCommandNotAllowlisted)
+
+	// macOS gets computer.* and mcp.call, while iOS and unknown never do.
+	mac := nodeSession("darwin", "computer.info", CommandMCPTools, CommandBrowserProxy)
+	assertAllow(t, Check(mac, "computer.info", nil, Mode{}))
+	assertAllow(t, Check(mac, CommandMCPTools, nil, Mode{}))
+	assertAllow(t, Check(mac, CommandBrowserProxy, nil, Mode{}))
+
+	iosComp := nodeSession("ios", "computer.screenshot", CommandMCPCall)
+	assertDeny(t, Check(iosComp, "computer.screenshot", nil, Mode{}), CodeCommandNotAllowlisted)
+	assertDeny(t, Check(iosComp, CommandMCPCall, nil, Mode{}), CodeCommandNotAllowlisted)
 }
 
-// Unclassifiable metadata must not inherit host exec. This is the fail-safe the
-// TypeScript spelled "unknown: UNKNOWN_PLATFORM_COMMANDS".
+// Unclassifiable metadata must not inherit host exec or computer control.
 func TestCheckDeniesHostExecToAnUnclassifiedPlatform(t *testing.T) {
 	for _, platform := range []string{"", "plan9", "haiku", "   "} {
-		s := nodeSession(platform, CommandSystemRun, CommandSystemWhich, "canvas.hide")
+		s := nodeSession(platform, CommandSystemRun, CommandSystemWhich, "computer.screenshot", CommandMCPCall, "canvas.hide")
 		assertDeny(t, Check(s, CommandSystemRun, []string{"echo"}, Mode{}), CodeCommandNotAllowlisted)
+		assertDeny(t, Check(s, "computer.screenshot", nil, Mode{}), CodeCommandNotAllowlisted)
+		assertDeny(t, Check(s, CommandMCPCall, nil, Mode{}), CodeCommandNotAllowlisted)
 		assertDeny(t, Check(s, CommandSystemWhich, nil, Mode{}), CodeCommandNotAllowlisted)
 		assertAllow(t, Check(s, "canvas.hide", nil, Mode{}))
 	}

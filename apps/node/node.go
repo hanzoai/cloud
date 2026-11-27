@@ -196,6 +196,7 @@ func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 	// trailing slash in every generated SDK.
 	root := app.Group("/v1/node")
 	root.Get("", o.listNodes)
+	root.Post("/:id/call", o.callNode)
 
 	// UNTYPED BY DESIGN: a policy refusal here is a 403 carrying a DOMAIN body —
 	// {"error":"denied","code":…,"reason":…} — that a client switches on, and the
@@ -393,6 +394,95 @@ func (o ops) listNodes(ctx context.Context, _ *nodesQuery) (*nodesView, error) {
 	return &nodesView{Nodes: out}, nil
 }
 
+// ---------------------------------------------------------------------------
+// POST /v1/node/{id}/call — typed invocation projected to /v1/mcp, CLI, SDKs
+// ---------------------------------------------------------------------------
+
+// callNodeIn invokes a command (computer.*, browser.proxy, mcp.tools, mcp.call,
+// device.info, etc.) on a connected machine in the caller's org.
+type callNodeIn struct {
+	// ID is the connected node's identifier within the caller's org (from GET /v1/node).
+	ID string `path:"id"`
+	// Command is the declared node command to run (e.g. "computer.screenshot",
+	// "browser.proxy", "mcp.tools", "mcp.call", "device.info").
+	Command string `json:"command"`
+	// Params is an optional JSON object of arguments for the command.
+	Params json.RawMessage `json:"params,omitempty"`
+	// TimeoutMs bounds how long cloud waits for the node (default 30s, max 5m).
+	TimeoutMs int `json:"timeoutMs,omitempty"`
+	// IdempotencyKey optionally deduplicates retried invocations.
+	IdempotencyKey string `json:"idempotencyKey,omitempty"`
+}
+
+// callNode asks one of the caller org's connected machines to execute a declared
+// command (such as computer control, browser proxy, or local MCP tool call) and
+// returns the node's JSON answer. Projected into POST /v1/mcp so mobile apps,
+// cloud agents, and third-party MCP clients can control linked machines securely
+// under the caller's IAM-validated organization.
+func (o ops) callNode(ctx context.Context, in *callNodeIn) (*invokeView, error) {
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
+	}
+	nodeID := strings.TrimSpace(in.ID)
+	if nodeID == "" {
+		return nil, zip.ErrBadRequest("a node id is required")
+	}
+	if len(nodeID) > maxNodeID {
+		return nil, zip.ErrNotFound("no such node for this org")
+	}
+	command := strings.TrimSpace(in.Command)
+	if command == "" {
+		return nil, zip.ErrBadRequest("command is required")
+	}
+
+	key := NodeKey{Org: org, NodeID: nodeID}
+	params := in.Params
+	if command == CommandSystemRun {
+		var p SystemRunParams
+		if len(params) > 0 && json.Unmarshal(params, &p) != nil {
+			return nil, zip.ErrBadRequest("invalid system.run params")
+		}
+		next, d := SanitizeSystemRun(key, p, Caller{}, nil, time.Now())
+		if !d.Allow {
+			return nil, zip.ErrForbidden(d.Reason)
+		}
+		b, err := json.Marshal(next)
+		if err != nil {
+			return nil, zip.ErrInternal("bot: could not re-encode system.run params")
+		}
+		params = b
+	}
+
+	timeout := defaultInvokeTimeout
+	if in.TimeoutMs > 0 {
+		timeout = time.Duration(in.TimeoutMs) * time.Millisecond
+	}
+	if timeout > maxInvokeTimeout {
+		timeout = maxInvokeTimeout
+	}
+
+	res, err := o.s.State.reg.Invoke(ctx, key,
+		InvokeFrame(key, command, params, timeout, strings.TrimSpace(in.IdempotencyKey)), timeout)
+
+	var denied *Denied
+	switch {
+	case err == nil:
+		return &invokeView{OK: res.OK, Payload: payloadJSON(res.Payload), Code: res.Code, Message: res.Message}, nil
+	case errors.As(err, &denied):
+		return nil, zip.ErrForbidden(denied.Message)
+	case errors.Is(err, ErrNoSuchNode):
+		return nil, zip.ErrNotFound("no such node for this org")
+	case errors.Is(err, ErrInvokeTimeout):
+		return nil, zip.Errorf(http.StatusGatewayTimeout, "bot: the node did not answer within %s", timeout)
+	case errors.Is(err, ErrNodeGone):
+		return nil, zip.Errorf(http.StatusBadGateway, "bot: the node disconnected before it answered")
+	default:
+		o.s.Log.Warn("bot: call failed", "org", org, "node", nodeID, "command", command, "err", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "bot: the node could not be reached")
+	}
+}
+
 func nonNil(v []string) []string {
 	if v == nil {
 		return []string{}
@@ -417,10 +507,14 @@ type invokeBody struct {
 // invokeView is what the node answered. payload is the node's own JSON, passed
 // through: cloud routes the call, it does not interpret the result.
 type invokeView struct {
-	OK      bool            `json:"ok"`
+	// OK reports whether the node completed the command without error.
+	OK bool `json:"ok"`
+	// Payload is the node's raw JSON answer when valid JSON was returned.
 	Payload json.RawMessage `json:"payload,omitempty"`
-	Code    string          `json:"code,omitempty"`
-	Message string          `json:"message,omitempty"`
+	// Code is the stable error code returned by the node when OK is false.
+	Code string `json:"code,omitempty"`
+	// Message is a human-readable diagnostic returned by the node on failure.
+	Message string `json:"message,omitempty"`
 }
 
 // deniedView is a refusal, carrying the stable code a client switches on.

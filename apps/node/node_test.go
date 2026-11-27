@@ -305,6 +305,23 @@ func TestSystemRunCannotSelfApprove(t *testing.T) {
 	}
 }
 
+func TestTypedCallNodeRoutesDesktopComputerAndMCP(t *testing.T) {
+	reg := gated()
+	connect(t, reg, "acme", "mac-mcp", "darwin", []string{"computer.health", CommandMCPTools}, `{"ok":true,"pressure":"normal"}`)
+	app := mount(t, reg)
+
+	code, body := call(t, app, http.MethodPost, "/v1/node/mac-mcp/call", "acme",
+		map[string]any{"command": "computer.health"})
+	if code != http.StatusOK || !strings.Contains(string(body), `"pressure":"normal"`) {
+		t.Fatalf("typed /call answered %d (%s)", code, body)
+	}
+	// Foreign org gets 404 just like an absent node.
+	if foreignCode, _ := call(t, app, http.MethodPost, "/v1/node/mac-mcp/call", "globex",
+		map[string]any{"command": "computer.health"}); foreignCode != http.StatusNotFound {
+		t.Fatalf("foreign org /call answered %d, want 404", foreignCode)
+	}
+}
+
 // The surface is /v1/node/*. Never /api/, and nothing outside this capability's
 // own prefix — which is now ONE noun: the run plane it used to share a package
 // with answers under its own name (apps/bots).
@@ -313,6 +330,7 @@ func TestRoutesLiveUnderTheirOwnNoun(t *testing.T) {
 	want := map[string]bool{
 		"GET /v1/node/connect":     false,
 		"GET /v1/node":             false,
+		"POST /v1/node/:id/call":   false,
 		"POST /v1/node/:id/invoke": false,
 		"POST " + PeerInvokePath:   false,
 	}
