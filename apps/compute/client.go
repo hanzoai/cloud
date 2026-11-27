@@ -103,16 +103,28 @@ type envelope struct {
 	Data   json.RawMessage `json:"data"`
 }
 
-// do issues ONE request to Visor and returns the response body. Every call goes
-// through it: the URL, the forwarded identity, the credential, the body limit and
-// the transport error mapping are decided here and nowhere else.
+// upstream is ONE Visor answer before a caller decides how to read it. status
+// and contentType are the upstream's, and body is the bounded bytes it wrote.
+type upstream struct {
+	status      int
+	contentType string
+	body        []byte
+}
+
+// issue sends ONE request to Visor and returns its answer WITHOUT judging the
+// status. Every call goes through it: the URL, the forwarded identity, the
+// credential, the body limit and the transport error mapping are decided here
+// and nowhere else.
 //
 // What it deliberately does NOT decide is how to read the answer, because Visor
-// does not have one answer shape — see call and op.
+// does not have one answer shape — see call, op and passthrough. extra is for
+// non-identity headers a caller must add (the computer relay's approval header);
+// identity and credential headers are never taken from it.
 //
-// Error mapping is honest and customer-appropriate: an unreachable Visor → 502,
-// and a non-2xx HTTP status → that status with a snippet of what came back.
-func (cl *computeClient) do(c *zip.Ctx, method, path, query string, body any) ([]byte, error) {
+// Transport failure is honest and customer-appropriate: an unreachable Visor →
+// 502. A non-2xx status is NOT an error here, because a passthrough route's
+// answer IS the upstream status and body; do and op map it where it matters.
+func (cl *computeClient) issue(c *zip.Ctx, method, path, query string, body any, extra map[string]string) (*upstream, error) {
 	u := cl.target + path
 	if query != "" {
 		u += "?" + query
@@ -139,6 +151,9 @@ func (cl *computeClient) do(c *zip.Ctx, method, path, query string, body any) ([
 			req.Header.Set(h, v)
 		}
 	}
+	for k, v := range extra {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := cl.cc.Do(req)
 	if err != nil {
@@ -146,11 +161,32 @@ func (cl *computeClient) do(c *zip.Ctx, method, path, query string, body any) ([
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	return &upstream{status: resp.StatusCode, contentType: resp.Header.Get("Content-Type"), body: raw}, nil
+}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, zip.Errorf(resp.StatusCode, "visor: upstream %d: %s", resp.StatusCode, snippet(raw))
+// do issues ONE request to Visor and returns the response body, mapping a
+// non-2xx status to that status with a snippet of what came back. Every enveloped
+// or typed read goes through it.
+func (cl *computeClient) do(c *zip.Ctx, method, path, query string, body any) ([]byte, error) {
+	u, err := cl.issue(c, method, path, query, body, nil)
+	if err != nil {
+		return nil, err
 	}
-	return raw, nil
+	if u.status < 200 || u.status >= 300 {
+		return nil, zip.Errorf(u.status, "visor: upstream %d: %s", u.status, snippet(u.body))
+	}
+	return u.body, nil
+}
+
+// passthrough issues ONE request and hands the caller Visor's status, content
+// type and body UNCHANGED. It is for answers that are not a decoded value — the
+// machine computer relay writes hanzod's bytes back as it got them, so a re-encode
+// would be a second answer to the same question and a status rewrite a lie.
+//
+// The bytes are never logged here: a computer response can hold screen pixels
+// or typed text, and neither belongs in a log line.
+func (cl *computeClient) passthrough(c *zip.Ctx, method, path, query string, body any, extra map[string]string) (*upstream, error) {
+	return cl.issue(c, method, path, query, body, extra)
 }
 
 // call reads an ENVELOPED answer — Visor's untyped controller routes, which put

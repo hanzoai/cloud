@@ -40,3 +40,49 @@ and `TestMachinesDropDOKSNodesOnSkew` pin both halves.
 **Deploy order.** Visor first, then cloud — but the window is not dangerous either
 way, because both directions of the skew now report instead of under-reporting, and
 the route 404s in production today regardless (see the release note above).
+
+## Machine computer relay: Cloud side is done, Visor side does not exist
+
+`POST /v1/compute/machines/:id/computer` (the `computer` verb on the existing
+machine-action dispatch) lets a bound cloud agent drive the machine's GUI through
+the machine's local **hanzod v0.5.2**. Cloud validates and relays; it does not
+invent a transport. There is **no** path from a Visor machine id to a local
+hanzod in this repository — `computeClient` (client.go) reaches Visor only, and
+the machine-agent commands here are bindings plus an agent RUN, neither of which
+dials the machine. The node plane's WebSocket invoke addresses a *node id* and
+is a different noun. So this needs a Visor/compute endpoint, specified exactly:
+
+```
+POST /v1/machines/{owner}/{name}/computer
+Authorization: service Basic (COMPUTE_CLIENT_*) or the caller's forwarded bearer
+X-Org-Id, X-User-Id, X-User-Email, X-Project-Id, X-App-Id: forwarded as on every
+                                              machine route (never a body field)
+X-Hanzo-Approve: true                        only when approval was granted
+Body: {"action":"screenshot|click|type|…","args":{…},"approval":true}
+```
+
+Visor must:
+
+1. Resolve the machine by `(owner, name)` from the validated principal's org;
+   an id owned by another tenant is the same 404 as a missing machine. Refuse
+   with 409 when the machine has no bound agent / no local hanzod.
+2. Open the existing ZeroTier/fabric path to that machine's local hanzod
+   (`127.0.0.1:3690`) and forward the body plus the approval header to
+   `POST /v1/computer` (no action in the path) or `/v1/computer/{action}`.
+3. Answer with hanzod's **status, Content-Type and body bytes verbatim**.
+   Re-check the read/act split and reject an act without approval (defence in
+   depth). Audit `(org, machine, action, decision, status)` but **never** log
+   args, screen pixels, typed text or credentials. Map tunnel failure to 502
+   and a machine timeout to 504.
+4. Keep the read/act vocabulary in step with hanzod v0.5.2. Cloud's copy is
+   `computerReadActions` in computer.go; everything not in that set — including
+   an unknown action — requires approval evidence.
+
+Cloud's behaviour while that endpoint is missing: all validation gates still
+hold, and a Visor 404/405 is translated to a clear 503 ("the machine computer
+relay is not deployed") instead of leaking an upstream HTML error page. Tests
+use a fake Visor that serves the specified address, so the validation, approval
+forwarding and byte/status passthrough are proven now; they become live when
+Visor ships this endpoint. The exact follow-up for the thin `hanzo-inc/cloud`
+repo is a module version bump to `github.com/hanzoai/cloud` after this lands —
+it imports this module and does not copy these files.

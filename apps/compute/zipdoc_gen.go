@@ -639,7 +639,7 @@ func init() {
 		Description: "Quotes (dryRun) or launches a metered, per-org machine. It fronts\nVisor's resell launch (POST /v1/machines), which owns the balance gate and\nper-hour metering — cloud never bills compute itself; it forwards the tenant.\nA dryRun returns Visor's price quote verbatim (spends nothing); a real launch\nreturns the launched machine as a clean machineView.",
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/compute POST /v1/compute/machines/:id/:action", zip.Doc{
-		Description: "Dispatches /v1/compute/bots/:id/:action. message routes to the AGENT path;\nstop and pause both halt the bot's agent runtime (one honest capability — see\nthe package doc). An unknown action is a clean 400, never a silent no-op.",
+		Description: "Dispatches /v1/compute/machines/:id/:action. message routes to the\nAGENT path, computer to the MACHINE's local hanzod (through Visor — see\ncomputer.go), and stop/pause both halt the bot's agent runtime (one honest\ncapability — see the package doc). An unknown action is a clean 400, never a\nsilent no-op.",
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/compute PUT /v1/compute/machines/:id/agent", zip.Doc{
 		Description: "Binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime. The owning org is\nthe validated tenant, never a client field.",

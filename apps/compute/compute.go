@@ -227,9 +227,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	//	delete DELETE /v1/compute/machines/:id      (unbinds, then deletes)
 	//	stop   DELETE /v1/compute/machines/:id/agent
 	//
-	// RAW: /:action is a verb dispatch, not a resource, and `message` streams the
-	// bound agent's answer back VERBATIM — the upstream body, its Content-Type and
-	// its status. There is no Out to state, and stating one would buffer a stream.
+	// RAW: /:action is a verb dispatch, not a resource. `message` streams the
+	// bound agent's answer back VERBATIM, and `computer` relays hanzod's answer
+	// (status, Content-Type and body) the same way — an Out would re-encode both
+	// and turn a passthrough into a second answer.
 	g.Raw(http.MethodPost, "/machines/:id/:action", cloud.Handle(s, botAction))
 
 	exposeMachinesRPC(s)
@@ -570,19 +571,30 @@ func init() {
 			"is only ever visible to that tenant. Fails closed: a validated principal is required "+
 			"(401 without one) and `size` (or its `instanceType` alias) is required (400).")
 	spec.Describe("/v1/compute/machines/:id/:action", http.MethodPost,
-		"Message a bot, or stop it, by naming the action in the path",
+		"Message a bot, drive its machine, or stop it, by naming the action in the path",
 		"Dispatches one verb against a bot the caller's org owns. `message` runs the bot's bound "+
 			"agent with the request body as the message and streams the agent's answer back "+
 			"VERBATIM — the upstream body, its content type and its status — so a message is a "+
 			"real agent run, recorded, billed and traced exactly like any other, under the "+
-			"caller's own identity rather than a fabricated one. `stop` and `pause` are the same "+
-			"single honest capability: they halt the runtime by unbinding the agent while LEAVING "+
-			"THE MACHINE UP, so the bot stops answering but keeps costing — rebind to resume, or "+
-			"delete the bot to tear it down. Stopping is idempotent; a bot with no binding still "+
-			"reports stopped.\n\n"+
+			"caller's own identity rather than a fabricated one.\n\n"+
+			"`computer` drives the machine's GUI. Its body is `{\"action\":\"…\",\"args\":{…},"+
+			"\"approval\":true}`. The action vocabulary and the read/act split are hanzod's: reads "+
+			"(screenshot, screen_size, position, window lists, info, health…) are open; every act "+
+			"(click, type, key, scroll, drag, focus, batch, …) needs approval evidence — either "+
+			"`approval: true` or an `X-Hanzo-Approve: true` header — which is forwarded to hanzod "+
+			"along with the action. An unrecognised action is treated as an act and refused without "+
+			"approval. hanzod keeps the audit record; Cloud never logs screen pixels, typed text or "+
+			"credentials, and passes the upstream status, Content-Type and body back unchanged. The "+
+			"relay needs Visor's `POST /v1/machines/{owner}/{name}/computer`; where Visor does not "+
+			"serve it the route answers 503 rather than fabricating a transport. A machine that does "+
+			"not exist in the caller's org, or has no bound agent, is refused before any relay.\n\n"+
+			"`stop` and `pause` are the same single honest capability: they halt the runtime by "+
+			"unbinding the agent while LEAVING THE MACHINE UP, so the bot stops answering but keeps "+
+			"costing — rebind to resume, or delete the bot to tear it down. Stopping is idempotent; "+
+			"a bot with no binding still reports stopped.\n\n"+
 			"Org-scoped and fails closed: a validated principal is required (401 without one) and "+
 			"the bot is addressed under the caller's OWN org, so another tenant's id is not "+
-			"reachable. An unknown action is a clean 400 naming the three it accepts, never a "+
+			"reachable. An unknown action is a clean 400 naming the four it accepts, never a "+
 			"silent no-op, and messaging a bot with no bound agent is a 400.")
 }
 

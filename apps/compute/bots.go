@@ -20,6 +20,7 @@
 //	get     = vm GET  /v1/machines/:owner/:name       joined with its binding
 //	delete  = vm DELETE .../agent (unbind)            THEN vm DELETE /v1/machines/:owner/:name
 //	message = the AGENT path: run the bot's bound agent via /v1/agent/:agent/run
+//	computer = the MACHINE's GUI: relay an approved hanzod action via Visor (computer.go)
 //	stop    = vm DELETE .../agent — halt the bot's @hanzo/bot runtime
 //	pause   = the same halt: DigitalOcean/vm expose no VM-suspend primitive, so a
 //	          bot's stop and pause are one honest capability (detach the agent
@@ -302,9 +303,11 @@ func ensureAgent(s *cloud.Service[state], c *zip.Ctx, agent, model, instructions
 	}
 }
 
-// botAction dispatches /v1/compute/bots/:id/:action. message routes to the AGENT path;
-// stop and pause both halt the bot's agent runtime (one honest capability — see
-// the package doc). An unknown action is a clean 400, never a silent no-op.
+// botAction dispatches /v1/compute/machines/:id/:action. message routes to the
+// AGENT path, computer to the MACHINE's local hanzod (through Visor — see
+// computer.go), and stop/pause both halt the bot's agent runtime (one honest
+// capability — see the package doc). An unknown action is a clean 400, never a
+// silent no-op.
 func botAction(s *cloud.Service[state], c *zip.Ctx) error {
 	org, id, err := botScope(s, c)
 	if err != nil {
@@ -313,10 +316,12 @@ func botAction(s *cloud.Service[state], c *zip.Ctx) error {
 	switch strings.ToLower(strings.TrimSpace(c.Param("action"))) {
 	case "message":
 		return messageBot(s, c, org, id)
+	case "computer":
+		return computerAction(s, c, org, id)
 	case "stop", "pause":
 		return stopBot(s, c, org, id)
 	default:
-		return zip.ErrBadRequest("unknown bot action (want stop|pause|message)")
+		return zip.ErrBadRequest("unknown bot action (want stop|pause|message|computer)")
 	}
 }
 

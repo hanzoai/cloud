@@ -122,6 +122,17 @@ type botVM struct {
 	lastBindOrg  string
 	lastBindName string // agentName last bound
 	lastUnbind   string // id last unbound
+
+	// computer relay: the fake serves Visor's NOT-YET-DEPLOYED
+	// /v1/machines/{owner}/{name}/computer exactly as LLM.md specifies, so a
+	// test proves the cloud half without pretending Visor already has it.
+	computerCalls      int
+	computerPath       string
+	computerBody       map[string]any
+	computerApproveHdr string
+	computerStatus     int
+	computerCT         string
+	computerReply      []byte
 }
 
 func newBotVM() *botVM {
@@ -191,13 +202,15 @@ func (f *botVM) server(t *testing.T) *httptest.Server {
 		}
 		switch {
 		case len(parts) == 1 && r.Method == http.MethodGet: // read one machine
-			if m, ok := f.bots[id]; ok {
+			if m, ok := f.bots[id]; ok && m["owner"] == f.lastOwner {
 				envelope200(w, m)
 				return
 			}
 			envelope200(w, map[string]any{}) // not found -> empty machine
 		case len(parts) == 1 && r.Method == http.MethodDelete: // DeleteComputeMachine
-			delete(f.bots, id)
+			if m, ok := f.bots[id]; ok && m["owner"] == f.lastOwner {
+				delete(f.bots, id)
+			}
 			envelope200(w, "deleted")
 		case len(parts) == 2 && parts[1] == "agent" && r.Method == http.MethodPut:
 			var b struct {
@@ -231,6 +244,31 @@ func (f *botVM) server(t *testing.T) *httptest.Server {
 			http.Error(w, "unhandled "+r.Method+" "+r.URL.Path, http.StatusNotFound)
 		}
 	}
+
+	// Visor's proposed computer relay, served here so the cloud half can be
+	// proved. It records the exact body and approval header it received and
+	// answers with whatever status/content-type/body the test staged.
+	mux.HandleFunc("/v1/machines/{owner}/{name}/computer", func(w http.ResponseWriter, r *http.Request) {
+		f.lastOwner = r.PathValue("owner")
+		f.computerCalls++
+		f.computerPath = r.URL.Path
+		f.computerApproveHdr = r.Header.Get("X-Hanzo-Approve")
+		f.computerBody = nil
+		_ = json.NewDecoder(r.Body).Decode(&f.computerBody)
+		status, ct, reply := f.computerStatus, f.computerCT, f.computerReply
+		if status == 0 {
+			status = http.StatusOK
+		}
+		if ct == "" {
+			ct = "application/json"
+		}
+		if reply == nil {
+			reply = []byte(`{"ok":true,"action":"relayed"}`)
+		}
+		w.Header().Set("Content-Type", ct)
+		w.WriteHeader(status)
+		_, _ = w.Write(reply)
+	})
 
 	// Two EXACT addresses, not one subtree. A subtree pattern redirects the item
 	// call to a trailing slash, and Go's client answers a 301 by reissuing as GET
