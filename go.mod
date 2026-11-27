@@ -879,3 +879,5 @@ replace (
 // stands down and hanzoai/s3's message_fbs compiles against the parent — same
 // import path, so no source moves.
 exclude github.com/google/flatbuffers/go v0.0.0-20230108230133-3b8644d32c50
+
+replace k8s.io/cri-streaming => k8s.io/cri-streaming v0.36.1
