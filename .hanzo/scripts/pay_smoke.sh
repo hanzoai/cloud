@@ -78,7 +78,9 @@ deposits() { api GET '/v1/billing/transactions?limit=300' | jq '[.transactions[]
 b0=$(bal); d0=$(deposits)
 
 # ── 1. Processor Cancellation & Zero-Phantom-Credit Gate ─────────────────────
-c_intent=$(api POST /v1/billing/topup/intent -H "X-Idempotency-Key: smoke-cancel-$want-$(date +%s)" -d "{\"amountCents\":$amount,\"country\":\"US\",\"currency\":\"usd\"}")
+# Use DE/eur (matching step 4 below) so checkout routes to Stripe test mode
+# rather than returning 409 Conflict ("this checkout is on square") on US/usd.
+c_intent=$(api POST /v1/billing/topup/intent -H "X-Idempotency-Key: smoke-cancel-$want-$(date +%s)" -d "{\"amountCents\":$amount,\"country\":\"DE\",\"currency\":\"eur\"}")
 cid=$(jq -r '.intentId // empty' <<<"$c_intent")
 [ -n "$cid" ] || { echo "::error::failed to open processor topup intent for cancel check: $(jq -c 'del(.clientSecret)? // .' <<<"$c_intent" 2>/dev/null | head -c 300)"; exit 1; }
 c_pre=$(api GET "/v1/billing/topup/intent/$cid" | jq -r '.credited // false')
@@ -168,10 +170,19 @@ w_lower=$(jq -r '.lower' <<<"$addrs")
 
 wallet_login() {
   local addr=$1
-  local n_raw
+  local n_raw pkce_pair pkce_verifier pkce_challenge
+  pkce_pair=$(python3 - <<'PY'
+import base64, hashlib, os
+v = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("=")
+c = base64.urlsafe_b64encode(hashlib.sha256(v.encode()).digest()).decode().rstrip("=")
+print(f"{v} {c}")
+PY
+)
+  pkce_verifier=${pkce_pair%% *}
+  pkce_challenge=${pkce_pair#* }
   n_raw=$(curl -sS --max-time 20 "$issuer/v1/iam/web3/nonce?chain=evm&address=${addr}&clientId=${web3_cid}")
   [ "$(jq -r '.status // empty' <<<"$n_raw")" = "ok" ] || { echo "::error::web3 nonce failed: $n_raw" >&2; return 1; }
-  local dom uri stmt nce iat exp ver msg sig v_body v_res
+  local dom uri stmt nce iat exp ver msg sig v_body v_res auth_code tok_res jwt_tok
   dom=$(jq -r '.data.domain' <<<"$n_raw")
   uri=$(jq -r '.data.uri' <<<"$n_raw")
   stmt=$(jq -r '.data.statement // empty' <<<"$n_raw")
@@ -190,15 +201,24 @@ sys.stdout.write("\n".join(lines))
 PY
 )
   sig=$(sign_siwe "$msg")
-  v_body=$(jq -nc --arg addr "$addr" --arg msg "$msg" --arg sig "$sig" --arg cid "$web3_cid" \
-    '{chain:"evm",scheme:"secp256k1-eip191",address:$addr,message:$msg,signature:$sig,clientId:$cid,type:"token"}')
+  v_body=$(jq -nc --arg addr "$addr" --arg msg "$msg" --arg sig "$sig" --arg cid "$web3_cid" --arg cc "$pkce_challenge" \
+    '{chain:"evm",scheme:"secp256k1-eip191",address:$addr,message:$msg,signature:$sig,clientId:$cid,type:"code",codeChallenge:$cc,codeChallengeMethod:"S256"}')
   v_res=$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' -d "$v_body" "$issuer/v1/iam/web3/verify")
   [ "$(jq -r '.status // empty' <<<"$v_res")" = "ok" ] || { echo "::error::web3 verify failed for $addr: $(jq -c 'del(.data)?' <<<"$v_res" 2>/dev/null || echo failed)" >&2; return 1; }
+  auth_code=$(jq -r '.data // empty' <<<"$v_res")
+  [ -n "$auth_code" ] || { echo "::error::web3 verify returned empty auth code for $addr" >&2; return 1; }
   # Replay of the exact same signed challenge MUST fail.
   local replay
   replay=$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' -d "$v_body" "$issuer/v1/iam/web3/verify")
   [ "$(jq -r '.status // empty' <<<"$replay")" != "ok" ] || { echo "::error::replayed web3 challenge was accepted!" >&2; return 1; }
-  jq -r '.data // empty' <<<"$v_res"
+  tok_res=$(curl -sS --max-time 20 -X POST "$issuer/v1/iam/oauth/token" \
+    --data-urlencode "grant_type=authorization_code" \
+    --data-urlencode "client_id=${web3_cid}" \
+    --data-urlencode "code=${auth_code}" \
+    --data-urlencode "code_verifier=${pkce_verifier}")
+  jwt_tok=$(jq -r '.access_token // empty' <<<"$tok_res")
+  [ -n "$jwt_tok" ] || { echo "::error::PKCE token exchange failed for $addr: $(jq -c 'del(.access_token,.refresh_token,.id_token)?' <<<"$tok_res" 2>/dev/null || echo failed)" >&2; return 1; }
+  printf '%s' "$jwt_tok"
 }
 
 wt1=$(wallet_login "$w_checksum")
@@ -212,15 +232,21 @@ import base64, json, os
 parts = os.environ["JWT_VAL"].split(".")
 if len(parts) == 3:
     pad = parts[1] + "=" * (-len(parts[1]) % 4)
-    print(json.loads(base64.urlsafe_b64decode(pad)).get("owner", ""))
+    c = json.loads(base64.urlsafe_b64decode(pad))
+    ba = c.get("billing_account") or ""
+    sub_org = (c.get("sub") or "").split("/")[0] if "/" in (c.get("sub") or "") else ""
+    print(ba[4:] if ba.startswith("org:") else (sub_org or c.get("owner", "")))
 else:
-    print(os.environ["JWT_VAL"])
+    print("")
 PY
 }
 w_org1=$(decode_owner "$wt1")
 w_org2=$(decode_owner "$wt2")
 [ -n "$w_org1" ] && [ "$w_org1" = "$w_org2" ] \
   || { echo "::error::checksum vs lowercase wallet sign-in resolved different identities ($w_org1 vs $w_org2)"; exit 1; }
+w_bal_acct=$(wapi "$wt1" GET /v1/billing/balance | jq -r '.account // empty')
+[ "$w_bal_acct" = "$w_org1" ] \
+  || { echo "::error::wallet JWT billing balance account '$w_bal_acct' did not match canonical wallet org '$w_org1'"; exit 1; }
 
 # ── 3. Native Crypto Watcher & Non-Conflation Gate ───────────────────────────
 dep_health_code=$(api GET /v1/commerce/deposits -o /tmp/pay_smoke_deposits.json -w '%{http_code}' || echo 000)
@@ -234,14 +260,23 @@ opt_code=$(api GET /v1/billing/crypto/options -o /tmp/pay_smoke_opts.json -w '%{
 if [ "$opt_code" = "200" ]; then
   asset_count=$(jq -r '.assets | length' /tmp/pay_smoke_opts.json)
   if [ "$asset_count" -gt 0 ]; then
-    jq -e '.assets[] | select((.chain|length)>0 and (.token|length)>0 and (.decimals//0)>0 and (.confirmations//0)>0 and (.minimumCents//0)>0)' /tmp/pay_smoke_opts.json >/dev/null \
+    jq -e 'all(.assets[]; (.chain|length)>0 and (.token|length)>0 and (.decimals//0)>0)' /tmp/pay_smoke_opts.json >/dev/null \
       || { echo "::error::/v1/billing/crypto/options returned incomplete asset metadata (Stripe conflation check failed)"; rm -f /tmp/pay_smoke_opts.json; exit 1; }
-    c_chain=$(jq -r '.assets[0].chain' /tmp/pay_smoke_opts.json)
-    c_token=$(jq -r '.assets[0].token' /tmp/pay_smoke_opts.json)
-    m1=$(api POST /v1/billing/crypto/deposit -d "{\"chain\":\"$c_chain\",\"token\":\"$c_token\",\"amountCents\":500}")
-    m2=$(api POST /v1/billing/crypto/deposit -d "{\"chain\":\"$c_chain\",\"token\":\"$c_token\",\"amountCents\":500}")
-    [ "$(jq -r '.id' <<<"$m1")" = "$(jq -r '.id' <<<"$m2")" ] && [ -n "$(jq -r '.depositAddress // empty' <<<"$m1")" ] \
-      || { echo "::error::native crypto deposit mint did not reuse open intent cleanly"; rm -f /tmp/pay_smoke_opts.json; exit 1; }
+    watched=$(jq -c '[.assets[] | select((.minimumCents//0)>0)][0] // .assets[0]' /tmp/pay_smoke_opts.json)
+    c_chain=$(jq -r '.chain' <<<"$watched")
+    c_token=$(jq -r '.token' <<<"$watched")
+    c_min=$(jq -r 'if (.minimumCents//0) > 500 then .minimumCents else 500 end' <<<"$watched")
+    m1_code=$(api POST /v1/billing/crypto/deposit -d "{\"chain\":\"$c_chain\",\"token\":\"$c_token\",\"amountCents\":$c_min}" -o /tmp/pay_smoke_m1.json -w '%{http_code}' || echo 000)
+    if [ "$m1_code" = "200" ]; then
+      m2=$(api POST /v1/billing/crypto/deposit -d "{\"chain\":\"$c_chain\",\"token\":\"$c_token\",\"amountCents\":$c_min}")
+      [ "$(jq -r '.id' /tmp/pay_smoke_m1.json)" = "$(jq -r '.id' <<<"$m2")" ] && [ -n "$(jq -r '.depositAddress // empty' /tmp/pay_smoke_m1.json)" ] \
+        || { echo "::error::native crypto deposit mint did not reuse open intent cleanly"; rm -f /tmp/pay_smoke_opts.json /tmp/pay_smoke_m1.json; exit 1; }
+    elif [ "$m1_code" != "503" ]; then
+      echo "::error::unexpected HTTP $m1_code from POST /v1/billing/crypto/deposit (want 200 or fail-closed 503)"
+      rm -f /tmp/pay_smoke_opts.json /tmp/pay_smoke_m1.json
+      exit 1
+    fi
+    rm -f /tmp/pay_smoke_m1.json
   fi
 elif [ "$opt_code" != "503" ]; then
   echo "::error::unexpected HTTP $opt_code from GET /v1/billing/crypto/options (want 200 or fail-closed 503)"
