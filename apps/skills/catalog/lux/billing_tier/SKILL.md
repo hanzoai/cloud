@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/billing/tier` → `billing.Tier` object with fields: `balance`, `plan`, `planName`, `subscription`, `tier`, `user`.
+- `/v1/billing/tier` → `billing.Tier` object with fields: `balance`, `plan`, `planHolder`, `planName`, `subscription`, `tier`, `user`.
 
 ## Example
 

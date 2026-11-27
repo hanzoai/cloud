@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.zoo.ngo/v1/mcp"
   },
-  "skill_count": 25,
+  "skill_count": 26,
   "skills": [
     {
       "description": "Read billing accounts: Answers the caller's billing accounts: the org itself, its currency, when it was opened, and the caller's own standing in it., Answers one billing account's roster..",
@@ -103,6 +103,14 @@
       "url": "/.well-known/agent-skills/billing_ledger/SKILL.md"
     },
     {
+      "description": "Read billing link: The plan this org borrows, and the plans you could lend it.",
+      "digest": "sha256:926f82783830c883c66a6647718985442b963efe7324ea1b4439b1b10048dc60",
+      "name": "billing_link",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_link/SKILL.md"
+    },
+    {
       "description": "Read billing methods: Cards and accounts on file for the caller.",
       "digest": "sha256:bf4cb55e86a01605363459e7eb3c504158e1c85bb2f7702c0f5fd8f3bf63d73a",
       "name": "billing_methods",
@@ -176,7 +184,7 @@
     },
     {
       "description": "Read billing tier: Answers which tier the caller is on, what it allows, and what is left to spend..",
-      "digest": "sha256:bad07ce9722e0fe78d2c4be42d07194e9a6bcb77ba4b3b16c2a09341549525f9",
+      "digest": "sha256:66f233797a2cd2bc3f8d6ab70d346d45e1be6b386202562b0815963b6bcf1dd5",
       "name": "billing_tier",
       "service": "billing",
       "type": "skill-md",

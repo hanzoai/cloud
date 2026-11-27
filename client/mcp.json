@@ -209,6 +209,7 @@
    "delete_billing_methods_by_id",
    "delete_billing_portal_methods_by_id",
    "getInvoice",
+   "getPlanLink",
    "get_billing_accounts",
    "get_billing_accounts_by_id_members",
    "get_billing_alerts",
@@ -238,6 +239,7 @@
    "get_billing_usage_rollup",
    "get_billing_wire",
    "issueInvoice",
+   "linkPlan",
    "patch_billing_alerts_by_id",
    "patch_billing_checkouts_by_id",
    "payInvoice",
@@ -260,6 +262,7 @@
    "raiseInvoice",
    "reactivateSubscription",
    "resizeSubscription",
+   "unlinkPlan",
    "voidInvoice"
   ]
  },
@@ -859,12 +862,7 @@
    "post_git_repos_by_name_subscriptions",
    "post_git_repos_by_name_targets",
    "post_git_runs",
-   "post_git_workspace",
-   "post_runner_declare",
-   "post_runner_log",
-   "post_runner_register",
-   "post_runner_state",
-   "post_runner_task"
+   "post_git_workspace"
   ]
  },
  "graph": {
@@ -1096,19 +1094,6 @@
    "post_library"
   ]
  },
- "licensing": {
-  "ops": [
-   "get_licensing_download_by_release",
-   "get_licensing_healthz",
-   "get_licensing_jwks",
-   "get_licensing_pubkey",
-   "get_licensing_releases",
-   "get_licensing_releases_by_release",
-   "post_licensing_fingerprint",
-   "post_licensing_issue",
-   "post_licensing_verify"
-  ]
- },
  "link": {
   "ops": [
    "delete_link_by_id",
@@ -1153,92 +1138,6 @@
    "get_market_chains",
    "get_market_pools",
    "get_market_survey"
-  ]
- },
- "marketing": {
-  "ops": [
-   "delete_marketing_audiences_by_id",
-   "delete_marketing_broadcasts_by_id",
-   "delete_marketing_calendar_by_id",
-   "delete_marketing_campaigns_by_id",
-   "delete_marketing_lists_by_id",
-   "delete_marketing_lists_by_id_segments_by_sid",
-   "delete_marketing_lists_by_id_subscribers_by_sid",
-   "delete_marketing_suppressions",
-   "get_marketing_audiences",
-   "get_marketing_audiences_by_id",
-   "get_marketing_audiences_by_id_preview",
-   "get_marketing_beta",
-   "get_marketing_beta_invites",
-   "get_marketing_broadcasts",
-   "get_marketing_broadcasts_by_id",
-   "get_marketing_broadcasts_by_id_stats",
-   "get_marketing_calendar",
-   "get_marketing_calendar_by_id",
-   "get_marketing_campaigns",
-   "get_marketing_campaigns_by_id",
-   "get_marketing_click",
-   "get_marketing_fields",
-   "get_marketing_imports",
-   "get_marketing_imports_by_id",
-   "get_marketing_lists",
-   "get_marketing_lists_by_id",
-   "get_marketing_lists_by_id_segments",
-   "get_marketing_lists_by_id_stats",
-   "get_marketing_lists_by_id_subscribers",
-   "get_marketing_lists_by_id_subscribers_by_sid",
-   "get_marketing_promos",
-   "get_marketing_promos_by_code_eligibility",
-   "get_marketing_promos_by_code_redemption",
-   "get_marketing_sender",
-   "get_marketing_sequences",
-   "get_marketing_sequences_by_id",
-   "get_marketing_sequences_by_id_enrollments",
-   "get_marketing_sequences_by_id_steps",
-   "get_marketing_summary",
-   "get_marketing_suppressions",
-   "get_marketing_suppressions_check",
-   "get_marketing_unsubscribe",
-   "patch_marketing_broadcasts_by_id",
-   "patch_marketing_lists_by_id",
-   "patch_marketing_lists_by_id_subscribers_by_sid",
-   "post_marketing_audiences",
-   "post_marketing_beta_actions",
-   "post_marketing_beta_request",
-   "post_marketing_broadcasts",
-   "post_marketing_broadcasts_by_id_cancel",
-   "post_marketing_broadcasts_by_id_send",
-   "post_marketing_broadcasts_by_id_test",
-   "post_marketing_calendar",
-   "post_marketing_campaigns",
-   "post_marketing_campaigns_by_id_schedule",
-   "post_marketing_imports",
-   "post_marketing_imports_by_id_cancel",
-   "post_marketing_imports_by_id_start",
-   "post_marketing_leads",
-   "post_marketing_leads_esign",
-   "post_marketing_leads_resume",
-   "post_marketing_lists",
-   "post_marketing_lists_by_id_segments",
-   "post_marketing_lists_by_id_subscribers",
-   "post_marketing_lists_by_id_subscribers_bulk",
-   "post_marketing_mail",
-   "post_marketing_promos_by_code_redeem",
-   "post_marketing_sequences",
-   "post_marketing_sequences_by_id_enroll",
-   "post_marketing_sequences_by_id_enrollments_by_eid_cancel",
-   "post_marketing_sequences_by_id_status",
-   "post_marketing_sequences_by_id_steps",
-   "post_marketing_subscribe",
-   "post_marketing_subscribe_confirm",
-   "post_marketing_suppressions",
-   "post_marketing_unsubscribe",
-   "put_marketing_beta",
-   "put_marketing_calendar_by_id",
-   "put_marketing_campaigns_by_id",
-   "put_marketing_fields",
-   "put_marketing_lists_by_id_segments_by_sid",
-   "put_marketing_sender"
   ]
  },
  "marketplace": {
@@ -1689,24 +1588,6 @@
    "put_patrol_site_by_name"
   ]
  },
- "plan": {
-  "ops": [
-   "get_plan",
-   "get_plan_blockchain",
-   "get_plan_dns",
-   "get_plan_entitlements_by_id",
-   "get_plan_gpu",
-   "get_plan_health",
-   "get_plan_policy",
-   "get_plan_regions",
-   "get_plan_resolve_by_id",
-   "get_plan_schema",
-   "get_plan_storage",
-   "get_plan_subscriptions",
-   "get_plan_tools",
-   "get_plan_vocab"
-  ]
- },
  "platform": {
   "ops": [
    "delete_platform_projects_by_project",
@@ -1753,36 +1634,6 @@
  "pref": {
   "ops": [
    "get_pref"
-  ]
- },
- "pricing": {
-  "ops": [
-   "get_pricing",
-   "get_pricing_base",
-   "get_pricing_blockchain",
-   "get_pricing_cloud",
-   "get_pricing_cloud_plans",
-   "get_pricing_cloud_regions",
-   "get_pricing_cloud_storage",
-   "get_pricing_compute",
-   "get_pricing_compute_presets",
-   "get_pricing_datastore",
-   "get_pricing_enablement",
-   "get_pricing_featured",
-   "get_pricing_free",
-   "get_pricing_gpu",
-   "get_pricing_health",
-   "get_pricing_iam",
-   "get_pricing_model_by_name",
-   "get_pricing_models",
-   "get_pricing_paas",
-   "get_pricing_policy",
-   "get_pricing_providers",
-   "get_pricing_services",
-   "get_pricing_subscriptions",
-   "get_pricing_summary",
-   "get_pricing_tariff",
-   "get_pricing_tools"
   ]
  },
  "principal": {
@@ -2005,19 +1856,6 @@
    "post_reward_me_posts",
    "post_reward_me_posts_by_id_recheck",
    "post_reward_me_posts_scan"
-  ]
- },
- "risk": {
-  "ops": [
-   "riskAdoptModel",
-   "riskFeatures",
-   "riskLearn",
-   "riskPolicy",
-   "riskPublishModel",
-   "riskScore",
-   "riskSearch",
-   "riskSearchResult",
-   "riskState"
   ]
  },
  "s3": {

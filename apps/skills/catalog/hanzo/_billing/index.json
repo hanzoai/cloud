@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.hanzo.ai/v1/mcp"
   },
-  "skill_count": 25,
+  "skill_count": 26,
   "skills": [
     {
       "description": "Read billing accounts: Answers the caller's billing accounts: the org itself, its currency, when it was opened, and the caller's own standing in it., Answers one billing account's roster..",
@@ -103,6 +103,14 @@
       "url": "/.well-known/agent-skills/billing_ledger/SKILL.md"
     },
     {
+      "description": "Read billing link: The plan this org borrows, and the plans you could lend it.",
+      "digest": "sha256:37033455132289a951df8aa4898c6a6bc04811a9289e5880437aae9902b59d85",
+      "name": "billing_link",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_link/SKILL.md"
+    },
+    {
       "description": "Read billing methods: Cards and accounts on file for the caller.",
       "digest": "sha256:fe89dfafc646968ae03491de7ca6c4c26fcfd94db49a1d8977ba6fea4c5a5f8b",
       "name": "billing_methods",
@@ -176,7 +184,7 @@
     },
     {
       "description": "Read billing tier: Answers which tier the caller is on, what it allows, and what is left to spend..",
-      "digest": "sha256:56bf2e8dfdb13c3989c7ac8b5d07b48285df23297d21b304e0581e36212bf6ca",
+      "digest": "sha256:e1d13e1078f2e9f89565dc9263bda84efbef7cf24e0199e0f11b59cb6ed8a41b",
       "name": "billing_tier",
       "service": "billing",
       "type": "skill-md",

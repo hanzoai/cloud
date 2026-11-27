@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/billing/tier` → `billing.Tier` object with fields: `balance`, `plan`, `planName`, `subscription`, `tier`, `user`.
+- `/v1/billing/tier` → `billing.Tier` object with fields: `balance`, `plan`, `planHolder`, `planName`, `subscription`, `tier`, `user`.
 
 ## Example
 

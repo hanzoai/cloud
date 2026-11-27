@@ -90,11 +90,6 @@
     "team_inbox"
   ],
   "marketing": [
-    "marketing_summary",
-    "marketing_campaigns",
-    "marketing_audiences",
-    "marketing_broadcasts",
-    "marketing_sequences",
     "campaign_metrics",
     "social_posts",
     "ad_summary"

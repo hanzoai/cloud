@@ -654,7 +654,7 @@
   },
   {
    "id": "post_auto_provider_by_id_run",
-   "doc": "Executes one provider action in-process and answers the outcome. The\ncaller's resolved credential travels in `auth`, delivered to the action\nverbatim — the runtime resolves no credential itself. An action that ran and\nfailed (or an action name the provider does not have) answers ok:false with\nthe failure message, not an HTTP error; an unknown provider is 404 and a\nmissing action 422."
+   "doc": "Executes one provider action in-process and answers the outcome. The\ncaller's resolved credential travels in `auth`, delivered to the action\nverbatim — the runtime resolves no credential itself. An action that ran and\nfailed (or an action name the provider does not have) answers ok:false with\nthe failure message, not an HTTP error; an unknown provider is 404, a known\nconnector with no program here 422, and a missing action 422."
   }
  ],
  "base": [

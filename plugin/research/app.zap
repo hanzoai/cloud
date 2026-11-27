@@ -132,7 +132,7 @@ struct IngestRequest {
     Attempts    list<bytes> @8
 }
 
-struct Or_github_com_hanzo_inc_cloud_apps_research_runsOut_github_com_hanzo_inc_cloud_apps_research_runsSummary_ {
+struct Or_github_com_hanzoai_cloud_apps_research_runsOut_github_com_hanzoai_cloud_apps_research_runsSummary_ {
     A bytes @0
     B bytes @8
 }
@@ -657,7 +657,7 @@ interface research {
     # enso.* benchmark's runs without notes, and no run of the base models those
     # families and Kai are built from; its `key` is derived over what it serves. The
     # org's own read is the full record.
-    get_research_runs(req: runsIn) returns (rep: Or_github_com_hanzo_inc_cloud_apps_research_runsOut_github_com_hanzo_inc_cloud_apps_research_runsSummary_)
+    get_research_runs(req: runsIn) returns (rep: Or_github_com_hanzoai_cloud_apps_research_runsOut_github_com_hanzoai_cloud_apps_research_runsSummary_)
     # Returns the HIP-1400 component conformance manifest for
     # the research, evolution, evidence, and XP plane.
     get_research_standard() returns (rep: StandardManifest)
@@ -856,8 +856,8 @@ interface research {
 #   HypothesisRecord.Budget  research.HypothesisBudget
 #   IngestRequest.Attempts  research.Attempt (list element)
 #   IngestRequest.Experiments  research.Experiment (list element)
-#   Or_github_com_hanzo_inc_cloud_apps_research_runsOut_github_com_hanzo_inc_cloud_apps_research_runsSummary_.A  research.runsOut
-#   Or_github_com_hanzo_inc_cloud_apps_research_runsOut_github_com_hanzo_inc_cloud_apps_research_runsSummary_.B  research.runsSummary
+#   Or_github_com_hanzoai_cloud_apps_research_runsOut_github_com_hanzoai_cloud_apps_research_runsSummary_.A  research.runsOut
+#   Or_github_com_hanzoai_cloud_apps_research_runsOut_github_com_hanzoai_cloud_apps_research_runsSummary_.B  research.runsSummary
 #   ResearchClaim.Contributors  research.AttributionShare (list element)
 #   ResearchClaim.CounterEvidence  research.CounterEvidence
 #   ResearchClaim.Replications  research.ClaimReplication (list element)
