@@ -9,6 +9,13 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// SetPluginsLock overrides the embedded plugins.lock content used by the light
+// host when resolving digest-pinned remote plugin artifacts, without linking
+// internal/host or runtime drivers into cmd/cloud.
+func SetPluginsLock(raw string) error {
+	return pin.SetCurrent(raw)
+}
+
 // remote resolves this app to the artifact plugins.lock pins for the running
 // platform. False when the lock has no stanza for it, none for this os/arch, or
 // the lock does not parse; the caller then falls through to the on-disk failure.
