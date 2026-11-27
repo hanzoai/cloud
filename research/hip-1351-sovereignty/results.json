@@ -1,0 +1,298 @@
+{
+  "protocolVersion": "hip-1351/v1",
+  "generatedAt": "2026-11-25T14:20:17.27777458Z",
+  "iterations": 200,
+  "rtoDrillCount": 20,
+  "regimeTrials": 50,
+  "zipE2ePassed": true,
+  "zipE2eDurationMs": 120.774,
+  "exitDrill": {
+    "protocolVersion": "hip-1351/v1",
+    "startedAt": "2026-11-25T14:20:14.169090246Z",
+    "totalDurationMs": 112.597,
+    "failoverRtoMs": 0.579404,
+    "allStagesPassed": true,
+    "stages": [
+      {
+        "stage": 1,
+        "name": "baseline_hanzo_online",
+        "plane": "hanzo_convenience",
+        "passed": true,
+        "durationMs": 32.845,
+        "hanzoCallsDuringStep": 10,
+        "detail": "baseline job settled \u0026 encrypted workspace stored (10 pre-kill Hanzo calls)"
+      },
+      {
+        "stage": 2,
+        "name": "kill_switch_hanzo_blackout",
+        "plane": "blackout_transition",
+        "passed": true,
+        "durationMs": 0.579404,
+        "hanzoCallsDuringStep": 0,
+        "detail": "all 6 Hanzo servers terminated; api.hanzo.ai \u0026 *.hanzo.ai hard-blocked; community plane live"
+      },
+      {
+        "stage": 3,
+        "name": "new_provider_onboarding_under_blackout",
+        "plane": "community_independent",
+        "passed": true,
+        "durationMs": 7.915508,
+        "hanzoCallsDuringStep": 0,
+        "detail": "new provider provider-bravo-post-blackout (0x85412Af32167f0F0c6fdF1f2968424dafF96BA36) joined Community Plane B after blackout"
+      },
+      {
+        "stage": 4,
+        "name": "decentralized_peer_and_model_discovery",
+        "plane": "community_independent",
+        "passed": true,
+        "durationMs": 2.121371,
+        "hanzoCallsDuringStep": 0,
+        "detail": "discovered 1 peer(s) including provider-bravo-post-blackout and SHA-256 verified 16384B model weights"
+      },
+      {
+        "stage": 5,
+        "name": "stateless_scheduling_and_inference",
+        "plane": "community_independent",
+        "passed": true,
+        "durationMs": 1.096123,
+        "hanzoCallsDuringStep": 0,
+        "detail": "scheduled job job-sovereign-exit-001 on provider-bravo-post-blackout -\u003e 128 deterministic tokens"
+      },
+      {
+        "stage": 6,
+        "name": "independent_offline_verification",
+        "plane": "community_independent",
+        "passed": true,
+        "durationMs": 0.510063,
+        "hanzoCallsDuringStep": 0,
+        "detail": "verified EIP-712 provider signature + deterministic SHA-256 digest d671694f0cc1e9d5 offline"
+      },
+      {
+        "stage": 7,
+        "name": "independent_payment_settlement",
+        "plane": "community_independent",
+        "passed": true,
+        "durationMs": 0.941488,
+        "hanzoCallsDuringStep": 0,
+        "detail": "settled 450 atomic units to provider-bravo-post-blackout via community-op-b-facilitator (drift=0)"
+      },
+      {
+        "stage": 8,
+        "name": "authorized_data_recovery_and_fork_migration",
+        "plane": "community_independent",
+        "passed": true,
+        "durationMs": 21.023693,
+        "hanzoCallsDuringStep": 0,
+        "detail": "decrypted 151B workspace, rejected unauthorized key, ratified governance (2/2), forked to Operator C (4109B bundle)"
+      }
+    ],
+    "postKillStagesPassed": 6,
+    "postKillStagesTotal": 6,
+    "decentralizationRatio": 1,
+    "sovereigntyRatio": 1,
+    "guardMetrics": {
+      "killSwitchActive": true,
+      "hanzoCallsBeforeKill": 10,
+      "hanzoCallsAfterKill": 0,
+      "hanzoBlockedAttempts": 0,
+      "communityCallsBeforeKill": 6,
+      "communityCallsAfterKill": 18
+    },
+    "hanzoBlackoutProbePass": true,
+    "unauthorizedKeyBlocked": true,
+    "governanceRatified": true,
+    "forkBundleVerified": true,
+    "forkBundleBytes": 4109,
+    "forkHydratedProviders": 1,
+    "forkHydratedVaultItems": 1,
+    "settledAmountAtomic": 450,
+    "tokensGenerated": 128,
+    "conservationDrift": 0
+  },
+  "cost": {
+    "tokensPerJob": 10000,
+    "ethPriceUsd": 3000,
+    "l1DirectUsdPer1MTokens": 390,
+    "l1DirectUsdPerJob": 3.9,
+    "l2DirectUsdPer1MTokens": 0.975,
+    "l2DirectUsdPerJob": 0.00975,
+    "communityBatchedL2UsdPer1MTokens": 0.0135,
+    "localVerifyAndDecryptUsdPer1MTokens": 0.000003,
+    "totalRecommendedUsdPer1MTokens": 0.013503,
+    "vcpuHourlyRateUsd": 0.04,
+    "measuredLocalCpuSecPer1MTokens": 0.303353
+  },
+  "performance": {
+    "blackoutFailoverRto": {
+      "count": 20,
+      "p50Us": 446.785,
+      "p95Us": 920.789,
+      "p99Us": 1709.101,
+      "meanUs": 409.626,
+      "opsPerSec": 11.95,
+      "totalSec": 1.6736
+    },
+    "peerAndModelDiscovery": {
+      "count": 200,
+      "p50Us": 1742.081,
+      "p95Us": 3595.127,
+      "p99Us": 4986.817,
+      "meanUs": 1959.52,
+      "opsPerSec": 510.33,
+      "totalSec": 0.3919
+    },
+    "inferenceTtftAndExec": {
+      "count": 200,
+      "p50Us": 1754.142,
+      "p95Us": 3502.024,
+      "p99Us": 4790.44,
+      "meanUs": 1892.829,
+      "opsPerSec": 528.31,
+      "totalSec": 0.3786
+    },
+    "offlineReceiptVerify": {
+      "count": 200,
+      "p50Us": 509.476,
+      "p95Us": 841.59,
+      "p99Us": 1391.198,
+      "meanUs": 549.937,
+      "opsPerSec": 1818.39,
+      "totalSec": 0.11
+    },
+    "communityPaymentSettle": {
+      "count": 200,
+      "p50Us": 1020.115,
+      "p95Us": 2554.059,
+      "p99Us": 3064.793,
+      "meanUs": 1117.505,
+      "opsPerSec": 894.85,
+      "totalSec": 0.2235
+    },
+    "sovereignDataRecovery": {
+      "count": 200,
+      "p50Us": 457.638,
+      "p95Us": 1906.723,
+      "p99Us": 2220.289,
+      "meanUs": 524.073,
+      "opsPerSec": 1908.13,
+      "totalSec": 0.1048
+    },
+    "fullPostBlackoutE2e": {
+      "count": 200,
+      "p50Us": 5743.883,
+      "p95Us": 8411.738,
+      "p99Us": 10893.648,
+      "meanUs": 6045.158,
+      "opsPerSec": 165.41,
+      "totalSec": 1.2091
+    },
+    "tokensPerSec": 21172.840642875428,
+    "completionRate": 1,
+    "hanzoCallsAfterKill": 0
+  },
+  "trust": {
+    "passed": 7,
+    "total": 7,
+    "detectionRate": 1,
+    "checks": [
+      {
+        "name": "tampered_model_artifact_sha256_rejected",
+        "passed": true,
+        "detail": "mirror bit-flip rejected fail-closed with ErrModelDigestMismatch"
+      },
+      {
+        "name": "forged_or_tampered_execution_receipt_rejected",
+        "passed": true,
+        "detail": "tampered inference output rejected offline via deterministic SHA-256 recomputation"
+      },
+      {
+        "name": "payment_replay_double_spend_rejected",
+        "passed": true,
+        "detail": "duplicate EIP-712 PaymentID rejected with HTTP 409 ErrReplayDetected"
+      },
+      {
+        "name": "unauthorized_third_party_data_key_rejected",
+        "passed": true,
+        "detail": "non-owner 32-byte key rejected by AES-256-GCM authentication"
+      },
+      {
+        "name": "tampered_encrypted_vault_ciphertext_rejected",
+        "passed": true,
+        "detail": "ciphertext bit-flip rejected before plaintext release"
+      },
+      {
+        "name": "tampered_fork_bundle_rejected",
+        "passed": true,
+        "detail": "mutated NetworkForkBundle rejected offline on SHA-256 \u0026 secp256k1 check"
+      },
+      {
+        "name": "blackout_hanzo_host_leak_blocked",
+        "passed": true,
+        "detail": "attempt to contact api.hanzo.ai during blackout rejected with ErrHanzoHostBlocked"
+      }
+    ]
+  },
+  "decentralization": {
+    "criticalFunctionsIndependent": 8,
+    "criticalFunctionsTotal": 8,
+    "independentShare": 1,
+    "hanzoCallsAfterKill": 0,
+    "functions": [
+      "new_provider_onboarding",
+      "peer_discovery",
+      "content_addressed_model_retrieval",
+      "stateless_job_scheduling",
+      "verifiable_inference_execution",
+      "offline_receipt_verification",
+      "independent_payment_settlement",
+      "authorized_data_recovery_and_governance"
+    ]
+  },
+  "sovereignty": {
+    "userDataRecoveryFidelity": 1,
+    "unauthorizedKeyRejected": true,
+    "custodialEscrowEnabled": false,
+    "governanceRatifiedWithoutHanzo": true,
+    "forkBundleVerified": true,
+    "forkBundleBytes": 4109,
+    "forkHydratedProviders": 1,
+    "forkHydratedVaultItems": 1,
+    "conservationDrift": 0
+  },
+  "negativeRegimes": [
+    {
+      "name": "centralized_hanzo_coupled_negative",
+      "category": "negative_control",
+      "trials": 50,
+      "succeeded": 0,
+      "failedClosed": 50,
+      "completionRate": 0,
+      "blockedHanzoCalls": 50,
+      "expectedBehavior": "0.0% completion (total outage) once Hanzo endpoints and api.hanzo.ai are killed",
+      "observedBehavior": "0/50 succeeded (0.0%); 50 calls blocked by HostBlocker",
+      "validated": true
+    },
+    {
+      "name": "missing_user_key_unrecoverable_boundary",
+      "category": "boundary_tradeoff",
+      "trials": 50,
+      "succeeded": 0,
+      "failedClosed": 50,
+      "completionRate": 0,
+      "expectedBehavior": "0.0% recovery without user's sovereign key (honest non-custodial zero-escrow boundary)",
+      "observedBehavior": "0/50 recovered; 50/50 fail-closed with ErrUnauthorizedDataAccess",
+      "validated": true
+    },
+    {
+      "name": "partitioned_bootstrap_quorum_loss",
+      "category": "boundary_tradeoff",
+      "trials": 50,
+      "succeeded": 0,
+      "failedClosed": 50,
+      "completionRate": 0,
+      "expectedBehavior": "0.0% discovery when all community bootstrap peers are offline; fail-closed ErrBootstrapQuorumLost with 0 Hanzo fallback calls",
+      "observedBehavior": "0/50 discovered; 50/50 fail-closed ErrBootstrapQuorumLost (Hanzo calls=0)",
+      "validated": true
+    }
+  ]
+}
