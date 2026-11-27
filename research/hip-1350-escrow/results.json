@@ -1,0 +1,197 @@
+{
+  "issue": "hanzoai/cloud#17",
+  "benchmark": "HIP-1350 Compute Escrow, Service Guarantees, Challenges and Rewards",
+  "generatedAtUtc": "2026-11-25T14:06:10Z",
+  "goVersion": "go1.27.1",
+  "goos": "linux",
+  "goarch": "amd64",
+  "iterations": 500,
+  "e2eAcceptance": {
+    "durationMs": 48.602,
+    "jobId": "job-e2e-17",
+    "finalState": "Settled",
+    "subjectiveHttpStatus": 422,
+    "providerFinalBalance": 750000,
+    "conservationDrift": 0,
+    "ledgerEntriesVerified": 7,
+    "ledgerChainValid": true,
+    "allAcceptanceStepsPassed": true
+  },
+  "cost": {
+    "tokensPerJob": 10000,
+    "ethPriceUsd": 3000,
+    "l1GasPriceGwei": 20,
+    "l2GasPriceGwei": 0.05,
+    "optimisticGasPerJob": 258000,
+    "alwaysChallengedGasPerJob": 466000,
+    "offchainClaimL2OptimisticGasPerJob": 190000,
+    "l1OptimisticUsdPerJob": 15.48,
+    "l1OptimisticUsdPer1MTokens": 1548,
+    "l1AlwaysChallengedUsdPerJob": 27.96,
+    "l1AlwaysChallengedUsdPer1MTokens": 2796,
+    "l2OptimisticUsdPerJob": 0.0387,
+    "l2OptimisticUsdPer1MTokens": 3.87,
+    "l2AlwaysChallengedUsdPerJob": 0.0699,
+    "l2AlwaysChallengedUsdPer1MTokens": 6.99,
+    "recommendedL2OffchainUsdPerJob": 0.0285,
+    "recommendedL2OffchainUsdPer1MTokens": 2.85,
+    "localVerificationComputeUsdPer1MTokens": 0.000001
+  },
+  "performance": {
+    "createQuote": {
+      "iterations": 500,
+      "p50Us": 294.21,
+      "p95Us": 504.17,
+      "p99Us": 1410.57,
+      "meanUs": 331.35,
+      "opsPerSec": 3018
+    },
+    "fundEscrow": {
+      "iterations": 500,
+      "p50Us": 272.54,
+      "p95Us": 426.75,
+      "p99Us": 1193.92,
+      "meanUs": 295.24,
+      "opsPerSec": 3387.1
+    },
+    "submitClaim": {
+      "iterations": 500,
+      "p50Us": 277.09,
+      "p95Us": 605.41,
+      "p99Us": 1451.25,
+      "meanUs": 331.87,
+      "opsPerSec": 3013.3
+    },
+    "finalizeEscrow": {
+      "iterations": 500,
+      "p50Us": 10.28,
+      "p95Us": 25.84,
+      "p99Us": 73,
+      "meanUs": 12.22,
+      "opsPerSec": 81825.9
+    },
+    "openAndResolveChallenge": {
+      "iterations": 500,
+      "p50Us": 352,
+      "p95Us": 472.77,
+      "p99Us": 1544.9,
+      "meanUs": 372.71,
+      "opsPerSec": 2683.1
+    },
+    "fullOptimisticLifecycle": {
+      "iterations": 500,
+      "p50Us": 874.4,
+      "p95Us": 1764.82,
+      "p99Us": 2481.64,
+      "meanUs": 971.7,
+      "opsPerSec": 1029.1
+    },
+    "completionRatePct": 100
+  },
+  "trust": {
+    "scenariosPassed": 7,
+    "scenariosTotal": 7,
+    "detectionRatePct": 100,
+    "doublePayoutCount": 0,
+    "subjectiveSlashes": 0,
+    "conservationDrift": 0,
+    "scenarios": [
+      {
+        "name": "honest_fulfillment_optimistic",
+        "passed": true,
+        "detail": "optimistic single release of payment + provider bond"
+      },
+      {
+        "name": "missed_deadline_worker_crash_recovery",
+        "passed": true,
+        "detail": "buyer reclaimed 100% price + deterministic SLA penalty from provider bond"
+      },
+      {
+        "name": "false_completion_claim_slashed",
+        "passed": true,
+        "detail": "provider bond slashed 100%, buyer refunded, challenger rewarded"
+      },
+      {
+        "name": "equivocation_double_output_slashed",
+        "passed": true,
+        "detail": "cryptographic double-output equivocation slashed without oracle"
+      },
+      {
+        "name": "malicious_challenger_bond_forfeited",
+        "passed": true,
+        "detail": "false challenger bond forfeited to honest provider"
+      },
+      {
+        "name": "subjective_quality_claim_rejected",
+        "passed": true,
+        "detail": "fail-closed ErrSubjectiveSlashingForbidden; zero funds seized"
+      },
+      {
+        "name": "double_payment_concurrent_16_goroutine_race",
+        "passed": true,
+        "detail": "exactly 1/16 concurrent goroutines released funds; 0 double-payments"
+      }
+    ]
+  },
+  "decentralization": {
+    "independentFunctions": 8,
+    "totalFunctions": 8,
+    "independenceRatePct": 100,
+    "hanzoDependencies": 0,
+    "verifiedCriticalPaths": [
+      "eip712_quote_signing_and_verification",
+      "buyer_quote_acceptance_and_atomic_bond_lock",
+      "provider_completion_claim_and_sla_proof",
+      "permissionless_missed_deadline_worker_crash_refund",
+      "permissionless_objective_challenge_submission",
+      "independent_deterministic_recomputation_and_equivocation_adjudication",
+      "permissionless_optimistic_finalization",
+      "sovereign_jsonl_ledger_export_offline_audit_and_migration"
+    ]
+  },
+  "sovereignty": {
+    "ledgerBytes": 2620,
+    "ledgerEntriesVerified": 7,
+    "ledgerOfflineValid": true,
+    "ledgerTamperCaught": true,
+    "snapshotBytes": 6448,
+    "snapshotImportSucceeded": true,
+    "snapshotTamperCaught": true,
+    "migrationFidelityPct": 100,
+    "postMigrationDrift": 0
+  },
+  "negativeBoundaryRegimes": {
+    "zero_bond_griefing_negative": {
+      "regime": "zero_bond_griefing_negative",
+      "jobsSimulated": 50,
+      "zeroBondGriefingSuccessPct": 100,
+      "zeroBondAttackerLossAtomic": 0,
+      "bondedAttackerForfeitedTotal": 2500000,
+      "optimisticMeanUs": 19.06,
+      "griefedMeanUs": 417.66,
+      "disputeLatencyOverheadPct": 2091.3,
+      "defaultPolicyBlocksZeroBond": true,
+      "conclusion": "With ChallengeBond == 0, an attacker with zero balance forces 100% of honest jobs through dispute adjudication at zero economic cost; DefaultPolicy requires ChallengeBond \u003e 0 so false challengers forfeit their entire bond to the honest provider."
+    },
+    "unverified_instant_release_negative": {
+      "regime": "unverified_instant_release_negative",
+      "fraudulentJobsSimulated": 50,
+      "instantReleaseTheftPct": 100,
+      "instantReleaseFraudCaughtPct": 0,
+      "optimisticFraudCaughtPct": 100,
+      "buyerLossInstantAtomic": 5000000,
+      "buyerLossOptimisticAtomic": 0,
+      "conclusion": "Skipping the challenge window (ChallengeWindowSec == 0) lets dishonest providers steal 100% of buyer funds via bogus OutputDigests; an optimistic challenge window paired with independent recomputation catches 100% of false completion claims with 0 buyer loss."
+    },
+    "non_deterministic_llm_sampling_boundary": {
+      "regime": "non_deterministic_llm_sampling_boundary",
+      "stochasticJobsSimulated": 50,
+      "distinctHashRatePct": 100,
+      "naiveBitwiseFalseSlashRatePct": 100,
+      "engineFalseSlashRatePct": 0,
+      "rawBitwiseChallengesRejectedPct": 100,
+      "equivocationStillSlashable": true,
+      "conclusion": "Non-deterministic floating-point / temperature \u003e 0 LLM sampling produces distinct output hashes across honest runs (100% false-slash rate under naive bitwise equality). EscrowEngine therefore refuses raw bitwise slashing on ClassNonDeterministicSampling jobs (0% false slashes), restricting slashing to objective SLA deadlines, invalid signatures, or cryptographic equivocation unless deterministic seeds or verifiable sampling/logprob commitments are used."
+    }
+  }
+}
