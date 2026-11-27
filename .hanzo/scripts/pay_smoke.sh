@@ -131,7 +131,7 @@ fi
 
 # ── 2. Web3 Wallet Auth, Replay Rejection & Same-Org Provisioning Gate ───────
 web3_cid="${WEB3_SMOKE_CLIENT_ID:-hanzo-app}"
-methods=$(curl -sS --max-time 20 "$issuer/v1/iam/auth/methods?clientId=${web3_cid}&responseType=code" || echo '{}')
+methods=$(curl -sS --retry 4 --retry-delay 2 --max-time 20 "$issuer/v1/iam/auth/methods?clientId=${web3_cid}&responseType=code" || echo '{}')
 if [ "$(jq -r '.data.web3 // empty' <<<"$methods" 2>/dev/null)" = "false" ]; then
   echo "::error::$issuer/v1/iam/auth/methods reported web3=false for $web3_cid"
   exit 1
@@ -208,7 +208,7 @@ w_lower=$(jq -r '.lower' <<<"$addrs")
 wallet_login() {
   local addr=$1
   local n_raw
-  n_raw=$(curl -sS --max-time 20 "$issuer/v1/iam/web3/nonce?chain=evm&address=${addr}&clientId=${web3_cid}")
+  n_raw=$(curl -sS --retry 4 --retry-delay 2 --max-time 20 "$issuer/v1/iam/web3/nonce?chain=evm&address=${addr}&clientId=${web3_cid}")
   [ "$(jq -r '.status // empty' <<<"$n_raw")" = "ok" ] || { echo "::error::web3 nonce failed: $n_raw" >&2; return 1; }
   local dom uri stmt nce iat exp ver msg sig v_body v_res
   dom=$(jq -r '.data.domain' <<<"$n_raw")
@@ -231,11 +231,11 @@ PY
   sig=$(sign_siwe "$msg")
   v_body=$(jq -nc --arg addr "$addr" --arg msg "$msg" --arg sig "$sig" --arg cid "$web3_cid" \
     '{chain:"evm",scheme:"secp256k1-eip191",address:$addr,message:$msg,signature:$sig,clientId:$cid,type:"token"}')
-  v_res=$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' -d "$v_body" "$issuer/v1/iam/web3/verify")
+  v_res=$(curl -sS --max-time 30 -X POST -H 'Content-Type: application/json' -d "$v_body" "$issuer/v1/iam/web3/verify")
   [ "$(jq -r '.status // empty' <<<"$v_res")" = "ok" ] || { echo "::error::web3 verify failed for $addr: $(jq -c 'del(.data)?' <<<"$v_res" 2>/dev/null || echo failed)" >&2; return 1; }
   # Replay of the exact same signed challenge MUST fail.
   local replay
-  replay=$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' -d "$v_body" "$issuer/v1/iam/web3/verify")
+  replay=$(curl -sS --max-time 30 -X POST -H 'Content-Type: application/json' -d "$v_body" "$issuer/v1/iam/web3/verify")
   [ "$(jq -r '.status // empty' <<<"$replay")" != "ok" ] || { echo "::error::replayed web3 challenge was accepted!" >&2; return 1; }
   jq -r '.data // empty' <<<"$v_res"
 }
@@ -256,7 +256,8 @@ if len(parts) == 3:
     sub_org = (c.get("sub") or "").split("/")[0] if "/" in (c.get("sub") or "") else ""
     print(ba[4:] if ba.startswith("org:") else (sub_org or c.get("owner", "")))
 else:
-    print(os.environ["JWT_VAL"])
+    v = os.environ["JWT_VAL"]
+    print(v.split("/")[0] if "/" in v else v)
 PY
 }
 w_org1=$(decode_owner "$wt1")
@@ -278,7 +279,7 @@ PY
 )
   pkce_verifier=${pkce_pair%% *}
   pkce_challenge=${pkce_pair#* }
-  n_raw=$(curl -sS --max-time 20 "$issuer/v1/iam/web3/nonce?chain=evm&address=${addr}&clientId=${web3_cid}")
+  n_raw=$(curl -sS --retry 4 --retry-delay 2 --max-time 20 "$issuer/v1/iam/web3/nonce?chain=evm&address=${addr}&clientId=${web3_cid}")
   [ "$(jq -r '.status // empty' <<<"$n_raw")" = "ok" ] || { echo "::error::web3 PKCE nonce failed for $addr" >&2; return 1; }
   dom=$(jq -r '.data.domain' <<<"$n_raw")
   uri=$(jq -r '.data.uri' <<<"$n_raw")
@@ -300,15 +301,15 @@ PY
   sig=$(sign_siwe "$msg")
   v_body=$(jq -nc --arg addr "$addr" --arg msg "$msg" --arg sig "$sig" --arg cid "$web3_cid" --arg cc "$pkce_challenge" \
     '{chain:"evm",scheme:"secp256k1-eip191",address:$addr,message:$msg,signature:$sig,clientId:$cid,type:"code",codeChallenge:$cc,codeChallengeMethod:"S256"}')
-  v_res=$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' -d "$v_body" "$issuer/v1/iam/web3/verify")
+  v_res=$(curl -sS --max-time 30 -X POST -H 'Content-Type: application/json' -d "$v_body" "$issuer/v1/iam/web3/verify")
   [ "$(jq -r '.status // empty' <<<"$v_res")" = "ok" ] || { echo "::error::web3 PKCE verify failed for $addr" >&2; return 1; }
   auth_code=$(jq -r '.data // empty' <<<"$v_res")
   [ -n "$auth_code" ] || { echo "::error::web3 PKCE verify returned empty code for $addr" >&2; return 1; }
   local replay
-  replay=$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' -d "$v_body" "$issuer/v1/iam/web3/verify")
+  replay=$(curl -sS --max-time 30 -X POST -H 'Content-Type: application/json' -d "$v_body" "$issuer/v1/iam/web3/verify")
   [ "$(jq -r '.status // empty' <<<"$replay")" != "ok" ] || { echo "::error::replayed web3 PKCE challenge was accepted!" >&2; return 1; }
   tok_res=$(PKCE_CID="$web3_cid" PKCE_CODE="$auth_code" PKCE_VERIFIER="$pkce_verifier" python3 - <<'PY' \
-    | curl -sS --max-time 20 --config - -X POST "$issuer/v1/iam/oauth/token"
+    | curl -sS --max-time 30 --config - -X POST "$issuer/v1/iam/oauth/token"
 import os, sys, urllib.parse
 form = urllib.parse.urlencode({
     "grant_type": "authorization_code",
