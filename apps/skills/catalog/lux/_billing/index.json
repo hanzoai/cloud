@@ -69,7 +69,7 @@
     },
     {
       "description": "Read billing crypto: Reads one of the caller's own deposit intents back — pending, confirming, or succeeded., Answers the terms to sign a USDC top-up against, for an agent or a person paying from a wallet: the treasury to pay, the networks and USDC contracts, the EIP-712 domain a",
-      "digest": "sha256:b020c3cc368e3f8e7f44ffc13f7ebfd675b82ee66bd7d013a27406d778c75c6b",
+      "digest": "sha256:3b445a278e6e9fc9aa4afbe128471e1418d11968b99bee0af022de81446551ce",
       "name": "billing_crypto",
       "service": "billing",
       "type": "skill-md",

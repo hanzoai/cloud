@@ -27,7 +27,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/billing/crypto/deposit/{id}` → `billing.CryptoDeposit` object with fields: `addressTag`, `amountCents`, `chain`, `confirmations`, `creditedCents`, `depositAddress`, `expiresAt`, `feeCents`, `id`, `instructions`, `minimumCents`, `planId`.
+- `/v1/billing/crypto/deposit/{id}` → `billing.CryptoDeposit` object with fields: `addressTag`, `amountCents`, `chain`, `confirmations`, `contract`, `creditedCents`, `depositAddress`, `expiresAt`, `feeCents`, `id`, `instructions`, `logIndex`.
 - `/v1/billing/crypto/gateway` → `billing.GatewayTerms` object with fields: `accepts`, `maxCents`, `maxValiditySeconds`, `minCents`, `nonce`, `payTo`, `primaryType`, `salt`, `scheme`, `types`, `x402Version`.
 - `/v1/billing/crypto/gateway/{id}` → `billing.GatewayPayment` object with fields: `amountCents`, `createdAt`, `credited`, `deferred`, `from`, `id`, `network`, `payment`, `reason`, `status`, `txHash`, `updatedAt`.
 - `/v1/billing/crypto/options` → `billing.CryptoOptions` object with fields: `assets`, `chains`, `gateway`, `tokens`.
