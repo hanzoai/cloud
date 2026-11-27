@@ -16,7 +16,7 @@
 
 services:
   cloud:
-    image: ghcr.io/hanzo-inc/cloud:${HANZO_CLOUD_TAG:-latest}
+    image: ${HANZO_CLOUD_IMAGE:-ghcr.io/hanzoai/cloud-oss:main}
     container_name: hanzo-cloud
     restart: unless-stopped
     ports:
