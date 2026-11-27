@@ -26,6 +26,7 @@ func TestAuthorizationContract(t *testing.T) {
 			"/v1/iam/web3":        authztest.Open,
 			"/v1/iam/auth":        authztest.Open,
 			"/v1/iam/registry":    authztest.Open,
+			"/v1/iam/stats":       authztest.Open, // public aggregate user/org counts, zero PII
 			"/v1/iam/accounts":    authztest.Open, // this browser's signed-in accounts, from its cookie
 		},
 		Data: func(t *testing.T) string {

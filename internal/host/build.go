@@ -188,6 +188,8 @@ var publicCatalog = map[string]int{
 	// Public SVG README badges: one shared hourly copy per handle/options across origins.
 	"/v1/leaderboard/badge": 3600,
 	"/v1/reward/badge":      3600,
+	// Public aggregate IAM counts (zero PII): shared 5-minute edge copy.
+	"/v1/iam/stats": 300,
 }
 
 // staticEdgePolicy projects the static env/flag edge config into the boot-default
