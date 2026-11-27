@@ -1,0 +1,439 @@
+# Hanzo Cloud Model Configuration
+# This file defines model routing, pricing, and identity prompts.
+# In production with live_mode: true, pricing is refreshed from pricing.hanzo.ai.
+version: 1
+
+services:
+  pricing_url: "https://pricing.hanzo.ai"  # Override: PRICING_SERVICE_URL env var
+
+cache:
+  pricing_ttl: "6h"
+
+features:
+  live_mode: false       # Set true in production ConfigMap
+  premium_gate: true
+
+# ── Auto-routing (virtual `auto` / `zen-router` model) ────────────────────────
+# Opt-in. When enabled, a chat request for model "auto" (alias "zen-router") is
+# classified into a coarse task and mapped to the first SERVABLE model in the
+# matching prefer list, BEFORE provider/pricing/billing resolution — so the
+# request is billed and reported as the model that served it (see the
+# X-Routed-Model response header). Disabled by default: "auto" is then just an
+# unknown model id.
+#
+# Strategy: if `endpoint` is set, POST {endpoint}/route to a zen-router served by
+# hanzo-engine (learned routing); on ANY error (or when endpoint is empty) fall
+# back to the built-in pure-Go heuristic — a faithful port of hanzo-router's
+# classifier — so auto works with ZERO extra infrastructure. Env overrides:
+# ROUTER_ENABLED=true, ROUTER_ENDPOINT=<url>.
+router:
+  enabled: true           # global auto-routing default: ON for everyone (AutoRouting); org/"*" OrgSettings rows override
+  # default_session_routing has no conf flag — its conf-level default is disabled;
+  # set it per-org or platform-wide via an OrgSettings row (owner "*").
+  endpoint: ""            # e.g. http://engine.hanzo.svc:3000 (zen-router via hanzo-engine)
+  cost_ceiling: 0.0       # advisory per-1k cost cap, forwarded to the engine as SLO
+  prefer:                 # task tag → ordered model ids; first servable wins ("default" = catch-all)
+    # A zen champion leads each list; the premium models follow as CANDIDATES —
+    # reachable by the learned engine and the exploration floor, and as fallbacks
+    # when a champion is unservable. Only models VERIFIED to have the task's
+    # capability are listed (gpt-5.6 has no tools, so it stays out of tool-heavy
+    # code/reasoning; deepseek-v4-pro and glm reject images, so they are absent
+    # from `vision`).
+    #
+    # EVERY id here is checked against GET /v1/models. It stopped being true and
+    # nothing said so: all eight lists led with retired ids (zen5*, zen4*, and
+    # zen3* were retired into the zen6 lineup), and `vision` had its top THREE
+    # dead with the live house vision SKU not listed at all. "First servable
+    # wins" is what hid it — the router walks past a dead champion and answers
+    # from a fallback, so the intended model silently never serves and the only
+    # symptom is a preference that does nothing.
+    code: [zen6-coder, zen6-max, qwen3-coder, gpt-5.3-codex, claude-opus-4-8, claude-sonnet-4-6, gpt-5.4, deepseek-v4-pro]
+    reasoning: [zen6-max, deepseek-reasoner, o3, gpt-5.5, claude-opus-4-8, deepseek-v4-pro]
+    math: [zen6-max, deepseek-reasoner, o3, gpt-5.5, deepseek-v4-pro]
+    creative: [zen6, claude-opus-4-8, gpt-5.5, claude-sonnet-4-6]
+    vision: [zen-vl, claude-sonnet-4-6, gpt-4o, gpt-5.4, llama-4-maverick, nemotron-nano-vl]
+    long_context: [zen6, gpt-5.4, gpt-5.5, gpt-5.6-luna, claude-opus-4-8, deepseek-v4-pro]
+    cheap_chat: [zen6-flash, gpt-4o-mini, claude-haiku-4-5]
+    default: [zen6, gpt-4o, gpt-4o-mini, kimi-k2.6, glm-5.2]
+
+default_pricing:
+  input_per_million: 1.00
+  output_per_million: 4.00
+
+# How long we hold a request open for a provider that is merely busy, instead
+# of handing its 429 to the client. A 429 means "ask again shortly" — and we
+# can do that far better than a client can: it cannot pick another provider,
+# and if every client retries at once they arrive together and overload the
+# provider again. Tunable here (and from admin) without a rebuild.
+#
+# attempts:     total tries of ONE provider (1 = no same-provider retry).
+# base_backoff: first wait; doubles each attempt, jittered to avoid a herd.
+# max_backoff:  ceiling on any single wait. A provider still refusing after a
+#               few seconds is not blipping — the cure is a different provider
+#               (the fallbacks: chain), not a longer sleep.
+retry:
+  attempts: 3
+  base_backoff: 500ms
+  max_backoff: 4s
+
+models:
+
+  # ── Chat models with no OpenRouter equivalent ──────────────────────────
+  # Every other third-party chat model is served by the OpenRouter family, and
+  # the short ids callers know them by (gpt-4o, claude-sonnet-4-6, …) are aliases
+  # ai resolves to OpenRouter SKUs (controllers/openrouter_alias.go). An entry in
+  # this file takes precedence over that alias, so a chat id stays here only while
+  # OpenRouter lists no priced SKU of the same model at the same size.
+  claude-3-5-haiku:
+    provider: anthropic
+    upstream: claude-3-5-haiku-20241022
+    fallbacks:
+    - provider: do-ai
+      upstream: anthropic-claude-3.5-haiku
+    pricing: {input: 0.80, output: 4.00}
+
+  claude-3-7-sonnet:
+    provider: anthropic
+    upstream: claude-3-7-sonnet-20250219
+    fallbacks:
+    - provider: do-ai
+      upstream: anthropic-claude-3.7-sonnet
+    pricing: {input: 3.00, output: 15.00}
+
+  claude-opus-4:
+    provider: anthropic
+    upstream: claude-opus-4-20250514
+    fallbacks:
+    - provider: do-ai
+      upstream: anthropic-claude-opus-4
+    pricing: {input: 15.00, output: 75.00}
+
+  gemma-3-31b:
+    provider: do-ai
+    upstream: gemma-3-31b
+    pricing: {input: 0.10, output: 0.30}
+
+  mistral-small:
+    provider: do-ai
+    upstream: mistral-small
+    pricing: {input: 0.10, output: 0.30}
+
+  nemotron-nano-vl:
+    context_window: 128000
+    provider: do-ai
+    upstream: nemotron-nano-12b-v2-vl
+    pricing: {input: 0.08, output: 0.24}
+
+  fireworks/cogito-671b:
+    provider: fireworks
+    upstream: accounts/cogito/models/cogito-671b-v2-p1
+    premium: true
+    hidden: true
+    pricing: {input: 3.00, output: 3.00}
+
+  fireworks/glm-5-thinking:
+    provider: fireworks
+    upstream: accounts/fireworks/models/glm-5-thinking
+    premium: true
+    hidden: true
+    pricing_only: true
+    pricing: {input: 3.00, output: 9.60}
+
+  fireworks/qwen3-4b:
+    provider: fireworks
+    upstream: accounts/fireworks/models/qwen3-4b
+    premium: true
+    hidden: true
+    pricing_only: true
+    pricing: {input: 0.30, output: 0.30}
+
+  fireworks/qwen3-coder-480b-bf16:
+    provider: fireworks
+    upstream: accounts/fireworks/models/qwen3-coder-480b-bf16
+    premium: true
+    hidden: true
+    pricing_only: true
+    pricing: {input: 4.50, output: 4.50}
+
+  anthropic/claude-opus-4:
+    provider: anthropic
+    upstream: claude-opus-4-20250514
+    premium: true
+    hidden: true
+    pricing: {input: 15.00, output: 75.00}
+
+  # do-ai fal-hosted diffusion via the async image API (model/doai_image.go).
+  # FLUX.1 schnell is the flagship/fast model; SDXL serves the -sdxl/-ssd
+  # variants. Pricing is per-token-shaped here only because the config schema
+  # is token-based; image calls bill per image via controllers.imageCostCents.
+
+  # ── DO-AI image: Stable Diffusion 3.5 Large ───────────────────────────
+  # Unlike the fal FLUX/SDXL models (async-invoke), SD 3.5 Large is served on
+  # the SYNCHRONOUS OpenAI /images/generations shape. model.GenerateImageForModel
+  # dispatches it via client.Images.Generate; getOpenAiModelType classifies it
+  # as an image model. Usable via /v1/images/generations and the chat-image path.
+  # Billed $0.08/image (controllers.imageCostCents) — token pricing is unused.
+  stable-diffusion-3.5-large:
+    context_window: 256
+    provider: do-ai
+    upstream: stable-diffusion-3.5-large
+
+  # ── DO-AI text-to-video (served at POST /v1/videos/generations) ────────
+  # wan2-2-t2v-a14b is the only text-to-video model in the do-ai catalog,
+  # served on the OpenAI Sora-style async /v1/videos API (create → poll →
+  # download) by model/doai_video.go. getOpenAiModelType classifies it via
+  # isDOAIVideoModel → the videos path. Billed per video via
+  # controllers.videoCostCents (40¢/video, DO publishes no per-video rate) —
+  # token pricing is unused for video. The unbranded raw id below stays on do-ai;
+  # provider (same async /v1/videos API), owned_by hanzo (upstream never exposed).
+  #
+  # premium: true on EVERY video id (including this unbranded passthrough) tags the
+  # usage record as premium; a t2v inference is minutes of A14B GPU compute (~40¢),
+  # billed per video via controllers.videoCostCents through the one metering path.
+  # Access is gated purely on a positive prepaid balance (there is no free credit),
+  # so a $0 signup is refused at the balance gate before ever reaching video. This
+  # YAML is the runtime source of truth (it wins over the static route map), so the
+  # provider re-point and the flag have to live here too, not only in
+  # controllers/model_routes.go.
+  wan2-2-t2v-a14b:
+    context_window: 100
+    provider: do-ai
+    upstream: wan2-2-t2v-a14b
+    premium: true
+
+  # ── DO-AI Inference Router (served at POST /v1/chat/completions) ───────
+  # DO's model router auto-selects the best foundation model per request and
+  # returns the chosen model in the response. Callable as plain chat. The router
+  # itself adds no cost (public preview); the request bills at the underlying
+  # model it selects — the price below is an in-pattern estimate for that class
+  # (matching gpt-oss-120b), NOT a published per-router rate.
+  "router:general":
+    provider: do-ai
+    upstream: "router:general"
+    pricing: {input: 0.90, output: 0.90}
+
+  "router:knowledge-base-document":
+    provider: do-ai
+    upstream: "router:knowledge-base-document"
+    pricing: {input: 0.90, output: 0.90}
+
+  "router:software-engineering":
+    provider: do-ai
+    upstream: "router:software-engineering"
+    pricing: {input: 0.90, output: 0.90}
+
+  "router:software-engineering-01":
+    provider: do-ai
+    upstream: "router:software-engineering-01"
+    pricing: {input: 0.90, output: 0.90}
+
+  "router:writing":
+    provider: do-ai
+    upstream: "router:writing"
+    pricing: {input: 0.90, output: 0.90}
+
+  #
+  # hidden: it does not appear in /v1/models, so no user can discover or select
+  # it, but it stays callable for anyone we deliberately let through (waitlist /
+  # allowlist). DO currently 403s it for this account; the moment the agreement
+  # lands this serves 1M with no further change, and dropping `hidden` is what
+  # makes it public. Until then it degrades to the same 1M we can actually serve
+  # rather than failing, so an allowlisted caller is never broken.
+
+  # the upstream (Kimi K2.7 Code when it lands; qwen3-coder today) in yaml only.
+
+  # (qwen3.5-397b-a17b, 397B, 131K context) when K2.6 is unavailable.
+
+  # ── OpenAI-compatible embeddings (served at POST /v1/embeddings) ───────
+  # Canonical text-embedding-* names route to OpenAI Direct, whose key
+  # (kms://OPENAI_API_KEY) is already configured for chat — so the OpenAI SDK
+  # works unchanged with NO new secret. Non-premium; CPU-only
+  # (provider-routed, no GPU node).
+  text-embedding-3-small:
+    provider: openai-direct
+    upstream: text-embedding-3-small
+    owned_by: openai
+    pricing: {input: 0.02, output: 0.00}
+
+  text-embedding-3-large:
+    provider: openai-direct
+    upstream: text-embedding-3-large
+    owned_by: openai
+    pricing: {input: 0.13, output: 0.00}
+
+  text-embedding-ada-002:
+    provider: openai-direct
+    upstream: text-embedding-ada-002
+    owned_by: openai
+    pricing: {input: 0.10, output: 0.00}
+
+  # ── DO-AI embeddings (served at POST /v1/embeddings) ──────────────────
+  # Open sentence-transformer / BGE / GTE / E5 embedding models served by the
+  # do-ai provider (the same working key as chat). Non-premium.
+  # Prices are DigitalOcean's published per-1M embedding rates;
+  # embeddings bill on input tokens only (output 0). owned_by = do-ai provider.
+  bge-m3:
+    provider: do-ai
+    upstream: bge-m3
+    pricing: {input: 0.02, output: 0.00}
+
+  e5-large-v2:
+    provider: do-ai
+    upstream: e5-large-v2
+    pricing: {input: 0.02, output: 0.00}
+
+  gte-large-en-v1.5:
+    provider: do-ai
+    upstream: gte-large-en-v1.5
+    pricing: {input: 0.09, output: 0.00}
+
+  all-mini-lm-l6-v2:
+    provider: do-ai
+    upstream: all-mini-lm-l6-v2
+    pricing: {input: 0.009, output: 0.00}
+
+  multi-qa-mpnet-base-dot-v1:
+    provider: do-ai
+    upstream: multi-qa-mpnet-base-dot-v1
+    pricing: {input: 0.009, output: 0.00}
+
+  # ── Rerank (served at POST /v1/rerank) ────────────────────────────────
+  # this embedding model (text-embedding-3-large on OpenAI Direct) and ranks by
+  # cosine similarity — a real ranked response with no rerank-specific key and no
+  # GPU. To add a cross-encoder reranker, seed a Jina/Cohere provider (drop
+  # JINA_API_KEY / COHERE_API_KEY into the cloud-api-llm-keys KMS secret) and add
+  # a model here routed to it; /v1/rerank proxies native rerank providers directly.
+
+  # direct-Fireworks routes.
+
+  # Vision-language size variants
+
+  # virtual SKUs with no HF weights and no working upstream — removed
+
+  # ── Hanzo Speech ── the in-cluster speech service (ghcr.io/hanzoai/speech) ──
+  # sherpa-onnx on CPU: Parakeet (Whisper for the languages it lacks) transcribes at
+  # /v1/audio/transcriptions, Kokoro speaks at /v1/audio/speech. The SKU carries
+  # the Zen name it is sold under; `upstream` is the id the speech service answers
+  # to, so the engine behind it is an implementation detail.
+  # No token price: audio bills per second heard and per character spoken
+  # (controllers sttNanoPerSecond / ttsNanoPerChar, the published rates), and a
+  # declared zero here would let a caller with no balance past the gate.
+  # `outputs` keeps a chat picker from offering either for a chat turn.
+  zen-scribe:
+    provider: speech
+    upstream: parakeet
+    owned_by: hanzo
+    outputs: [transcript]
+    description: Hanzo's speech-to-text model, which writes down what is said in any language, served at /v1/audio/transcriptions.
+  zen-voice-mini:
+    provider: speech
+    upstream: kokoro
+    owned_by: hanzo
+    outputs: [audio]
+    description: Hanzo's text-to-speech voice, served at /v1/audio/speech.
+
+  # The upstream ids and the retired zen-scribe-mini stay CALLABLE and leave the
+  # listing, so a caller already sending one keeps working while the catalog
+  # advertises the Zen names. whisper-small reaches Whisper.
+  zen-scribe-mini:
+    provider: speech
+    upstream: parakeet
+    owned_by: hanzo
+    outputs: [transcript]
+    hidden: true
+  parakeet:
+    provider: speech
+    upstream: parakeet
+    owned_by: hanzo
+    outputs: [transcript]
+    hidden: true
+  whisper:
+    provider: speech
+    upstream: whisper
+    owned_by: hanzo
+    outputs: [transcript]
+    hidden: true
+  whisper-small:
+    provider: speech
+    upstream: whisper
+    owned_by: hanzo
+    outputs: [transcript]
+    hidden: true
+  kokoro:
+    provider: speech
+    upstream: kokoro
+    owned_by: hanzo
+    outputs: [audio]
+    hidden: true
+
+  # ── Hanzo Decision ── the decision service (KAI_URL), POST /v1/decisions ──
+  # Kai is Hanzo's decision model, priced per input token like any model. The Jev
+  # ids are forwarded by the same service to OpenRouter's Decisions API: callable
+  # on /v1/decisions, not listed, billed at Jev's list price per input token. outputs: [decision] keeps every catalog from offering these
+  # for a chat turn.
+  # released: kai when api.hanzo.ai first served it (cloud f80ce7a0a, ai
+  # v1.833.242); the Jev ids when OpenRouter listed them (its `created`).
+  # A Kai version (kai-<12 hex>, kai-<major>.<minor>[.<patch>]) needs no row: it is
+  # kai, priced, gated and filed as kai. One that runs as its own deployment is named
+  # in KAI_URLS (kai-1.4=http://kai-1-4.hanzo.svc:8080,...), which sends its decisions
+  # there and lists it on /v1/models as kai's row; kai itself stays KAI_URL's.
+  kai:
+    provider: kai
+    upstream: kai
+    owned_by: hanzo
+    outputs: [decision]
+    pricing: {input: 0.021, output: 0.00}
+    released: 2026-09-27T23:06:02Z
+    description: Hanzo's decision model, which answers typed questions at /v1/decisions rather than a chat turn.
+  typesafe/jev-1.13:
+    provider: kai
+    upstream: typesafe/jev-1.13
+    owned_by: typesafe
+    outputs: [decision]
+    pricing: {input: 0.042, output: 0.00}
+    released: 2026-09-18T00:01:24Z
+    hidden: true
+  "~typesafe/jev-latest":
+    provider: kai
+    upstream: "~typesafe/jev-latest"
+    owned_by: typesafe
+    outputs: [decision]
+    pricing: {input: 0.042, output: 0.00}
+    released: 2026-09-18T00:01:25Z
+    hidden: true
+  # Zen through the same service: it asks Hanzo's router for the Zen model under a
+  # strict JSON schema and holds the answer to it. The router keeps no logprobs for
+  # Zen, so each answer is the option chosen with all the mass. The ids are
+  # namespaced: zen6 is Zen's chat route. The answer is a completion, so its output
+  # is billed beside its input: both at the published Zen chat row (zen5's), the two
+  # ids being served by one chain. PROVISIONAL launch price: $2.28 in / $7.26 out per
+  # million, zen5's row, until the owner confirms one.
+  zenlm/zen6:
+    provider: kai
+    upstream: zenlm/zen6
+    owned_by: hanzo
+    outputs: [decision]
+    pricing: {input: 2.28, output: 7.26}
+    description: Zen 6 answering typed questions at /v1/decisions under a strict JSON schema.
+  zenlm/zen6-flash:
+    provider: kai
+    upstream: zenlm/zen6-flash
+    owned_by: hanzo
+    outputs: [decision]
+    pricing: {input: 2.28, output: 7.26}
+    description: Zen 6 Flash answering typed questions at /v1/decisions under a strict JSON schema.
+
+  # ── DO upstream leaves ──────────────────────────────────────────────
+  # Declared so an alias above inherits its upstream's REAL served window
+  # (ModelConfig.ContextWindow follows the alias chain). hidden: they are the
+  # plumbing behind the listed ids, not SKUs of their own.
+  nemotron-nano-12b-v2-vl:
+    provider: do-ai
+    upstream: nemotron-nano-12b-v2-vl
+    context_window: 128000
+    hidden: true
+  nemotron-3-nano-omni:
+    provider: do-ai
+    upstream: nemotron-3-nano-omni
+    hidden: true
+    context_window: 65536

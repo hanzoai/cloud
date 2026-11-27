@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/07/schema#",
+  "$id": "https://hanzo.ai/schemas/cloud-34-enso-routellm-results.json",
+  "title": "cloud#34 & cloud#27 Quality-Constrained Enso Model Routing (RouteLLM, HIP-1345 §2.6) Results Schema",
+  "description": "Strict machine-readable schema for the 4-part Enso / RouteLLM benchmark report in research/ensoroutellm.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "benchmark",
+    "issues",
+    "tracking_hip",
+    "related_hips",
+    "seed",
+    "dense_cv_folds",
+    "dense_corpus_size",
+    "dense_calibration",
+    "dense_policies",
+    "sparse_bandit_comparison",
+    "capability_gate_audit",
+    "adversarial_short_prompt_slice"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "hanzo.ensoroutellm.results/v1"
+    },
+    "benchmark": { "type": "string", "minLength": 1 },
+    "issues": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "format": "uri" }
+    },
+    "tracking_hip": { "type": "string", "minLength": 1 },
+    "related_hips": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "seed": { "type": "integer", "minimum": 0 },
+    "dense_cv_folds": { "type": "integer", "minimum": 2 },
+    "dense_corpus_size": { "type": "integer", "minimum": 1 },
+    "dense_calibration": { "$ref": "#/definitions/calibration_summary" },
+    "dense_policies": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/policy_eval_metrics" }
+    },
+    "sparse_bandit_comparison": { "$ref": "#/definitions/sparse_comparison_summary" },
+    "capability_gate_audit": { "$ref": "#/definitions/gate_audit_summary" },
+    "adversarial_short_prompt_slice": { "$ref": "#/definitions/adversarial_slice_summary" }
+  },
+  "definitions": {
+    "calibration_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ece_10_bin", "brier_score", "apgr", "cpt_80_spend_pct", "cpt_90_spend_pct"],
+      "properties": {
+        "ece_10_bin": { "type": "number", "minimum": 0, "maximum": 1 },
+        "brier_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "apgr": { "type": "number", "minimum": 0, "maximum": 1 },
+        "cpt_80_spend_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "cpt_90_spend_pct": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "policy_eval_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_name",
+        "queries",
+        "accuracy",
+        "quality_retention_pct",
+        "blended_usd_per_mtok",
+        "usd_per_1k_queries",
+        "blended_cost_saving_pct",
+        "usd_cost_saving_pct",
+        "mean_latency_ms",
+        "p95_latency_ms"
+      ],
+      "properties": {
+        "policy_name": { "type": "string", "minLength": 1 },
+        "queries": { "type": "integer", "minimum": 1 },
+        "accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+        "quality_retention_pct": { "type": "number", "minimum": 0 },
+        "blended_usd_per_mtok": { "type": "number", "minimum": 0 },
+        "usd_per_1k_queries": { "type": "number", "minimum": 0 },
+        "blended_cost_saving_pct": { "type": "number" },
+        "usd_cost_saving_pct": { "type": "number" },
+        "mean_latency_ms": { "type": "number", "minimum": 0 },
+        "p95_latency_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "sparse_comparison_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "queries",
+        "observed_arms_per_query",
+        "logistic_only_brier",
+        "matrix_factorization_brier",
+        "enso_hybrid_brier",
+        "logistic_only_rel004_acc",
+        "matrix_factorization_rel004_acc",
+        "enso_hybrid_rel004_acc",
+        "enso_hybrid_rel004_usd_savings_pct"
+      ],
+      "properties": {
+        "queries": { "type": "integer", "minimum": 1 },
+        "observed_arms_per_query": { "type": "integer", "minimum": 1 },
+        "logistic_only_brier": { "type": "number", "minimum": 0, "maximum": 1 },
+        "matrix_factorization_brier": { "type": "number", "minimum": 0, "maximum": 1 },
+        "enso_hybrid_brier": { "type": "number", "minimum": 0, "maximum": 1 },
+        "logistic_only_rel004_acc": { "type": "number", "minimum": 0, "maximum": 1 },
+        "matrix_factorization_rel004_acc": { "type": "number", "minimum": 0, "maximum": 1 },
+        "enso_hybrid_rel004_acc": { "type": "number", "minimum": 0, "maximum": 1 },
+        "enso_hybrid_rel004_usd_savings_pct": { "type": "number" }
+      }
+    },
+    "gate_scenario_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario",
+        "requests",
+        "unconstrained_violations",
+        "constrained_violations",
+        "expected_rejection_handled"
+      ],
+      "properties": {
+        "scenario": { "type": "string", "minLength": 1 },
+        "requests": { "type": "integer", "minimum": 1 },
+        "unconstrained_violations": { "type": "integer", "minimum": 0 },
+        "constrained_violations": { "type": "integer", "minimum": 0 },
+        "expected_rejection_handled": { "type": "boolean" }
+      }
+    },
+    "gate_audit_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_scenarios",
+        "total_requests",
+        "unconstrained_total_violations",
+        "constrained_total_violations",
+        "scenarios"
+      ],
+      "properties": {
+        "total_scenarios": { "type": "integer", "minimum": 1 },
+        "total_requests": { "type": "integer", "minimum": 1 },
+        "unconstrained_total_violations": { "type": "integer", "minimum": 0 },
+        "constrained_total_violations": { "type": "integer", "minimum": 0 },
+        "scenarios": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/gate_scenario_result" }
+        }
+      }
+    },
+    "adversarial_slice_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "queries",
+        "always_strong_accuracy",
+        "always_weak_accuracy",
+        "enso_loose_tol_008_accuracy",
+        "enso_tight_tol_002_accuracy",
+        "enso_abs_floor_085_accuracy"
+      ],
+      "properties": {
+        "queries": { "type": "integer", "minimum": 1 },
+        "always_strong_accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+        "always_weak_accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+        "enso_loose_tol_008_accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+        "enso_tight_tol_002_accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+        "enso_abs_floor_085_accuracy": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

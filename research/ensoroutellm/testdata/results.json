@@ -1,0 +1,246 @@
+{
+  "schema": "hanzo.ensoroutellm.results/v1",
+  "benchmark": "enso-routellm-quality-constrained-routing",
+  "issues": [
+    "https://github.com/hanzoai/cloud/issues/34",
+    "https://github.com/hanzoai/cloud/issues/27"
+  ],
+  "tracking_hip": "HIP-1345 §2.6",
+  "related_hips": [
+    "HIP-0510",
+    "HIP-1332",
+    "HIP-1346",
+    "HIP-1348 §1.1–§1.2"
+  ],
+  "seed": 20261134,
+  "dense_cv_folds": 5,
+  "dense_corpus_size": 600,
+  "dense_calibration": {
+    "ece_10_bin": 0.0186,
+    "brier_score": 0.1171,
+    "apgr": 0.8239,
+    "cpt_80_spend_pct": 37.47,
+    "cpt_90_spend_pct": 47.18
+  },
+  "dense_policies": [
+    {
+      "policy_name": "always_strong(zen-4-max)",
+      "queries": 600,
+      "accuracy": 0.935,
+      "quality_retention_pct": 100,
+      "blended_usd_per_mtok": 21,
+      "usd_per_1k_queries": 35.1225,
+      "blended_cost_saving_pct": 0,
+      "usd_cost_saving_pct": 0,
+      "mean_latency_ms": 10390.99,
+      "p95_latency_ms": 26993
+    },
+    {
+      "policy_name": "always_weak(zen-4-flash)",
+      "queries": 600,
+      "accuracy": 0.4583,
+      "quality_retention_pct": 49.02,
+      "blended_usd_per_mtok": 0.26,
+      "usd_per_1k_queries": 0.4395,
+      "blended_cost_saving_pct": 98.75,
+      "usd_cost_saving_pct": 98.75,
+      "mean_latency_ms": 2470.7,
+      "p95_latency_ms": 6441
+    },
+    {
+      "policy_name": "random_router",
+      "queries": 600,
+      "accuracy": 0.7667,
+      "quality_retention_pct": 82,
+      "blended_usd_per_mtok": 6.42,
+      "usd_per_1k_queries": 10.8238,
+      "blended_cost_saving_pct": 69.44,
+      "usd_cost_saving_pct": 69.18,
+      "mean_latency_ms": 6637.99,
+      "p95_latency_ms": 19731
+    },
+    {
+      "policy_name": "static_rule_prefer(HIP-0510)",
+      "queries": 600,
+      "accuracy": 0.8433,
+      "quality_retention_pct": 90.2,
+      "blended_usd_per_mtok": 4.75,
+      "usd_per_1k_queries": 8.6443,
+      "blended_cost_saving_pct": 77.37,
+      "usd_cost_saving_pct": 75.39,
+      "mean_latency_ms": 7134.26,
+      "p95_latency_ms": 18771
+    },
+    {
+      "policy_name": "routellm_mf_rel(tol=0.04)",
+      "queries": 600,
+      "accuracy": 0.9083,
+      "quality_retention_pct": 97.15,
+      "blended_usd_per_mtok": 11.49,
+      "usd_per_1k_queries": 26.2738,
+      "blended_cost_saving_pct": 45.27,
+      "usd_cost_saving_pct": 25.19,
+      "mean_latency_ms": 9139.23,
+      "p95_latency_ms": 26993
+    },
+    {
+      "policy_name": "enso_hybrid_rel(tol=0.02)",
+      "queries": 600,
+      "accuracy": 0.9233,
+      "quality_retention_pct": 98.75,
+      "blended_usd_per_mtok": 13.83,
+      "usd_per_1k_queries": 29.3475,
+      "blended_cost_saving_pct": 34.16,
+      "usd_cost_saving_pct": 16.44,
+      "mean_latency_ms": 9589.55,
+      "p95_latency_ms": 26993
+    },
+    {
+      "policy_name": "enso_hybrid_rel(tol=0.04)",
+      "queries": 600,
+      "accuracy": 0.905,
+      "quality_retention_pct": 96.79,
+      "blended_usd_per_mtok": 10.55,
+      "usd_per_1k_queries": 23.9136,
+      "blended_cost_saving_pct": 49.77,
+      "usd_cost_saving_pct": 31.91,
+      "mean_latency_ms": 8888.18,
+      "p95_latency_ms": 26993
+    },
+    {
+      "policy_name": "enso_hybrid_rel(tol=0.06)",
+      "queries": 600,
+      "accuracy": 0.9033,
+      "quality_retention_pct": 96.61,
+      "blended_usd_per_mtok": 8.91,
+      "usd_per_1k_queries": 21.2737,
+      "blended_cost_saving_pct": 57.56,
+      "usd_cost_saving_pct": 39.43,
+      "mean_latency_ms": 8429.92,
+      "p95_latency_ms": 26993
+    },
+    {
+      "policy_name": "enso_hybrid_abs(floor=0.80)",
+      "queries": 600,
+      "accuracy": 0.87,
+      "quality_retention_pct": 93.05,
+      "blended_usd_per_mtok": 6.07,
+      "usd_per_1k_queries": 17.2319,
+      "blended_cost_saving_pct": 71.11,
+      "usd_cost_saving_pct": 50.94,
+      "mean_latency_ms": 7620.55,
+      "p95_latency_ms": 26993
+    }
+  ],
+  "sparse_bandit_comparison": {
+    "queries": 180,
+    "observed_arms_per_query": 1,
+    "logistic_only_brier": 0.176,
+    "matrix_factorization_brier": 0.1679,
+    "enso_hybrid_brier": 0.1689,
+    "logistic_only_rel004_acc": 0.7278,
+    "matrix_factorization_rel004_acc": 0.8056,
+    "enso_hybrid_rel004_acc": 0.7778,
+    "enso_hybrid_rel004_usd_savings_pct": 81.8
+  },
+  "capability_gate_audit": {
+    "total_scenarios": 12,
+    "total_requests": 132,
+    "unconstrained_total_violations": 105,
+    "constrained_total_violations": 0,
+    "scenarios": [
+      {
+        "scenario": "zero_retention_required",
+        "requests": 11,
+        "unconstrained_violations": 11,
+        "constrained_violations": 0,
+        "expected_rejection_handled": true
+      },
+      {
+        "scenario": "thinking_family_anthropic_continuity",
+        "requests": 11,
+        "unconstrained_violations": 11,
+        "constrained_violations": 0,
+        "expected_rejection_handled": true
+      },
+      {
+        "scenario": "pinned_turn_model_reasoning_lock",
+        "requests": 11,
+        "unconstrained_violations": 11,
+        "constrained_violations": 0,
+        "expected_rejection_handled": true
+      },
+      {
+        "scenario": "cross_family_thinking_block_sanitization",
+        "requests": 11,
+        "unconstrained_violations": 11,
+        "constrained_violations": 0,
+        "expected_rejection_handled": true
+      },
+      {
+        "scenario": "forced_tool_choice_required",
+        "requests": 11,
+        "unconstrained_violations": 0,
+        "constrained_violations": 0,
+        "expected_rejection_handled": true
+      },
+      {
+        "scenario": "forced_tool_choice_named_function",
+        "requests": 11,
+        "unconstrained_violations": 11,
+        "constrained_violations": 0,
+        "expected_rejection_handled": true
+      },
+      {
+        "scenario": "plan_entitlement_free_tier",
+        "requests": 11,
+        "unconstrained_violations": 8,
+        "constrained_violations": 0,
+        "expected_rejection_handled": true
+      },
+      {
+        "scenario": "plan_entitlement_starter_tier",
+        "requests": 11,
+        "unconstrained_violations": 6,
+        "constrained_violations": 0,
+        "expected_rejection_handled": true
+      },
+      {
+        "scenario": "org_blocked_external_providers",
+        "requests": 11,
+        "unconstrained_violations": 4,
+        "constrained_violations": 0,
+        "expected_rejection_handled": true
+      },
+      {
+        "scenario": "fast_mode_fail_closed_zero_prepaid",
+        "requests": 11,
+        "unconstrained_violations": 11,
+        "constrained_violations": 0,
+        "expected_rejection_handled": true
+      },
+      {
+        "scenario": "fast_mode_fail_closed_low_prepaid",
+        "requests": 11,
+        "unconstrained_violations": 11,
+        "constrained_violations": 0,
+        "expected_rejection_handled": true
+      },
+      {
+        "scenario": "fast_mode_funded_prepaid",
+        "requests": 11,
+        "unconstrained_violations": 10,
+        "constrained_violations": 0,
+        "expected_rejection_handled": true
+      }
+    ]
+  },
+  "adversarial_short_prompt_slice": {
+    "queries": 60,
+    "always_strong_accuracy": 0.8833,
+    "always_weak_accuracy": 0.05,
+    "enso_loose_tol_008_accuracy": 0.35,
+    "enso_tight_tol_002_accuracy": 0.8833,
+    "enso_abs_floor_085_accuracy": 0.35
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "manifest_version": 2,
+  "pr": "https://github.com/hanzoai/cloud/pull/59",
+  "public_dataset": {
+    "name": "LiveBench",
+    "repository": "https://github.com/LiveBench/LiveBench",
+    "repository_license": "Apache-2.0",
+    "content_redistribution_policy": "Content-free Go FeatureVec + ShippingClassify task tags + objective ground-truth numeric scores only; zero third-party prompt text redistributed in git.",
+    "pinned_sources": [
+      {
+        "dataset": "livebench/model_judgment",
+        "revision": "9704e5da7bfb",
+        "file": "data/leaderboard-00000-of-00001.parquet",
+        "sha256": "35ad896970151776145c96b31c5ddb3a2749ea9a1d91e6b7f1a4c4c04735182a"
+      },
+      {
+        "dataset": "livebench/coding",
+        "revision": "a958549fdd8a",
+        "file": "data/test-00000-of-00001.parquet",
+        "sha256": "5f02d01fb21672f5d84169f940adab46ff3ca09b9159fd42fdd289bc9be23502"
+      },
+      {
+        "dataset": "livebench/language",
+        "revision": "3ada32a2e53d",
+        "file": "data/test-00000-of-00001.parquet",
+        "sha256": "76ba142afd242ca02d6baa8bb737608d2b416674f311d8f9d798b4e3908a499c"
+      },
+      {
+        "dataset": "livebench/instruction_following",
+        "revision": "0868379c4b5c",
+        "file": "data/test-00000-of-00001.parquet",
+        "sha256": "a9bb97bbaf8788142c310bcb33d50e2f6f5df8cbd8b8c3db677816b06f0f4f25"
+      }
+    ],
+    "derived_content_free_corpus": {
+      "path": "research/ensoroutellm/testdata/livebench_public_features.jsonl",
+      "questions": 318,
+      "models": 11,
+      "total_evaluations": 3498,
+      "categories": {
+        "coding": 128,
+        "instruction_following": 50,
+        "language": 140
+      },
+      "sha256": "a18dc1f28be41b87cbe32508b69f37d9025480ad110ac3441073b29195f28cb7",
+      "rebuild_script": "research/ensoroutellm/scripts/prepare_livebench_eval.py"
+    }
+  },
+  "canonical_hanzo_config": {
+    "source_repo": "https://github.com/hanzoai/ai",
+    "source_commit": "7d0b017",
+    "models_yaml_snapshot": {
+      "path": "research/ensoroutellm/testdata/hanzo_models_snapshot.yaml",
+      "sha256": "92d76036aada6ee0038708827c626e1de8e2f9818a125b2adaf70e96aecf4102"
+    },
+    "pricing_snapshot": {
+      "path": "research/ensoroutellm/testdata/hanzo_pricing_snapshot.json",
+      "sha256": "96c3c3b0340b2e13ef0a3eda153ac36f37fd2861de92cf1954a1c4e0a4043bf3"
+    }
+  }
+}

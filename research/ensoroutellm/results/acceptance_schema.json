@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hanzo.ai/schemas/cloud-59-enso-routellm-acceptance.v2.json",
+  "title": "hanzoai/cloud#59 Quality-Constrained Enso Routing Acceptance Contract Receipt (Aggregate-Only)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "benchmark",
+    "pr",
+    "aggregate_only",
+    "dataset_name",
+    "dataset_sha256",
+    "content_free_corpus",
+    "seed",
+    "cv_folds",
+    "corpus_size",
+    "category_counts",
+    "catalog",
+    "calibration",
+    "reliability_bins",
+    "policies",
+    "matched_budget_vs_canonical_router",
+    "matched_budget_vs_pool_adapted_router",
+    "pareto_frontier",
+    "performance",
+    "reliability"
+  ],
+  "properties": {
+    "schema": { "const": "hanzo.ensoroutellm.acceptance/v2" },
+    "benchmark": { "type": "string", "minLength": 1 },
+    "pr": { "type": "string", "format": "uri" },
+    "aggregate_only": { "const": true },
+    "dataset_name": { "type": "string", "minLength": 1 },
+    "dataset_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "content_free_corpus": { "type": "boolean" },
+    "seed": { "type": "integer", "minimum": 0 },
+    "cv_folds": { "type": "integer", "minimum": 2 },
+    "corpus_size": { "type": "integer", "minimum": 2 },
+    "category_counts": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 1 }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["models_yaml_sha256", "active_arms", "price_sources"],
+      "properties": {
+        "models_yaml_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "pricing_snapshot_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "active_arms": { "type": "integer", "minimum": 2 },
+        "price_sources": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ece_10_bin", "brier_score", "apgr", "cpt_80_spend_pct", "cpt_90_spend_pct"],
+      "properties": {
+        "ece_10_bin": { "type": "number", "minimum": 0, "maximum": 1 },
+        "brier_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "apgr": { "type": "number", "minimum": 0, "maximum": 1 },
+        "cpt_80_spend_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "cpt_90_spend_pct": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "reliability_bins": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bin_index", "count", "mean_pred", "mean_actual"],
+        "properties": {
+          "bin_index": { "type": "integer", "minimum": 0, "maximum": 9 },
+          "count": { "type": "integer", "minimum": 1 },
+          "mean_pred": { "type": "number", "minimum": 0, "maximum": 1 },
+          "mean_actual": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "policies": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "policy_name", "queries", "routed_queries", "unrouted_queries",
+          "accuracy", "accuracy_ci95", "quality_retention_pct",
+          "blended_usd_per_mtok", "usd_per_1k_queries", "usd_per_1k_ci95",
+          "usd_cost_saving_pct", "mean_model_latency_ms",
+          "p50_model_latency_ms", "p95_model_latency_ms", "p99_model_latency_ms",
+          "unique_models_selected"
+        ],
+        "properties": {
+          "policy_name": { "type": "string", "minLength": 1 },
+          "queries": { "type": "integer", "minimum": 1 },
+          "routed_queries": { "type": "integer", "minimum": 0 },
+          "unrouted_queries": { "type": "integer", "minimum": 0 },
+          "accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+          "accuracy_ci95": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number" } },
+          "quality_retention_pct": { "type": "number", "minimum": 0 },
+          "blended_usd_per_mtok": { "type": "number", "minimum": 0 },
+          "usd_per_1k_queries": { "type": "number", "minimum": 0 },
+          "usd_per_1k_ci95": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number" } },
+          "usd_cost_saving_pct": { "type": "number" },
+          "mean_model_latency_ms": { "type": "number", "minimum": 0 },
+          "p50_model_latency_ms": { "type": "integer", "minimum": 0 },
+          "p95_model_latency_ms": { "type": "integer", "minimum": 0 },
+          "p99_model_latency_ms": { "type": "integer", "minimum": 0 },
+          "unique_models_selected": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "matched_budget_vs_canonical_router": { "$ref": "#/$defs/matched_budget" },
+    "matched_budget_vs_pool_adapted_router": { "$ref": "#/$defs/matched_budget" },
+    "pareto_frontier": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tolerance", "accuracy", "usd_per_1k_queries", "usd_cost_saving_pct"],
+        "properties": {
+          "tolerance": { "type": "number", "minimum": 0, "maximum": 1 },
+          "accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+          "usd_per_1k_queries": { "type": "number", "minimum": 0 },
+          "usd_cost_saving_pct": { "type": "number" }
+        }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt_length_median_bytes", "shipping_heuristic", "candidate_hybrid", "candidate_with_ledger"],
+      "properties": {
+        "prompt_length_median_bytes": { "type": "integer", "minimum": 1 },
+        "shipping_heuristic": { "$ref": "#/$defs/perf_summary" },
+        "candidate_hybrid": { "$ref": "#/$defs/perf_summary" },
+        "candidate_with_ledger": { "$ref": "#/$defs/perf_summary" }
+      }
+    },
+    "reliability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_checks", "passed_checks", "all_passed", "checks"],
+      "properties": {
+        "total_checks": { "type": "integer", "minimum": 1 },
+        "passed_checks": { "type": "integer", "minimum": 0 },
+        "all_passed": { "type": "boolean" },
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["category", "check", "passed", "detail"],
+            "properties": {
+              "category": { "type": "string", "minLength": 1 },
+              "check": { "type": "string", "minLength": 1 },
+              "passed": { "type": "boolean" },
+              "detail": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "matched_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_policy", "baseline_accuracy", "baseline_usd_per_1k",
+        "baseline_unrouted_queries", "candidate_policy", "candidate_accuracy",
+        "candidate_usd_per_1k", "accuracy_delta_pp", "accuracy_delta_ci95_pp",
+        "cost_delta_pct", "budget_matched"
+      ],
+      "properties": {
+        "baseline_policy": { "type": "string", "minLength": 1 },
+        "baseline_accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+        "baseline_usd_per_1k": { "type": "number", "minimum": 0 },
+        "baseline_unrouted_queries": { "type": "integer", "minimum": 0 },
+        "candidate_policy": { "type": "string", "minLength": 1 },
+        "candidate_accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+        "candidate_usd_per_1k": { "type": "number", "minimum": 0 },
+        "accuracy_delta_pp": { "type": "number" },
+        "accuracy_delta_ci95_pp": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number" } },
+        "cost_delta_pct": { "type": "number" },
+        "budget_matched": { "type": "boolean" }
+      }
+    },
+    "perf_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["iterations", "mean_ns", "p50_ns", "p95_ns", "p99_ns", "throughput_qps", "concurrent_8_qps"],
+      "properties": {
+        "iterations": { "type": "integer", "minimum": 1 },
+        "mean_ns": { "type": "number", "minimum": 0 },
+        "p50_ns": { "type": "integer", "minimum": 0 },
+        "p95_ns": { "type": "integer", "minimum": 0 },
+        "p99_ns": { "type": "integer", "minimum": 0 },
+        "throughput_qps": { "type": "number", "minimum": 0 },
+        "concurrent_8_qps": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}
