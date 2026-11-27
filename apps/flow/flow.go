@@ -72,12 +72,14 @@ type projectFlight struct {
 	err  error
 }
 
-// state is this subsystem's own data: the org→project resolution cache. The
-// flow service owns all workflow data; nothing is stored here.
+// state is this subsystem's own data: the org→project resolution cache and a
+// bounded per-org ring of native Go DAG run traces. The flow service owns all
+// workflow definitions.
 type state struct {
 	mu       sync.RWMutex
 	projects map[string]string         // org → flow project id, cached after first resolution
 	inflight map[string]*projectFlight // per-org singleflight so network I/O never blocks other orgs
+	runs     *dagRunStore              // bounded per-(org, workflow) native Go run traces
 }
 
 // Mount wires /v1/flow/* onto app. The subsystem holds no store and runs no
@@ -89,6 +91,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 			return state{
 				projects: map[string]string{},
 				inflight: map[string]*projectFlight{},
+				runs:     newDAGRunStore(),
 			}, nil
 		},
 		routes)
@@ -355,7 +358,14 @@ func (o ops) workflowDelete(ctx context.Context, in *flowRef) (*flowResult, erro
 	if err != nil {
 		return nil, err
 	}
-	return relay(ctx, http.MethodDelete, "/v1/flows/"+id, nil, timeout)
+	res, err := relay(ctx, http.MethodDelete, "/v1/flows/"+id, nil, timeout)
+	if err != nil {
+		return nil, err
+	}
+	if org, ok := principal.OrgFrom(ctx); ok {
+		o.s.State.runs.delete(org, id)
+	}
+	return res, nil
 }
 
 // Run executes one of the caller's workflows synchronously: the graph runs in
@@ -365,10 +375,43 @@ func (o ops) workflowDelete(ctx context.Context, in *flowRef) (*flowResult, erro
 //
 // Example: {"workflow": "8f14e45f-…", "input": "summarize today's tickets"}
 func (o ops) run(ctx context.Context, in *flowRun) (*flowResult, error) {
-	id, _, err := o.owned(ctx, in.Workflow)
+	id, raw, err := o.owned(ctx, in.Workflow)
 	if err != nil {
 		return nil, err
 	}
+	// Unified hanzo.flow/v1 graphs execute natively in pure Go (dag.go) rather
+	// than proxying to the Python Langflow runner. Legacy Langflow graphs stay
+	// verbatim on the upstream /v1/run/{id}?stream=false path below.
+	if g, ok, parseErr := parseUnifiedGraph(raw); ok {
+		if parseErr != nil {
+			return nil, zip.ErrBadRequest(parseErr.Error())
+		}
+		compiled, err := compileDAG(g)
+		if err != nil {
+			return nil, err
+		}
+		// Pay before the graph runs, not after — a run the caller cannot afford
+		// must never reach the steps that bill a model provider (billing.go).
+		if err := o.gate(ctx); err != nil {
+			return nil, err
+		}
+		org, err := principal.Acting(ctx)
+		if err != nil {
+			return nil, err
+		}
+		trace, runErr := o.executeUnified(ctx, org, id, g, compiled, in)
+		o.s.State.runs.record(org, id, trace)
+		if runErr != nil {
+			return nil, runErr
+		}
+		o.meter(ctx)
+		encoded, err := json.Marshal(trace)
+		if err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "flow: encode run trace")
+		}
+		return &flowResult{raw: encoded}, nil
+	}
+
 	// Pay before the graph runs, not after — a run the caller cannot afford must
 	// never reach the components that bill a model provider (billing.go).
 	if err := o.gate(ctx); err != nil {
@@ -393,11 +436,41 @@ func (o ops) run(ctx context.Context, in *flowRun) (*flowResult, error) {
 // result, keyed by component. Ownership is verified first — run records never
 // cross the org boundary.
 func (o ops) runs(ctx context.Context, in *flowRuns) (*flowResult, error) {
-	id, _, err := o.owned(ctx, in.Workflow)
+	id, raw, err := o.owned(ctx, in.Workflow)
 	if err != nil {
 		return nil, err
 	}
-	return relay(ctx, http.MethodGet, "/v1/monitor/builds?flow_id="+url.QueryEscape(id), nil, timeout)
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
+	}
+	nativeRuns := o.s.State.runs.list(org, id)
+	_, isUnified, _ := parseUnifiedGraph(raw)
+	if len(nativeRuns) == 0 && !isUnified {
+		return relay(ctx, http.MethodGet, "/v1/monitor/builds?flow_id="+url.QueryEscape(id), nil, timeout)
+	}
+
+	merged := map[string]any{"vertex_builds": map[string]any{}}
+	if st, data, sendErr := send(ctx, http.MethodGet, "/v1/monitor/builds?flow_id="+url.QueryEscape(id), nil, timeout); sendErr == nil && st >= 200 && st < 300 {
+		var upstreamObj map[string]any
+		if json.Unmarshal(data, &upstreamObj) == nil && upstreamObj != nil {
+			merged = upstreamObj
+			if _, hasVB := merged["vertex_builds"]; !hasVB {
+				merged["vertex_builds"] = map[string]any{}
+			}
+		}
+	}
+	if nativeRuns == nil {
+		nativeRuns = []dagRunResponse{}
+	}
+	merged["engine"] = nativeEngineName
+	merged["schema"] = unifiedSchema
+	merged["runs"] = nativeRuns
+	encoded, err := json.Marshal(merged)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "flow: encode runs")
+	}
+	return &flowResult{raw: encoded}, nil
 }
 
 // ── tenancy ─────────────────────────────────────────────────────────────────

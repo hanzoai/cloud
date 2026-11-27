@@ -23,8 +23,8 @@ outputs) → run records → delete, all answered by the product, not by a stub.
 | GET /v1/flow/workflows/{id} | GET /v1/flows/{id} after the ownership gate |
 | PATCH /v1/flow/workflows/{id} | PATCH /v1/flows/{id} after the ownership gate |
 | DELETE /v1/flow/workflows/{id} | DELETE /v1/flows/{id} after the ownership gate |
-| POST /v1/flow/runs | POST /v1/run/{id}?stream=false (sync execution, ≤300s) |
-| GET /v1/flow/runs?workflow= | GET /v1/monitor/builds?flow_id= (component build records) |
+| POST /v1/flow/runs | Native Go DAG executor (`hanzo-flow-go`) when `data.schema == "hanzo.flow/v1"`; else POST /v1/run/{id}?stream=false (sync execution, ≤300s) |
+| GET /v1/flow/runs?workflow= | Merges bounded per-org native Go run traces (`runs`) with upstream GET /v1/monitor/builds?flow_id= (`vertex_builds`) |
 
 Responses relay the product's own payloads VERBATIM (`flowResult`, a
 RawMessage relay — the cfResult pattern): a workflow is the product's FlowRead,
