@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.hanzo.ai/v1/mcp"
   },
-  "skill_count": 25,
+  "skill_count": 26,
   "skills": [
     {
       "description": "Read billing accounts: Answers the caller's billing accounts: the org itself, its currency, when it was opened, and the caller's own standing in it., Answers one billing account's roster..",
@@ -69,7 +69,7 @@
     },
     {
       "description": "Read billing crypto: Reads one of the caller's own deposit intents back — pending, confirming, or succeeded., Answers the terms to sign a USDC top-up against, for an agent or a person paying from a wallet: the treasury to pay, the networks and USDC contracts, the EIP-712 domain a",
-      "digest": "sha256:f4bf72be1bb73551ab7b80be5abe6cd19ea208608a2c9a62628adfe40da87fc8",
+      "digest": "sha256:de2bec997dde1333d881bfa0096218431a0dca5dac1265d0e17dc4ca6e63a536",
       "name": "billing_crypto",
       "service": "billing",
       "type": "skill-md",
@@ -101,6 +101,14 @@
       "service": "billing",
       "type": "skill-md",
       "url": "/.well-known/agent-skills/billing_ledger/SKILL.md"
+    },
+    {
+      "description": "Read billing link: The plan this org borrows, and the plans you could lend it.",
+      "digest": "sha256:37033455132289a951df8aa4898c6a6bc04811a9289e5880437aae9902b59d85",
+      "name": "billing_link",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_link/SKILL.md"
     },
     {
       "description": "Read billing methods: Cards and accounts on file for the caller.",
@@ -176,7 +184,7 @@
     },
     {
       "description": "Read billing tier: Answers which tier the caller is on, what it allows, and what is left to spend..",
-      "digest": "sha256:56bf2e8dfdb13c3989c7ac8b5d07b48285df23297d21b304e0581e36212bf6ca",
+      "digest": "sha256:e1d13e1078f2e9f89565dc9263bda84efbef7cf24e0199e0f11b59cb6ed8a41b",
       "name": "billing_tier",
       "service": "billing",
       "type": "skill-md",

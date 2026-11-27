@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.lux.network/v1/mcp"
   },
-  "skill_count": 25,
+  "skill_count": 26,
   "skills": [
     {
       "description": "Read billing accounts: Answers the caller's billing accounts: the org itself, its currency, when it was opened, and the caller's own standing in it., Answers one billing account's roster..",
@@ -69,7 +69,7 @@
     },
     {
       "description": "Read billing crypto: Reads one of the caller's own deposit intents back — pending, confirming, or succeeded., Answers the terms to sign a USDC top-up against, for an agent or a person paying from a wallet: the treasury to pay, the networks and USDC contracts, the EIP-712 domain a",
-      "digest": "sha256:b020c3cc368e3f8e7f44ffc13f7ebfd675b82ee66bd7d013a27406d778c75c6b",
+      "digest": "sha256:3b445a278e6e9fc9aa4afbe128471e1418d11968b99bee0af022de81446551ce",
       "name": "billing_crypto",
       "service": "billing",
       "type": "skill-md",
@@ -101,6 +101,14 @@
       "service": "billing",
       "type": "skill-md",
       "url": "/.well-known/agent-skills/billing_ledger/SKILL.md"
+    },
+    {
+      "description": "Read billing link: The plan this org borrows, and the plans you could lend it.",
+      "digest": "sha256:881b906612ea0a44c438d8468b4367d035df86d06395bc08b37068007168cfc2",
+      "name": "billing_link",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_link/SKILL.md"
     },
     {
       "description": "Read billing methods: Cards and accounts on file for the caller.",
@@ -176,7 +184,7 @@
     },
     {
       "description": "Read billing tier: Answers which tier the caller is on, what it allows, and what is left to spend..",
-      "digest": "sha256:70bb9d5f688689b9a35857739f3b05085ddd0dd4a78487ef7074ddc3159b5113",
+      "digest": "sha256:ab4c912d586cf31bccc6275223dc8c1f53119de48b477d8217290fcd69faac2d",
       "name": "billing_tier",
       "service": "billing",
       "type": "skill-md",

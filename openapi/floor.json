@@ -1,6 +1,6 @@
 {
-  "paths": 2131,
-  "operations": 2922,
+  "paths": 2132,
+  "operations": 2923,
   "products": {
     "account": 11,
     "ad": 7,
@@ -80,7 +80,7 @@
     "ml": 7,
     "mq": 15,
     "network": 14,
-    "node": 4,
+    "node": 5,
     "notify": 6,
     "o11y": 342,
     "openapi": 17,

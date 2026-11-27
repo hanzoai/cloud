@@ -82,7 +82,7 @@
     },
     {
       "name": "billing",
-      "skill_count": 25,
+      "skill_count": 26,
       "url": "/.well-known/agent-skills/_billing/index.json"
     },
     {
@@ -371,11 +371,6 @@
       "url": "/.well-known/agent-skills/_library/index.json"
     },
     {
-      "name": "licensing",
-      "skill_count": 5,
-      "url": "/.well-known/agent-skills/_licensing/index.json"
-    },
-    {
       "name": "link",
       "skill_count": 4,
       "url": "/.well-known/agent-skills/_link/index.json"
@@ -389,11 +384,6 @@
       "name": "market",
       "skill_count": 5,
       "url": "/.well-known/agent-skills/_market/index.json"
-    },
-    {
-      "name": "marketing",
-      "skill_count": 13,
-      "url": "/.well-known/agent-skills/_marketing/index.json"
     },
     {
       "name": "marketplace",
@@ -456,11 +446,6 @@
       "url": "/.well-known/agent-skills/_patrol/index.json"
     },
     {
-      "name": "plan",
-      "skill_count": 14,
-      "url": "/.well-known/agent-skills/_plan/index.json"
-    },
-    {
       "name": "platform",
       "skill_count": 9,
       "url": "/.well-known/agent-skills/_platform/index.json"
@@ -474,11 +459,6 @@
       "name": "pref",
       "skill_count": 1,
       "url": "/.well-known/agent-skills/_pref/index.json"
-    },
-    {
-      "name": "pricing",
-      "skill_count": 22,
-      "url": "/.well-known/agent-skills/_pricing/index.json"
     },
     {
       "name": "principal",
@@ -534,11 +514,6 @@
       "name": "reward",
       "skill_count": 6,
       "url": "/.well-known/agent-skills/_reward/index.json"
-    },
-    {
-      "name": "risk",
-      "skill_count": 5,
-      "url": "/.well-known/agent-skills/_risk/index.json"
     },
     {
       "name": "s3",
@@ -721,7 +696,7 @@
       "url": "/.well-known/agent-skills/_x402/index.json"
     }
   ],
-  "skill_count": 810,
+  "skill_count": 752,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Zoo surface..",
@@ -1531,7 +1506,7 @@
     },
     {
       "description": "Read billing crypto: Reads one of the caller's own deposit intents back — pending, confirming, or succeeded., Answers the terms to sign a USDC top-up against, for an agent or a person paying from a wallet: the treasury to pay, the networks and USDC contracts, the EIP-712 domain a",
-      "digest": "sha256:95723a8331ca9bb38480fe4607d642f278b0cc826b089feb7798a833d69ab09d",
+      "digest": "sha256:b43985c3b38c2cefde4f8b7b4f0b1ee0042e8e97f1f4e6e947e2d4123f3117c9",
       "name": "billing_crypto",
       "service": "billing",
       "type": "skill-md",
@@ -1563,6 +1538,14 @@
       "service": "billing",
       "type": "skill-md",
       "url": "/.well-known/agent-skills/billing_ledger/SKILL.md"
+    },
+    {
+      "description": "Read billing link: The plan this org borrows, and the plans you could lend it.",
+      "digest": "sha256:926f82783830c883c66a6647718985442b963efe7324ea1b4439b1b10048dc60",
+      "name": "billing_link",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_link/SKILL.md"
     },
     {
       "description": "Read billing methods: Cards and accounts on file for the caller.",
@@ -1638,7 +1621,7 @@
     },
     {
       "description": "Read billing tier: Answers which tier the caller is on, what it allows, and what is left to spend..",
-      "digest": "sha256:bad07ce9722e0fe78d2c4be42d07194e9a6bcb77ba4b3b16c2a09341549525f9",
+      "digest": "sha256:66f233797a2cd2bc3f8d6ab70d346d45e1be6b386202562b0815963b6bcf1dd5",
       "name": "billing_tier",
       "service": "billing",
       "type": "skill-md",
@@ -4143,46 +4126,6 @@
       "url": "/.well-known/agent-skills/library_unowned/SKILL.md"
     },
     {
-      "description": "Read licensing download: Download resolves a release to its artifact, gated on a valid license..",
-      "digest": "sha256:5c4493d2bc3d72226be271511139f36141579bcdd731a7819da58f86720b4ee6",
-      "name": "licensing_download",
-      "service": "licensing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/licensing_download/SKILL.md"
-    },
-    {
-      "description": "Read licensing healthz: Health reports which signer this deployment mints with, and in which env..",
-      "digest": "sha256:f3b76b09a29b1bdd01baa3de365734db826ccc25f05b3bf63a05499efdb6cd06",
-      "name": "licensing_healthz",
-      "service": "licensing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/licensing_healthz/SKILL.md"
-    },
-    {
-      "description": "Read licensing jwks: Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and /jwks..",
-      "digest": "sha256:6fc798d0a571ecabfe62f837efb3bf626833bcb213add70fe219adf1e68dccde",
-      "name": "licensing_jwks",
-      "service": "licensing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/licensing_jwks/SKILL.md"
-    },
-    {
-      "description": "Read licensing pubkey: Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and /jwks..",
-      "digest": "sha256:a9052c7bf92651c43572a983c49974b250fd34c2b3452be67f43398008930cd1",
-      "name": "licensing_pubkey",
-      "service": "licensing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/licensing_pubkey/SKILL.md"
-    },
-    {
-      "description": "Read licensing releases: Lists the signed binary releases this deployment can serve., Reads one release's metadata: its product, version, platform and the cosign material a client verifies the binary against..",
-      "digest": "sha256:d8b1cc731282806cb039462f10b4fa84f3e1d0c9b5a9c52d6c6556630d953414",
-      "name": "licensing_releases",
-      "service": "licensing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/licensing_releases/SKILL.md"
-    },
-    {
       "description": "Read link devices: Shows one machine: its accounts, usage and live sessions..",
       "digest": "sha256:5c2ac57bd73b747a75839f107080b87c84c45cd4c02bfa36fcc7033fec97f5e7",
       "name": "link_devices",
@@ -4277,125 +4220,6 @@
       "service": "market",
       "type": "skill-md",
       "url": "/.well-known/agent-skills/market_tokens/SKILL.md"
-    },
-    {
-      "description": "Read marketing audiences: Returns every audience the org can send to: its saved cohorts, most recently updated first, then its mailing lists and their saved segments, newest first, each list with its subscribed count., Returns one of the caller org's saved audiences., Evaluates t",
-      "digest": "sha256:9b45762f98fe62a6a2fa664ce5abd7f662ae5d6e962fb4a8f3a1cdb9269fafae",
-      "name": "marketing_audiences",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_audiences/SKILL.md",
-      "works": [
-        "marketing"
-      ]
-    },
-    {
-      "description": "Read marketing beta: Answers the signed-in caller's waitlist record: the application as it stands, the betas asked for, the points and the actions that earned them, and the place on the waitlist., Answers the caller's invites, newest first, with how many were sent, how many joine",
-      "digest": "sha256:c3806a459fbcdcd54d165df1f29bb518c9b9ea763d4e36cc033a497c10af79e7",
-      "name": "marketing_beta",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_beta/SKILL.md"
-    },
-    {
-      "description": "Read marketing broadcasts: Returns the org's broadcasts, newest first., Returns one of the org's broadcasts., Returns one broadcast's numbers: audience, sent, refused, failed, and what the email plane reported (delivered, opened, clicked, bounced, complained, unsubscribed), each ",
-      "digest": "sha256:f1f5f94d255eac08e8a51744ac326a46aa1b9d194c5f02dba4f01ff6a8872e62",
-      "name": "marketing_broadcasts",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_broadcasts/SKILL.md",
-      "works": [
-        "marketing"
-      ]
-    },
-    {
-      "description": "Read marketing calendar: Returns the org's calendar, latest scheduled first, optionally narrowed to one status., Returns one of the caller org's posts, including the exact error behind a failed publish..",
-      "digest": "sha256:53a6fdcf2a5089c8ef48d73abaaac245e8efb72db11732be9ee31040856d1647",
-      "name": "marketing_calendar",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_calendar/SKILL.md"
-    },
-    {
-      "description": "Read marketing campaigns: Returns the org's campaigns, most recently updated first, optionally narrowed to one lifecycle status., Returns one of the caller org's campaigns..",
-      "digest": "sha256:60de8473093148cd01525d2a634a76adab21676d79e66e928facd9c62b37cb7d",
-      "name": "marketing_campaigns",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_campaigns/SKILL.md",
-      "works": [
-        "marketing"
-      ]
-    },
-    {
-      "description": "Read marketing fields: Returns the custom fields the org defined for its subscribers..",
-      "digest": "sha256:6f13b0aeed0eee19f7f26db4f53b1a261fda5fd4b7a0c5ef909e4cfe3bc396df",
-      "name": "marketing_fields",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_fields/SKILL.md"
-    },
-    {
-      "description": "Read marketing imports: Returns the org's imports, newest first, each with its report., Returns one of the org's imports: its state, how far its bytes and its reading have come, and its report so far..",
-      "digest": "sha256:8b97f87fee6df06a1a1bdb0dd1ddee1d64482d8083aebf22e214469b9d820d6a",
-      "name": "marketing_imports",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_imports/SKILL.md"
-    },
-    {
-      "description": "Read marketing lists: Returns the org's lists, newest first, each with its subscribers counted by status., Returns one of the org's lists, by id or slug, with its subscribers counted by status., Streams a selection of one list as CSV (format=csv, the default) or as a JSON array (",
-      "digest": "sha256:2cb43ff880f8f0b1f5ac5075769ac26017704ef1c2a353259a88e36eebfb77e4",
-      "name": "marketing_lists",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_lists/SKILL.md"
-    },
-    {
-      "description": "Read marketing promos: Returns every promo the deployment offers with its live counters: how many orgs have redeemed it and how many redemptions remain under the cap., Prices a promo against a plan and seat count., Returns the caller org's OWN redemption of a promo — an org-scope",
-      "digest": "sha256:93ea0bbd5393ac21569e864f03a4500e22f34374f047933ead02957c8c54b8c3",
-      "name": "marketing_promos",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_promos/SKILL.md"
-    },
-    {
-      "description": "Read marketing sender: Returns the org's sender: the provider and the from, reply and footer fields every list takes when it leaves its own empty..",
-      "digest": "sha256:0b1b108306a2f101e72a71c2b5d01cf80d84a92747633404bfe4293a9c6d6c68",
-      "name": "marketing_sender",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_sender/SKILL.md"
-    },
-    {
-      "description": "Read marketing sequences: Returns the org's drip sequences, most recently updated first., Returns one of the caller org's sequences together with its steps in send order., Returns who is walking one sequence, most recently enrolled first, with each walk's current step and next du",
-      "digest": "sha256:7432ade98c3ce5a0f021ea5662ded539e8c3f014eabce405aeaa144fd3fe459b",
-      "name": "marketing_sequences",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_sequences/SKILL.md",
-      "works": [
-        "marketing"
-      ]
-    },
-    {
-      "description": "Read marketing summary: Rolls up the caller org's campaigns: how many there are, how many are active, and the summed budget and spend in cents..",
-      "digest": "sha256:85ac9396da89ec0033b9d1aed1dc9c7e534be3291b5336b501d27a9455340a99",
-      "name": "marketing_summary",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_summary/SKILL.md",
-      "works": [
-        "marketing"
-      ]
-    },
-    {
-      "description": "Read marketing suppressions: Returns the org's opt-out list, newest first — everyone the send gate will refuse to deliver to., Answers whether the org's send gate refuses an address, and which list holds it, by the same check every commercial send asks..",
-      "digest": "sha256:24a70288121097bec1c4ef519487d4888597129419cba21309aaa0b5b51f7751",
-      "name": "marketing_suppressions",
-      "service": "marketing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/marketing_suppressions/SKILL.md"
     },
     {
       "description": "Read marketplace jobs: Lists the jobs the caller's org is a party to, newest first: as buyer, the work it hired — with the quotes it has not paid and the jobs being funded, each with the attempt that made it, so a hire whose answer was lost is found here — and as seller, the work",
@@ -5356,118 +5180,6 @@
       "url": "/.well-known/agent-skills/patrol_unit/SKILL.md"
     },
     {
-      "description": "Read plan blockchain: Returns the blockchain RPC plan catalog: the tiers metered in monthly compute units, with their prices, limits and overage terms..",
-      "digest": "sha256:c8fe633ce063f5b4f58a2486270624588a81f20058ceb94921e79a9d4ae716f9",
-      "name": "plan_blockchain",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_blockchain/SKILL.md"
-    },
-    {
-      "description": "Read plan dns: ListDNSPlans returns the DNS plans on sale: the tiers priced on zones, records per zone and queries per day..",
-      "digest": "sha256:169411f34961124ef06ce5e6a334cb5c61e2e2b668d88afc954786962410d3c5",
-      "name": "plan_dns",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_dns/SKILL.md"
-    },
-    {
-      "description": "Read plan entitlements: Returns what one plan GRANTS and not what it costs: the canonical namespaced entitlement block and the flat license-feature list derived from it..",
-      "digest": "sha256:d6d26f8d5965427c8922d6da885330749e2632fd6ca4b0e9cd06ac8da65ca140",
-      "name": "plan_entitlements",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_entitlements/SKILL.md"
-    },
-    {
-      "description": "Read plan gpu: ListGPUTiers returns the rentable GPU configurations, each with its accelerator count and model, VRAM, vCPUs, host memory and hourly price..",
-      "digest": "sha256:0becc902386a94f57ebf4c650e2d9f73348ff65d957d5bd442faecc578390d7a",
-      "name": "plan_gpu",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_gpu/SKILL.md"
-    },
-    {
-      "description": "Read plan health: Reports that the plans subsystem is mounted and serving..",
-      "digest": "sha256:c5f6d4bbdf808eb40c301b4267c2d665d50518e288c700b39c6761d95e5016db",
-      "name": "plan_health",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_health/SKILL.md"
-    },
-    {
-      "description": "Read plan plan: Returns the Zoo cloud plan catalog: every cloud tier with its price, included capacity, limits and feature list, scoped to the caller's catalog..",
-      "digest": "sha256:d46fd404be3cfcdf9f93991b5262fdd293a07cb5a49a4090199c8ae92f34532d",
-      "name": "plan_plan",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_plan/SKILL.md"
-    },
-    {
-      "description": "Read plan policy: Returns the published pricing policy: whether pricing is transparent, the revenue-sharing terms (idle compute resale and the open-source share) and the principles the catalog is priced by..",
-      "digest": "sha256:7de4bc99d9faac201e3401f940758bf2a9d67c6655c379610774e75c7a0918eb",
-      "name": "plan_policy",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_policy/SKILL.md"
-    },
-    {
-      "description": "Read plan regions: Returns the regions cloud capacity is offered in, each with its display name and physical location..",
-      "digest": "sha256:f26aa0120bd02f3759ca8be1a6487cd29e07b1cc26ae89597ca48fa463b845ad",
-      "name": "plan_regions",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_regions/SKILL.md"
-    },
-    {
-      "description": "Read plan resolve: Resolves one plan to everything a consumer of the catalog needs at once: its canonical entitlement block, the flat license-feature list a signed license carries, its billing reference, and the catalog it came from..",
-      "digest": "sha256:d5e69aa6f7c6747195162c503e770fe2003d119a57c14be12c253c52b05b5217",
-      "name": "plan_resolve",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_resolve/SKILL.md"
-    },
-    {
-      "description": "Read plan schema: Returns the two JSON Schema documents this surface speaks: entitlements.schema.json, which declares every entitlement key with its type, unit and enum, and plan.schema.json, which a catalog plan record conforms to..",
-      "digest": "sha256:8de506c89f31c6192ea5221f2bddcccdbf08bfcb7048709019f9be9a3aee3a6c",
-      "name": "plan_schema",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_schema/SKILL.md"
-    },
-    {
-      "description": "Read plan storage: Returns the block-storage price block: the price per GB per month and the volume size bounds a cloud plan may attach..",
-      "digest": "sha256:0af1dfccc090a829e910441f47dd7c9dc1d4a34b4bf3bb38de1ecd990b4a7f83",
-      "name": "plan_storage",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_storage/SKILL.md"
-    },
-    {
-      "description": "Read plan subscriptions: Returns the plans a customer subscribes to that are on sale — each with its monthly and annual price, seat rules, limits, the entitlement block it grants and its billing reference..",
-      "digest": "sha256:ffde1cce6b7d52122bac55838acb9eee95b45029327bcaed9e51fa2815d8a9e9",
-      "name": "plan_subscriptions",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_subscriptions/SKILL.md"
-    },
-    {
-      "description": "Read plan tools: Returns the per-use price of every metered tool — web search, code interpreter, image generation, speech — each with the unit it is billed in..",
-      "digest": "sha256:8d5be85d9be67b9c241c7361f427b5371c52c320e10b087c4f19b89262ff38f9",
-      "name": "plan_tools",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_tools/SKILL.md"
-    },
-    {
-      "description": "Read plan vocab: Returns the entitlement key vocabulary: every key with its namespace, JSON type, nullability, unit, enum and title, the list of namespaces, and the engine features a license can grant..",
-      "digest": "sha256:fc9d3570e1366ff7d6bda5201d06e54511c255a45b74974c15a722ecd39d9a49",
-      "name": "plan_vocab",
-      "service": "plan",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/plan_vocab/SKILL.md"
-    },
-    {
       "description": "Read platform apps: Answers what this organisation has declared, joined with what the delivery plane has done about it., Answers ONE declaration — what git says this app is, before the delivery plane has had any say in it., Answers ONE app's reconciliation alone — the poll a depl",
       "digest": "sha256:0bf25ce67dfe8c3295891ec08b5b5fce3f32518a575654d6fb4bcdbbfb7852bb",
       "name": "platform_apps",
@@ -5562,182 +5274,6 @@
       "service": "pref",
       "type": "skill-md",
       "url": "/.well-known/agent-skills/pref_pref/SKILL.md"
-    },
-    {
-      "description": "Read pricing base: Returns the Zoo Base plans — the managed-instance tiers, each with its monthly and annual price, storage and request allowances and feature list..",
-      "digest": "sha256:319669b56e4e5a4da6a4de6d0261fd9aae9b3ff0a3bd43d773fa84c7ad44aadc",
-      "name": "pricing_base",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_base/SKILL.md"
-    },
-    {
-      "description": "Read pricing blockchain: Returns the blockchain access plans — the RPC and node tiers, each with its monthly price, compute-unit allowance and feature list..",
-      "digest": "sha256:1dcb368c2967de9aba44b7f3dae32d9ff64c61ac22f364d50793ebf22f1e4dd7",
-      "name": "pricing_blockchain",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_blockchain/SKILL.md"
-    },
-    {
-      "description": "Read pricing cloud: Returns the public cloud section of the catalog in one document: its instance plans, its regions and its block-storage prices., Returns just the cloud instance plans — each with its vCPU, memory, disk, CPU type, VM allowance, feature list and monthly and hourl",
-      "digest": "sha256:2d9c3bdcb29a5ee42df271487b6abed6ef1381c758ae47a76fd0e0756cf45c88",
-      "name": "pricing_cloud",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_cloud/SKILL.md"
-    },
-    {
-      "description": "Read pricing compute: Returns the compute section of the catalog: the cloud provider and region the prices are quoted for, the monthly markup applied to them, the full instance-size tier list and the named presets., Returns just the named compute sizes — the short, human-labelled",
-      "digest": "sha256:d0b629baa10ae93f43036f7a0b3c4c1134e3873d996ed656467756f70133afd9",
-      "name": "pricing_compute",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_compute/SKILL.md"
-    },
-    {
-      "description": "Read pricing datastore: Returns the Zoo Datastore rate card: the tier list, the per-GB storage and egress usage rates, the annual discount and the trial..",
-      "digest": "sha256:21caf6d92ee0743fa48128c55729b03a81dc96691d741ce5345f51f65ba8b1be",
-      "name": "pricing_datastore",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_datastore/SKILL.md"
-    },
-    {
-      "description": "Read pricing enablement: Returns what the caller can actually use: every managed item with its global state and whether it is effective for this caller — a beta item is, while the platform's `beta` switch is on for it..",
-      "digest": "sha256:fd698fa9383efe3736d9bec5d024e848037d8ad66d95a580ff371ed012da1e6b",
-      "name": "pricing_enablement",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_enablement/SKILL.md"
-    },
-    {
-      "description": "Read pricing featured: Returns the models the catalog highlights, filtered to what the caller's org may see..",
-      "digest": "sha256:cf74f1ed11587348635f2045dc813e9c2f55eb29169d6a55de20d79714f8897c",
-      "name": "pricing_featured",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_featured/SKILL.md"
-    },
-    {
-      "description": "Read pricing free: Returns the models that cost nothing to call, filtered to what the caller's org may see..",
-      "digest": "sha256:0a8fc7888f392e86aff01f9e4cbc2b606b090585932975f354f9b78ec9be4938",
-      "name": "pricing_free",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_free/SKILL.md"
-    },
-    {
-      "description": "Read pricing gpu: ListGPUTiers returns the rentable GPU configurations, each with its accelerator count and model, VRAM, vCPU, host memory and hourly price..",
-      "digest": "sha256:bddb473ffcf32cb685e63b2f0d07107d99c1f2ee4fd44250963986a2326f55a4",
-      "name": "pricing_gpu",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_gpu/SKILL.md"
-    },
-    {
-      "description": "Read pricing health: Reports that the pricing subsystem is mounted and serving..",
-      "digest": "sha256:fb07ab277082918979b040f0b3a17cb4a92b73eba4b4e95fd47c9ace16857daa",
-      "name": "pricing_health",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_health/SKILL.md"
-    },
-    {
-      "description": "Read pricing iam: ListIAMPlans returns the identity plans — the Zoo IAM tiers, each with its monthly and annual price, monthly-active-user allowance and feature list..",
-      "digest": "sha256:99479186e8de83024dc875fa59a18bcfbde6580cc9b14e80592386d139bd5ff4",
-      "name": "pricing_iam",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_iam/SKILL.md"
-    },
-    {
-      "description": "Read pricing model: Returns one model's catalog entry — its pricing, context window and capabilities as the pricing source records them..",
-      "digest": "sha256:a98be5542af6ea7b086586324a420215a5e14748ef4e4880d5c3147a6a6c0611",
-      "name": "pricing_model",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_model/SKILL.md"
-    },
-    {
-      "description": "Read pricing models: Returns the whole model catalog — every model the gateway serves, Zen and third-party alike — filtered to what the caller may see..",
-      "digest": "sha256:bdcd9a6bfcd3064bb64368a1ba8bf6d762d6197934cdacf03b0c97c82d7fc46d",
-      "name": "pricing_models",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_models/SKILL.md"
-    },
-    {
-      "description": "Read pricing paas: ListPaaSPlans returns the application-hosting plans — the deploy-and-host tiers, each with its monthly and annual price, app and memory allowances and feature list..",
-      "digest": "sha256:2d569a97ed1b225d15dd125b50d39d8f8315c92b604a12547570d86ba620a379",
-      "name": "pricing_paas",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_paas/SKILL.md"
-    },
-    {
-      "description": "Read pricing policy: Returns the pricing policy document: the revenue-sharing terms (the idle-resale share and the open-source share, each with its percentage and who is eligible) and the commitments Zoo makes about how it bills — no hidden fees, no egress charges, no surprise bi",
-      "digest": "sha256:16ffbc2102b899de6727dac32429e38afb596f886c45fdf247a9f82e25d6771a",
-      "name": "pricing_policy",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_policy/SKILL.md"
-    },
-    {
-      "description": "Read pricing pricing: Returns the whole pricing catalog in one document: Zen and third-party models, providers, model families, the free-model list, plan and infrastructure pricing..",
-      "digest": "sha256:8a5971a989449a0fad6d3203dbc09a938a440d9ffe7062861d60eab3a733e85e",
-      "name": "pricing_pricing",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_pricing/SKILL.md"
-    },
-    {
-      "description": "Read pricing providers: Returns the model providers the catalog knows, each with its info object, filtered to what the caller's org may see..",
-      "digest": "sha256:26b7b97cc4fd0691096cdbba72809c55022ab2f8c320e39641dba86918de9388",
-      "name": "pricing_providers",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_providers/SKILL.md"
-    },
-    {
-      "description": "Read pricing services: Returns the managed-service rate cards — Search, Crawl, Vector, Console and Managed Services — each with its own tiers, and some with usage rates or a comparison table..",
-      "digest": "sha256:76759364dd70db53b172356f130f8031e2ec9fff3409a814522d25792e9247fa",
-      "name": "pricing_services",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_services/SKILL.md"
-    },
-    {
-      "description": "Read pricing subscriptions: Returns the API subscription plans — the account-level tiers a customer subscribes to, each with its monthly and annual price, included credit, rate limits and feature list..",
-      "digest": "sha256:9c96348c758f5c4c62052704fae6d10f641b4dd0933f21eed4d64962c7db5832",
-      "name": "pricing_subscriptions",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_subscriptions/SKILL.md"
-    },
-    {
-      "description": "Read pricing summary: Returns the catalog's headline statistics — model counts by family and the provider directory..",
-      "digest": "sha256:85d2fc34c1c71a099276f9874c3dff6ba5f525c0dff3a9e15bc26e510f0d0de9",
-      "name": "pricing_summary",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_summary/SKILL.md"
-    },
-    {
-      "description": "Read pricing tariff: Returns the platform's rate card: what a bill is made of, what each part costs, and the completion windows a request may ask for..",
-      "digest": "sha256:61a3511f958e77ca8ebcddb5bd2a195c458d5a3b78755d10be43e4d0e3393013",
-      "name": "pricing_tariff",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_tariff/SKILL.md"
-    },
-    {
-      "description": "Read pricing tools: Returns the per-use tool prices — web search, web fetch, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit..",
-      "digest": "sha256:d7672df70bc52ac49c3e49b80f71d75f52632291bcf835e63680f6f04d3a21c4",
-      "name": "pricing_tools",
-      "service": "pricing",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/pricing_tools/SKILL.md"
     },
     {
       "description": "Read principal agents: Attests which principal one of the caller's agents answers to: the org, the chain of agents that spawned it, and the same signed with the platform's key as a JWS (EdDSA) a verifier checks offline against GET /v1/principal/keys..",
@@ -6315,46 +5851,6 @@
       "service": "reward",
       "type": "skill-md",
       "url": "/.well-known/agent-skills/reward_rules/SKILL.md"
-    },
-    {
-      "description": "Read risk features: The feature catalogue: what the model reads, and what your surface carries.",
-      "digest": "sha256:f88fd8d70645319ebba530bed3e51fcd76574b34977cf0ba3732249e9cbc4455",
-      "name": "risk_features",
-      "service": "risk",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/risk_features/SKILL.md"
-    },
-    {
-      "description": "Read risk health: Whether the risk model plane can actually work right now.",
-      "digest": "sha256:39c679f37bbada377dcbe090cf8c06496628ce5c40b9a2506cbd77817cfdb650",
-      "name": "risk_health",
-      "service": "risk",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/risk_health/SKILL.md"
-    },
-    {
-      "description": "Read risk policy: Your organisation's decision-regime history, and which version is in force.",
-      "digest": "sha256:fa9b85eb2dcb20e916dcdffe5fad1d04566d6786719c63d6d3cfd71ce26256f4",
-      "name": "risk_policy",
-      "service": "risk",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/risk_policy/SKILL.md"
-    },
-    {
-      "description": "Read risk search: Read back one exhaustive search.",
-      "digest": "sha256:cd0327e7ab100a1141341130ecffe5045343b402055909fa6e32aac53a65b2c7",
-      "name": "risk_search",
-      "service": "risk",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/risk_search/SKILL.md"
-    },
-    {
-      "description": "Read risk state: Report your organisation's model: what it learned, and what it realised.",
-      "digest": "sha256:386b58ca06f9ed647b465781ac0e7f7d29c3679eec5eb5c2c7cfea2af6786816",
-      "name": "risk_state",
-      "service": "risk",
-      "type": "skill-md",
-      "url": "/.well-known/agent-skills/risk_state/SKILL.md"
     },
     {
       "description": "Read s3 buckets: Lists the caller org's own buckets., Read one object's bytes, Lists one folder level of a bucket..",
