@@ -134,11 +134,60 @@ dev: ## Launch Hanzo Dev coding session in this repository (hanzo dev).
 debug: ## Launch Hanzo Dev coding session with debug logging enabled (hanzo dev --debug).
 	@$(HANZO) dev --debug
 
-boot: ## Build and boot the local source-built Cloud fleet on isolated ports.
-	@BOOT_ONLY=1 ./e2e/run.sh
+BOOT_APPS       ?= base kms iam o11y audit
+BOOT_LISTEN     ?= 127.0.0.1:8080
+BOOT_ZAP_LISTEN ?= 127.0.0.1:9653
 
-dev-stop: ## Stop an isolated source-built instance started with `make boot`.
-	@./e2e/dev/stop.sh
+boot: cloud ## Build and boot a local loopback OSS Cloud host + core plugins (BOOT_APPS=...).
+	@set -eu; \
+	  mkdir -p bin .dev/data; \
+	  if [ -f .dev/cloud.pid ] && kill -0 "$$(cat .dev/cloud.pid)" 2>/dev/null; then \
+	    echo "Local Cloud already running (pid $$(cat .dev/cloud.pid)) on http://$(BOOT_LISTEN)"; \
+	    exit 0; \
+	  fi; \
+	  if [ ! -f .dev/master.key ]; then \
+	    (umask 077 && openssl rand -base64 32 > .dev/master.key); \
+	  fi; \
+	  $(PLUGIN_BUILD) $(addprefix ./plugin/,$(BOOT_APPS)); \
+	  CLOUD_LISTEN="$(BOOT_LISTEN)" \
+	  CLOUD_ZAP_LISTEN="$(BOOT_ZAP_LISTEN)" \
+	  CLOUD_DATA_DIR=".dev/data" \
+	  CLOUD_KMS_MASTER_KEY_REF="$$(cat .dev/master.key)" \
+	  CONSOLE_CSRF_KEY="$${CONSOLE_CSRF_KEY:-$(DEV_CSRF_KEY)}" \
+	  ./bin/cloud >.dev/cloud.log 2>&1 & \
+	  pid=$$!; echo "$$pid" > .dev/cloud.pid; \
+	  for i in $$(seq 1 40); do \
+	    if curl -fsS "http://$(BOOT_LISTEN)/healthz" >/dev/null 2>&1; then \
+	      echo "Hanzo Cloud (OSS) ready on http://$(BOOT_LISTEN) (pid $$pid, logs: .dev/cloud.log)"; \
+	      exit 0; \
+	    fi; \
+	    if ! kill -0 "$$pid" 2>/dev/null; then \
+	      echo "Cloud failed to start; tail of .dev/cloud.log:" >&2; \
+	      tail -n 20 .dev/cloud.log >&2; \
+	      rm -f .dev/cloud.pid; \
+	      exit 1; \
+	    fi; \
+	    sleep 0.25; \
+	  done; \
+	  echo "Timed out waiting for http://$(BOOT_LISTEN)/healthz (check .dev/cloud.log)" >&2; \
+	  exit 1
+
+dev-stop: ## Stop a local loopback instance started with `make boot`.
+	@set -eu; \
+	  if [ -f .dev/cloud.pid ]; then \
+	    pid="$$(cat .dev/cloud.pid)"; \
+	    if kill -0 "$$pid" 2>/dev/null; then \
+	      kill "$$pid" 2>/dev/null || true; \
+	      for i in $$(seq 1 20); do \
+	        kill -0 "$$pid" 2>/dev/null || break; \
+	        sleep 0.2; \
+	      done; \
+	      echo "Stopped local Cloud (pid $$pid)"; \
+	    fi; \
+	    rm -f .dev/cloud.pid; \
+	  else \
+	    echo "No local Cloud pid file (.dev/cloud.pid) found."; \
+	  fi
 
 logs: ## Stream project-scoped logs for the local Cloud workload (never uses ambient kubeconfig).
 	@test -f "$(HOME)/.kube/hanzo.yaml" || { echo "Local kubeconfig missing; run make start or make up" >&2; exit 1; }
