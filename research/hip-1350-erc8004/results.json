@@ -1,0 +1,226 @@
+{
+  "benchmark": "ERC-8004 Agent Identity, Delegated Enforcement \u0026 Verifiable Reputation (HIP-1350)",
+  "issue": "hanzoai/cloud#18",
+  "hip": "HIP-1350",
+  "generatedAtUtc": "2026-11-25T13:50:18Z",
+  "iterations": 500,
+  "acceptanceFlow": {
+    "passed": true,
+    "agentId": "eip155:31337:0x8004000000000000000000000000000000000001:1",
+    "mcpEndpointsAdvertised": 1,
+    "a2aEndpointsAdvertised": 1,
+    "offlineCredentialVerified": true,
+    "delegationId": "0x382c677d8c51fb10d2416d288f256565ce01ebe0a6a33d9fa6bf7c9e238011b0",
+    "toolExecutedWithinCap": true,
+    "paymentAuthorizedAtomic": 150000,
+    "workReceiptHash": "0x46b43d7a6925a1697179b3d15ac530049308948be305be2420737666eb3b6506",
+    "feedbackScore": 98,
+    "feedbackOfflineValid": true,
+    "postRevokeToolHttpStatus": 403,
+    "postRevokePaymentHttpStatus": 403,
+    "totalLifecycleMs": 49.097
+  },
+  "dimensions": {
+    "cost": {
+      "assumptions": {
+        "ethPriceUsd": 3000,
+        "l1GasPriceGwei": 20,
+        "l2EffectiveGasPriceGwei": 0.05,
+        "usefulTokensPerTask": 10000,
+        "tasksPerAgentLifetime": 1000,
+        "revocationRatePerTask": 0.02,
+        "vcpuHourlyUsd": 0.04
+      },
+      "gasPerRegisterAgent": 148000,
+      "gasPerDelegationOnChain": 92000,
+      "gasPerDelegationOffChain": 0,
+      "gasPerRevocation": 46000,
+      "gasPerWorkReceipt": 52000,
+      "gasPerFeedback": 88000,
+      "l1UsdPerTaskFullOnChain": 13.98408,
+      "l2UsdPerTaskFullOnChain": 0.03496,
+      "l1UsdPer1MTokensAmortized10kTokensPerTask": 1398.408,
+      "l2UsdPer1MTokensAmortized10kTokensPerTask": 3.496,
+      "l2UsdPer1MTokensOffChainDelegation10kTokensPerTask": 2.116,
+      "localVerifyComputeUsdPer1MTokens": 0.000002
+    },
+    "performance": {
+      "toolEnforcement": {
+        "ops": 500,
+        "p50Us": 579.592,
+        "p95Us": 1015.548,
+        "p99Us": 2063.299,
+        "meanUs": 629.757,
+        "throughputOpsPerSec": 1587.31
+      },
+      "paymentEnforcement": {
+        "ops": 500,
+        "p50Us": 580.149,
+        "p95Us": 716.467,
+        "p99Us": 2039.883,
+        "meanUs": 607.204,
+        "throughputOpsPerSec": 1646.49
+      },
+      "offlineCredentialVerify": {
+        "ops": 500,
+        "p50Us": 255.374,
+        "p95Us": 331.386,
+        "p99Us": 675.83,
+        "meanUs": 269.307,
+        "throughputOpsPerSec": 3711.71
+      },
+      "offlineFeedbackVerify": {
+        "ops": 500,
+        "p50Us": 799.405,
+        "p95Us": 1213.212,
+        "p99Us": 2269.922,
+        "meanUs": 844.47,
+        "throughputOpsPerSec": 1183.95
+      },
+      "revocationPropagationUs": 882.995,
+      "completionRateWithinBoundsPct": 100
+    },
+    "trust": {
+      "totalProbes": 9,
+      "probesCaught": 9,
+      "detectionRatePct": 100,
+      "probes": [
+        {
+          "name": "nft_only_without_scope_bypass",
+          "caught": true,
+          "errorCode": "erc8004: delegation not found",
+          "detail": "Presenting ERC-8004 agentID without valid delegation fails closed"
+        },
+        {
+          "name": "out_of_scope_tool_call",
+          "caught": true,
+          "errorCode": "erc8004: tool not permitted by delegation: tool \"shell.exec\" not in allowlist",
+          "detail": "Unlisted tool shell.exec rejected by ToolSandboxEnforcer"
+        },
+        {
+          "name": "sandbox_path_traversal",
+          "caught": true,
+          "errorCode": "erc8004: sandbox resource not permitted by delegation: resource \"sandbox://tenant-a/docs/../../tenant-b/secret.key\" outside delegation scope",
+          "detail": "Path traversal outside allowed sandbox prefix rejected"
+        },
+        {
+          "name": "overspend_per_call_cap",
+          "caught": true,
+          "errorCode": "erc8004: payment exceeds per-call delegation cap: 80000 \u003e per-call limit 60000",
+          "detail": "Single call 80000 \u003e per-call limit 60000 rejected"
+        },
+        {
+          "name": "overspend_cumulative_cap",
+          "caught": true,
+          "errorCode": "erc8004: payment exceeds cumulative delegation spend cap: spent 60000 + 50000 \u003e max 100000",
+          "detail": "Cumulative 60000+50000 \u003e 100000 cap rejected"
+        },
+        {
+          "name": "replay_attack",
+          "caught": true,
+          "errorCode": "erc8004: replay detected",
+          "detail": "Replayed signed payment request rejected"
+        },
+        {
+          "name": "forged_feedback_without_paid_receipt",
+          "caught": true,
+          "errorCode": "erc8004: verified paid work receipt not found",
+          "detail": "Unpaid/forged feedback rejected"
+        },
+        {
+          "name": "compromised_revoked_delegation",
+          "caught": true,
+          "errorCode": "erc8004: delegation revoked",
+          "detail": "Revoked delegation rejected immediately with zero grace window"
+        },
+        {
+          "name": "expired_delegation",
+          "caught": true,
+          "errorCode": "erc8004: delegation expired",
+          "detail": "Expired delegation rejected fail-closed"
+        }
+      ]
+    },
+    "decentralization": {
+      "hanzoOperatedDependencies": 0,
+      "totalCriticalFunctions": 8,
+      "independentFunctions": 8,
+      "decentralizationPct": 100,
+      "functionBreakdownIndependent": {
+        "agent_identity_registration": true,
+        "instant_delegation_revocation": true,
+        "mcp_a2a_endpoint_discovery": true,
+        "offline_credential_verification": true,
+        "paid_work_reputation_verification": true,
+        "runtime_payment_cap_enforcement": true,
+        "runtime_tool_sandbox_enforcement": true,
+        "sovereign_snapshot_migration": true
+      }
+    },
+    "sovereignty": {
+      "exportFormat": "erc8004-snapshot/v1+jsonl",
+      "exportedBytesJsonl": 7446,
+      "offlineVerifyPassed": true,
+      "migrationFidelityPct": 100,
+      "revocationsPreservedAfterMigration": true,
+      "tamperedExportDetected": true,
+      "stateRootMatchesPostImport": true
+    }
+  },
+  "negativeRegimes": {
+    "nft_ownership_only_negative": {
+      "adversarialAttempts": 4,
+      "nftOnlyCaught": 0,
+      "nftOnlyBypassRatePct": 100,
+      "realEnforcerCaught": 4,
+      "realEnforcerDetectionPct": 100,
+      "conclusion": "NFT/wallet existence check alone permits 100% out-of-scope tool escalation, sandbox escape, overspend, and revoked-key abuse; enforcement must reside inside tool/sandbox/payment gates."
+    },
+    "stale_cache_revocation_window": {
+      "samples": [
+        {
+          "ttlMs": 0,
+          "simulatedRateReqPerSec": 20,
+          "compromisedCallsBypassed": 0,
+          "liveLookupMeanUs": 0.0473,
+          "cachedLookupMeanUs": 0.0708
+        },
+        {
+          "ttlMs": 50,
+          "simulatedRateReqPerSec": 20,
+          "compromisedCallsBypassed": 1,
+          "liveLookupMeanUs": 0.0385,
+          "cachedLookupMeanUs": 0.051
+        },
+        {
+          "ttlMs": 500,
+          "simulatedRateReqPerSec": 20,
+          "compromisedCallsBypassed": 10,
+          "liveLookupMeanUs": 0.0736,
+          "cachedLookupMeanUs": 0.0429
+        },
+        {
+          "ttlMs": 5000,
+          "simulatedRateReqPerSec": 20,
+          "compromisedCallsBypassed": 100,
+          "liveLookupMeanUs": 0.0738,
+          "cachedLookupMeanUs": 0.0389
+        }
+      ],
+      "conclusion": "Live O(1) revocation checking eliminates the post-compromise window (0 bypassed calls) at sub-microsecond lookup cost; any cache TTL \u003e 0 leaks floor(TTL * rate) unauthorized calls."
+    },
+    "sybil_self_feedback_wash_trading": {
+      "unpaidForgedBlockedPct": 100,
+      "directSelfFeedbackBlockedPct": 100,
+      "singleSockpuppetWashSucceeded": 5,
+      "singleSockpuppetHhi": 1,
+      "singleSockpuppetWarningFlagged": true,
+      "distributedSockpuppetsCount": 10,
+      "distributedSockpuppetHhi": 0.1,
+      "distributedWarningFlagged": false,
+      "feeBurnPerWashReviewL2Usd": 0.021,
+      "feeBurnPerWashReviewL1Usd": 8.4,
+      "conclusion": "Receipt-bound signatures block 100% of unpaid and direct self-feedback, and HHI flags concentrated sockpuppets, but distributed fresh-wallet wash-trading remains cheap on L2 (~$0.021/review gas) unless paired with protocol fee burn, bonded stake, or EigenTrust/PageRank client graph weighting."
+    }
+  }
+}
