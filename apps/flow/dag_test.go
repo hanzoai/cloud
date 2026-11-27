@@ -495,7 +495,7 @@ func TestUnifiedDAGPlatformActionsAndMediaAndMCP(t *testing.T) {
 			_, _ = w.Write([]byte(`{"data":[{"url":"https://cdn.hanzo.ai/img1.png"}]}`))
 		case "/v1/prompt":
 			_, _ = w.Write([]byte(`{"prompt_id":"comfy-job-9"}`))
-		case "/mcp":
+		case "/v1/mcp":
 			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"1","result":{"text":"crm_contact_42"}}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -540,7 +540,7 @@ func TestUnifiedDAGPlatformActionsAndMediaAndMCP(t *testing.T) {
 	}
 
 	mu.Lock()
-	for _, wantPath := range []string{"/mcp", "/v1/decisions", "/v1/notify/send", "/v1/images/generations", "/v1/prompt"} {
+	for _, wantPath := range []string{"/v1/mcp", "/v1/decisions", "/v1/notify/send", "/v1/images/generations", "/v1/prompt"} {
 		if gotOrg := seenPaths[wantPath]; gotOrg != "acme" {
 			t.Errorf("platform path %s saw X-Org-Id=%q, want acme", wantPath, gotOrg)
 		}

@@ -45,6 +45,7 @@ import (
 	"github.com/hanzoai/outbound"
 	"github.com/zap-proto/zip"
 
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/sdk"
 	"github.com/hanzoai/cloud/sdk/env"
 	"github.com/hanzoai/cloud/sdk/principal"
@@ -1563,7 +1564,7 @@ func (e *dagExec) runMCPTool(cfg map[string]any) (map[string]any, error) {
 
 	endpoint := strVal(cfg, "endpoint")
 	if endpoint == "" {
-		endpoint = "/mcp"
+		endpoint = manifest.MCPPath
 	} else {
 		var err error
 		endpoint, err = validatePlatformPath(endpoint)
@@ -1633,7 +1634,7 @@ var allowedPlatformPrefixes = []string{
 
 func validatePlatformPath(raw string) (string, error) {
 	p := strings.TrimSpace(raw)
-	if p == "/mcp" {
+	if p == manifest.MCPPath {
 		return p, nil
 	}
 	if !strings.HasPrefix(p, "/v1/") {
