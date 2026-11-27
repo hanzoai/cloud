@@ -6166,6 +6166,14 @@ components:
             {"pct":0-100 (optional), "phase":"queued|running|blocked|done",
             "activity":"≤120 chars"} — so a malformed one is refused with 400 instead
             of being stored as prose nobody reads.
+        requestId:
+          description: |-
+            RequestID names this append so it can be made again safely: a second append
+            to the same session with the same id stores nothing and answers with the
+            turn the first one stored; the same id with another turn is refused 422. Up
+            to 256 bytes, no control characters. Leave it out and every append is its own
+            turn.
+          type: string
       type: object
     agent.eventList:
       properties:
@@ -6582,6 +6590,12 @@ components:
             Status sets operator INTENT: online | offline | draining. Draining is how a
             machine is taken out of dispatch without ending what is already on it. What
             comes back may still read offline, because the heartbeat outranks the intent.
+          type: string
+        terminal:
+          description: |-
+            Terminal publishes, or with "" clears, the machine's live terminal URL (https).
+            Omit it and the stored terminal is left alone, so a heartbeat from a process
+            that publishes none never wipes another's. The server stamps the time.
           type: string
       type: object
     agent.proposalList:
@@ -7847,6 +7861,14 @@ components:
             INTENT — a heartbeat is what decides whether an online machine is actually
             reachable, so declaring online does not make it so.
           type: string
+        terminal:
+          description: |-
+            Terminal is the https URL this machine's live terminal is published at.
+            Optional: omit it to leave the stored one alone, send "" to clear it (the
+            link is ending). The server stamps the time, and the terminal shows on the
+            machine only while the machine beats and restates it within the 90-second
+            window.
+          type: string
       type: object
     agent.targetView:
       properties:
@@ -7944,6 +7966,15 @@ components:
             before but not in the last 90 seconds reports offline whatever its row says. A
             target that has NEVER beaten keeps its stored status, because a hand-registered
             destination has no fact to check.
+          type: string
+        terminal:
+          description: |-
+            Terminal is where the machine's live terminal can be watched, an https URL.
+            It is the machine's own fact, kept alive by the machine's heartbeat: present
+            only while the machine is online and has restated it within the last 90
+            seconds, so it does not outlive the shell it points at, and it does not
+            depend on any session surviving the session reaper. Shown only to the
+            machine's owner (or an org admin); a colleague's machine never carries it.
           type: string
         updatedAt:
           description: |-
@@ -13186,6 +13217,22 @@ components:
             $ref: '#/components/schemas/billing.BillingInvoice'
           type: array
       type: object
+    billing.LendablePlan:
+      properties:
+        from:
+          description: From is the account that holds it.
+          type: string
+        org:
+          description: Org is the org it is already lent to, omitted when it is free
+            to link.
+          type: string
+        plan:
+          description: Plan is the catalog rung it serves.
+          type: string
+        planName:
+          description: PlanName is that rung's display name.
+          type: string
+      type: object
     billing.Mode:
       properties:
         live:
@@ -13258,6 +13305,59 @@ components:
           type: string
         status:
           type: string
+      type: object
+    billing.PlanLink:
+      properties:
+        at:
+          description: At is when it was linked, RFC 3339.
+          type: string
+        by:
+          description: By is the IAM row ("<owner>/<name>") of the person who linked
+            it.
+          type: string
+        from:
+          description: 'From is the account the plan is read from: "<org>/<name>"
+            or "<org>".'
+          type: string
+        live:
+          description: |-
+            Live is false when the source's plan has lapsed: the link then confers nothing,
+            and stays until it is removed.
+          type: boolean
+        org:
+          description: Org is the org that borrows the plan.
+          type: string
+        plan:
+          description: |-
+            Plan is the catalog rung the source serves now, "" when the source's plan has
+            lapsed.
+          type: string
+        planName:
+          description: PlanName is that rung's display name, "" when it has lapsed.
+          type: string
+      type: object
+    billing.PlanLinkState:
+      properties:
+        canLink:
+          description: |-
+            CanLink is true only when the caller may link a plan to the org they act in right
+            now: they are its owner or admin, the org may borrow, it holds no live paid plan
+            of its own and borrows none. It says nothing of whether the caller holds a plan to
+            lend; Plans does.
+          type: boolean
+        canUnlink:
+          description: |-
+            CanUnlink is true only when the org borrows a plan and the caller may end it: they
+            are an owner or admin of the org, or hold the account the plan is lent from.
+          type: boolean
+        link:
+          $ref: '#/components/schemas/billing.PlanLink'
+          description: Link is the plan the org borrows, omitted when it borrows none.
+        plans:
+          description: Plans is every live paid plan the CALLER holds, always an array.
+          items:
+            $ref: '#/components/schemas/billing.LendablePlan'
+          type: array
       type: object
     billing.PriceQuote:
       properties:
@@ -13798,11 +13898,17 @@ components:
             Plan is the catalog rung the subject is served as ("" with no plan). A tier
             is a class of rungs; a bound that differs within one class keys on this.
           type: string
+        planHolder:
+          description: |-
+            PlanHolder is the canonical account claim ("person:hanzo/james", "org:acme")
+            whose live paid subscription this org borrows through a plan link; absent when
+            the subject uses its own books or holds no plan. Appended last for the ZAP wire.
+          type: string
         planName:
           description: |-
             PlanName is the display name of the served plan ("Unlimited"), "" with no
             plan. A plan only the plan authority knows has no catalog name, so a reader
-            shows this, not the tier. Last, for the ZAP wire.
+            shows this, not the tier.
           type: string
         subscription:
           description: |-
@@ -14230,6 +14336,14 @@ components:
         description:
           type: string
         id:
+          type: string
+      type: object
+    billing.linkBody:
+      properties:
+        from:
+          description: |-
+            From is the account to lend, as `plans` lists it: "<org>/<name>" for your own
+            wallet, "<org>" for an org you own.
           type: string
       type: object
     billing.paypalOrderIn:
@@ -84519,6 +84633,12 @@ paths:
         that still had the secret in it once, and this way the author learns which
         value to rotate. The refusal carries every finding: the rule, the severity, the
         line, a MASKED preview and the fingerprint. The secret is never in the answer.
+
+        A TURN THAT NAMES ITSELF IS STORED ONCE. With a `requestId`, a repeat of the
+        append (a client retrying after a 5xx or a timeout) answers 201 with the turn
+        the first request stored and changes nothing: no second turn, no second frame
+        on the stream, no second move of progress. The same id with another kind, actor
+        or payload is another request under a reused id, refused 422.
       operationId: post_agent_sessions_by_id_events
       parameters:
       - description: ID is the session to append to, from the path.
@@ -99023,6 +99143,115 @@ paths:
         `held:<org>`) and its return gives it back (positive), and every other posting
         DEBITS it (negative, account `usage:<org>`), described by its notes or its
         tags.'
+      tags:
+      - billing
+      x-app: billing
+      x-public: true
+      x-tool: true
+  /v1/billing/link:
+    delete:
+      description: |-
+        Stops using a linked plan.
+
+        Without a query it ends the link of the org you act in: an owner or admin of the org
+        may, and so may the person who holds the account the plan is lent from. With
+        `from=<account>` it ends the link that account's plan is lent through, from whatever
+        org you act in — so someone removed from the borrowing org can still take their plan
+        back — and `from` must be one of your own `plans`. Ending a link frees the plan to be
+        lent again. Answers 404 when nothing is linked and 403 when it is not yours to end. It
+        is on the audit trail.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: unlinkPlan
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/billing.PlanLinkState'
+          description: ok
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problem-details'
+          description: refused
+      summary: Stop using a linked plan
+      tags:
+      - billing
+      x-app: billing
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Answers the plan the org you act in borrows, and the plans you could lend it.
+
+        `link` is the plan this org uses, omitted when it uses none; `live` is false once the
+        plan it was lent from has lapsed, and the link then confers nothing. Any member of the
+        org may read it. `plans` is every live paid plan YOU hold — your own wallet in the
+        shared signup org and each org you own — whoever else is in the org, with `org` naming
+        the org one is already lent to. `canLink` and `canUnlink` say what you may do from
+        here, by the rules the writes enforce: link a plan if you are an owner or admin of an
+        org that may borrow, holds no live paid plan of its own and borrows none; end the link
+        if you are an owner or admin of the org or hold the plan it is lent from.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: getPlanLink
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/billing.PlanLinkState'
+          description: ok
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problem-details'
+          description: refused
+      summary: The plan this org borrows, and the plans you could lend it
+      tags:
+      - billing
+      x-app: billing
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Uses a plan you hold on the org you act in.
+
+        The whole org is covered by it, and one plan is lent to at most one org. You must be
+        an owner or admin of the org, and `from` must be one of your own `plans`: your own
+        wallet in the shared signup org, or an org you own. The org keeps its own wallet and
+        its own included allowance; a plan lent to it is never its to cancel. Refusals: 403
+        when you are not an owner or admin; 400 `no_plan_to_link` when `from` is not a live
+        paid plan you hold; 400 `org_cannot_link` for the shared signup org, a held or reserved
+        org, or the plan's own org; 409 `org_has_plan` when the org already holds a live paid
+        plan of its own; 409 `plan_already_linked` when the plan is lent to another org; 409
+        `org_already_linked` when the org already uses one. It is on the audit trail.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: linkPlan
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/billing.linkBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/billing.PlanLinkState'
+          description: ok
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problem-details'
+          description: refused
+      summary: Use a plan you hold on this org
       tags:
       - billing
       x-app: billing
@@ -137950,6 +138179,35 @@ paths:
       x-app: leaderboard
       x-public: true
       x-tool: true
+  /v1/leaderboard/badge/{handle}:
+    get:
+      description: Public once the org opts into the public leaderboard (PUT /v1/leaderboard/optin
+        or PUT /v1/leaderboard/optin/org). Name the handle or org slug with the .svg
+        extension. theme=dark|light, style=flat|card, fields= and label= (at most
+        24 characters) choose the look. Cached hourly in-process and at the edge (stale-while-revalidate
+        24h) and answers 304 to a matching ETag; every word on it is escaped. An unlisted
+        org and an unknown handle are the same 404. No credential is needed.
+      operationId: get_leaderboard_badge_by_handle
+      parameters:
+      - in: path
+        name: handle
+        required: true
+        schema:
+          type: string
+      responses:
+        2XX:
+          content:
+            image/svg+xml:
+              schema:
+                format: binary
+                type: string
+          description: Success
+      security: []
+      summary: The README badge of a listed org's leaderboard rank, as an SVG
+      tags:
+      - leaderboard
+      x-app: leaderboard
+      x-public: true
   /v1/leaderboard/beta:
     get:
       description: |-
@@ -143281,7 +143539,9 @@ paths:
         new and one asked for before, however often, and with the same headers, so it says
         nothing about who is on the list; a repeat changes nothing, and the first entry
         stands. An X handle is never looked up anywhere and no wallet address is taken. No
-        account is needed, and the entry keeps nothing about the caller.
+        account is needed, and the entry keeps nothing about the caller. It also keeps
+        no email or handle: only a keyed HMAC digest of the identifier, under the one
+        invite secret with a domain of its own, is filed.
 
         A deployment that cannot hold the waitlist, or has issued no invite yet, answers 503;
         then a caller past ten requests an hour is 429 (with Retry-After), a body over 4 KiB
@@ -170839,8 +171099,8 @@ paths:
     get:
       description: Public once the person turns their profile on. Name the handle
         with the .svg extension. theme=dark|light and style=flat|card choose the look.
-        The image is never cached by a shared cache and answers 304 to a matching
-        ETag, and every word on it is escaped.
+        Cached hourly in-process and at the edge (stale-while-revalidate 24h) and
+        answers 304 to a matching ETag, and every word on it is escaped.
       operationId: get_reward_badge_by_handle
       parameters:
       - in: path

@@ -88,8 +88,9 @@
 // route under the capability it is the address of, and openapi/misfiled.txt only
 // shrinks. An invite verifies without saying why it does not, and without consuming
 // the code; the code is HNZ- and ten Crockford base32 characters, stored only as an
-// HMAC under the KMS secret network/invite-hmac. Nothing server-side enforces an
-// invite until redemption exists.
+// HMAC under the KMS secret network/invite-hmac, as is a waitlist identifier under
+// a domain of its own: no email or handle is stored. Nothing server-side enforces
+// an invite until redemption exists.
 //
 // The operator's half is a SuperAdmin's twice, once at the group and once in each op,
 // and audited before it acts (invites_admin.go).

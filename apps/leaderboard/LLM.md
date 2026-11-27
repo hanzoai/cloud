@@ -56,6 +56,14 @@ Both public, both aggregate or masked, neither takes a principal.
   leave the hub. An empty hub is filled from what is durable (newest orgs, awards). Names are the
   standing's (`handleOf`); a line holds `id, kind, at, handle, detail` and nothing else.
 
+- `GET /v1/leaderboard/badge/:handle` (`badge.go`) is a RAW route (`image/svg+xml` bytes +
+  ETag/304; in `untypedByDesign` and `openapi/untyped.json`), public (no credential), rendering
+  a listed org's standing rank and points via `github.com/hanzoai/reward/emblem`. Only orgs with
+  `choices[org].Listed == true` resolve (by org slug or chosen handle, case-insensitive); unlisted,
+  withdrawn, held and unknown handles all answer 404. Cached hourly in-process (bounded 4096 entries,
+  serving stale on transient warehouse errors) and at the edge (`public, max-age=3600, s-maxage=3600,
+  stale-while-revalidate=86400`), invalidated immediately on opt-in writes.
+
 ### The galaxy (`galaxy.go`)
 
 `GET /v1/leaderboard/galaxy` (typed, public, no principal asked; `hanzo.ai/leaderboard` draws it)

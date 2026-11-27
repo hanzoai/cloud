@@ -450,7 +450,7 @@ func init() {
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/provider POST /integrations/connect", zip.Doc{
-		Description: "Initiates a social OAuth flow or verifies and seals a credential\non behalf of the caller's org over the internal plane.",
+		Description: "Initiates a social OAuth flow or verifies and seals a credential\non behalf of the caller's org over the internal plane. It asks who is calling\nthe way the route does (connect): an AdminOnly connector is its org admin's to\nconnect, by the admin bit the caller carries for this org.",
 		Fields: map[string]string{
 			"Field.name":                          "Name is the field's name.",
 			"Field.value":                         "Value is the field's value, verbatim.",

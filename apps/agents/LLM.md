@@ -180,3 +180,27 @@ Enso arms inside one request is hanzo-inc/zen's (`walk`, `sticks`), not this pac
   folder revoked while queued is reported failed, never handed out).
 - Audit actions: `machine.folder.grant`, `.revoke`, `.run`, `.deny`; resource `machine/<id>`,
   `after` = `{machine, folder, run}`.
+
+## A machine's terminal is on the machine (`apps/agents/targetterminal.go`, 2026-11-27)
+
+`hanzo link` published a laptop's shell on a SESSION (agent `tmux`, `host`, no target). The
+reaper rightly ends a session with no activity for an hour (`reap.go`), and a link never
+appends events, so about an hour in the machine's terminal vanished from Hanzo Tabs while the
+shell was still live (production, 2026-11-26). The terminal is a fact about the machine, and
+the machine already beats, so it now rides the beat.
+
+- The run-target row has `terminal` and `terminal_at`. `POST /v1/agent/targets` and
+  `PATCH /v1/agent/targets/:id` take an optional `terminal`: absent leaves both columns
+  alone (a `hanzo dev` beat never wipes a link's), `""` clears, a URL is checked by
+  `sessionTerminal` (https only, 512 bytes; the one validator) and stamped from the server
+  clock.
+- `Target.LiveTerminal(now)` is the reading: the stored URL only while the machine is online
+  and `terminal_at` is inside `LiveWindow`. One window, no new knob. A link therefore
+  restates its terminal on every beat.
+- `targetView.terminal` carries it only for a caller who `targetOwns` the machine. A
+  colleague's machine never shows it.
+- Session `terminal`, the reaper, the meter and `Store.End` are untouched: older CLIs still
+  publish on a session, and a reader keeps that as its fallback.
+- `/v1/agents/targets` (plural) is the same route: the router rewrites the other number of a
+  capability's name (`manifest.Normalize`).
+- Pinned by `targetterminal_test.go`, including `TestAReapedLinkSessionLeavesTheMachineItsTerminal`.

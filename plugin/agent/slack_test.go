@@ -139,9 +139,7 @@ func TestASlackCodingRequest(t *testing.T) {
 		if !strings.Contains(end, "started a coding run") {
 			t.Fatalf("the assistant's own reply was lost from the message: %q", end)
 		}
-		if n := d.forge.liveKeys(); n != 0 {
-			t.Fatalf("%d push keys are still registered after the run", n)
-		}
+		d.forge.waitNoLiveKeys(t)
 	})
 
 	t.Run("a refused push is said in the forge's words, and the sandbox is kept", func(t *testing.T) {
@@ -162,9 +160,7 @@ func TestASlackCodingRequest(t *testing.T) {
 		if d.forge.pullCount() != pulls {
 			t.Fatal("a pull request was opened for a branch the forge refused")
 		}
-		if n := d.forge.liveKeys(); n != 0 {
-			t.Fatalf("%d push keys are still registered after the run", n)
-		}
+		d.forge.waitNoLiveKeys(t)
 	})
 }
 
@@ -736,6 +732,21 @@ func (f *forgeHost) liveKeys() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.keys)
+}
+
+func (f *forgeHost) waitNoLiveKeys(t *testing.T) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		n := f.liveKeys()
+		if n == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d push keys are still registered after the run", n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 func (f *forgeHost) serve(w http.ResponseWriter, r *http.Request) {

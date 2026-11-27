@@ -64,6 +64,9 @@ var Ops = []string{
 	client.BillingLimitDrop,
 	client.BillingLimitSet,
 	client.BillingLimits,
+	client.BillingLink,
+	client.BillingLinkDrop,
+	client.BillingLinkPut,
 	client.BillingMethodDefault,
 	client.BillingMethodDetach,
 	client.BillingMethodSave,
@@ -450,6 +453,27 @@ func BillingLimitSet(ctx context.Context, in *client.LimitSet) (*client.LimitRow
 // Calls client.BillingLimits on commerce over the peer plane.
 func BillingLimits(ctx context.Context, in *client.LimitsIn) (*client.LimitSheet, error) {
 	return plane.Call[client.LimitsIn, client.LimitSheet](ctx, App, client.BillingLimits, in)
+}
+
+// BillingLink the plan an org borrows, and the plans the caller could lend it.
+//
+// Calls client.BillingLink on commerce over the peer plane.
+func BillingLink(ctx context.Context, in *client.PlanLinkIn) (*client.PlanLinkState, error) {
+	return plane.Call[client.PlanLinkIn, client.PlanLinkState](ctx, App, client.BillingLink, in)
+}
+
+// BillingLinkDrop end a plan link.
+//
+// Calls client.BillingLinkDrop on commerce over the peer plane.
+func BillingLinkDrop(ctx context.Context, in *client.PlanLinkDropIn) (*client.PlanLinkState, error) {
+	return plane.Call[client.PlanLinkDropIn, client.PlanLinkState](ctx, App, client.BillingLinkDrop, in)
+}
+
+// BillingLinkPut lend a plan to an org.
+//
+// Calls client.BillingLinkPut on commerce over the peer plane.
+func BillingLinkPut(ctx context.Context, in *client.PlanLinkPutIn) (*client.PlanLinkState, error) {
+	return plane.Call[client.PlanLinkPutIn, client.PlanLinkState](ctx, App, client.BillingLinkPut, in)
 }
 
 // BillingMethodDefault set one saved payment method as default.

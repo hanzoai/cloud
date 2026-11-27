@@ -9,6 +9,8 @@ import (
 
 	rewardmod "github.com/hanzoai/reward"
 
+	"github.com/zap-proto/zip"
+
 	"github.com/hanzoai/cloud/sdk"
 )
 
@@ -35,6 +37,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("reward: open the store: %w", err)
 	}
+	badges := newRewardBadgeCache()
+	app.Use(zip.H(badges.middleware))
 	eng, err := rewardmod.Mount(app, rewardmod.Config{DB: db, Log: slog.Default().With("subsystem", "reward")})
 	if err != nil {
 		_ = closeDB()

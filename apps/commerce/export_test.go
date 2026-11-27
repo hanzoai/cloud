@@ -42,3 +42,10 @@ func SoldOnceForTest(t *testing.T, org, invoice string, cents int64, began time.
 	t.Helper()
 	sandbox(t).soldOnce(t, org, invoice, cents, began)
 }
+
+// BootLinksForTest opens the plan-link store for a test that boots the embed itself,
+// as Use does for a process.
+func BootLinksForTest(t *testing.T) {
+	t.Helper()
+	bootLinks(t)
+}

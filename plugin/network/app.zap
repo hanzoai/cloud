@@ -245,7 +245,9 @@ interface network {
     # new and one asked for before, however often, and with the same headers, so it says
     # nothing about who is on the list; a repeat changes nothing, and the first entry
     # stands. An X handle is never looked up anywhere and no wallet address is taken. No
-    # account is needed, and the entry keeps nothing about the caller.
+    # account is needed, and the entry keeps nothing about the caller. It also keeps
+    # no email or handle: only a keyed HMAC digest of the identifier, under the one
+    # invite secret with a domain of its own, is filed.
     # A deployment that cannot hold the waitlist, or has issued no invite yet, answers 503;
     # then a caller past ten requests an hour is 429 (with Retry-After), a body over 4 KiB
     # 413, and a body that is not JSON, one with neither or both of email and xHandle, an

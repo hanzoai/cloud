@@ -15,6 +15,26 @@ func init() {
 			"alertRef.id": "ID is the cap to remove, from the path.",
 		},
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/billing DELETE /v1/billing/link", zip.Doc{
+		Description: "Stops using a linked plan.\n\nWithout a query it ends the link of the org you act in: an owner or admin of the org\nmay, and so may the person who holds the account the plan is lent from. With\n`from=<account>` it ends the link that account's plan is lent through, from whatever\norg you act in — so someone removed from the borrowing org can still take their plan\nback — and `from` must be one of your own `plans`. Ending a link frees the plan to be\nlent again. Answers 404 when nothing is linked and 403 when it is not yours to end. It\nis on the audit trail.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"LendablePlan.from":       "From is the account that holds it.",
+			"LendablePlan.org":        "Org is the org it is already lent to, omitted when it is free to link.",
+			"LendablePlan.plan":       "Plan is the catalog rung it serves.",
+			"LendablePlan.planName":   "PlanName is that rung's display name.",
+			"PlanLink.at":             "At is when it was linked, RFC 3339.",
+			"PlanLink.by":             "By is the IAM row (\"<owner>/<name>\") of the person who linked it.",
+			"PlanLink.from":           "From is the account the plan is read from: \"<org>/<name>\" or \"<org>\".",
+			"PlanLink.live":           "Live is false when the source's plan has lapsed: the link then confers nothing,\nand stays until it is removed.",
+			"PlanLink.org":            "Org is the org that borrows the plan.",
+			"PlanLink.plan":           "Plan is the catalog rung the source serves now, \"\" when the source's plan has\nlapsed.",
+			"PlanLink.planName":       "PlanName is that rung's display name, \"\" when it has lapsed.",
+			"PlanLinkState.canLink":   "CanLink is true only when the caller may link a plan to the org they act in right\nnow: they are its owner or admin, the org may borrow, it holds no live paid plan\nof its own and borrows none. It says nothing of whether the caller holds a plan to\nlend; Plans does.",
+			"PlanLinkState.canUnlink": "CanUnlink is true only when the org borrows a plan and the caller may end it: they\nare an owner or admin of the org, or hold the account the plan is lent from.",
+			"PlanLinkState.link":      "Link is the plan the org borrows, omitted when it borrows none.",
+			"PlanLinkState.plans":     "Plans is every live paid plan the CALLER holds, always an array.",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/billing DELETE /v1/billing/methods/:id", zip.Doc{
 		Description: "Removes one card or account the caller has saved.\n\nIt detaches only the CALLER'S own — the wallet this request bills from,\nresolved server-side — so an id belonging to another customer of the same org\nis not something this operation can reach. The org's cards are removed only\nby an admin of the org or the platform; a member is refused with 403 and told\nto ask an admin. A platform or service caller\ndetaches on the subject's behalf, and that authority is decided HERE, where the\ncredential is, and travels as a value: authority decided twice is authority\nthat eventually disagrees with itself.\n\nThe card is vaulted at the processor, so what goes is our token for it.",
 		Fields: map[string]string{
@@ -237,6 +257,26 @@ func init() {
 		},
 		Example: json.RawMessage(`{"range":"30d"}`),
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/billing GET /v1/billing/link", zip.Doc{
+		Description: "Answers the plan the org you act in borrows, and the plans you could lend it.\n\n`link` is the plan this org uses, omitted when it uses none; `live` is false once the\nplan it was lent from has lapsed, and the link then confers nothing. Any member of the\norg may read it. `plans` is every live paid plan YOU hold — your own wallet in the\nshared signup org and each org you own — whoever else is in the org, with `org` naming\nthe org one is already lent to. `canLink` and `canUnlink` say what you may do from\nhere, by the rules the writes enforce: link a plan if you are an owner or admin of an\norg that may borrow, holds no live paid plan of its own and borrows none; end the link\nif you are an owner or admin of the org or hold the plan it is lent from.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"LendablePlan.from":       "From is the account that holds it.",
+			"LendablePlan.org":        "Org is the org it is already lent to, omitted when it is free to link.",
+			"LendablePlan.plan":       "Plan is the catalog rung it serves.",
+			"LendablePlan.planName":   "PlanName is that rung's display name.",
+			"PlanLink.at":             "At is when it was linked, RFC 3339.",
+			"PlanLink.by":             "By is the IAM row (\"<owner>/<name>\") of the person who linked it.",
+			"PlanLink.from":           "From is the account the plan is read from: \"<org>/<name>\" or \"<org>\".",
+			"PlanLink.live":           "Live is false when the source's plan has lapsed: the link then confers nothing,\nand stays until it is removed.",
+			"PlanLink.org":            "Org is the org that borrows the plan.",
+			"PlanLink.plan":           "Plan is the catalog rung the source serves now, \"\" when the source's plan has\nlapsed.",
+			"PlanLink.planName":       "PlanName is that rung's display name, \"\" when it has lapsed.",
+			"PlanLinkState.canLink":   "CanLink is true only when the caller may link a plan to the org they act in right\nnow: they are its owner or admin, the org may borrow, it holds no live paid plan\nof its own and borrows none. It says nothing of whether the caller holds a plan to\nlend; Plans does.",
+			"PlanLinkState.canUnlink": "CanUnlink is true only when the org borrows a plan and the caller may end it: they\nare an owner or admin of the org, or hold the account the plan is lent from.",
+			"PlanLinkState.link":      "Link is the plan the org borrows, omitted when it borrows none.",
+			"PlanLinkState.plans":     "Plans is every live paid plan the CALLER holds, always an array.",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/billing GET /v1/billing/orders/:id", zip.Doc{
 		Description: "Confirms a completed checkout: the order, what it cost, what the wallet was credited or\nthe subscription it opened, and for a subscription what is left on the token it renews on.\nA checkout that is not complete has no order yet (404), and one that is not the caller's\nis 404.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
@@ -360,7 +400,8 @@ func init() {
 		Description: "Answers which tier the caller is on, what it allows, and what is left to spend.\n\n`effectiveAvailable` is the ONLY figure to compare against zero. The others are\nits parts — prepaid money, granted credits and the daily term are three sources\nof one spend, not three balances to add up a second time.\n\nA tier that cannot be READ is an error, never Free. The router in front of the\nmodels maps any non-2xx to Free, so answering Free from a question nobody could\nanswer would pin every paying customer to the most restrictive row with nothing\nanywhere to find.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Tier.plan":                  "Plan is the catalog rung the subject is served as (\"\" with no plan). A tier\nis a class of rungs; a bound that differs within one class keys on this.",
-			"Tier.planName":              "PlanName is the display name of the served plan (\"Unlimited\"), \"\" with no\nplan. A plan only the plan authority knows has no catalog name, so a reader\nshows this, not the tier. Last, for the ZAP wire.",
+			"Tier.planHolder":            "PlanHolder is the canonical account claim (\"person:hanzo/james\", \"org:acme\")\nwhose live paid subscription this org borrows through a plan link; absent when\nthe subject uses its own books or holds no plan. Appended last for the ZAP wire.",
+			"Tier.planName":              "PlanName is the display name of the served plan (\"Unlimited\"), \"\" with no\nplan. A plan only the plan authority knows has no catalog name, so a reader\nshows this, not the tier.",
 			"Tier.subscription":          "Subscription is the id of the subscription row whose plan is the served rung,\n\"\" when the tier is not a subscription's.",
 			"TierLimits.unlimitedAgents": "UnlimitedAgents reports that MaxAgents 0 means \"no ceiling\" rather than\n\"no agents\" — the reading a bare zero cannot carry.",
 		},
@@ -1244,6 +1285,27 @@ func init() {
 			"wireReconcileIn.amountCents":   "AmountCents is what the bank received, in cents.",
 			"wireReconcileIn.bankReference": "BankReference is the bank's own reference for the transfer.",
 			"wireReconcileIn.reference":     "Reference is the reference the payer was shown beside the bank details (WIRE-...).",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/billing PUT /v1/billing/link", zip.Doc{
+		Description: "Uses a plan you hold on the org you act in.\n\nThe whole org is covered by it, and one plan is lent to at most one org. You must be\nan owner or admin of the org, and `from` must be one of your own `plans`: your own\nwallet in the shared signup org, or an org you own. The org keeps its own wallet and\nits own included allowance; a plan lent to it is never its to cancel. Refusals: 403\nwhen you are not an owner or admin; 400 `no_plan_to_link` when `from` is not a live\npaid plan you hold; 400 `org_cannot_link` for the shared signup org, a held or reserved\norg, or the plan's own org; 409 `org_has_plan` when the org already holds a live paid\nplan of its own; 409 `plan_already_linked` when the plan is lent to another org; 409\n`org_already_linked` when the org already uses one. It is on the audit trail.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"LendablePlan.from":       "From is the account that holds it.",
+			"LendablePlan.org":        "Org is the org it is already lent to, omitted when it is free to link.",
+			"LendablePlan.plan":       "Plan is the catalog rung it serves.",
+			"LendablePlan.planName":   "PlanName is that rung's display name.",
+			"PlanLink.at":             "At is when it was linked, RFC 3339.",
+			"PlanLink.by":             "By is the IAM row (\"<owner>/<name>\") of the person who linked it.",
+			"PlanLink.from":           "From is the account the plan is read from: \"<org>/<name>\" or \"<org>\".",
+			"PlanLink.live":           "Live is false when the source's plan has lapsed: the link then confers nothing,\nand stays until it is removed.",
+			"PlanLink.org":            "Org is the org that borrows the plan.",
+			"PlanLink.plan":           "Plan is the catalog rung the source serves now, \"\" when the source's plan has\nlapsed.",
+			"PlanLink.planName":       "PlanName is that rung's display name, \"\" when it has lapsed.",
+			"PlanLinkState.canLink":   "CanLink is true only when the caller may link a plan to the org they act in right\nnow: they are its owner or admin, the org may borrow, it holds no live paid plan\nof its own and borrows none. It says nothing of whether the caller holds a plan to\nlend; Plans does.",
+			"PlanLinkState.canUnlink": "CanUnlink is true only when the org borrows a plan and the caller may end it: they\nare an owner or admin of the org, or hold the account the plan is lent from.",
+			"PlanLinkState.link":      "Link is the plan the org borrows, omitted when it borrows none.",
+			"PlanLinkState.plans":     "Plans is every live paid plan the CALLER holds, always an array.",
+			"linkBody.from":           "From is the account to lend, as `plans` lists it: \"<org>/<name>\" for your own\nwallet, \"<org>\" for an org you own.",
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/billing PUT /v1/billing/recharge", zip.Doc{

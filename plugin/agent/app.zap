@@ -371,10 +371,11 @@ struct decideProposalIn {
 }
 
 struct eventIn {
-    ID      text  @0
-    Kind    text  @8
-    Payload bytes @16
-    Actor   text  @24
+    ID        text  @0
+    Kind      text  @8
+    Payload   bytes @16
+    Actor     text  @24
+    RequestID text  @32
 }
 
 struct eventList {
@@ -479,6 +480,7 @@ struct patchTargetIn {
     Host     list<text> @40
     Spec     bytes      @48
     Metrics  bytes      @56
+    Terminal list<text> @64
 }
 
 struct proposalList {
@@ -728,13 +730,14 @@ struct targetRef {
 }
 
 struct targetReq {
-    Label    text  @0
-    Kind     text  @8
-    Status   text  @16
-    Capacity text  @24
-    Host     text  @32
-    Spec     bytes @40
-    Metrics  bytes @48
+    Label    text       @0
+    Kind     text       @8
+    Status   text       @16
+    Capacity text       @24
+    Host     text       @32
+    Spec     bytes      @40
+    Metrics  bytes      @48
+    Terminal list<text> @56
 }
 
 struct targetView {
@@ -753,6 +756,7 @@ struct targetView {
     UpdatedAt text       @96
     Serving   bool       @104
     Folders   list<text> @112
+    Terminal  text       @120
 }
 
 struct updateAgentIn {
@@ -1147,6 +1151,11 @@ interface agent {
     # that still had the secret in it once, and this way the author learns which
     # value to rotate. The refusal carries every finding: the rule, the severity, the
     # line, a MASKED preview and the fingerprint. The secret is never in the answer.
+    # A TURN THAT NAMES ITSELF IS STORED ONCE. With a `requestId`, a repeat of the
+    # append (a client retrying after a 5xx or a timeout) answers 201 with the turn
+    # the first request stored and changes nothing: no second turn, no second frame
+    # on the stream, no second move of progress. The same id with another kind, actor
+    # or payload is another request under a reused id, refused 422.
     post_agent_sessions_by_id_events(req: eventIn) returns (rep: eventView)
     # Sends a steering message to a running session — the endpoint a
     # human or another agent interrupts through. It requires a `message` or a

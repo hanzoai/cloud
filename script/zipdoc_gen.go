@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("github.com/hanzoai/cloud/script POST /v1/auto/provider/:id/run", zip.Doc{
-		Description: "Executes one provider action in-process and answers the outcome. The\ncaller's resolved credential travels in `auth`, delivered to the action\nverbatim — the runtime resolves no credential itself. An action that ran and\nfailed (or an action name the provider does not have) answers ok:false with\nthe failure message, not an HTTP error; an unknown provider is 404 and a\nmissing action 422.",
+		Description: "Executes one provider action in-process and answers the outcome. The\ncaller's resolved credential travels in `auth`, delivered to the action\nverbatim — the runtime resolves no credential itself. An action that ran and\nfailed (or an action name the provider does not have) answers ok:false with\nthe failure message, not an HTTP error; an unknown provider is 404, a known\nconnector with no program here 422, and a missing action 422.",
 		Fields: map[string]string{
 			"runIn.action":   "Action is the name of the provider action to invoke.",
 			"runIn.auth":     "Auth is the caller's resolved credential for the provider, handed to the\naction verbatim. Its shape is whatever the provider's auth descriptor\ndeclares (a token string, an object), so it is opaque here.",

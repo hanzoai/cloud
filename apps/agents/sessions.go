@@ -754,7 +754,7 @@ func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView
 	body := *in
 	agent := strings.TrimSpace(body.Agent)
 	if agent == "" {
-		return nil, zip.ErrBadRequest("agent is required")
+		return nil, zip.ErrBadRequest(`agent is required (the field is "agent"); a session row records activity and dispatches nothing: to run work on a linked machine call create_agent_coding with targetId and dir`)
 	}
 	if len(agent) > maxAgentLabel {
 		return nil, zip.ErrBadRequest("agent too long")

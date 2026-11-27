@@ -9,12 +9,13 @@ package network
 // survives a restart and reads the same from every replica.
 //
 //	network_invites   one record per invite code: the HMAC of the code, never the code
-//	network_waitlist  one record per address or handle that asked to be told
+//	network_waitlist  one record per HMAC of an address or handle, never the value
 //
 // IDS ARE DERIVED. An invite's id is the first 15 hex characters of its code's
-// HMAC, a waitlist entry's the first 15 of the SHA-256 of its kind and its
-// identifier (the shape Base takes), so a code is found by one read with no index and
-// a repeat ask is the same record.
+// HMAC; a waitlist entry's is the first 15 of the HMAC of its domain, kind and
+// identifier, both under the one KMS secret. Each carries a label of its own, so
+// a digest cannot be read as a code or as a count. A lookup is one read with no
+// index and a repeat ask is the same record.
 //
 // Neither collection carries an API rule, so nothing reaches them but the plane.
 
@@ -55,7 +56,6 @@ const accessSchema = `[
   {"name": "revoked_by", "type": "text"}],
   "indexes": ["CREATE INDEX idx_network_invites_issued ON network_invites (issued_at, id)"]},
  {"name": "network_waitlist", "type": "base", "fields": [
-  {"name": "identifier", "type": "text"},
   {"name": "kind", "type": "text"},
   {"name": "role", "type": "text"},
   {"name": "source", "type": "text"},
@@ -82,9 +82,10 @@ func (o ops) grow(ctx context.Context, org string) error {
 }
 
 // brandContext is the brand's own context, bounded by the request: cancelled when
-// the caller returns or the request ends, whichever is first. Every Base call acts
-// for the brand on it, and never for the org a request names: a plane call prefers
-// the request's own caller to one stated over it, so this one starts from none.
+// the caller returns or the request ends, whichever is first. Every Base call and
+// the KMS read of the invite key act for the brand on it, and never for the org a
+// request names: a plane call prefers the request's own caller to one stated over
+// it, so this one starts from none.
 func brandContext(ctx context.Context, org string) (context.Context, context.CancelFunc) {
 	fctx, cancel := context.WithTimeout(plane.For(context.Background(), org), planeBudget)
 	stop := context.AfterFunc(ctx, cancel)
@@ -169,15 +170,15 @@ func readInvites(ctx context.Context, org string, limit, page int) ([]inviteRow,
 	return rows, got.Page < got.TotalPages, nil
 }
 
-// waitRow is one waitlist entry as the Base holds it.
+// waitRow is one waitlist entry as the Base holds it: its id is the HMAC digest,
+// and there is no field for the email or handle it was asked for.
 type waitRow struct {
-	ID         string `json:"id"`
-	Identifier string `json:"identifier"`
-	Kind       string `json:"kind"`
-	Role       string `json:"role"`
-	Source     string `json:"source"`
-	Locale     string `json:"locale"`
-	CreatedAt  string `json:"created_at"`
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	Role      string `json:"role"`
+	Source    string `json:"source"`
+	Locale    string `json:"locale"`
+	CreatedAt string `json:"created_at"`
 }
 
 // readWait is the waitlist entry with this id, or nil when there is none.

@@ -95,3 +95,53 @@ func forbidden(err error) bool {
 	var he *zip.HTTPError
 	return errors.As(err, &he) && he.Status == http.StatusForbidden
 }
+
+// A routed run is attributed to the person the call VALIDATED, never to whom the
+// request body names: the delivery activity states that person as its caller, so a
+// forged actor would have the run's grant and completion act as someone else.
+func TestARoutedRunIsRefusedAnActorTheCallerIsNot(t *testing.T) {
+	alice := zip.WithCaller(context.Background(), zip.Caller{Org: "acme", User: "u-alice"})
+	nobody := zip.WithCaller(context.Background(), zip.Caller{Org: "acme"})
+	for _, c := range []struct {
+		name  string
+		ctx   context.Context
+		actor string
+	}{
+		{"another person named in the body", alice, "u-bob"},
+		{"a person named by a call that states none", nobody, "u-bob"},
+	} {
+		_, err := planeRouteRun(c.ctx, &client.RouteRunIn{TargetID: "t_1", SessionID: "sess_x", Actor: c.actor})
+		if !forbidden(err) {
+			t.Errorf("%s = %v, want 403", c.name, err)
+		}
+	}
+	// A run on a forge repository takes its login from the forge, so one whose caller
+	// the forge cannot resolve is not queued under the login its body names.
+	if _, err := routedAs(alice, &client.RouteRunIn{Repo: "hanzo/app", TargetID: "t_1", SessionID: "sess_x", ForgeActor: "bob"}); err == nil {
+		t.Error("a forge run queued under the login its body names")
+	}
+}
+
+// The control, and what is handed to the queue: the run carries the caller's org and
+// person whether the body repeats them or leaves them out, and a call that states
+// nobody has no actor to carry.
+func TestARoutedRunCarriesTheCallersOrgAndActor(t *testing.T) {
+	alice := zip.WithCaller(context.Background(), zip.Caller{Org: "acme", User: "u-alice"})
+	nobody := zip.WithCaller(context.Background(), zip.Caller{Org: "acme"})
+	for _, c := range []struct {
+		name, named, want string
+		ctx               context.Context
+	}{
+		{"named and the caller's", "u-alice", "u-alice", alice},
+		{"left out", "", "u-alice", alice},
+		{"no one stated", "", "", nobody},
+	} {
+		run, err := routedAs(c.ctx, &client.RouteRunIn{Org: "", Made: true, TargetID: "t_1", SessionID: "sess_x", Actor: c.named})
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if run.Actor != c.want || run.Org != "acme" {
+			t.Errorf("%s: queued for %q in %q, want %q in acme", c.name, run.Actor, run.Org, c.want)
+		}
+	}
+}

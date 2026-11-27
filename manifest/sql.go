@@ -94,6 +94,7 @@ var SQLStores = map[string]string{
 	"objects":            "git",
 	"ssh_keys":           "git",
 	"patent":             "patent",
+	"planlinks":          "commerce",
 	"platform":           "platform",
 	"prefs":              "pref",
 	"principal":          "principal",

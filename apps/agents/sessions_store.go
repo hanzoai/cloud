@@ -203,6 +203,13 @@ type Event struct {
 	Actor     string
 	Payload   string // opaque JSON blob (validated well-formed, size-bounded)
 	CreatedAt int64
+	// RequestID is the name the writer gave this turn on the way IN, "" for one that
+	// names nothing. AppendEvent keeps one event per (session, RequestID); a read
+	// does not carry it.
+	RequestID string
+	// Replay is set by AppendEvent on the way out: the event returned is one that
+	// RequestID had already stored, and this call stored nothing.
+	Replay bool
 }
 
 // Session status values. running/paused are live; done/error/stopped are
@@ -357,6 +364,9 @@ CREATE INDEX IF NOT EXISTS ix_sessions_org_room ON agent_sessions(org, room, cre
 CREATE INDEX IF NOT EXISTS ix_sessions_meter ON agent_sessions(org, ended_at, metered_at);
 CREATE INDEX IF NOT EXISTS ix_sessions_org_kind ON agent_sessions(org, kind, created_at);`); err != nil {
 		return fmt.Errorf("migrate sessions indexes: %w", err)
+	}
+	if err := s.migrateOnce(ctx, tx); err != nil {
+		return err
 	}
 	return s.scrubSessions(ctx, tx)
 }
@@ -1219,8 +1229,15 @@ func (s *Store) AppendEvent(ctx context.Context, e Event) (Event, error) {
 // event takes, so it is the one place that guarantees what a reader parses.
 func appendTx(ctx context.Context, tx *sql.Tx, e Event) (Event, error) {
 	e.Payload = plainPayload(e.Payload)
-	if err := dialect.Text(e.ID, e.SessionID, e.Org, e.Kind, e.Actor, e.Payload); err != nil {
+	if err := dialect.Text(e.ID, e.SessionID, e.Org, e.Kind, e.Actor, e.Payload, e.RequestID); err != nil {
 		return Event{}, fmt.Errorf("insert event: %w", err)
+	}
+	// A turn that names itself is stored once (sessions_once.go): its repeat is
+	// answered with the row the first kept, and writes nothing.
+	if e.RequestID != "" {
+		if kept, ok, err := requested(ctx, tx, e); err != nil || ok {
+			return kept, err
+		}
 	}
 	var next int64
 	if err := tx.QueryRowContext(ctx,
@@ -1230,8 +1247,8 @@ func appendTx(ctx context.Context, tx *sql.Tx, e Event) (Event, error) {
 	}
 	e.Seq = next
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO agent_session_events (`+eventCols+`) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-		e.ID, e.SessionID, e.Org, e.Seq, e.Kind, e.Actor, e.Payload, e.CreatedAt); err != nil {
+		`INSERT INTO agent_session_events (`+eventCols+`,request_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		e.ID, e.SessionID, e.Org, e.Seq, e.Kind, e.Actor, e.Payload, e.CreatedAt, e.RequestID); err != nil {
 		return Event{}, fmt.Errorf("insert event: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,

@@ -27,7 +27,6 @@ import (
 	"github.com/hanzoai/cloud/sdk/plan"
 	"github.com/hanzoai/commerce/datastore"
 	"github.com/hanzoai/commerce/models/subscription"
-	commerceorg "github.com/hanzoai/commerce/pkg/org"
 )
 
 // ActivePaidPlan reports whether org `orgID` holds a LIVE PAID Hanzo plan — the paywall's
@@ -44,22 +43,49 @@ import (
 //   - (_,    _,     err) — commerce not co-resident, org unresolvable, subscription query
 //     error, or a plan row that cannot classify itself: unresolved at the paywall.
 func (c *inProcessClient) ActivePaidPlan(ctx context.Context, orgID string) (string, bool, error) {
-	orgID = strings.TrimSpace(orgID)
-	if orgID == "" {
-		return "", false, fmt.Errorf("commerce.ActivePaidPlan: empty orgID")
+	slug, paid, err := c.OwnPaidPlan(ctx, orgID)
+	if err != nil || paid {
+		return slug, paid, err
 	}
 
+	// The org holds no plan of its own. A plan link lends it the plan of another account
+	// (planlink.go); a lapsed source, or no link, is the same definitive "no plan".
+	lent, ok, err := borrowed(ctx, strings.TrimSpace(orgID))
+	if err != nil {
+		return "", false, fmt.Errorf("commerce.ActivePaidPlan: plan link for org %q: %w", orgID, err)
+	}
+	if ok {
+		return lent.Plan, true, nil
+	}
+	return "", false, nil
+}
+
+// OwnPaidPlan is the live paid plan org's OWN subscriptions hold, never one it borrows
+// through a plan link; its three answers are ActivePaidPlan's. ActivePaidPlan is what
+// the org is SERVED as, and every gate reads it; this is what the org PAYS for, and a
+// surface that records a claim of money against an org's plan reads it (marketing's
+// promotions): a borrowed plan is paid for by the account that lends it.
+func (c *inProcessClient) OwnPaidPlan(ctx context.Context, orgID string) (string, bool, error) {
+	orgID = strings.TrimSpace(orgID)
+	if orgID == "" {
+		return "", false, fmt.Errorf("commerce.OwnPaidPlan: empty orgID")
+	}
 	e := c.resolve()
 	if e == nil || e.App() == nil {
 		// Commerce not co-resident / not booted — the subscription store is unreadable,
-		// so the plan cannot be verified. Fail open at the paywall; never fabricate.
-		return "", false, fmt.Errorf("commerce.ActivePaidPlan: commerce not co-resident; cannot verify plan (org=%s)", orgID)
+		// so the plan cannot be verified. Never fabricate.
+		return "", false, fmt.Errorf("commerce.OwnPaidPlan: commerce not co-resident; cannot verify plan (org=%s)", orgID)
 	}
+	return ownPaidPlan(ctx, orgID)
+}
 
+// ownPaidPlan is the org's own live paid plan, from its own subscriptions alone: what
+// ActivePaidPlan answers before it consults a link. Its three answers are that method's.
+func ownPaidPlan(ctx context.Context, orgID string) (string, bool, error) {
 	// Resolve org → its datastore namespace via commerce's OWN canonical resolver — the
 	// SAME binding CheckEntitlement + the money path use, so the read is derived from a
 	// real commerce Organization record and can never cross orgs.
-	o, err := commerceorg.Resolve(ctx, orgID)
+	o, err := resolveOrg(ctx, orgID)
 	if err != nil {
 		return "", false, fmt.Errorf("commerce.ActivePaidPlan: resolve org %q: %w", orgID, err)
 	}

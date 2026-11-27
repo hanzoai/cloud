@@ -105,6 +105,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	mountMethods(app, o)
 	mountPosture(app, o)
 	mountSubscriptions(app, o)
+	mountLink(app, o)
 	mountCards(app, o)
 	mountRoute(app, o)
 	mountAgent(app, o)

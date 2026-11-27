@@ -23,13 +23,15 @@ package network
 // anything else: an anonymous endpoint that answered differently for a handle that is
 // somebody's would be a directory of who has an account. No wallet address is taken.
 //
-// An entry holds its kind, its identifier, its role, where the form was and the
-// person's language, and when. It holds nothing about the caller: not the address the
-// request came from, not its agent, not a header.
+// An entry holds its kind, the HMAC digest of its identifier, its role, where the
+// form was and the person's language, and when. It holds nothing about the caller:
+// not the address the request came from, not its agent, not a header. No email or
+// handle is stored: the digest is keyed by the deployment's one invite secret, under
+// a domain of its own, so neither the value nor its use as an invite code is read
+// back from the row.
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -101,11 +103,18 @@ type WaitlistEntry struct {
 	Status string `json:"status"`
 }
 
-// waitID is the id an entry is kept under: 15 hex characters of the SHA-256 of its
-// kind and identifier, so it holds neither. An X handle is the same handle in any case.
-func waitID(kind, identifier string) string {
-	sum := sha256.Sum256([]byte(kind + "\x00" + strings.ToLower(identifier)))
-	return hex.EncodeToString(sum[:])[:15]
+// waitDomain separates a waitlist digest from an invite code's MAC and from the
+// counts derived from the same key, so one KMS secret serves all three and a
+// value used for one cannot stand for another.
+const waitDomain = "waitlist\x00"
+
+// waitID is the id an entry is kept under: the first 15 hex characters of the
+// HMAC-SHA-256 of its domain, kind and normalized identifier under the
+// deployment's invite key. It holds no identifier: neither an email nor an X
+// handle is stored. An X handle is the same handle in any case.
+func waitID(key []byte, kind, identifier string) string {
+	sum := mac(key, waitDomain+kind+"\x00"+strings.ToLower(identifier))
+	return hex.EncodeToString(sum)[:15]
 }
 
 // identifier is the one identifier a request carries, in the spelling it is kept
@@ -133,7 +142,9 @@ func identifier(in *WaitlistIn) (kind, id string, err error) {
 // new and one asked for before, however often, and with the same headers, so it says
 // nothing about who is on the list; a repeat changes nothing, and the first entry
 // stands. An X handle is never looked up anywhere and no wallet address is taken. No
-// account is needed, and the entry keeps nothing about the caller.
+// account is needed, and the entry keeps nothing about the caller. It also keeps
+// no email or handle: only a keyed HMAC digest of the identifier, under the one
+// invite secret with a domain of its own, is filed.
 //
 // A deployment that cannot hold the waitlist, or has issued no invite yet, answers 503;
 // then a caller past ten requests an hour is 429 (with Retry-After), a body over 4 KiB
@@ -176,14 +187,14 @@ func (o ops) joinWaitlist(ctx context.Context, in *WaitlistIn) (*WaitlistEntry, 
 		"network: the waitlist count is past its hourly threshold; entries are still taken")
 	// The entry is read and written whether or not there is one: a repeat writes what
 	// it read, so what it does is what a new one does and nothing it names is kept.
-	key15 := waitID(kind, id)
-	row, err := readWait(ctx, org, key15)
+	digest := waitID(key, kind, id)
+	row, err := readWait(ctx, org, digest)
 	if err != nil {
 		return nil, o.unavailable("the Base did not answer a waitlist read", err)
 	}
 	if row == nil {
 		row = &waitRow{
-			ID: key15, Identifier: id, Kind: kind, Role: role,
+			ID: digest, Kind: kind, Role: role,
 			Source: text.Trim(text.OneLine(in.Source), maxLine), CreatedAt: stamp(time.Now()),
 		}
 		if l := strings.TrimSpace(in.Locale); text.Tag(l) {

@@ -51,8 +51,9 @@ Eager (manifest) because the feeders run in the child.
     stars, follows and forks (GitHub sends no follow delivery); `POST
     /v1/reward/me/github/badge` verifies a README badge (public, non-fork repo owned by the linked
     account whose README carries a badge IMAGE, in markdown or an img tag, query ignored:
-    `api.hanzo.ai/v1/reward/badge/<handle>.svg` (profile), `api.hanzo.ai/v1/leaderboard/badge/<handle>.svg`
-    (rank) or `hanzo.ai/badges/built-with-hanzo[-dark].svg` (built)); one event per kind found,
+    `api.hanzo.ai/v1/reward/badge/<handle>.svg` (profile, hourly-cached in-process and at the edge by
+    `badge_cache.go`), `api.hanzo.ai/v1/leaderboard/badge/<handle>.svg`
+    (rank) or `hanzo.ai|hanzo.app/badges/built-with-hanzo[-dark|-light|-shields].svg` (built)); one event per kind found,
     each paying once per repo and kind (`repo+badge`). Deploy to Hanzo is not built yet.
   - `social.post.verified` (`post.go`, `social/`): see below.
   - `discord.joined`: the provider app states it (`reward_event`, the plane op any

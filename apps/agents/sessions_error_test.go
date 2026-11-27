@@ -116,3 +116,25 @@ func TestAPatchEndsASessionInErrorWithItsReason(t *testing.T) {
 		}
 	})
 }
+
+// Registering a session without an agent says what the field is called and that a
+// session row dispatches nothing, so a caller after a linked machine goes to the
+// operation that does.
+func TestRegisterWithoutAnAgentNamesTheRightOperation(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountApp(t, &fakeAI{content: "x"})
+		code, b := do(t, app, http.MethodPost, "/v1/agent/sessions", "acme", map[string]any{"title": "t"})
+		if code != http.StatusBadRequest {
+			t.Fatalf("want 400, got %d %s", code, b)
+		}
+		var prob struct {
+			Detail string `json:"detail"`
+		}
+		_ = json.Unmarshal(b, &prob)
+		for _, want := range []string{"agent is required", `the field is "agent"`, "dispatches nothing", "create_agent_coding", "targetId", "dir"} {
+			if !strings.Contains(prob.Detail, want) {
+				t.Fatalf("refusal %s lacks %q", b, want)
+			}
+		}
+	})
+}

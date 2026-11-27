@@ -76,6 +76,9 @@ func init() {
 		},
 		Example: json.RawMessage(`{"subject":"user","from":"2026-01-01","to":"2026-03-31"}`),
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/leaderboard GET /v1/leaderboard/badge/:handle", zip.Doc{
+		Description: "Serves GET /v1/leaderboard/badge/:handle.",
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/leaderboard GET /v1/leaderboard/beta", zip.Doc{
 		Description: "Ranks everyone on the hanzo.ai/beta waitlist by one score: 1 per star\non GitHub verified for the record and 1 per founder link followed, plus 1 per org\nthat signed up with its referral code, plus 20 per such org that has made metered\nspend, plus 1 per 100,000 tokens the person used, all time. Ties go to the earlier\napplication. Share clicks count for nothing.\n\nEveryone who ever applied is on it. A form filed before the person had an\naccount is a row of its own (no name, score 0, the day it was filed) until their\naccount's record claims it, and the record then begins when the form did.\n\nA row is named only for a person who opted into the public board (PUT\n/v1/leaderboard/optin); the caller always sees their own row named. Tokens are a\nrange on every row and exact on a named row and the caller's. `tokens` and\n`referrals` say whether the warehouse and the referral service answered; a\nterm that did not is left out of every score alike.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{

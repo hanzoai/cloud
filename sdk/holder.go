@@ -20,7 +20,13 @@ import (
 // it, nor borrows the owner's. Zero when person is not named, is the payer already,
 // or does not own org; an ownership nobody can read is not ownership.
 func Holder(ctx context.Context, person, org string) account.Account {
-	if !strings.Contains(person, "/") || strings.TrimSpace(org) == "" {
+	if strings.TrimSpace(org) == "" {
+		return account.Account{}
+	}
+	if linked := LinkedHolder(ctx, org); !linked.Zero() {
+		return linked
+	}
+	if !strings.Contains(person, "/") {
 		return account.Account{}
 	}
 	acct := account.PayerOf("", person)

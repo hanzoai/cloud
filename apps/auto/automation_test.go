@@ -128,6 +128,15 @@ func TestAutomationValidation(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		app := newApp(t)
 		ownsSite(t)
+		detailOf := func(b []byte) string {
+			var p struct {
+				Detail string `json:"detail"`
+			}
+			if json.Unmarshal(b, &p) == nil && p.Detail != "" {
+				return p.Detail
+			}
+			return string(b)
+		}
 		for _, c := range []struct {
 			body map[string]any
 			code int
@@ -140,6 +149,8 @@ func TestAutomationValidation(t *testing.T) {
 			{map[string]any{"name": "x", "instructions": strings.Repeat("i", maxInstructions+1)}, http.StatusBadRequest, "longer than 30 KiB"},
 			{map[string]any{"name": "x", "instructions": "x", "permissions": "root"}, http.StatusBadRequest, "permissions must be"},
 			{map[string]any{"name": "x", "instructions": "x", "project": "../etc"}, http.StatusBadRequest, "project slug"},
+			{map[string]any{"name": "x", "instructions": "x", "target": "my-local-machine", "permissions": "ask"}, http.StatusBadRequest, wantRoutedPlan},
+			{map[string]any{"name": "x", "instructions": "x", "target": "my-local-machine"}, http.StatusBadRequest, wantRoutedPlan},
 			{map[string]any{"name": "x", "instructions": "x", "model": "-rf"}, http.StatusBadRequest, "model id"},
 			{map[string]any{"name": "x", "instructions": "x", "project": "theirs"}, http.StatusUnprocessableEntity, "not one of this organization"},
 			{map[string]any{"name": "x", "instructions": "x", "schedule": map[string]any{"kind": "daily"}}, http.StatusUnprocessableEntity, "invalid schedule"},
@@ -149,7 +160,7 @@ func TestAutomationValidation(t *testing.T) {
 			{map[string]any{"name": "x", "instructions": "x", "schedule": map[string]any{"kind": "cron", "cron": "@daily"}}, http.StatusUnprocessableEntity, "cron"},
 		} {
 			r := req(t, app, http.MethodPost, "/v1/auto/automations", "acme", c.body)
-			if r.Code != c.code || !strings.Contains(string(r.Body), c.says) {
+			if r.Code != c.code || !strings.Contains(detailOf(r.Body), c.says) {
 				t.Errorf("%v = %d %s, want %d saying %q", c.body, r.Code, r.Body, c.code, c.says)
 			}
 		}
@@ -158,6 +169,21 @@ func TestAutomationValidation(t *testing.T) {
 		}
 		if flows, _ := mounted.State.store.ListFlows(context.Background(), "acme", "u-acme", 10); len(flows) != 0 {
 			t.Fatalf("a refused create left %d flows", len(flows))
+		}
+
+		// A save that would leave a machine target beside ask is refused too.
+		onMachine := decode[Automation](t, ask(t, app, http.MethodPost, "/v1/auto/automations", "acme", map[string]any{
+			"name": "On a machine", "instructions": "x", "target": "my-local-machine", "permissions": "auto",
+		}))
+		if r := ask(t, app, http.MethodPatch, "/v1/auto/automations/"+onMachine.ID, "acme", map[string]any{"permissions": "ask"}); r.Code != http.StatusBadRequest || !strings.Contains(detailOf(r.Body), wantRoutedPlan) {
+			t.Errorf("patch to ask on a machine = %d %s", r.Code, r.Body)
+		}
+		inSandbox := decode[Automation](t, ask(t, app, http.MethodPost, "/v1/auto/automations", "acme", map[string]any{"name": "In the sandbox", "instructions": "x"}))
+		if r := ask(t, app, http.MethodPatch, "/v1/auto/automations/"+inSandbox.ID, "acme", map[string]any{"target": "my-local-machine"}); r.Code != http.StatusBadRequest || !strings.Contains(detailOf(r.Body), wantRoutedPlan) {
+			t.Errorf("patch to a machine on ask = %d %s", r.Code, r.Body)
+		}
+		if r := ask(t, app, http.MethodPatch, "/v1/auto/automations/"+inSandbox.ID, "acme", map[string]any{"target": "my-local-machine", "permissions": "auto"}); r.Code != http.StatusOK {
+			t.Errorf("patch to a machine on auto = %d %s", r.Code, r.Body)
 		}
 	})
 }
@@ -797,7 +823,7 @@ func TestAgentStepAskIsAPlanAndAFailureSaysWhy(t *testing.T) {
 		}))
 		r := req(t, app, http.MethodPost, "/v1/auto/automations/"+a.ID+"/run", "acme", nil)
 		got := until(t, "acme", decode[runStarted](t, r).Run.ID)
-		if got.Status != RunFailed || got.Summary != "Failed: the sandbox could not start" {
+		if got.Status != RunFailed || got.Summary != planOnly+"Failed: the sandbox could not start" {
 			t.Fatalf("run = %+v", got)
 		}
 		dev.mu.Lock()
@@ -829,7 +855,7 @@ func TestAgentStepKeepsFailureReasonAcrossPages(t *testing.T) {
 		}))
 		r := req(t, app, http.MethodPost, "/v1/auto/automations/"+a.ID+"/run", "acme", nil)
 		got := until(t, "acme", decode[runStarted](t, r).Run.ID)
-		if got.Status != RunFailed || got.Summary != "Failed: coding: run: exec: context deadline exceeded" {
+		if got.Status != RunFailed || got.Summary != planOnly+"Failed: coding: run: exec: context deadline exceeded" {
 			t.Fatalf("run = %+v, want summary with error reason", got)
 		}
 	})

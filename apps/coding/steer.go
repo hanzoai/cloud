@@ -377,7 +377,8 @@ func (f *flight) redirect(subject string, in client.CodingSteerIn, log func(msg 
 	if !paused {
 		f.interrupt(errFollowed)
 	}
-	go f.follow(subject, in, paused, log)
+	wait := followWait
+	go f.followAfter(subject, in, paused, wait, log)
 	return nil
 }
 
@@ -385,6 +386,10 @@ func (f *flight) redirect(subject string, in client.CodingSteerIn, log func(msg 
 // caller that asked: the run is already stopped, so the follow-up is owed
 // whether or not anyone is still waiting on the answer.
 func (f *flight) follow(subject string, in client.CodingSteerIn, paused bool, log func(msg string, kv ...any)) {
+	f.followAfter(subject, in, paused, followWait, log)
+}
+
+func (f *flight) followAfter(subject string, in client.CodingSteerIn, paused bool, wait time.Duration, log func(msg string, kv ...any)) {
 	// The follow-up acts as the subject, as the run it follows did. It is stated
 	// on a context of its own because this call came from a surface that resolved
 	// them, and a statement is read only where no request is behind it. It names
@@ -412,7 +417,7 @@ func (f *flight) follow(subject string, in client.CodingSteerIn, paused bool, lo
 	}
 	select {
 	case <-f.done:
-	case <-time.After(followWait):
+	case <-time.After(wait):
 		fail(fmt.Errorf("the run did not stop in time"))
 		return
 	}

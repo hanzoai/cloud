@@ -13,6 +13,7 @@ package commerce
 import (
 	"context"
 	"net/http"
+	"sync"
 
 	"github.com/hanzoai/commerce/datastore"
 	"github.com/hanzoai/commerce/models/organization"
@@ -21,6 +22,18 @@ import (
 
 	"github.com/hanzoai/cloud/sdk"
 )
+
+// resolveOrgMu serializes commerceorg.Resolve across distinct org names so
+// Organization.AfterCreate cannot race in commerce/util/hashid's unsynchronized
+// namespace map when unseen orgs are created concurrently. Cached orgs return
+// from commerceorg's in-memory cache immediately.
+var resolveOrgMu sync.Mutex
+
+func resolveOrg(ctx context.Context, name string) (*organization.Organization, error) {
+	resolveOrgMu.Lock()
+	defer resolveOrgMu.Unlock()
+	return commerceorg.Resolve(ctx, name)
+}
 
 // orgOf resolves the caller's org to the commerce organization the money core
 // needs, through commerce's OWN canonical resolver — the same binding the balance
@@ -55,7 +68,7 @@ func orgOf(ctx context.Context, op string) (*organization.Organization, error) {
 		return nil, zip.Errorf(http.StatusServiceUnavailable,
 			"%s: commerce is not co-resident in this process", op)
 	}
-	org, err := commerceorg.Resolve(ctx, name)
+	org, err := resolveOrg(ctx, name)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "%s: resolve org %q: %v", op, name, err)
 	}
@@ -81,7 +94,7 @@ func existingOrgOf(ctx context.Context, op string) (*organization.Organization, 
 	if !ok {
 		return nil, false, nil
 	}
-	org, err := commerceorg.Resolve(ctx, name)
+	org, err := resolveOrg(ctx, name)
 	if err != nil {
 		return nil, false, zip.Errorf(http.StatusBadGateway, "%s: resolve org %q: %v", op, name, err)
 	}

@@ -72,6 +72,8 @@ var changesSomething = map[string]string{
 	"POST /v1/billing/subscriptions/{id}/agent-token": "replaces the payment method a subscription renews on",
 	"POST /v1/billing/wire/reconcile":                 "credits a wallet with a wire the bank received, once",
 	"POST /v1/billing/usage":                          "debits an org's wallet for usage an application metered",
+	"PUT /v1/billing/link":                            "makes an org use a plan another account pays for, which opens that plan's gates to the whole org",
+	"DELETE /v1/billing/link":                         "ends an org's use of a plan another account pays for, which closes that plan's gates to the whole org",
 }
 
 // TestEveryChangeIsClassified makes forgetting structurally impossible: the two

@@ -51,6 +51,7 @@ func bootCommerce(t *testing.T) *commercemod.Embedded {
 		t.Fatalf("Embed: %v", err)
 	}
 	commerce.PublishEmbedded(emb)
+	commerce.BootLinksForTest(t)
 	t.Cleanup(func() {
 		commerce.PublishEmbedded(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

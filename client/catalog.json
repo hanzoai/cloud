@@ -70,7 +70,6 @@
    "doc": "Replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution."
   }
  ],
- "admin": [],
  "admission": [],
  "affiliate": [
   {
@@ -366,7 +365,7 @@
   },
   {
    "id": "post_agent_sessions_by_id_events",
-   "doc": "Records one turn of a session's transcript and answers 201 with it.\n\nA `progress` turn additionally MOVES THE SESSION'S PROGRESS, marked as the run's\nown word rather than an estimate, and pushes the updated session onto the live\nstream — so a board's bar follows the run without polling and without a second\nwrite path. See progress.go.\n\nTHE TURN IS SCANNED BEFORE IT IS STORED. The same engine the code-security\nsurface runs reads the payload at this boundary, and a credential in it refuses\nthe append with 422 rather than redacting it — a redacted transcript is one\nthat still had the secret in it once, and this way the author learns which\nvalue to rotate. The refusal carries every finding: the rule, the severity, the\nline, a MASKED preview and the fingerprint. The secret is never in the answer."
+   "doc": "Records one turn of a session's transcript and answers 201 with it.\n\nA `progress` turn additionally MOVES THE SESSION'S PROGRESS, marked as the run's\nown word rather than an estimate, and pushes the updated session onto the live\nstream — so a board's bar follows the run without polling and without a second\nwrite path. See progress.go.\n\nTHE TURN IS SCANNED BEFORE IT IS STORED. The same engine the code-security\nsurface runs reads the payload at this boundary, and a credential in it refuses\nthe append with 422 rather than redacting it — a redacted transcript is one\nthat still had the secret in it once, and this way the author learns which\nvalue to rotate. The refusal carries every finding: the rule, the severity, the\nline, a MASKED preview and the fingerprint. The secret is never in the answer.\n\nA TURN THAT NAMES ITSELF IS STORED ONCE. With a `requestId`, a repeat of the\nappend (a client retrying after a 5xx or a timeout) answers 201 with the turn\nthe first request stored and changes nothing: no second turn, no second frame\non the stream, no second move of progress. The same id with another kind, actor\nor payload is another request under a reused id, refused 422."
   },
   {
    "id": "post_agent_sessions_by_id_message",
@@ -750,6 +749,11 @@
    "read": true
   },
   {
+   "id": "getPlanLink",
+   "doc": "Answers the plan the org you act in borrows, and the plans you could lend it.\n\n`link` is the plan this org uses, omitted when it uses none; `live` is false once the\nplan it was lent from has lapsed, and the link then confers nothing. Any member of the\norg may read it. `plans` is every live paid plan YOU hold — your own wallet in the\nshared signup org and each org you own — whoever else is in the org, with `org` naming\nthe org one is already lent to. `canLink` and `canUnlink` say what you may do from\nhere, by the rules the writes enforce: link a plan if you are an owner or admin of an\norg that may borrow, holds no live paid plan of its own and borrows none; end the link\nif you are an owner or admin of the org or hold the plan it is lent from.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
    "id": "get_billing_accounts",
    "doc": "Answers the caller's billing accounts: the org itself, its currency, when it\nwas opened, and the caller's own standing in it.\n\nThe standing is the caller's, resolved from the validated principal here and\nsent to the store rather than looked up there — the membership roster is IAM's\nand commerce keeps none, so a callee that answered \"what role is this\" would\nbe inventing it. An anonymous read gets the account with no role rather than\nan implied membership.\n\nScoped to the caller's own org, which is the whole tenancy story: there is no\norg field on the wire and none on the input.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
    "read": true
@@ -894,6 +898,10 @@
    "doc": "Issues a draft invoice: moves it to OPEN, assigns its number, and makes it\ncollectible. It is the org admin's act; a member is refused 403.\n\nOnly a draft can be issued. An invoice already open, paid or void is refused\nwith the state machine's own reason rather than being silently re-issued, which\nwould mint a second number for one debt.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   },
   {
+   "id": "linkPlan",
+   "doc": "Uses a plan you hold on the org you act in.\n\nThe whole org is covered by it, and one plan is lent to at most one org. You must be\nan owner or admin of the org, and `from` must be one of your own `plans`: your own\nwallet in the shared signup org, or an org you own. The org keeps its own wallet and\nits own included allowance; a plan lent to it is never its to cancel. Refusals: 403\nwhen you are not an owner or admin; 400 `no_plan_to_link` when `from` is not a live\npaid plan you hold; 400 `org_cannot_link` for the shared signup org, a held or reserved\norg, or the plan's own org; 409 `org_has_plan` when the org already holds a live paid\nplan of its own; 409 `plan_already_linked` when the plan is lent to another org; 409\n`org_already_linked` when the org already uses one. It is on the audit trail.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  },
+  {
    "id": "patch_billing_alerts_by_id",
    "doc": "Changes one spend cap: raise or lower the ceiling, flip enforcement, retune\nthe rate limit.\n\nOnly the fields the body carries move. Every mutable field is optional, and an\nabsent one is PRESERVED rather than reset — so a change that flips enforcement\ncannot silently wipe the threshold it enforces.\n\nA cap belonging to another org is a 404, not a 403: a guessed id must not\nbecome an oracle for what anyone else holds.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   },
@@ -992,6 +1000,10 @@
   {
    "id": "resizeSubscription",
    "doc": "Changes a team's seats: how many standard and premium seats its next period\nopens at.\n\n`quantity` is the subscription's own seat type, 0 to keep it, and `lines` each\nother seat type: `{\"lines\":[{\"planId\":\"team-premium\",\"quantity\":1}]}` adds a\npremium seat to a team bought with standard ones. The renewal that opens the\nnext period charges the seats asked for, and the period in hand keeps the ones\nit was paid for, so nothing is charged now. A team is at least 2 seats and at\nmost 100 across every seat type; past either, or naming a plan that is not a\nseat type of the team, is 400 and nothing changes.\n\nThe team's seats are its admins' to change, and the platform's. A member is\nrefused with 403 and told to ask an admin. A subscription from another org, or\nheld by a wallet the caller may not change, is not found.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  },
+  {
+   "id": "unlinkPlan",
+   "doc": "Stops using a linked plan.\n\nWithout a query it ends the link of the org you act in: an owner or admin of the org\nmay, and so may the person who holds the account the plan is lent from. With\n`from=\u003caccount\u003e` it ends the link that account's plan is lent through, from whatever\norg you act in — so someone removed from the borrowing org can still take their plan\nback — and `from` must be one of your own `plans`. Ending a link frees the plan to be\nlent again. Answers 404 when nothing is linked and 403 when it is not yours to end. It\nis on the audit trail.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   },
   {
    "id": "voidInvoice",
@@ -3142,26 +3154,6 @@
   {
    "id": "post_git_workspace",
    "doc": "Sets the org's code workspace up for the caller and answers it:\nthe namespace, made when the org has none, and the caller's forge account and\nseat there. Idempotent. The estate's namespace is answered from the closed\ntable and nobody is enrolled in it. A seat is a person's: an API key or an\napplication is refused, and a SuperAdmin acting in another org reads the\nworkspace as it is and makes nothing."
-  },
-  {
-   "id": "post_runner_declare",
-   "doc": "Republishes what a registered runner can do, and answers with what\nthis side understands, so the two learn about each other from one exchange."
-  },
-  {
-   "id": "post_runner_log",
-   "doc": "Adds console output to a task's log and answers with how far that log is\ndurable, so the runner knows where to resend from."
-  },
-  {
-   "id": "post_runner_register",
-   "doc": "Trades a pool's join secret for a runner identity and the token that\nauthenticates every later call. It is the one operation with no credential to\ncheck, because a runner has none until this answers.\n\nThe secret names the pool it opens, and a pool exists only because somebody\ndeclared it. A daemon that starts against capacity nobody declared is refused\nhere, which is where the rule that pools are declared state actually holds."
-  },
-  {
-   "id": "post_runner_state",
-   "doc": "Records a task's progress and that of its steps, and answers with the\nresult this side now holds — which is how a runner learns its task was stopped\nfrom somewhere else."
-  },
-  {
-   "id": "post_runner_task",
-   "doc": "Hands the runner a job to execute, if its pool has one, and answers\nimmediately either way. A runner sends the queue version it last saw; when it\nmatches, nothing has been queued since and no lease transaction is opened."
   }
  ],
  "graph": [
@@ -4255,50 +4247,6 @@
    "doc": "Keeps one thing you made in your Library: its bytes go to your own\nprefix of the Library's store, and it is listed to you alone until you share\nit. Send `data` up to 10 MiB inline, or send `bytes` up to 2 GiB to reserve\na signed `upload` PUT and finish it with `PATCH /v1/library/:id` `{\"commit\": true}`.\nA save with the `key` of one already kept answers that item."
   }
  ],
- "licensing": [
-  {
-   "id": "get_licensing_download_by_release",
-   "doc": "Download resolves a release to its artifact, gated on a valid license.\n\nThe gate is the LICENSE token, not the IAM bearer: being signed in is not\npermission to download a paid binary — holding a good license for it is. The\ntoken must verify against this deployment's public key, be unrevoked, be\nscoped to the release's app, and carry every feature the release requires.\nPresent it as the `X-License-Token` header (preferred, since a header does not\nland in proxy logs) or as `?token=`.\n\nThe response pairs the artifact URL with its cosign signature so the client\nverifies the binary BEFORE trusting it: a signed URL alone proves where the\nbytes came from, not what they are. A yanked release is 410 Gone.",
-   "read": true
-  },
-  {
-   "id": "get_licensing_healthz",
-   "doc": "Health reports which signer this deployment mints with, and in which env.\n\nIt answers 200 whenever the process is up: there is nothing downstream to\nprobe, since KMS is read only when a token is actually minted. Its\nvalue is the `signer` field — `\"signer\":\"local\"` on a production host says\nthat deployment is signing licenses with a development key, which is a\nmisconfiguration worth paging on rather than a healthy 200.",
-   "read": true
-  },
-  {
-   "id": "get_licensing_jwks",
-   "doc": "Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and\n/jwks.\n\nThis is the only public-safe surface here and the reason the whole scheme\nworks offline: the engine embeds or fetches this key once and then verifies\nevery license itself, with no call home per launch. The private half lives in\nKMS, so nothing served here is a secret. `provider` names where that half\nlives: `\"kms\"` is the production key every engine embeds; `\"local\"` is a\ndevelopment key, and a token signed by one is not a production credential.",
-   "read": true
-  },
-  {
-   "id": "get_licensing_pubkey",
-   "doc": "Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and\n/jwks.\n\nThis is the only public-safe surface here and the reason the whole scheme\nworks offline: the engine embeds or fetches this key once and then verifies\nevery license itself, with no call home per launch. The private half lives in\nKMS, so nothing served here is a secret. `provider` names where that half\nlives: `\"kms\"` is the production key every engine embeds; `\"local\"` is a\ndevelopment key, and a token signed by one is not a production credential.",
-   "read": true
-  },
-  {
-   "id": "get_licensing_releases",
-   "doc": "Lists the signed binary releases this deployment can serve.\n\nMetadata only, and no download URL: the artifact is behind GET\n/v1/licensing/download/{release}, which is gated on a valid license token.\nKnowing that a release exists is not permission to run it, which is why this\nlist needs no license of its own.",
-   "read": true
-  },
-  {
-   "id": "get_licensing_releases_by_release",
-   "doc": "Reads one release's metadata: its product, version, platform and the\ncosign material a client verifies the binary against.\n\nAn unknown id is 404. Like the list, this is metadata only — the bytes are\nbehind the license-gated download.",
-   "read": true
-  },
-  {
-   "id": "post_licensing_fingerprint",
-   "doc": "Fingerprint turns raw device signals into the opaque value that binds a license\nto one machine.\n\nThis is the anti-copy step: the value returned here is folded into the signed\ntoken, so a token minted with it runs only on the device it was bound to. The\nderivation is one-way and salted — the signals are never stored and never\nechoed back — so the response is safe to persist client-side and pass to\nissue. Signals too weak to identify a machine (a hostname alone) are refused\nrather than turned into a binding that would collide with other machines."
-  },
-  {
-   "id": "post_licensing_issue",
-   "doc": "Issue mints a signed license token for a product the caller's org already pays\nfor.\n\nThe order is the whole security argument: the caller is an IAM-validated\nprincipal, commerce is then asked whether that principal's ORG holds an ACTIVE\nentitlement for the product, and only then is a token signed, with the\nproduction key KMS holds. A product the org does not own answers\n403 and no token. The signed features are the plan's features verbatim, so the\nengine enforces exactly what was bought, and the expiry is clamped to the\nentitlement's so a token cannot outlive the subscription that paid for it.\n\nThe token is the credential the engine runs on. Treat it as a secret."
-  },
-  {
-   "id": "post_licensing_verify",
-   "doc": "Verify checks a license token online: signature, schema, expiry, app_id and\nthe revocation list.\n\nIt is UNAUTHENTICATED and always answers 200 — a bad token is `valid:false`\nwith a reason rather than an error status, because \"is this token good\" is a\nquestion anyone may ask about a credential they already hold and the answer is\nthe same either way. It is also OPTIONAL: the engine verifies OFFLINE against\nthe published public key (GET /v1/licensing/pubkey) and needs this endpoint\nonly to learn about revocation, so an outage here never stops a paid customer\nworking."
-  }
- ],
  "link": [
   {
    "id": "delete_link_by_id",
@@ -4449,376 +4397,6 @@
    "id": "get_market_tokens",
    "doc": "Answers the tokens one chain's indexer has seen, with the decimals a caller needs\nto read any amount of one correctly.\n\nThis is what the indexer INGESTED, which is not the same as what exists on the\nchain: a token nothing has traded has no row here, and this is not a registry of\nwhat is permitted or listed.",
    "read": true
-  }
- ],
- "marketing": [
-  {
-   "id": "delete_marketing_audiences_by_id",
-   "doc": "Removes one of the caller org's audiences and answers 204. It\ndeletes the saved filter only — no customer, event or enrollment is touched.\n\nOrg admin or SuperAdmin only; a member of the org is refused."
-  },
-  {
-   "id": "delete_marketing_broadcasts_by_id",
-   "doc": "Deletes a broadcast that is not sending, with its record of\nwho it went to, and answers 204. One that is sending is 409; cancel it first.\n\nOrg admin only."
-  },
-  {
-   "id": "delete_marketing_calendar_by_id",
-   "doc": "Removes one of the caller org's posts and answers 204. A\npost already published is deleted from the calendar only — nothing is\nretracted from the network it went out on."
-  },
-  {
-   "id": "delete_marketing_campaigns_by_id",
-   "doc": "Removes one of the caller org's campaigns and answers 204. A\ncampaign belonging to another org reads as not found and is left untouched."
-  },
-  {
-   "id": "delete_marketing_lists_by_id",
-   "doc": "Deletes one of the org's lists with every subscriber, segment,\nimport and broadcast it has, and answers 204. A list with a broadcast sending\nis 409; cancel it first.\n\nOrg admin only."
-  },
-  {
-   "id": "delete_marketing_lists_by_id_segments_by_sid",
-   "doc": "Deletes a saved segment and answers 204. A scheduled broadcast to\nit is 409; change or cancel the broadcast first.\n\nOrg admin only."
-  },
-  {
-   "id": "delete_marketing_lists_by_id_subscribers_by_sid",
-   "doc": "Removes one subscriber from one of the org's lists and\nanswers 204. The row and its evidence are gone; to keep the record of someone\nleaving, set their status to unsubscribed instead.\n\nOrg admin only."
-  },
-  {
-   "id": "delete_marketing_suppressions",
-   "doc": "Re-subscribes an address on one channel and answers 204. The\nentry is named in the query. An address that is not on the list reads as not\nfound.\n\nOrg admin or SuperAdmin only; a member of the org is refused."
-  },
-  {
-   "id": "get_marketing_audiences",
-   "doc": "Returns every audience the org can send to: its saved cohorts,\nmost recently updated first, then its mailing lists and their saved segments,\nnewest first, each list with its subscribed count. A list or a segment is an\naudience as a cohort is: a sequence enrolls any of them by id.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_audiences_by_id",
-   "doc": "Returns one of the caller org's saved audiences. An audience\nbelonging to another org reads as not found.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_audiences_by_id_preview",
-   "doc": "Evaluates the cohort LIVE — the same resolution an enrollment\nwould run — and reports how big it is and how many real mailboxes it reaches.\nIt is the honest answer to \"is this send worth making\": a cohort of 500 that\nmails 3 says so, in deliverable and unmatched. Nothing is sent.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_beta",
-   "doc": "Answers the signed-in caller's waitlist record: the application as it\nstands, the betas asked for, the points and the actions that earned them, and\nthe place on the waitlist. An account that has not applied answers applied\nfalse and place 0.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_beta_invites",
-   "doc": "Answers the caller's invites, newest first, with how many were sent,\nhow many joined, and how many more they may send now. A reservation that\nlapsed unsent is not listed: it holds nothing.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_broadcasts",
-   "doc": "Returns the org's broadcasts, newest first.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_broadcasts_by_id",
-   "doc": "Returns one of the org's broadcasts.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_broadcasts_by_id_stats",
-   "doc": "Returns one broadcast's numbers: audience, sent, refused,\nfailed, and what the email plane reported (delivered, opened, clicked,\nbounced, complained, unsubscribed), each counted once per message, with open\nand click rates.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_calendar",
-   "doc": "Returns the org's calendar, latest scheduled first,\noptionally narrowed to one status.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_calendar_by_id",
-   "doc": "Returns one of the caller org's posts, including the exact\nerror behind a failed publish. A post belonging to another org reads as not\nfound.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_campaigns",
-   "doc": "Returns the org's campaigns, most recently updated first,\noptionally narrowed to one lifecycle status.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_campaigns_by_id",
-   "doc": "Returns one of the caller org's campaigns. A campaign belonging to\nanother org reads as not found.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_click",
-   "doc": "Follows a tracked email link. It is public — the person clicking has no\nsession — and the token is its only authority: a token that verifies, for a\nsequence of one of Hanzo's own orgs that still exists, answers 302 to the\ndestination it signs and records one click (time and user-agent family; no IP\naddress), off the request path so the redirect never waits on storage. A token\nthat is missing, altered, signed under another key, older than a year, or for\nany other org or a deleted sequence answers 302 to the brand's home page\n(https://hanzo.ai/ on Hanzo's deployment). The location is only ever a\ndestination a token signs or that page, never a URL the request names."
-  },
-  {
-   "id": "get_marketing_fields",
-   "doc": "Returns the custom fields the org defined for its subscribers.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_imports",
-   "doc": "Returns the org's imports, newest first, each with its report.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_imports_by_id",
-   "doc": "Returns one of the org's imports: its state, how far its bytes and\nits reading have come, and its report so far.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_lists",
-   "doc": "Returns the org's lists, newest first, each with its subscribers counted\nby status.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_lists_by_id",
-   "doc": "Returns one of the org's lists, by id or slug, with its subscribers\ncounted by status.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_lists_by_id_segments",
-   "doc": "Returns one list's saved segments, newest first.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_lists_by_id_stats",
-   "doc": "Returns one list's numbers for charting: subscribers by status,\nsource and consent basis, and over a range of days, what happened each day,\nthe net growth, the confirmation rate and the unsubscribe rate. Every number is\nread from kept counts, never by reading the list.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_lists_by_id_subscribers",
-   "doc": "Returns a page of one list's subscribers, newest first unless asked\notherwise. Every filter (status, tag, source, ref, consent basis, a prefix of\nthe address or name, a custom field's value, ranges of when they joined and\nconfirmed, and whether they opened or clicked since a time) walks an index of\nits own, so a page costs the same on a list of ten rows or ten million.\nContinue with next.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_lists_by_id_subscribers_by_sid",
-   "doc": "Returns one subscriber of one of the org's lists, with their\nconsent evidence and engagement.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_promos",
-   "doc": "Returns every promo the deployment offers with its live counters:\nhow many orgs have redeemed it and how many redemptions remain under the cap.\nThe promos are fleet-wide, not per-org — only the counters move.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_promos_by_code_eligibility",
-   "doc": "Prices a promo against a plan and seat count. It is PURE: nothing\nis redeemed, credited or counted, so it is safe to call from a pricing page on\nevery keystroke. An inactive promo or an exhausted cap quotes ineligible with\nthe reason rather than erroring.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_promos_by_code_redemption",
-   "doc": "Returns the caller org's OWN redemption of a promo — an\norg-scoped read, so it can never surface another tenant's. Not found when this\norg has not redeemed it.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_sender",
-   "doc": "Returns the org's sender: the provider and the from, reply and\nfooter fields every list takes when it leaves its own empty.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_sequences",
-   "doc": "Returns the org's drip sequences, most recently updated first.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_sequences_by_id",
-   "doc": "Returns one of the caller org's sequences together with its steps\nin send order. A sequence belonging to another org reads as not found.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_sequences_by_id_enrollments",
-   "doc": "Returns who is walking one sequence, most recently enrolled\nfirst, with each walk's current step and next due time.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_sequences_by_id_steps",
-   "doc": "Returns one sequence's steps in send order.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_summary",
-   "doc": "Rolls up the caller org's campaigns: how many there are, how many are\nactive, and the summed budget and spend in cents.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_suppressions",
-   "doc": "Returns the org's opt-out list, newest first — everyone the\nsend gate will refuse to deliver to. The page carries `next` (an opaque\ncursor for the following page, empty on the last) and `total` (the true\ncount of this org's opt-outs on this channel, across every page).",
-   "read": true
-  },
-  {
-   "id": "get_marketing_suppressions_check",
-   "doc": "Answers whether the org's send gate refuses an address, and\nwhich list holds it, by the same check every commercial send asks.",
-   "read": true
-  },
-  {
-   "id": "get_marketing_unsubscribe",
-   "doc": "Is the PUBLIC one-click endpoint (no principal): a recipient\nclicks the signed link in an email footer. The token binds (org, channel,\naddress), so a caller can only opt OUT exactly the tuple it was minted for —\nnever another address and never another org. With company=true the address's\nwhole domain is opted out of this org's mail too, which a free mail address\nmay not ask (422); without it, the answer offers the company's domain when\nthere is one to offer. An invalid token is refused, and\na deployment with no KMS-sealed key refuses rather than accepting anything."
-  },
-  {
-   "id": "patch_marketing_broadcasts_by_id",
-   "doc": "Changes the fields the body names on a draft or scheduled\nbroadcast and answers it. One that is sending or done is 409.\n\nOrg admin only."
-  },
-  {
-   "id": "patch_marketing_lists_by_id",
-   "doc": "Changes the fields the body names on one of the org's lists and\nanswers the list. A field left out keeps its value; an empty string clears a\nsender field back to the org's.\n\nOrg admin only."
-  },
-  {
-   "id": "patch_marketing_lists_by_id_subscribers_by_sid",
-   "doc": "Changes the fields the body names on one subscriber and\nanswers the row. A status change follows the same rule as add: an address that\nunsubscribed or complained is not put back by the org.\n\nOrg admin only."
-  },
-  {
-   "id": "post_marketing_audiences",
-   "doc": "Saves a cohort filter for the caller's org. Name is required.\nOmitting event saves the WHOLE-ORG audience — every mailable customer — which\nneeds no analytics warehouse; naming one narrows that roster to the customers\nwho fired it within windowDays.\n\nOrg admin or SuperAdmin only; a member of the org is refused."
-  },
-  {
-   "id": "post_marketing_beta_actions",
-   "doc": "Counts one action of the signed-in caller: a star on a Hanzo repository,\nverified on GitHub for the login named, or a follow of a founder's link, taken\non trust. An action already counted changes nothing. A star GitHub does not\nshow answers 422, and a login another account's stars are counted for, 409."
-  },
-  {
-   "id": "post_marketing_beta_invites",
-   "doc": "Reserves an invite for each address the limits admit and answers the\nmessage the member's mailbox sends for each: subject, text and HTML, the\nunsubscribe headers, with the member's referral link for that invite and a\none-click unsubscribe for that address. Nothing is sent from here; the member's\nbrowser sends each from their own Gmail and reports it to POST\n/v1/marketing/beta/invites/sent.\n\nAn address is skipped, with why, when it is not an email address, is the\nmember's own, cannot be invited (it opted out of the brand's email, its company\ndid, the platform bars it, or it already holds an account: one reason for all,\nso no one learns which), was invited in the last 30 days, or is past the\nmember's 20 a day or 100 a month. When the limits leave the member nothing to\nreserve the answer is 429, with Retry-After the seconds until a slot frees."
-  },
-  {
-   "id": "post_marketing_beta_invites_sent",
-   "doc": "Records what the member's browser did with its reservations: the\ninvites sent, and the ones that failed with the mailbox's reason. Only the\nmember who reserved an invite marks it, only while it is reserved, and only\nwithin the 24 hours it holds; anything else is left as it stands. Each invite\nthat becomes sent is filed on its invitee's CRM timeline, the person made when\nthe org held none, a CRM that cannot answer costing the timeline an entry and\nnever the report. It answers the named invites that are the caller's, as they\nstand."
-  },
-  {
-   "id": "post_marketing_beta_request",
-   "doc": "Adds betas to those the signed-in caller asked for, creating the record\nwhen there is none. Each new id is stamped with the time it was asked for and\nstated on the event plane as beta_requested."
-  },
-  {
-   "id": "post_marketing_broadcasts",
-   "doc": "Composes a broadcast to one of the org's lists, or a segment\nof it, and answers 201 with it. With scheduledAt it is scheduled; without, a\ndraft until sent.\n\nOrg admin only."
-  },
-  {
-   "id": "post_marketing_broadcasts_by_id_cancel",
-   "doc": "Stops a scheduled or sending broadcast and answers it. Who it\nalready reached stays recorded.\n\nOrg admin only."
-  },
-  {
-   "id": "post_marketing_broadcasts_by_id_send",
-   "doc": "Sends a draft or scheduled broadcast now, or schedules it for at,\nand answers 202 with it. The list's sender must carry a postal address, which\nevery commercial mail states (CAN-SPAM); without one it is 422.\n\nOrg admin only."
-  },
-  {
-   "id": "post_marketing_broadcasts_by_id_test",
-   "doc": "Sends the broadcast as it stands to up to five addresses, its\nsubject marked [Test], through the same rail and footer the real send takes.\n\nOrg admin only."
-  },
-  {
-   "id": "post_marketing_calendar",
-   "doc": "Adds a post to the content calendar. Channel and body are\nrequired. A scheduledAt in the future makes the post \"scheduled\" and the\ndurable sweep publishes it when it comes due — claimed once, so a post\npublishes at most once; without one it stays a draft."
-  },
-  {
-   "id": "post_marketing_campaigns",
-   "doc": "Registers a campaign in the caller's org. Name is required;\nchannel defaults to email and status to draft, and a future scheduledAt with\nno explicit status makes the campaign \"scheduled\". Budget and spend are cents\nand are clamped to \u003e= 0. The id, createdAt and updatedAt of the input are\nignored — the server assigns them."
-  },
-  {
-   "id": "post_marketing_campaigns_by_id_schedule",
-   "doc": "Sets a campaign's send time and moves it to \"scheduled\". A\nscheduledAt of 0 clears the schedule and returns it to \"draft\"."
-  },
-  {
-   "id": "post_marketing_imports",
-   "doc": "Creates an import into one of the org's lists and answers it. For\na file the import waits in state receiving for its bytes (PUT\n/v1/marketing/imports/{id}/data); for a source (from: commerce) it is queued at\nonce. A key makes the call idempotent: a second create with it answers the\nfirst import. The rows are stamped with the import's id as their source ref, so\na filter on ref selects the batch.\n\nOrg admin only."
-  },
-  {
-   "id": "post_marketing_imports_by_id_cancel",
-   "doc": "Stops an import that has not finished and answers it. The rows it\nalready wrote stay; a filter on its id as ref selects them.\n\nOrg admin only."
-  },
-  {
-   "id": "post_marketing_imports_by_id_start",
-   "doc": "Queues an import whose bytes have all arrived and answers 202 with\nit; a worker reads it from there. An import with no bytes is 409.\n\nOrg admin only."
-  },
-  {
-   "id": "post_marketing_leads",
-   "doc": "Files one public form in the deployment's own CRM. A sales inquiry or a\nprogram application becomes a lead: the person, and the form on their timeline\nwith every answer, the campaign and coupon its page carried; it is stated on the\nevent plane and mailed to the brand's sales mailbox. A body naming a job opening\nbecomes a candidate and its form, mailed to the brand's careers mailbox and stated\nnowhere. Program investor is an investor and their form at status submitted,\nstated nowhere, mailed to nobody, and sent a SAFE to sign (`sent` says whether it\nwent). No account is needed: every record lands in the brand's org. A person\nsigned in who applies to the beta also opens the products in beta (the CRM) for\nthe org they act in. Answers 201 with an opaque reference.\n\nA person signed in files under the address their token was issued to: a body\nnaming another address is 400, and so is a sign-in issued with no address. An\norder that upgrades an organization names it in `upgrade`, sent signed in and\nacting in that organization (X-Org-Id) as its owner or an admin, and the lead\nrecords that verified handle; anyone else naming one is 403. `payment` is card or invoice, and an Enterprise inquiry paying by\ninvoice is also stated as invoice_requested. X-Idempotency-Key makes a retry\nsafe: the same key from the same address answers the same reference, and files,\nmails and states nothing twice; the same key sent with another form is 409. The\nsales mail states the payment and the verified organization to upgrade beside the\nanswers.\n\nA brand org whose Base cannot hold the CRM answers 503, a caller past ten forms\nin an hour 429, a body over 16 KiB 413, and a missing or malformed email 400 — in\nthat order; an investor's form then answers 400 for its name, its amount\n(\"The minimum investment is $25,000.\"), its address, entity, title and phone, in\nthat order."
-  },
-  {
-   "id": "post_marketing_leads_esign",
-   "doc": "Takes Hanzo eSign's webhook: a SAFE was signed, countersigned,\ncompleted, declined or voided, and the investor's form in the brand's CRM moves\nto that status. The caller is Hanzo eSign acting as itself: its own IAM\nclient_credentials token, verified by the identity boundary like every other.\nNo caller answers 401, and any caller but eSign's application 403.\n\nA status only moves forward (submitted, investor signed, countersigned,\ncompleted; or declined, or voided), so a replay or a late event changes\nnothing. The document must be the one the form recorded; any other, and any\nreference that names no investor's form, answers 200 with no status and\nchanges nothing."
-  },
-  {
-   "id": "post_marketing_leads_resume",
-   "doc": "Signs a form the careers page posts one resume through, into the brand\norg's private careers bucket, and answers the key to name on the application\n(`resume_file`). PUBLIC like the form itself: each caller is limited to ten an\nhour, a file that is not a PDF, DOC or DOCX of at most 10 MB is refused 400, and\na deployment that cannot sign one answers 503."
-  },
-  {
-   "id": "post_marketing_lists",
-   "doc": "Creates a list in the org and answers 201 with it. Name is\nrequired; a new list is private, asks public subscribers to confirm, and takes\nthe org's sender for every sender field it leaves empty. A slug the org already\nuses is 409.\n\nOrg admin only."
-  },
-  {
-   "id": "post_marketing_lists_by_id_segments",
-   "doc": "Saves a filter over one list as a segment and answers 201 with\nit and how many subscribers it selects now.\n\nOrg admin only."
-  },
-  {
-   "id": "post_marketing_lists_by_id_subscribers",
-   "doc": "Adds an address to one of the org's lists, or updates it when it\nis already there, and answers 201 or 200 with the row. Pending mails the\naddress a link to confirm. An address that unsubscribed or complained cannot be\nput back by the org: it is 409, and the person rejoins by subscribing and\nconfirming again.\n\nOrg admin only."
-  },
-  {
-   "id": "post_marketing_lists_by_id_subscribers_bulk",
-   "doc": "Applies one action to a selection of a list and answers how many rows it\nmatched and changed. The selection is ids, a saved segment, a filter, or the\nwhole list. It walks the selection in batches of a thousand, one transaction\neach, so millions of rows move in bounded memory: tag and untag add or remove\na tag; move moves the rows to another list of the org; unsubscribe and clean\nset those statuses on every row that is pending or subscribed, each telling\nthe CRM and the event stream; delete removes the rows and their evidence.\n\nOrg admin only."
-  },
-  {
-   "id": "post_marketing_mail",
-   "doc": "Sends one email from the org to one person, the way a person on the org's team\nwrites back to a lead from its record.\n\nIt leaves by the org's own path, the one every marketing send takes: the org's\nmailbox when it has one, else the platform's notify rail, and never to an\naddress that opted out of the org's mail, whose company did, or that the\nplatform blocks (Sent is false then, and that is not an error). It carries the\nopt-out footer and List-Unsubscribe. The org's mailbox caps hold: at its cap\nthe send is refused with 429 and the time it frees.\n\nAn admin of the org acting, or SuperAdmin, may send: mail that leaves in the\norg's name is the team's to write, not every member's. The send is on the audit\ntrail before it leaves (marketing.mail.send: the address, the subject and the\nperson, never the text), and the mail, sent or refused, goes on the timeline of\nits person.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
-  },
-  {
-   "id": "post_marketing_promos_by_code_redeem",
-   "doc": "Records the caller org's claim on a promo. NOTHING IS CREDITED:\nthe redemption is a row, and credit into an org is an admin decision made on\nthe admin surface against an auditable ledger.\n\nThe plan is DERIVED from the org's live ACTIVE/TRIALING paid subscription and\ncan never be named by the caller — an org with no qualifying subscription is\nrefused, and so is one whose subscription cannot be read. The seat count is\nthe single-seat floor (claimSeats), so the recorded figure has no input that\ncan inflate it.\n\nGuards run under one lock so the cap cannot be raced past: the fleet-wide\nredemption cap, one redemption per org, one per payment instrument (REQUIRED),\nand the per-redemption ceiling.\n\nIt is IDEMPOTENT: an org that already redeemed gets its original redemption\nback with alreadyRedeemed true."
-  },
-  {
-   "id": "post_marketing_sequences",
-   "doc": "Registers a drip sequence in the caller's org. Name is\nrequired; status defaults to draft, and a sequence must be ACTIVE before it\nwill accept enrollments. The id, createdAt and updatedAt of the input are\nignored — the server assigns them.\n\nOrg admin or SuperAdmin only; a member of the org is refused."
-  },
-  {
-   "id": "post_marketing_sequences_by_id_enroll",
-   "doc": "Adds one contact or a whole audience to a sequence and schedules the\nfirst step for each. The sequence must be ACTIVE (a draft sends nothing), and\nthe request must name exactly one of address or audienceId.\n\nEnrolling is ALL this does: the message itself is sent later by the drip\nengine, through the suppression gate, so an opted-out customer can be enrolled\nhere and still never be mailed. Re-posting is safe — an address this sequence\nalready took is counted in alreadyEnrolled and never double-dripped — which is\nwhat makes retrying a partially-applied announcement a resume rather than a\nsecond send.\n\nOrg admin or SuperAdmin only; a member of the org is refused."
-  },
-  {
-   "id": "post_marketing_sequences_by_id_enrollments_by_eid_cancel",
-   "doc": "Stops one walk mid-sequence and answers 204: no further step\nis sent, and steps already delivered are not recalled. Only an ACTIVE\nenrollment can be canceled — one already completed or canceled reads as not\nfound.\n\nOrg admin or SuperAdmin only; a member of the org is refused."
-  },
-  {
-   "id": "post_marketing_sequences_by_id_status",
-   "doc": "Flips draft/active/archived — the activation gate for\nsending, since only an active sequence accepts enrollments. It does not touch\nenrollments already walking: archiving stops new ones, not in-flight ones.\n\nOrg admin or SuperAdmin only; a member of the org is refused."
-  },
-  {
-   "id": "post_marketing_sequences_by_id_steps",
-   "doc": "Appends a message to the END of a sequence: the new step's idx is one\npast the last, so steps arrive in the order they are added. Body is required\nand delaySeconds must be \u003e= 0. Adding a step does not disturb enrollments\nalready walking — one that has passed this index simply never sees it.\n\nOrg admin or SuperAdmin only; a member of the org is refused."
-  },
-  {
-   "id": "post_marketing_subscribe",
-   "doc": "Asks for the brand's newsletter for an address and answers 202\npending. Nothing is recorded: the address is mailed a link to confirm, good for\nseven days, and only a press on it subscribes. The answer is the same for an\naddress that is new, already subscribed or unsubscribed, and each is mailed\nalike, so the answer says nothing about the address; one that unsubscribed gets\nthe link too, which is how it comes back. No account is needed, and nothing is\ntold to the sales mailbox or stated to an ad platform.\n\nA deployment whose brand cannot hold the newsletter answers 503, a caller past\nten requests in an hour 429, a body over 4 KiB 413, a missing or malformed email\n400, and an address already sent three links today, or a deployment past its\nhourly ceiling, 429, in that order."
-  },
-  {
-   "id": "post_marketing_subscribe_confirm",
-   "doc": "Subscribes the address a confirmation link names and answers 200\nconfirmed. The token is the t value in the link's fragment, and it is the only\nauthority. The subscriber is filed in the brand's CRM: the person, their place\non the Newsletter list, and the confirmation on their timeline with the page\nand language it came from, when it was asked for, and when and from which\naddress it was confirmed (double opt-in). The brand's opt-out for that address\nis lifted, since the person asked to come back. Pressing the same link again\nanswers 200 and changes nothing.\n\nA caller past thirty presses in an hour answers 429, a link that is missing,\nmalformed, altered or signed elsewhere 400, one older than seven days 410, and\na deployment whose brand cannot hold the CRM 503."
-  },
-  {
-   "id": "post_marketing_suppressions",
-   "doc": "Records an opt-out for the org (admin / self-service\nmanagement). Address is required; channel defaults to email. An address of\nthe form \"@example.com\" opts out the whole domain, a company; a free mail\nprovider's domain is refused 422. The admin org's list is the platform's:\nwhat it holds, every org's send gate refuses. It is idempotent:\nre-suppressing the same tuple keeps the original record rather than erroring.\nFrom here on the ONE send gate refuses that recipient on that channel.\n\nOrg admin or SuperAdmin only; a member of the org is refused."
-  },
-  {
-   "id": "post_marketing_unsubscribe",
-   "doc": "Is the one-click unsubscribe a mail client sends from the\nList-Unsubscribe header (RFC 8058): the same signed link the footer carries,\nPOSTed with the form body List-Unsubscribe=One-Click. It opts out exactly what\na click on the link does, under the same token check, and is as public."
-  },
-  {
-   "id": "put_marketing_beta",
-   "doc": "Writes the signed-in caller's application: the program, the answers, the\nbetas asked for and the lead it was filed under. A field left out keeps what\nthe record holds; betas replace the set, each new id stamped with the time it\nwas asked for and stated on the event plane as beta_requested."
-  },
-  {
-   "id": "put_marketing_calendar_by_id",
-   "doc": "Replaces a post's editable fields. It is a full write, not\na patch, and it RESETS the lifecycle from the schedule: a scheduledAt makes\nthe post \"scheduled\" again and none makes it a draft — so editing a failed\npost requeues it rather than leaving it stuck."
-  },
-  {
-   "id": "put_marketing_campaigns_by_id",
-   "doc": "Replaces a campaign's editable fields. It is a full write, not\na patch: every field takes the value in the body, and an omitted one is\ncleared. The id comes from the path — the body cannot retarget another\ncampaign — and createdAt is never rewritten."
-  },
-  {
-   "id": "put_marketing_fields",
-   "doc": "Replaces the org's custom fields with the set the body carries and\nanswers it. A field dropped from the set is removed from every subscriber; a\nfield kept keeps its values when its type does not change, and a changed type\nis 409 while any subscriber has a value for it.\n\nOrg admin only."
-  },
-  {
-   "id": "put_marketing_lists_by_id_segments_by_sid",
-   "doc": "Replaces a segment's name and filter and answers it with how\nmany subscribers it selects now.\n\nOrg admin only."
-  },
-  {
-   "id": "put_marketing_sender",
-   "doc": "Replaces the org's sender and answers it. Every field is written;\none left out is cleared.\n\nOrg admin only."
   }
  ],
  "marketplace": [
@@ -5094,7 +4672,7 @@
   },
   {
    "id": "post_network_waitlist",
-   "doc": "Puts an address or an X handle on the Hanzo Network waitlist and answers\n202 pending. Nothing is mailed. It gives the same answer for an identifier that is\nnew and one asked for before, however often, and with the same headers, so it says\nnothing about who is on the list; a repeat changes nothing, and the first entry\nstands. An X handle is never looked up anywhere and no wallet address is taken. No\naccount is needed, and the entry keeps nothing about the caller.\n\nA deployment that cannot hold the waitlist, or has issued no invite yet, answers 503;\nthen a caller past ten requests an hour is 429 (with Retry-After), a body over 4 KiB\n413, and a body that is not JSON, one with neither or both of email and xHandle, an\ninvalid one or a role that is not miner, builder, researcher or staker 400, in that\norder. The ten an hour are per network address: clients behind one address share them,\nand so do callers whose address is unknown. Nothing here is gated by an invite yet; the operations that will be answer with\nthe problem type invite_required."
+   "doc": "Puts an address or an X handle on the Hanzo Network waitlist and answers\n202 pending. Nothing is mailed. It gives the same answer for an identifier that is\nnew and one asked for before, however often, and with the same headers, so it says\nnothing about who is on the list; a repeat changes nothing, and the first entry\nstands. An X handle is never looked up anywhere and no wallet address is taken. No\naccount is needed, and the entry keeps nothing about the caller. It also keeps\nno email or handle: only a keyed HMAC digest of the identifier, under the one\ninvite secret with a domain of its own, is filed.\n\nA deployment that cannot hold the waitlist, or has issued no invite yet, answers 503;\nthen a caller past ten requests an hour is 429 (with Retry-After), a body over 4 KiB\n413, and a body that is not JSON, one with neither or both of email and xHandle, an\ninvalid one or a role that is not miner, builder, researcher or staker 400, in that\norder. The ten an hour are per network address: clients behind one address share them,\nand so do callers whose address is unknown. Nothing here is gated by an invite yet; the operations that will be answer with\nthe problem type invite_required."
   }
  ],
  "node": [
@@ -6791,78 +6369,6 @@
    "doc": "Changes a site's contract and brief fields. It leaves absent fields\nas they stand, and it never moves the account number, the coordinates or the\ncustomer — those are register facts, changed through the framework surface."
   }
  ],
- "plan": [
-  {
-   "id": "get_plan",
-   "doc": "Returns the Hanzo cloud plan catalog: every cloud tier with its\nprice, included capacity, limits and feature list, scoped to the caller's\ncatalog. A reseller org sees its own overrides in place of the canonical\nrecords it has replaced, and the canonical record for every tier it has not.",
-   "read": true
-  },
-  {
-   "id": "get_plan_blockchain",
-   "doc": "Returns the blockchain RPC plan catalog: the tiers metered\nin monthly compute units, with their prices, limits and overage terms. It is\nthe canonical catalog for every caller — these plans carry no reseller\noverrides.",
-   "read": true
-  },
-  {
-   "id": "get_plan_dns",
-   "doc": "ListDNSPlans returns the DNS plans on sale: the tiers priced on zones, records\nper zone and queries per day. They are the plan authority's rows of the dns\ncategory, the same for every caller. Answers 503 while the authority has never\nbeen read.",
-   "read": true
-  },
-  {
-   "id": "get_plan_entitlements_by_id",
-   "doc": "Returns what one plan GRANTS and not what it costs: the\ncanonical namespaced entitlement block and the flat license-feature list\nderived from it. It is the entitlement half of ResolvePlan, over the same rows\nand the same 404 for an id none holds — the read a licensing or quota gate\nmakes.",
-   "read": true
-  },
-  {
-   "id": "get_plan_gpu",
-   "doc": "ListGPUTiers returns the rentable GPU configurations, each with its accelerator\ncount and model, VRAM, vCPUs, host memory and hourly price.",
-   "read": true
-  },
-  {
-   "id": "get_plan_health",
-   "doc": "Reports that the plans subsystem is mounted and serving. It answers from\nthe process itself and consults neither the catalog bundle nor the goja host,\nso it stays \"ok\" while either is degraded.",
-   "read": true
-  },
-  {
-   "id": "get_plan_policy",
-   "doc": "Returns the published pricing policy: whether pricing is\ntransparent, the revenue-sharing terms (idle compute resale and the open-source\nshare) and the principles the catalog is priced by.",
-   "read": true
-  },
-  {
-   "id": "get_plan_regions",
-   "doc": "Returns the regions cloud capacity is offered in, each with its\ndisplay name and physical location.",
-   "read": true
-  },
-  {
-   "id": "get_plan_resolve_by_id",
-   "doc": "Resolves one plan to everything a consumer of the catalog needs at\nonce: its canonical entitlement block, the flat license-feature list a signed\nlicense carries, its billing reference, and the catalog it came from. The id\nis a plan's slug, or a slug the plan replaces: a plan the plan authority holds\na row for, whatever its status (an archived plan still resolves for a renewal),\nor a cloud VM plan. An id neither holds answers 404, and 503 while the\nauthority has never been read.",
-   "read": true
-  },
-  {
-   "id": "get_plan_schema",
-   "doc": "Returns the two JSON Schema documents this surface speaks:\nentitlements.schema.json, which declares every entitlement key with its type,\nunit and enum, and plan.schema.json, which a catalog plan record conforms to.",
-   "read": true
-  },
-  {
-   "id": "get_plan_storage",
-   "doc": "Returns the block-storage price block: the price per GB per\nmonth and the volume size bounds a cloud plan may attach.",
-   "read": true
-  },
-  {
-   "id": "get_plan_subscriptions",
-   "doc": "Returns the plans a customer subscribes to that are on\nsale — each with its monthly and annual price, seat rules, limits, the\nentitlement block it grants and its billing reference. The plans are the plan\nauthority's rows, the ones a card is charged from: an edit made at\nadmin.hanzo.ai is published here within seconds. Answers 503 while the\nauthority has never been read.",
-   "read": true
-  },
-  {
-   "id": "get_plan_tools",
-   "doc": "Returns the per-use price of every metered tool — web search,\ncode interpreter, image generation, speech — each with the unit it is billed\nin.",
-   "read": true
-  },
-  {
-   "id": "get_plan_vocab",
-   "doc": "Returns the entitlement key vocabulary: every key with\nits namespace, JSON type, nullability, unit, enum and title, the list of\nnamespaces, and the engine features a license can grant. It is derived from\nentitlements.schema.json on every call, so it cannot fall behind the schema.",
-   "read": true
-  }
- ],
  "platform": [
   {
    "id": "delete_platform_projects_by_project",
@@ -7047,138 +6553,6 @@
   {
    "id": "get_pref",
    "doc": "Returns the signed-in caller's OWN preference document — the theme,\ndensity and pinned nav that follow them across every Hanzo surface. There is no\npath to another user's preferences: not for an org admin, not for a platform\nSuperAdmin, because the subject is built from the validated credential and is the\nmandatory predicate on the read. A caller who has never saved anything gets an\nempty document at 200, never a 404, so the user menu always renders.",
-   "read": true
-  }
- ],
- "pricing": [
-  {
-   "id": "get_pricing",
-   "doc": "Returns the whole pricing catalog in one document: Zen and\nthird-party models, providers, model families, the free-model list, plan and\ninfrastructure pricing. Every model and provider it names is filtered to what\nthe caller's org may see — the same gate the leaf routes apply, so this can\nnever be an un-gated second source for what they hide.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_base",
-   "doc": "Returns the Hanzo Base plans — the managed-instance tiers,\neach with its monthly and annual price, storage and request allowances and\nfeature list.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_blockchain",
-   "doc": "Returns the blockchain access plans — the RPC and node\ntiers, each with its monthly price, compute-unit allowance and feature list.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_cloud",
-   "doc": "Returns the public cloud section of the catalog in one\ndocument: its instance plans, its regions and its block-storage prices. The\nsection's internal half — the provider costs Hanzo pays and the plan-to-\nprovider routing table — is stripped before it is served, so this is what a\ncustomer may see and nothing more.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_cloud_plans",
-   "doc": "Returns just the cloud instance plans — each with its vCPU,\nmemory, disk, CPU type, VM allowance, feature list and monthly and hourly\nprice. It is the plans of the cloud section on their own.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_cloud_regions",
-   "doc": "Returns the regions a cloud instance can be placed in, each\nwith its id, display name and physical location. It is the regions of the\ncloud section on their own.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_cloud_storage",
-   "doc": "Returns the block-storage prices of the cloud\nsection: the per-GB monthly rate and the volume size bounds a caller may ask\nfor.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_compute",
-   "doc": "Returns the compute section of the catalog: the cloud\nprovider and region the prices are quoted for, the monthly markup applied to\nthem, the full instance-size tier list and the named presets. It is the\nwhole section as the pricing source records it, un-gated — no model or\nprovider identity appears in it.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_compute_presets",
-   "doc": "Returns just the named compute sizes — the short,\nhuman-labelled list (\"Starter\", \"Pro\") a size picker renders, each carrying\nits provider slug, vCPU, memory, disk and price. It is the presets of the\ncompute section on their own, for a caller that does not need the full tier\ntable.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_datastore",
-   "doc": "Returns the Hanzo Datastore rate card: the tier list, the\nper-GB storage and egress usage rates, the annual discount and the trial. It is\nthe section as authored, un-gated — no provider identity appears in it.\n\nThe route was missing while the data existed, so this 404d and every visitor to\nhanzo.ai's Infrastructure tab was told pricing was \"temporarily unavailable\".",
-   "read": true
-  },
-  {
-   "id": "get_pricing_enablement",
-   "doc": "Returns what the caller can actually use: every managed item\nwith its global state and whether it is effective for this caller — a beta\nitem is, while the platform's `beta` switch is on for it. Read-only and safe\nfor any caller: one without a validated principal sees the generally-available\nitems, never another org's view.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_featured",
-   "doc": "Returns the models the catalog highlights, filtered to what\nthe caller's org may see. It is the same catalog as ListModels narrowed to\nentries the pricing source marks featured.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_free",
-   "doc": "Returns the models that cost nothing to call, filtered to what\nthe caller's org may see. It is the same catalog as ListModels narrowed to\nentries the pricing source marks free.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_gpu",
-   "doc": "ListGPUTiers returns the rentable GPU configurations, each with its\naccelerator count and model, VRAM, vCPU, host memory and hourly price.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_health",
-   "doc": "Reports that the pricing subsystem is mounted and serving. It answers\nfrom the process itself and consults neither the catalog bundle nor the\nenablement store, so it stays \"ok\" while either is degraded.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_iam",
-   "doc": "ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each with its\nmonthly and annual price, monthly-active-user allowance and feature list.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_model_by_name",
-   "doc": "Returns one model's catalog entry — its pricing, context window and\ncapabilities as the pricing source records them. A model hidden for the\ncaller's org answers the same 404 an unknown name does, so a disabled model\ngets no existence oracle.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_models",
-   "doc": "Returns the whole model catalog — every model the gateway serves,\nZen and third-party alike — filtered to what the caller may see. A model an\nadmin has disabled is absent; one in beta appears only for a caller the\nplatform's `beta` switch is on for. A SuperAdmin sees every model, each\nannotated with its enablement state.\n\n?id= narrows it to the models named, in the catalog's order, and `total`\ncounts what is answered: a page that prices five models reads five, not the\ncatalog.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_paas",
-   "doc": "ListPaaSPlans returns the application-hosting plans — the deploy-and-host\ntiers, each with its monthly and annual price, app and memory allowances and\nfeature list.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_policy",
-   "doc": "Returns the pricing policy document: the revenue-sharing\nterms (the idle-resale share and the open-source share, each with its\npercentage and who is eligible) and the commitments Hanzo makes about how it\nbills — no hidden fees, no egress charges, no surprise bills.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_providers",
-   "doc": "Returns the model providers the catalog knows, each with its\ninfo object, filtered to what the caller's org may see. A provider an admin\nhas disabled is absent — and so are its models everywhere else on this\nsurface, because a provider's state cascades to what it serves.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_services",
-   "doc": "Returns the managed-service rate cards — Search, Crawl,\nVector, Console and Managed Services — each with its own tiers, and some with\nusage rates or a comparison table. It is the section as authored, un-gated.\n\nThese are DISPLAY rate cards: what a product costs, not what a plan grants. No\nentitlement or limit fields ride here, so nothing can bill off them.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_subscriptions",
-   "doc": "Returns the API subscription plans — the account-level\ntiers a customer subscribes to, each with its monthly and annual price,\nincluded credit, rate limits and feature list.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_summary",
-   "doc": "Returns the catalog's headline statistics — model counts by\nfamily and the provider directory. The provider sub-object is filtered to what\nthe caller's org may see, so a disabled provider's name never leaks; the\naggregate counts are the catalog's own, over everything it holds. A SuperAdmin's\nsummary adds `enso`: the day's Enso answers, the arms that failed first, the share\nOpenRouter's credit bought (fallbacks), the margin the fixed prices made, the\nanswers that stated no cost and every loss, by model, arm and vendor.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_tariff",
-   "doc": "Returns the platform's rate card: what a bill is made of, what each\npart costs, and the completion windows a request may ask for.\n\nFOUR COMPONENTS, and every charge is one of them — model inference, computer,\nweb tools and media generation. Two are quoted before they run, so an agent is\nrefused before it breaches its budget; two are booked from what they used,\nbecause neither a provider's charge nor a render's cost is knowable in advance.\n\nEVERY AMOUNT IS INTEGER MICRO-USD (1 USD = 1,000,000), stated once in `unit`,\nand each rate says what one unit of it is in `per`. The compute rates are per\nHOUR because that is the unit a span is priced in — rate × seconds / 3600 — and\nbecause a GiB-second is four and a half micro-USD, which no integer holds.\n\nThe rates are the ones the ledger books: each is resolved through the same\nauthority the metering path reads, falling back to the same compiled floor. A\nrate of zero is a price and not an absence — a paused computer, a computer's\ncreation, the interfaces and a seat all cost nothing by design.",
-   "read": true
-  },
-  {
-   "id": "get_pricing_tools",
-   "doc": "Returns the per-use tool prices — web search, web fetch, code\ninterpreter, file storage, image generation, speech-to-text and\ntext-to-speech — each with the unit it is billed by and its price in that\nunit.\n\nThe two WEB rows are priced from the rate card rather than from the catalog,\nbecause those are the rows the platform charges by the call and a published\nnumber that is also a charged one has exactly one home (see tariff.go). Read\nthem as integer micro-USD at /v1/pricing/tariff; the decimal here is the\ndisplay this list has always carried.",
    "read": true
   }
  ],
@@ -8034,52 +7408,6 @@
   {
    "id": "post_reward_me_posts_scan",
    "doc": "Reads your recent public posts on Bluesky, Mastodon, Reddit, Hacker News or DEV by the\nhandle you give, and holds each that carries your own referral link, as pasting\nit would. Every other network is pasted as an address: X, Medium and Hashnode are read when\npasted, and LinkedIn, TikTok, YouTube, Threads, Instagram and Facebook cannot be read\nwithout your sign-in there, so staff decide those by hand. Asked at most three times an hour."
-  }
- ],
- "risk": [
-  {
-   "id": "riskAdoptModel",
-   "doc": "Puts one of your organisation's OWN PUBLISHED VALUES in force, by name —\nwhich is what an instant rollback is, what promoting a challenger is, and what\ninstalling the shape a search found is.\n\nIT TAKES AN ADDRESS AND NEVER STATE. The masses are read from your own store, so\nnothing about your model has to be held by whatever is making this call. That\ncloses the sharpest edge the previous shape had: a body of counters is something\na caller can COMPOSE, and a region filled until activity inside it reads as\nordinary is a model that has been shaped rather than learned. The engine's mass\ninvariant was the only thing standing between a composed body and the model; with\nan address there is no body to compose.\n\nIT ADOPTS THE SHAPE, NOT ONLY THE MASSES. A value records the model space its\nmasses were taken in, and a value whose space differs from the one in force\nREPLANTS your model into that space before restoring them. That is what makes\nPOST /v1/risk/search actionable: a search answers with the shape that fits your own\nhistory best and publishes it fitted, and its address is what you name here. Before\nthis, a winning shape was advice nobody could take — the adoption path refused every\nshape change, and a winner is a different shape by definition.\n\nWHAT ADOPTING A SEARCHED SHAPE COSTS, SAID PLAINLY: the value a search fits has\nlearned the window the search replayed and nothing older, so installing it trades\nhistory for fit. Your appetite is untouched — that is your policy record's, with its\nown versions — and so is the geometry, which stays your own.\n\nAn address your organisation has not published is NOT FOUND. That includes one\nanother organisation published, and it is not a lookup that failed: the store is\nper organisation and the address is a name, never an authority."
-  },
-  {
-   "id": "riskFeatures",
-   "doc": "Features is the feature catalogue in its two honest lenses.\n\nThe MODEL lens is the governed inventory: one entry per dimension of the model\nspace, each carrying the typology it serves, the supervisor's own words for the\nindicator, and the published standard those words come from — so a coverage\nclaim is checkable rather than asserted. It is the same for every organisation.\n\nThe SURFACE lens is what THIS organisation's own event surface actually carries,\nmeasured over the window: how many of its buckets carry each dimension at all,\nand what the dimension reads where it is present. A dimension present in no\nbucket is BLIND, and saying so is the difference between no risk and no data.",
-   "read": true
-  },
-  {
-   "id": "riskLearn",
-   "doc": "Records a batch of events into the caller organisation's own aggregates\nand lets its model learn from them. It answers how many it learned from.\n\nIT DOES NOT SCORE, AND THAT IS THE POINT. An observation is a value you record;\nlearning is a transformation over observations; a verdict is a query against the\nresult. This op is the first two. [ops.score] is the third, it is pure, and it\nis the ONE entry point to a verdict. They were one call, which meant you could\nnot record without training and could not train without being answered — and the\nmodel ran twice over every event to produce a verdict the response carried and\nno caller read.\n\nTO OBSERVE AND JUDGE, COMPOSE THE TWO, and mind the order. Score FIRST, then\nlearn: the score is then the model's opinion of an event it has not yet learned\nfrom, which is the question worth asking. The other order answers for a model\nthat has already absorbed the event it is judging.\n\nThis is the training path, and there is no job behind it: the model IS a set of\nmass counters over half-space trees, so learning is an increment and the model\nis current the instant the last event lands. Nothing from any other\norganisation is in it, and nothing from this organisation leaves it.\n\nA RETRY IS INERT. The record deduplicates on the event id you send, and an event\nalready in it moves nothing, costs nothing and is not counted — so a client that\ntimed out can send the same batch again and its model holds what it holds.\nWithout an id of your own there is nothing to converge on: two identical bodies\nare two events."
-  },
-  {
-   "id": "riskPolicy",
-   "doc": "Reports the caller organisation's own decision-regime history: every\ndistinct regime it has adopted, which version is in force, and what retention\nhas taken.\n\nWHY IT EXISTS. Every score cites the version it was decided under\n([riskScoreOut.Policy]), and the threshold that score was measured against is\nderived from the appetite that version states. Restate the appetite and, without\nthis record, every earlier decision becomes unreconstructible — the cut it was\njudged by no longer exists anywhere. An adverse decision that cannot be\nexplained against the policy in force when it was taken cannot be defended.\n\nIt covers ONE organisation. The history is on that organisation's own shelf, so\nanother's versions are not filtered out of the answer — they are not in the file\nthe answer is read from.",
-   "read": true
-  },
-  {
-   "id": "riskPublishModel",
-   "doc": "Publishes your organisation's model as a NAMED VALUE, so a decision\ntaken today can be reconstructed tomorrow and a change made today can be undone.\n\nIt answers with a NAME and not with the state. The masses stay on your\norganisation's own encrypted store and are referred to by an address computed\nfrom their own content: the shape, the geometry seed, the position in the window,\nthe threshold, the masses themselves as IEEE-754 bits, and the fold watermark\nbehind them. That is what makes the value nameable without making the caller its\ncustodian.\n\nIT IS IDEMPOTENT ON THE VALUE. A model that has not changed publishes to the name\nit already has and mints nothing, reporting minted=false — so publishing at every\nboundary that matters is free. Ten values are retained per organisation, bounded\nin BYTES rather than in rows, and the oldest is disposed of past that.\n\nA model that has learned nothing is refused: planted is not learned, and a value\nthat reproduces nothing is not a value.\n\nIt is POST and PUT on one address because they are one plane's two verbs over one\nkind of thing: POST mints a value from the model in force, PUT puts a value in\nforce. They were /v1/risk/state/snapshot and /v1/risk/state/restore — two addresses\nnamed after the operation rather than after the thing, which is how a reader ends\nup asking what the difference between a snapshot and a value is."
-  },
-  {
-   "id": "riskScore",
-   "doc": "Judges one event against the caller organisation's OWN model and learns\nnothing from it. It is how a candidate is tried against real behaviour before\nanything depends on the answer, and it is the model's analogue of testing a\nrule.\n\nBecause it records nothing, the aggregates it reads do not include the event:\nthe numbers are the organisation's history as it stands. A model still warming\ndeclines with a reason rather than answering zero, because silence must never\nread as a clean result."
-  },
-  {
-   "id": "riskSearch",
-   "doc": "Runs an exhaustive search for the model shape that best fits the caller\norganisation's own history, and answers 202 with the run to read back.\n\nEvery candidate is replayed over that organisation's OWN feature surface in its\nown sandbox — its own aggregates, its own model, neither of them the live one —\nso a run cannot move a live threshold and cannot see another organisation's\ndata. The result is the learning curve for each shape and the one that fit\nbest, ranked on how closely it honoured the stated appetite, whether it warmed\nat all, whether it saturated, and how much of the coordinate space it left\nblind.\n\nAn empty history is REFUSED rather than reported as zero alerts, because \"no\nalerts\" is exactly what a quiet model looks like."
-  },
-  {
-   "id": "riskSearchResult",
-   "doc": "Reads back one search run: every shape tried over this\norganisation's own history, best first, and the one that fit.\n\nA run another organisation started is simply not there — the same 404 an\nunknown id gives, so the read is not a probe oracle.",
-   "read": true
-  },
-  {
-   "id": "riskSetPolicy",
-   "doc": "States the decision regime the caller organisation's model decides\nunder: how much of its own stream may be sent for examination, how much of the\nrest is sampled to measure what was missed, and whether the model may change an\noutcome at all.\n\nThe appetite is the decision a model is not permitted to make for itself: its\noutput is a probability, so how likely it is to MISS something is a matter of\npolicy that has to be stated, measured and reviewed rather than absorbed into a\nconstant. The alert threshold is derived from it as a quantile of the scores\nactually observed, which is what keeps its meaning as the distribution drifts.\n\nIt is DURABLE BEFORE IT IS IN FORCE. The regime is recorded as a new version on\nthe organisation's own shelf before anything in memory moves, so a policy that\ncannot be written down is refused rather than answered from state the next\nrollout would silently undo.\n\nARMING IS AN ADMIN ACT AND TUNING IS NOT. Setting `live` requires an admin of\nthis organisation; stating the appetite and the sample is self-service for any\nmember. Taking the model live decides whether it may change an OUTCOME at all —\na payment frozen, a grant refused — for every customer this organisation has,\nand that is a decision an organisation takes rather than one of its members.\n\nA RESTATEMENT OF THE REGIME IN FORCE MINTS NOTHING and answers the version\nalready in force. Compare the version you receive with the version you had:\nunchanged means the numbers were the same, which is why there is no flag for it.\n\nLearned state survives the change. The model's identity covers its SHAPE — the\ninventory and the geometry — and not its appetite, so restating policy unlearns\nnothing. It also does not REPORT the learned state: what the model is is read\nfrom the model."
-  },
-  {
-   "id": "riskState",
-   "doc": "Reports the caller organisation's own model: what it has learned, whether\nit is live or still in shadow, the threshold in force, the appetite it stated\nbeside the share it actually realised, every refusal by reason, every feature\nthat read blind, and how much of the organisation's own event surface has been\nfolded in.\n\nIt covers ONE organisation. A caller cannot learn another's volumes, alert rate\nor behaviour from it, because the state is read out of a model that holds only\nits own.",
-   "read": true
   }
  ],
  "s3": [
@@ -9811,6 +9139,5 @@
    "doc": "Reads one x402 payment receipt by id.\n\nIt is scoped to the caller's own account — the wallet that was drawn, in the\nbooks that hold it — so one tenant can never read another's settlement, nor one\nmember of the signup org another's, and an id that exists but belongs to\nsomebody else is a 404 exactly like one that does not exist. A caller with no\nbillable identity is refused outright.",
    "read": true
   }
- ],
- "zen": []
+ ]
 }

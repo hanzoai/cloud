@@ -1,6 +1,8 @@
 package network
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -22,12 +24,31 @@ func (in *intake) join(t *testing.T, body, ip string) answer {
 // waiting is the waitlist records the brand's Base holds.
 func waiting(t *testing.T) []map[string]any { return records(t, "hanzo", waitlistName) }
 
+// noIdentifierIn checks that none of the identifiers appears in a stored row, in
+// any answer, or in the server log: the only trace of one is its HMAC digest.
+func (in *intake) noIdentifierIn(t *testing.T, answers []answer, identifiers ...string) {
+	t.Helper()
+	rows, _ := json.Marshal(waiting(t))
+	dump := map[string]string{"stored rows": string(rows), "log": in.logs.String()}
+	for i, a := range answers {
+		dump[fmt.Sprintf("answer %d", i+1)] = a.body + "\n" + a.head
+	}
+	for _, id := range identifiers {
+		for where, s := range dump {
+			if strings.Contains(strings.ToLower(s), strings.ToLower(id)) {
+				t.Errorf("%s carry the plaintext identifier %q:\n%s", where, id, s)
+			}
+		}
+	}
+}
+
 // TestJoiningAnswersAlikeForANewAndARepeatEntry: the first ask for an address, the
 // same address again in other letters, and the same one from another caller get the
 // same 202, byte for byte, and are one entry.
 func TestJoiningAnswersAlikeForANewAndARepeatEntry(t *testing.T) {
 	in := mountIntake(t)
 	first := in.join(t, `{"email":"ada@example.com","role":"builder"}`, from(1))
+	answers := []answer{first}
 	if first.code != http.StatusAccepted || first.body != pending {
 		t.Fatalf("want 202 %s, got %d %s", pending, first.code, first.body)
 	}
@@ -35,7 +56,9 @@ func TestJoiningAnswersAlikeForANewAndARepeatEntry(t *testing.T) {
 		{`{"email":"ada@example.com","role":"builder"}`, from(1)},
 		{`{"email":" Ada@Example.COM ","role":"staker","source":"elsewhere"}`, from(2)},
 	} {
-		if a := in.join(t, c.body, c.ip); a != first {
+		a := in.join(t, c.body, c.ip)
+		answers = append(answers, a)
+		if a != first {
 			t.Errorf("%s answered %d %q %s, the first %d %q %s", c.body, a.code, a.kind, a.body, first.code, first.kind, first.body)
 		}
 	}
@@ -44,28 +67,32 @@ func TestJoiningAnswersAlikeForANewAndARepeatEntry(t *testing.T) {
 	}
 
 	h := in.join(t, `{"xHandle":"AdaLovelace","role":"miner"}`, from(3))
+	answers = append(answers, h)
 	if h != first {
 		t.Fatalf("a handle answered %d %q %s, an address %d %q %s", h.code, h.kind, h.body, first.code, first.kind, first.body)
 	}
-	if again := in.join(t, `{"xHandle":"@adalovelace","role":"miner"}`, from(4)); again != h {
+	again := in.join(t, `{"xHandle":"@adalovelace","role":"miner"}`, from(4))
+	answers = append(answers, again)
+	if again != h {
 		t.Fatalf("a repeat handle answered %d %s", again.code, again.body)
 	}
 	if n := len(waiting(t)); n != 2 {
 		t.Fatalf("an address and a handle are %d entries, want 2", n)
 	}
+	in.noIdentifierIn(t, answers, "ada@example.com", "AdaLovelace", "adalovelace")
 }
 
-// TestAnEntryHoldsExactlyItsFieldsAndNoAddress: an address entry is its kind, the
-// address, the role, where it came from, the language and when. An X handle entry is
-// the same, the handle without its @ and in the case it was given. Neither holds
-// anything about the caller: no address, no agent, no header.
-func TestAnEntryHoldsExactlyItsFieldsAndNoAddress(t *testing.T) {
+// TestAnEntryHoldsExactlyItsFieldsAndNoIdentifier: an address entry is its kind,
+// its HMAC digest, the role, where it came from, the language and when; an X handle
+// entry is the same. Neither holds the identifier, anything about the caller (no
+// address, agent or header), nor the digest of the other kind.
+func TestAnEntryHoldsExactlyItsFieldsAndNoIdentifier(t *testing.T) {
 	in := mountIntake(t)
 	before := time.Now().UTC().Add(-2 * time.Second)
-	in.join(t, `{"email":" Grace@Example.com ","role":"miner","source":"hanzo.network/join","locale":"pt-BR"}`, "203.0.113.77")
-	in.join(t, `{"xHandle":"@Grace_Hopper","role":"researcher"}`, "203.0.113.78")
+	a := in.join(t, `{"email":" Grace@Example.com ","role":"miner","source":"hanzo.network/join","locale":"pt-BR"}`, "203.0.113.77")
+	b := in.join(t, `{"xHandle":"@Grace_Hopper","role":"researcher"}`, "203.0.113.78")
 
-	allowed := map[string]bool{"id": true, "identifier": true, "kind": true, "role": true,
+	allowed := map[string]bool{"id": true, "kind": true, "role": true,
 		"source": true, "locale": true, "created_at": true,
 		"collectionId": true, "collectionName": true} // Base's own, on every record
 	var email, handle map[string]any
@@ -92,37 +119,117 @@ func TestAnEntryHoldsExactlyItsFieldsAndNoAddress(t *testing.T) {
 		t.Fatalf("want one address entry and one X entry, got %v", waiting(t))
 	}
 	for field, want := range map[string]any{
-		"identifier": "grace@example.com", "role": "miner", "source": "hanzo.network/join", "locale": "pt-BR",
+		"role": "miner", "source": "hanzo.network/join", "locale": "pt-BR",
 	} {
 		if email[field] != want {
 			t.Errorf("address entry %s = %v, want %v", field, email[field], want)
 		}
 	}
-	for field, want := range map[string]any{"identifier": "Grace_Hopper", "role": "researcher", "source": "", "locale": ""} {
+	for field, want := range map[string]any{"role": "researcher", "source": "", "locale": ""} {
 		if handle[field] != want {
 			t.Errorf("X entry %s = %v, want %v", field, handle[field], want)
 		}
 	}
-	for _, r := range []map[string]any{email, handle} {
-		at, err := time.Parse(baseDate, fmt.Sprint(r["created_at"]))
+	key := in.key(t)
+	for _, c := range []struct {
+		r        map[string]any
+		kind, id string
+	}{
+		{email, kindEmail, "grace@example.com"},
+		{handle, kindX, "Grace_Hopper"},
+	} {
+		at, err := time.Parse(baseDate, fmt.Sprint(c.r["created_at"]))
 		if err != nil || at.Before(before) || at.After(time.Now().Add(time.Second)) {
-			t.Errorf("created_at = %v (%v), want now", r["created_at"], err)
+			t.Errorf("created_at = %v (%v), want now", c.r["created_at"], err)
 		}
-		id, _ := r["id"].(string)
-		if !regexp.MustCompile(`^[0-9a-f]{15}$`).MatchString(id) || strings.Contains(strings.ToLower(id), "grace") {
+		id, _ := c.r["id"].(string)
+		if !regexp.MustCompile(`^[0-9a-f]{15}$`).MatchString(id) {
 			t.Errorf("id %q is not a digest", id)
+		}
+		if want := waitID(key, c.kind, c.id); id != want {
+			t.Errorf("%s id %q, want the HMAC digest %q", c.kind, id, want)
 		}
 	}
 	if email["id"] == handle["id"] {
 		t.Error("an address and a handle share an id")
 	}
+	in.noIdentifierIn(t, []answer{a, b}, "grace@example.com", "Grace_Hopper", "grace_hopper")
+}
+
+// TestWaitlistDigestsAreKeyedSeparateAndCostNoSecondSecret: the filed id is the
+// HMAC of a domain, a kind and the normalized identifier under the one invite
+// key. Neither an unkeyed hash, an invite code's MAC, nor a second KMS secret
+// can stand in for it.
+func TestWaitlistDigestsAreKeyedSeparateAndCostNoSecondSecret(t *testing.T) {
+	in := mountIntake(t)
+	key := in.key(t)
+	a := in.join(t, `{"email":"domain@example.com","role":"builder"}`, from(1))
+	rows := waiting(t)
+	if len(rows) != 1 {
+		t.Fatalf("one ask filed %d entries, want 1", len(rows))
+	}
+	id, _ := rows[0]["id"].(string)
+	if want := waitID(key, kindEmail, "domain@example.com"); id != want {
+		t.Fatalf("id %q, want the keyed digest %q", id, want)
+	}
+	if id == waitID([]byte(strings.Repeat("k", 32)), kindEmail, "domain@example.com") {
+		t.Fatal("a different key files the same id")
+	}
+	plain := sha256.Sum256([]byte(kindEmail + "\x00" + "domain@example.com"))
+	if id == hex.EncodeToString(plain[:])[:15] {
+		t.Fatal("the id is an unkeyed SHA-256, which anyone can reverse by trying addresses")
+	}
+	for _, other := range []string{
+		inviteID(mac(key, "domain@example.com")),
+		inviteID(mac(key, "HNZ-00000-00000")),
+		waitID(key, kindX, "domain@example.com"),
+	} {
+		if id == other {
+			t.Fatalf("the waitlist digest %q is also %q: no domain separation", id, other)
+		}
+	}
+	if waitID(key, kindEmail, "DOMAIN@EXAMPLE.COM") != id {
+		t.Fatal("the same address in other letters filed under another id")
+	}
+	if refs := in.kms.Refs(); len(refs) != 1 || refs[0] != inviteRef {
+		t.Fatalf("KMS holds %v, want only %s", refs, inviteRef)
+	}
+	in.noIdentifierIn(t, []answer{a}, "domain@example.com")
+}
+
+// TestNoIdentifierInAnyRefusal: a 400 and a 429 say nothing about the identifier
+// they were asked for, and leave none in a row or in the log.
+func TestNoIdentifierInAnyRefusal(t *testing.T) {
+	in := mountIntake(t)
+	answers := []answer{
+		in.join(t, `{"email":"private@example.com","role":"investor"}`, from(1)),
+		in.join(t, `{"email":"private@example.com","role":"builder"}`, from(2)),
+		in.join(t, `{"xHandle":"@Private_Handle","role":"staker"}`, from(3)),
+	}
+	if !problem(answers[0], http.StatusBadRequest) || answers[1].code != http.StatusAccepted || answers[2].code != http.StatusAccepted {
+		t.Fatalf("want 400, 202, 202; got %d, %d, %d", answers[0].code, answers[1].code, answers[2].code)
+	}
+	for i := range 10 {
+		a := in.join(t, `{"email":"spam@example.com","role":"builder"}`, "203.0.113.9")
+		answers = append(answers, a)
+		if a.code != http.StatusAccepted {
+			t.Fatalf("request %d: want 202, got %d %s", i+1, a.code, a.body)
+		}
+	}
+	limited := in.join(t, `{"email":"limited@example.com","role":"builder"}`, "203.0.113.9")
+	answers = append(answers, limited)
+	if !problem(limited, http.StatusTooManyRequests) {
+		t.Fatalf("past the rate want 429, got %d %s", limited.code, limited.body)
+	}
+	in.noIdentifierIn(t, answers,
+		"private@example.com", "Private_Handle", "spam@example.com", "limited@example.com")
 }
 
 // TestARepeatChangesNothing: a second ask for the same identifier, with another role,
 // source and language, leaves the first entry as it was, and when it was made.
 func TestARepeatChangesNothing(t *testing.T) {
 	in := mountIntake(t)
-	in.join(t, `{"email":"ada@example.com","role":"builder","source":"first","locale":"en"}`, from(1))
+	first := in.join(t, `{"email":"ada@example.com","role":"builder","source":"first","locale":"en"}`, from(1))
 	was := waiting(t)
 	if len(was) != 1 {
 		t.Fatalf("the first ask filed %d entries, want 1", len(was))
@@ -130,13 +237,14 @@ func TestARepeatChangesNothing(t *testing.T) {
 	// Make the entry old, so a repeat that stamped now would show.
 	in.put(t, waitlistName, map[string]any{"id": was[0]["id"], "created_at": "2020-01-01 00:00:00.000Z"})
 	was = waiting(t)
-	in.join(t, `{"email":"ada@example.com","role":"staker","source":"second","locale":"fr"}`, from(2))
+	again := in.join(t, `{"email":"ada@example.com","role":"staker","source":"second","locale":"fr"}`, from(2))
 	now := waiting(t)
 	a, _ := json.Marshal(was)
 	b, _ := json.Marshal(now)
 	if string(a) != string(b) {
 		t.Fatalf("a repeat changed the entry:\n%s\n%s", a, b)
 	}
+	in.noIdentifierIn(t, []answer{first, again}, "ada@example.com")
 }
 
 // TestTheIdentifierIsEitherAnAddressOrAnXHandle: exactly one of them, a role of the
@@ -195,19 +303,23 @@ func TestTheIdentifierIsEitherAnAddressOrAnXHandle(t *testing.T) {
 // none.
 func TestTheFourRolesAreAcceptedInAnyCase(t *testing.T) {
 	in := mountIntake(t)
+	var answers []answer
 	for i, role := range []string{"miner", "builder", "researcher", "staker", " Builder ", "STAKER"} {
 		body := fmt.Sprintf(`{"xHandle":"person_%d","role":%q}`, i, role)
-		if a := in.join(t, body, from(i)); a.code != http.StatusAccepted {
+		a := in.join(t, body, from(i))
+		answers = append(answers, a)
+		if a.code != http.StatusAccepted {
 			t.Fatalf("role %q: %d %s", role, a.code, a.body)
 		}
 	}
 	long := strings.Repeat("s", 500) + "\nline two"
-	in.join(t, `{"xHandle":"Bounded","role":"staker","source":`+mustJSON(long)+`,"locale":"not a locale!"}`, from(50))
+	answers = append(answers, in.join(t, `{"xHandle":"Bounded","role":"staker","source":`+mustJSON(long)+`,"locale":"not a locale!"}`, from(50)))
+	key := in.key(t)
 	got := map[string]map[string]any{}
 	for _, r := range waiting(t) {
-		got[fmt.Sprint(r["identifier"])] = r
+		got[fmt.Sprint(r["id"])] = r
 	}
-	b := got["Bounded"]
+	b := got[waitID(key, kindX, "Bounded")]
 	if b == nil {
 		t.Fatalf("no entry for Bounded in %v", got)
 	}
@@ -217,11 +329,13 @@ func TestTheFourRolesAreAcceptedInAnyCase(t *testing.T) {
 	if b["locale"] != "" {
 		t.Errorf("locale = %q, want none", b["locale"])
 	}
-	for id, want := range map[string]string{"person_4": "builder", "person_5": "staker"} {
-		if got[id]["role"] != want {
-			t.Errorf("%s filed as %v, want %s", id, got[id]["role"], want)
+	for handle, want := range map[string]string{"person_4": "builder", "person_5": "staker"} {
+		r := got[waitID(key, kindX, handle)]
+		if r == nil || r["role"] != want {
+			t.Errorf("%s filed as %v, want %s", handle, r, want)
 		}
 	}
+	in.noIdentifierIn(t, answers, "person_4", "person_5", "Bounded")
 }
 
 func mustJSON(v any) string {
@@ -265,8 +379,10 @@ func TestOneCallerJoinsAFew(t *testing.T) {
 func TestAnIdentifiersTenthAskIsIndistinguishableFromItsFirst(t *testing.T) {
 	in := mountIntake(t)
 	var first answer
+	var answers []answer
 	for i := range 12 {
 		a := in.join(t, `{"email":"Victim@Example.com","role":"staker"}`, from(i))
+		answers = append(answers, a)
 		if i == 0 {
 			first = a
 		}
@@ -284,12 +400,15 @@ func TestAnIdentifiersTenthAskIsIndistinguishableFromItsFirst(t *testing.T) {
 		}
 		in.remove(t, waitlistName, fmt.Sprint(was[0]["id"]))
 	}
-	if a := in.join(t, `{"email":"bystander@example.com","role":"staker"}`, from(30)); a.code != http.StatusAccepted {
+	a := in.join(t, `{"email":"bystander@example.com","role":"staker"}`, from(30))
+	answers = append(answers, a)
+	if a.code != http.StatusAccepted {
 		t.Fatalf("another address want 202, got %d %s", a.code, a.body)
 	}
 	if n := len(waiting(t)); n != 1 {
 		t.Fatalf("another address was not written: %d entries", n)
 	}
+	in.noIdentifierIn(t, answers, "victim@example.com", "bystander@example.com")
 }
 
 // TestTheDeploymentsJoinCountNeverClosesTheList: past the hourly count the deployment is

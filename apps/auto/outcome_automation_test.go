@@ -17,7 +17,7 @@ func TestOutcomeAutomationIsArmedWithoutAClockOrAnImmediateRun(t *testing.T) {
 		got := ask(t, app, http.MethodPost, "/v1/auto/automations", "acme", map[string]any{
 			"name": "Continuous research", "instructions": "Review the measured evidence and propose a tested draft change.",
 			"event": map[string]any{"source": "research", "name": "improvement.reviewed"},
-			"model": "halogen-qwen3.8-flash-next", "target": "my-local-machine", "permissions": "ask",
+			"model": "halogen-qwen3.8-flash-next", "target": "my-local-machine", "permissions": "auto",
 		})
 		if got.Code != http.StatusCreated {
 			t.Fatalf("create: %d %s", got.Code, got.Body)

@@ -141,6 +141,7 @@ func (o boardOps) putUserOptin(ctx context.Context, in *userOptinReq) (*userOpti
 	}, now); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "save opt-in: %v", err)
 	}
+	badges.reset()
 	noStore(ctx)
 	return &userOptinView{Listed: body.Listed, Handle: handle, CanSet: true}, nil
 }
@@ -186,6 +187,7 @@ func (o boardOps) putOrgOptin(ctx context.Context, in *orgOptinReq) (*orgOptinVi
 	}, now); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "save org opt-in: %v", err)
 	}
+	badges.reset()
 	noStore(ctx)
 	return &orgOptinView{Listed: body.Listed, Display: display, CanManage: true}, nil
 }

@@ -176,6 +176,9 @@ var allowedTokenPrimitives = map[string]string{
 		"address, source, locale) under the KMS key marketing/newsletter-hmac — it binds one link to the one " +
 		"address it was mailed to, constant-time checked, and grants nothing but that address's place " +
 		"on the brand's newsletter.",
+	"apps/network/invite.go": "anonymous invite-code digest — HMAC-SHA256 over the normalised HNZ-XXXXX-XXXXX " +
+		"code under the KMS key network/invite-hmac, stored and constant-time checked on POST /v1/network/invite/verify " +
+		"before a visitor has an account; it mints no IAM bearer and grants no authenticated Hanzo surface.",
 	"apps/share/client.go": "deterministic per-org zrok credential derivation — HMAC as a KDF so " +
 		"provisioning is stateless and collision-free; nothing is signed or verified.",
 	"apps/webhook/dispatch.go": "outbound delivery signatures — signs what WE deliver " +

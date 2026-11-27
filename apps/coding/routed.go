@@ -177,13 +177,13 @@ func (d Dispatcher) grantRouted(ctx context.Context, in agents.RoutedRun) (*agen
 	if err != nil {
 		return nil, nil, err
 	}
-	g, err := delegate(ctx, ws, "", in.Repo, in.SessionID, in.Read)
+	g, err := delegate(forRouted(ctx), ws, "", in.Repo, in.SessionID, in.Read)
 	if err != nil {
 		return nil, nil, err
 	}
 	if g.hub != nil {
 		_ = withdraw(context.WithoutCancel(ctx), in.Org, g)
-		return nil, nil, errors.New("a repository mirrored from GitHub is reached there")
+		return nil, nil, fmt.Errorf("%s/%s mirrors github.com/%s/%s: to run it on a machine, name github.com/%s/%s as the repository", g.Owner, g.Repo, g.hub.owner, g.hub.name, g.hub.owner, g.hub.name)
 	}
 	held, _ := agents.Hold(in.SessionID, func(error) {})
 	return &agents.RoutedGrant{Remote: g.Remote, Key: g.Key, Known: g.Known}, func() {

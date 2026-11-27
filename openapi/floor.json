@@ -1,6 +1,6 @@
 {
-  "paths": 2129,
-  "operations": 2918,
+  "paths": 2131,
+  "operations": 2922,
   "products": {
     "account": 11,
     "ad": 7,
@@ -17,7 +17,7 @@
     "auto": 30,
     "base": 5,
     "benchmark": 11,
-    "billing": 79,
+    "billing": 82,
     "blueprint": 3,
     "bot": 9,
     "campaign": 11,
@@ -67,7 +67,7 @@
     "knowledge": 19,
     "kv": 6,
     "label": 7,
-    "leaderboard": 13,
+    "leaderboard": 14,
     "legal": 11,
     "library": 6,
     "link": 11,

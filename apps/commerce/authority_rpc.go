@@ -194,6 +194,16 @@ func checkPlan(in *client.PlanSet) error {
 	if _, err := grants(in.Entitlements); err != nil {
 		return err
 	}
+	if in.Multiplier != nil && *in.Multiplier < 0 {
+		return zip.ErrBadRequest("multiplier is 1 or more, or 0 to remove it")
+	}
+	in.UsagePolicy = strings.ToLower(strings.TrimSpace(in.UsagePolicy))
+	if in.UsagePolicy != "" && in.UsagePolicy != "daily" && in.UsagePolicy != "metered" && in.UsagePolicy != "unlimited" {
+		return zip.ErrBadRequest("usagePolicy: daily, metered, or unlimited")
+	}
+	if _, err := capabilitiesOf(in.Capabilities); err != nil {
+		return err
+	}
 	if len(in.Replaces) > maxReplaces {
 		return zip.ErrBadRequest("replaces: at most 16 slugs")
 	}
@@ -241,6 +251,34 @@ func grants(stated string) (map[string]any, error) {
 		}
 	}
 	return out, nil
+}
+
+// capabilitiesOf reads a stated capability differentiation map: nil when omitted
+// (keeps the row's), empty map for "{}" (clears it), else trimmed key/value pairs.
+func capabilitiesOf(stated string) (map[string]string, error) {
+	stated = strings.TrimSpace(stated)
+	if stated == "" {
+		return nil, nil
+	}
+	if len(stated) > maxGrants {
+		return nil, zip.ErrBadRequest("capabilities: at most 16 KiB")
+	}
+	out := map[string]string{}
+	if err := json.Unmarshal([]byte(stated), &out); err != nil || out == nil {
+		return nil, zip.ErrBadRequest("capabilities: a JSON object of string values")
+	}
+	if len(out) > maxGrantKeys {
+		return nil, zip.ErrBadRequest("capabilities: at most 128 keys")
+	}
+	clean := make(map[string]string, len(out))
+	for k, v := range out {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			return nil, zip.ErrBadRequest("capabilities: key must not be empty")
+		}
+		clean[k] = strings.TrimSpace(v)
+	}
+	return clean, nil
 }
 
 // maxDollars is the most an order figure states, in whole dollars: past what a card
@@ -376,6 +414,17 @@ func applyPlan(p *commerceplan.Plan, in *client.PlanSet) {
 			p.Replaces = slices.Clone(in.Replaces)
 		}
 	}
+	p.Multiplier = restated(in.Multiplier, p.Multiplier)
+	if in.UsagePolicy != "" {
+		p.UsagePolicy = in.UsagePolicy
+	}
+	if caps, _ := capabilitiesOf(in.Capabilities); caps != nil {
+		if len(caps) == 0 {
+			p.Capabilities = nil
+		} else {
+			p.Capabilities = caps
+		}
+	}
 	p.AdminEdited, p.Managed = true, true
 }
 
@@ -409,6 +458,13 @@ func planRow(p *commerceplan.Plan) client.PlanRow {
 		}
 	}
 	r.Replaces = p.Replaces
+	r.Multiplier = p.Multiplier
+	r.UsagePolicy = p.UsagePolicy
+	if len(p.Capabilities) > 0 {
+		if raw, err := json.Marshal(p.Capabilities); err == nil {
+			r.Capabilities = string(raw)
+		}
+	}
 	if l := p.Limits; l != nil {
 		c := client.PlanCapacity{Agents: l.Agents, Bots: l.Bots, TeamGuests: l.TeamGuests, MaxMembers: l.MaxMembers,
 			MinSeats: l.MinSeats, Zones: l.Zones, RecordsPerZone: l.RecordsPerZone, QueriesPerDay: l.QueriesPerDay,

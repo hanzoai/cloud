@@ -108,7 +108,9 @@ func exposePost() {
 }
 
 // planeConnect initiates a social OAuth flow or verifies and seals a credential
-// on behalf of the caller's org over the internal plane.
+// on behalf of the caller's org over the internal plane. It asks who is calling
+// the way the route does (connect): an AdminOnly connector is its org admin's to
+// connect, by the admin bit the caller carries for this org.
 func planeConnect(ctx context.Context, in *client.IntegrationsConnectIn) (*client.IntegrationsConnectOut, error) {
 	s := mounted
 	if s == nil {
@@ -121,7 +123,7 @@ func planeConnect(ctx context.Context, in *client.IntegrationsConnectIn) (*clien
 	if in == nil || strings.TrimSpace(in.Provider) == "" {
 		return nil, zip.ErrBadRequest("connect: provider is required")
 	}
-	out, err := connectFor(ctx, s, who.Org, who.User, false, &connectIn{
+	out, err := connectFor(ctx, s, who.Org, who.User, orgAdminOf(who), &connectIn{
 		Provider:  in.Provider,
 		Token:     in.Credential,
 		AccountID: in.AccountID,

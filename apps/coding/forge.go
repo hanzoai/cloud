@@ -261,6 +261,9 @@ func delegate(ctx context.Context, ws forge.Workspace, actor, repo, session stri
 	if o, n, ok := r.Home(); ok {
 		h, err := mint(ctx, o, n, read)
 		if err != nil {
+			if isRouted(ctx) {
+				return nil, fmt.Errorf("%s/%s mirrors github.com/%s/%s: to run it on a machine, name github.com/%s/%s as the repository", owner, repo, o, n, o, n)
+			}
 			return nil, fmt.Errorf("coding: %s/%s mirrors github.com/%s/%s, and GitHub would not grant this run a push there: %w",
 				owner, repo, o, n, err)
 		}
@@ -404,4 +407,15 @@ func propose(ctx context.Context, ws forge.Workspace, actor, repo, base, head, t
 		return "", fmt.Errorf("coding: a proposal needs the person it is for")
 	}
 	return acting(c, ws, actor).Propose(ctx, ws.Owner, repo, base, head, title, body)
+}
+
+type routedKey struct{}
+
+func forRouted(ctx context.Context) context.Context {
+	return context.WithValue(ctx, routedKey{}, true)
+}
+
+func isRouted(ctx context.Context) bool {
+	v, _ := ctx.Value(routedKey{}).(bool)
+	return v
 }

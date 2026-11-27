@@ -121,6 +121,16 @@ func init() {
 			}
 			return out.Plan, nil
 		},
+		PlanHolderOf: func(ctx context.Context, subject string) (string, error) {
+			out, err := commercepeer.BillingTier(ctx, &client.TierIn{Subject: subject})
+			if err != nil {
+				return "", err
+			}
+			if out == nil {
+				return "", errors.New("commerce answered nothing")
+			}
+			return out.PlanHolder, nil
+		},
 		OwnerOf: func(ctx context.Context, person, org string) (bool, error) {
 			out, err := iampeer.IAMRoles(zip.WithCaller(cloud.For(ctx, org), zip.Caller{Org: org, User: person}))
 			if err != nil {

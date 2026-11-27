@@ -285,6 +285,9 @@ type service struct {
 	// holder names the account whose plan a person's call in an org spends when the
 	// org's books hold none (cloud.Holder). nil lends no plan.
 	holder func(ctx context.Context, person, org string) account.Account
+	// linked names the account whose paid plan an org borrows through a Shared Plan
+	// link (cloud.LinkedHolder), so bounded plan quotas count once against the holder.
+	linked func(ctx context.Context, org string) account.Account
 	log    luxlog.Logger
 	// tally is what the takes since the last report admitted and refused.
 	tally tally
@@ -342,7 +345,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// The plan and the balance are commerce's and commerce is another process, so
 	// both are asked over the plane: the tier through cloud.Tier, the balance through
 	// the same prepaid gate that refuses a priced call.
-	s := &service{store: openStore(), tier: cloud.Tier, funded: fundedBy(deps.Metering), pool: askPool, holder: cloud.Holder, log: log}
+	s := &service{store: openStore(), tier: cloud.Tier, funded: fundedBy(deps.Metering), pool: askPool, holder: cloud.Holder, linked: cloud.LinkedHolder, log: log}
 	mounted, stopReport = s, make(chan struct{})
 	go s.report(stopReport)
 	routes(app, s)
@@ -572,14 +575,27 @@ func standing(tier string, bs []bound, used map[string]int64, now time.Time) *cl
 	return out
 }
 
+// countKey resolves the quota key a bounded call counts against: when an org borrows a
+// live paid plan through a Shared Plan link, every member of the borrowing org and the
+// plan holder share one atomic counter keyed on the plan holder's subject.
+func (s *service) countKey(ctx context.Context, org, payer, subject string) string {
+	if s.linked != nil && strings.EqualFold(strings.TrimSpace(payer), strings.TrimSpace(org)) {
+		if acct := s.linked(ctx, org); !acct.Zero() {
+			return acct.Subject()
+		}
+	}
+	return subject
+}
+
 // read answers subject's standing on meter m without taking anything. payer is the
 // wallet whose plan and balance decide the ceiling.
 func (s *service) read(ctx context.Context, m gauge, org, payer, subject string, now time.Time) (*client.Allowance, error) {
 	tier, bs := s.bounds(ctx, m, payer, org, subject, now)
 	bs = bounded(bs)
+	counted := s.countKey(ctx, org, payer, subject)
 	used := map[string]int64{}
 	if len(bs) > 0 {
-		for i, u := range s.store.Read(ctx, subject, bs, now) {
+		for i, u := range s.store.Read(ctx, counted, bs, now) {
 			used[bs[i].window] = u
 		}
 	}
@@ -604,7 +620,8 @@ func (s *service) take(ctx context.Context, m gauge, org, payer, subject string,
 		s.tally.unbounded.Add(1)
 		return standing(tier, bs, nil, now), nil
 	}
-	counts, taken := s.store.Take(ctx, subject, bs, now)
+	counted := s.countKey(ctx, org, payer, subject)
+	counts, taken := s.store.Take(ctx, counted, bs, now)
 	used := map[string]int64{}
 	for i, u := range counts {
 		used[bs[i].window] = u
@@ -626,7 +643,7 @@ func (s *service) take(ctx context.Context, m gauge, org, payer, subject string,
 		out.Window, out.Limit, out.Used, out.Resets = w.window, w.limit, w.limit, now.Add(outage).Unix()
 	}
 	out.Spent = true
-	s.spentOnce(ctx, m, org, payer, subject, out, now)
+	s.spentOnce(ctx, m, org, payer, counted, out, now)
 	return out, nil
 }
 
@@ -635,8 +652,9 @@ func (s *service) take(ctx context.Context, m gauge, org, payer, subject string,
 // and answers the standing now.
 func (s *service) give(ctx context.Context, m gauge, org, payer, subject string, at time.Time, start int64) (*client.Allowance, error) {
 	_, bs := s.bounds(ctx, m, payer, org, subject, at)
+	counted := s.countKey(ctx, org, payer, subject)
 	if bs = bounded(bs); len(bs) > 0 {
-		s.store.Give(ctx, subject, bs, start)
+		s.store.Give(ctx, counted, bs, start)
 	}
 	return s.read(ctx, m, org, payer, subject, time.Now())
 }

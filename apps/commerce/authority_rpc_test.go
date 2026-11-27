@@ -402,3 +402,59 @@ func TestASuperAdminStatesWhatAPlanGrants(t *testing.T) {
 		}
 	}
 }
+
+func TestMultiplierUsagePolicyAndCapabilitiesRoundTrip(t *testing.T) {
+	ctx := ae.NewContext()
+	defer ctx.Close()
+	super := superAdmin(ctx)
+
+	set := &client.PlanSet{
+		Slug: "max-15x", Name: "Max", Category: "personal", Price: 9500, Interval: "month", Status: "active",
+		Multiplier: ptr(5), UsagePolicy: "metered",
+		Capabilities: `{"agentExecution":"Expanded","inferencePriority":"Elevated","support":"Priority"}`,
+	}
+	row, err := planeCreate(super, set)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if row.Multiplier == nil || *row.Multiplier != 5 || row.UsagePolicy != "metered" || !strings.Contains(row.Capabilities, `"support":"Priority"`) {
+		t.Fatalf("created row: %+v", row)
+	}
+
+	// Verify public ReadPlans exposes Multiplier, UsagePolicy, and Capabilities as JSON object.
+	listed, err := commercebilling.ReadPlans(ctx, "", "personal", nil)
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("ReadPlans: %v (%d rows)", err, len(listed))
+	}
+	if listed[0].Multiplier == nil || *listed[0].Multiplier != 5 || listed[0].UsagePolicy != "metered" || listed[0].Capabilities["support"] != "Priority" {
+		t.Fatalf("public PlanView: %+v", listed[0])
+	}
+
+	// Omitting the three fields on a restatement preserves them.
+	if row, err = planeSet(super, &client.PlanSet{Slug: "max-15x", Name: "Max", Category: "personal", Price: 9900, Interval: "month", Status: "active"}); err != nil {
+		t.Fatalf("restate omitting: %v", err)
+	}
+	if row.Price != 9900 || row.Multiplier == nil || *row.Multiplier != 5 || row.UsagePolicy != "metered" || !strings.Contains(row.Capabilities, `"support":"Priority"`) {
+		t.Fatalf("preserved row: %+v", row)
+	}
+
+	// Clearing multiplier (0) and capabilities ("{}") works.
+	if row, err = planeSet(super, &client.PlanSet{Slug: "max-15x", Name: "Max", Category: "personal", Price: 9900, Interval: "month", Status: "active",
+		Multiplier: ptr(0), UsagePolicy: "unlimited", Capabilities: "{}"}); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if row.Multiplier != nil || row.UsagePolicy != "unlimited" || row.Capabilities != "" {
+		t.Fatalf("cleared row: %+v", row)
+	}
+
+	for name, bad := range map[string]*client.PlanSet{
+		"negative multiplier": {Multiplier: ptr(-2)},
+		"bad usagePolicy":     {UsagePolicy: "infinite"},
+		"bad capabilities":    {Capabilities: `["support"]`},
+	} {
+		bad.Slug, bad.Name, bad.Category, bad.Interval, bad.Status = "max-15x", "Max", "personal", "month", "active"
+		if _, err := planeSet(super, bad); statusOf(err) != http.StatusBadRequest {
+			t.Errorf("%s: %v, want 400", name, err)
+		}
+	}
+}

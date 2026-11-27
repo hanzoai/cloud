@@ -285,6 +285,7 @@ func resetStanding() {
 	lines.reset()
 	pulses.reset()
 	galaxies.reset()
+	badges.reset()
 }
 
 // current is the line, as the shared read last had it.

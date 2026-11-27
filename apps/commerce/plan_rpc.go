@@ -6,12 +6,17 @@ package commerce
 // plane: the tier their subscriptions confer, the month measured against the
 // plan, and the subscription rows themselves.
 //
-// THERE IS NO TIER OVERRIDE. A tier is derived from the subject's own recorded
-// subscriptions, for every org: hanzo, admin, lux and zoo resolve like
-// customers, and no header, query or role names one.
+// THERE IS NO TIER OVERRIDE. A tier is derived from recorded subscriptions, for
+// every org: hanzo, admin, lux and zoo resolve like customers, and no header, query
+// or role names one. They are the subject's own, with one addition: an org that holds
+// no live paid plan of its own and has a plan link reads the plan of the account the
+// link names, derived the same way for that account's own subject (planlink.go). A
+// link says whose subscriptions to read, never which tier to serve, and the lent plan
+// is never the borrowing org's to cancel.
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -86,7 +91,35 @@ func planeTier(ctx context.Context, in *client.TierIn) (*client.Tier, error) {
 	if verr != nil {
 		return nil, zip.Errorf(500, "failed to resolve tier")
 	}
-	return tierAnswer(view), nil
+	if onPlan(view) {
+		return tierAnswer(view), nil // an org's own plan always wins over a link
+	}
+	lent, from, ok, err := borrowedFrom(ctx, org.Name)
+	if err != nil {
+		return nil, linkFault(err)
+	}
+	if !ok {
+		return tierAnswer(view), nil
+	}
+	// The lent plan, the borrowing org's own money: nothing crosses ledgers, and the
+	// subscription id stays empty because the row is not this org's to cancel.
+	return &client.Tier{
+		User:       view.User,
+		Plan:       lent.Plan,
+		Tier:       tierLimits(lent),
+		Balance:    tierBalance(view),
+		PlanName:   lent.PlanName,
+		PlanHolder: from.String(),
+	}, nil
+}
+
+// linkFault answers a plan link that could not be read: a 5xx the store already chose,
+// else the same "failed to resolve tier" an unreadable ledger gets — never Free.
+func linkFault(err error) error {
+	if he, ok := errors.AsType[*zip.HTTPError](err); ok {
+		return he
+	}
+	return zip.Errorf(500, "failed to resolve tier")
 }
 
 // tierAnswer moves a tier onto the wire, the row that serves it named.

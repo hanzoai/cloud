@@ -149,7 +149,8 @@ func planeGitHubRun(ctx context.Context, in *client.GitHubRunIn) (*client.GitHub
 // orgAdminOf is whether the caller administers the org the call is FOR, as the
 // caller states it. A call re-pointed at another org — zip.ActingAs names who is
 // acting — carries the admin bit of the org it came from, which says nothing
-// about this one. It widens a VIEW (view); a mint asks adminNow instead.
+// about this one. It widens a VIEW (view) and admits a connect over the plane
+// (planeConnect); a mint asks adminNow instead.
 func orgAdminOf(who zip.Caller) bool { return who.OrgAdmin && who.ActedBy == "" }
 
 // adminNow is whether the caller administers the org the call is for, asked of

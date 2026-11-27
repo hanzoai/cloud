@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hanzoai/account"
 )
 
 // tierCallTimeout bounds the ask. Every reader treats a tier it could not read as
@@ -36,6 +38,37 @@ func Tier(ctx context.Context, subject, org string) (string, error) {
 // "pro-3x", ...), asked and kept as Tier is. "" with a nil error means none.
 func Plan(ctx context.Context, subject, org string) (string, error) {
 	return asked(ctx, "plan", subject, org, askPlan)
+}
+
+// LinkedHolder returns the account whose paid subscription org borrows through a
+// Shared Plan link, or the zero Account when org uses its own books or holds none.
+func LinkedHolder(ctx context.Context, org string) account.Account {
+	org = tierOrg(org)
+	if org == "" || strings.EqualFold(org, account.SignupOrg) {
+		return account.Account{}
+	}
+	raw, err := asked(ctx, "holder", org, org, askPlanHolder)
+	if err != nil || raw == "" {
+		return account.Account{}
+	}
+	return account.Parse(raw)
+}
+
+// InvalidateTier drops cached tier, plan and holder answers so a plan link or
+// unlink takes effect on the very next read in this process.
+func InvalidateTier(org string) {
+	org = strings.ToLower(tierOrg(org))
+	tiers.mu.Lock()
+	if org == "" {
+		tiers.m = map[string]tierAnswer{}
+	} else {
+		for k := range tiers.m {
+			if strings.Contains(strings.ToLower(k), "\x00"+org+"\x00") {
+				delete(tiers.m, k)
+			}
+		}
+	}
+	tiers.mu.Unlock()
 }
 
 // tierOrg extracts the commerce organization namespace from org. Callers such as
@@ -149,4 +182,21 @@ func askPlan(ctx context.Context, subject, org string) (string, error) {
 		return "", fmt.Errorf("plan: %w", err)
 	}
 	return strings.TrimSpace(name), nil
+}
+
+func askPlanHolder(ctx context.Context, subject, org string) (string, error) {
+	ask := peersOf().PlanHolderOf
+	if ask == nil {
+		return "", nil
+	}
+	ctx, cancel := context.WithTimeout(For(ctx, org), tierCallTimeout)
+	defer cancel()
+	holder, err := ask(ctx, subject)
+	switch {
+	case errors.Is(err, ErrNoPeer):
+		return "", nil
+	case err != nil:
+		return "", fmt.Errorf("plan holder: %w", err)
+	}
+	return strings.TrimSpace(holder), nil
 }

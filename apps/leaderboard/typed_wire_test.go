@@ -20,6 +20,10 @@ var untypedByDesign = map[string]string{
 		"`return c.SendStreamWriter(func(w *bufio.Writer) {` (feed.go), while a typed op's only response " +
 		"path is c.JSON(out). The media type is DECLARED (openapi.Bytes text/event-stream) and the " +
 		"lines are described in its prose.",
+	"GET /v1/leaderboard/badge/{handle}": "NON-JSON MEDIA TYPE: returns raw `image/svg+xml` bytes with " +
+		"ETag / 304 conditional responses (`return c.Bytes(http.StatusOK, svg)` in badge.go), while a typed " +
+		"op's only response path is c.JSON(out). The media type is DECLARED (spec.Bytes image/svg+xml) and " +
+		"the options are described in its prose.",
 }
 
 // TestTheLedgerNamesWhatIsServed fails when a ledger entry names an address the app no
@@ -31,6 +35,11 @@ func TestTheLedgerNamesWhatIsServed(t *testing.T) {
 		t.Cleanup(stopHub)
 		for route := range untypedByDesign {
 			method, path, _ := strings.Cut(route, " ")
+			if strings.Contains(path, "{handle}") {
+				// An invalid option answers 400 before handle lookup, proving the route
+				// is mounted without needing a seeded listed org.
+				path = strings.ReplaceAll(path, "{handle}", "probe.svg") + "?theme=invalid"
+			}
 			req := httptest.NewRequest(method, path, nil)
 			resp, err := app.Test(req, zip.TestConfig{Timeout: 300 * time.Millisecond, FailOnTimeout: false})
 			if err != nil {

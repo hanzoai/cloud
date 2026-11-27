@@ -357,7 +357,7 @@
     },
     {
       "name": "leaderboard",
-      "skill_count": 9,
+      "skill_count": 10,
       "url": "/.well-known/agent-skills/_leaderboard/index.json"
     },
     {
@@ -721,7 +721,7 @@
       "url": "/.well-known/agent-skills/_x402/index.json"
     }
   ],
-  "skill_count": 809,
+  "skill_count": 810,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Zoo surface..",
@@ -4016,6 +4016,14 @@
       "service": "leaderboard",
       "type": "skill-md",
       "url": "/.well-known/agent-skills/leaderboard_activity/SKILL.md"
+    },
+    {
+      "description": "Read leaderboard badge: The README badge of a listed org's leaderboard rank, as an SVG.",
+      "digest": "sha256:8d8b2e41d0a2816726acbc6d81ce64ce5c9f55f7dc1126583200133155e16374",
+      "name": "leaderboard_badge",
+      "service": "leaderboard",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/leaderboard_badge/SKILL.md"
     },
     {
       "description": "Read leaderboard beta: Ranks everyone on the zoo.ngo/beta waitlist by one score: 1 per star on GitHub verified for the record and 1 per founder link followed, plus 1 per org that signed up with its referral code, plus 20 per such org that has made metered spend, plus 1 per 100,00",

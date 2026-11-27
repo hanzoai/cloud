@@ -410,7 +410,7 @@ func (o routingOps) report(ctx context.Context, in *reportRunIn) (*reportOut, er
 func claimAuthError(err error) error {
 	switch err {
 	case errNoClaimKey, errClaimKeyBad, errTargetNotFound:
-		return zip.ErrForbidden("target claim rejected")
+		return zip.ErrForbidden("target claim rejected: claim is the linked machine's own poll for work; to run work on a linked machine call create_agent_coding with targetId and dir")
 	default:
 		return zip.Errorf(http.StatusInternalServerError, "claim auth: %v", err)
 	}

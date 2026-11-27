@@ -166,6 +166,7 @@ func Use(app *zip.App, deps cloud.Deps) error {
 	exposeRouting()
 	exposeAgent()
 	exposePlan()
+	exposeLink()
 	exposeOverrides()
 	exposeAuthority()
 	exposeEntitlement()
@@ -335,6 +336,20 @@ func Use(app *zip.App, deps cloud.Deps) error {
 		readiness.Degraded("commerce", err)
 		mountCommerceFailClosed(app)
 		return nil
+	}
+
+	// The plan links the tier and plan reads consult for an org on no plan of its own.
+	// Opened beside the embed for the same reason: a process that serves the tier op
+	// without it could not tell an org with no link from one it cannot read.
+	linked, err := openLinks(lg, dataDir)
+	if err != nil {
+		lg.Error("plan links not opened — serving fail-closed 503 (cloud stays up)", "err", err)
+		readiness.Degraded("commerce", err)
+		mountCommerceFailClosed(app)
+		return nil
+	}
+	if old := planLinks.Swap(linked); old != nil {
+		_ = old.Close()
 	}
 
 	// THE ONE GROUP the module's own route tables bind onto, at commerce's own

@@ -38,6 +38,9 @@ type Peers struct {
 	// PlanOf asks commerce which catalog plan subject is served as ("unlimited", "pro-3x",
 	// "go", ...), "" for none. ctx already states the org.
 	PlanOf func(ctx context.Context, subject string) (string, error)
+	// PlanHolderOf asks commerce which account's subscription serves subject's borrowed plan
+	// ("person:hanzo/james", "org:acme"), "" when subject uses its own books or holds none.
+	PlanHolderOf func(ctx context.Context, subject string) (string, error)
 	// OwnerOf asks IAM whether person ("<home org>/<name>") holds an owner membership in
 	// org.
 	OwnerOf func(ctx context.Context, person, org string) (bool, error)

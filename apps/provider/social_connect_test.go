@@ -3,12 +3,15 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/sdk"
+
+	"github.com/zap-proto/zip"
 )
 
 // A person adds a Bluesky account from the app, posts to it, adds a second, ends
@@ -128,6 +131,46 @@ func TestAnAccountIsAddedPostedToAndEnded(t *testing.T) {
 	}
 	if left := Connections("acme", "bluesky"); len(left) != 0 {
 		t.Fatalf("left = %+v", left)
+	}
+}
+
+// The social app adds an account over the plane (client.IntegrationsConnect), not
+// through the provider's own route, so the plane asks who is calling the way the
+// route does: connecting is an org admin's act, a member's is refused, an admin of
+// another org re-pointed at this one is no admin here, and an operator acting for
+// the org is no admin of it.
+func TestAnOrgAdminAddsAnAccountOverThePlane(t *testing.T) {
+	srv := pds(t)
+	newApp(t, newKMS(t))
+	in := &client.IntegrationsConnectIn{Provider: "bluesky", Fields: client.Fields(map[string]string{
+		"identifier": "acme.bsky.social", "password": goodAppPassword, "server": srv.URL,
+	})}
+	as := func(who zip.Caller) context.Context { return zip.WithCaller(context.Background(), who) }
+
+	for name, ctx := range map[string]context.Context{
+		"a member":                       as(zip.Caller{Org: "acme", User: "u-bob"}),
+		"an admin of another org":        cloud.For(as(zip.Caller{Org: "globex", User: "u-eve", OrgAdmin: true}), "acme"),
+		"an operator acting for the org": as(zip.Caller{Org: "acme", User: "u-ada", OrgAdmin: true, ActedBy: "admin/op"}),
+	} {
+		_, err := planeConnect(ctx, in)
+		var he *zip.HTTPError
+		if !errors.As(err, &he) || he.Status != http.StatusForbidden {
+			t.Fatalf("%s connected an account: %v", name, err)
+		}
+		if got := Connections("acme", "bluesky"); len(got) != 0 {
+			t.Fatalf("%s left a connection behind: %+v", name, got)
+		}
+	}
+
+	out, err := planeConnect(as(zip.Caller{Org: "acme", User: "u-ada", OrgAdmin: true}), in)
+	if err != nil {
+		t.Fatalf("the org's admin was refused: %v", err)
+	}
+	if !out.Connected || out.Provider != "bluesky" || out.Account != "@acme.bsky.social" || out.ExternalID != "did:plc:abc123" {
+		t.Fatalf("connected = %+v", out)
+	}
+	if got := Connections("acme", "bluesky"); len(got) != 1 || got[0].ExternalID != "did:plc:abc123" {
+		t.Fatalf("connections = %+v", got)
 	}
 }
 

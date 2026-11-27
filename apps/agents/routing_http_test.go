@@ -88,6 +88,33 @@ func TestClaim_RequiresMachineKey(t *testing.T) {
 	})
 }
 
+// An agent that reaches for the machine's own poll is told the real operation, in
+// the same words whether the key is missing, wrong, or the target does not exist
+// (still no oracle), so a dead end never costs a turn.
+func TestClaim_RefusalNamesTheRightOperation(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountApp(t, &fakeAI{content: "x"})
+		id, _ := registerAndMint(t, app, "acme", "evo")
+		for name, c := range map[string]struct{ id, key string }{
+			"no key":         {id, ""},
+			"wrong key":      {id, "tgtk_wrong"},
+			"no such target": {"tgt_nope", "tgtk_wrong"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				code, body := doKey(t, app, "POST", "/v1/agent/targets/"+c.id+"/claim", "acme", c.key)
+				if code != 403 {
+					t.Fatalf("want 403, got %d %s", code, body)
+				}
+				for _, want := range []string{"target claim rejected", "create_agent_coding", "targetId", "dir"} {
+					if !strings.Contains(string(body), want) {
+						t.Fatalf("refusal %s lacks %q", body, want)
+					}
+				}
+			})
+		}
+	})
+}
+
 // THE machine boundary: a key minted for target A cannot claim target B, and a
 // different org cannot claim at all — even with a real key for its own target.
 func TestClaim_CrossMachineAndCrossOrgDenied(t *testing.T) {

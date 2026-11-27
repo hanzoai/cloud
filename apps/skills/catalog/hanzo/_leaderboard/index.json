@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.hanzo.ai/v1/mcp"
   },
-  "skill_count": 9,
+  "skill_count": 10,
   "skills": [
     {
       "description": "Read leaderboard activity: Returns the per-day usage series for ONE authorized subject — the points a contribution heatmap and a timeline are drawn from, gap-filled so every day in the range is present..",
@@ -18,6 +18,14 @@
       "service": "leaderboard",
       "type": "skill-md",
       "url": "/.well-known/agent-skills/leaderboard_activity/SKILL.md"
+    },
+    {
+      "description": "Read leaderboard badge: The README badge of a listed org's leaderboard rank, as an SVG.",
+      "digest": "sha256:05717e50f69580c67ae399075f40917d9353cc0ce53b9e8c7c36c49723a5a4be",
+      "name": "leaderboard_badge",
+      "service": "leaderboard",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/leaderboard_badge/SKILL.md"
     },
     {
       "description": "Read leaderboard beta: Ranks everyone on the hanzo.ai/beta waitlist by one score: 1 per star on GitHub verified for the record and 1 per founder link followed, plus 1 per org that signed up with its referral code, plus 20 per such org that has made metered spend, plus 1 per 100,0",

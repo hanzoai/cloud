@@ -459,6 +459,12 @@ func TestNothingSensitiveIsLogged(t *testing.T) {
 			t.Errorf("the log carries %q:\n%s", secret, in.logs.String())
 		}
 	}
+	rows, _ := json.Marshal(waiting(t))
+	for _, identifier := range []string{"ada.private", "example.com", "privatehandle"} {
+		if strings.Contains(strings.ToLower(string(rows)), identifier) {
+			t.Errorf("a stored waitlist row carries %q:\n%s", identifier, rows)
+		}
+	}
 }
 
 // brokenKMS is a KMS that answers every read with a fault.

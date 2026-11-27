@@ -140,7 +140,7 @@ func pick(n int) (int, error) {
 }
 
 // mac is the HMAC-SHA-256 of a value under key: of a normalised code, the only form
-// in which a code is stored.
+// in which a code is stored, and, behind a domain prefix, of a waitlist identifier.
 func mac(key []byte, v string) []byte {
 	m := hmac.New(sha256.New, key)
 	m.Write([]byte(v))

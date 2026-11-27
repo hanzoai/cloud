@@ -176,10 +176,11 @@ func planeTargetGate(ctx context.Context, in *client.TargetGateIn) (*client.Codi
 // reads, and the workflow would spend its entire budget before failing. One
 // process holds the engine, the mailbox and the completion — this one.
 func planeRouteRun(ctx context.Context, in *client.RouteRunIn) (*client.CodingAck, error) {
-	org, err := callerOrg(ctx, in.Org)
+	run, err := routedAs(ctx, in)
 	if err != nil {
 		return nil, err
 	}
+	org := run.Org
 	// The queue asks for itself whether the caller reaches the machine, rather
 	// than trusting that the dispatcher's gate was asked: a run is put on a held
 	// org's machine only for the machine's owner (or a SuperAdmin), whichever
@@ -192,12 +193,30 @@ func planeRouteRun(ctx context.Context, in *client.RouteRunIn) (*client.CodingAc
 	if err := agents.Admit(ctx, org, in.TargetID, in.Dir, in.SessionID); err != nil {
 		return nil, err
 	}
-	run := *in
-	run.Org = org
 	if err := coding.Enqueue(ctx, run, routeLog); err != nil {
 		return nil, fmt.Errorf("agents: could not queue the routed run: %w", err)
 	}
 	return &client.CodingAck{OK: true}, nil
+}
+
+// routedAs is the run as its VALIDATED caller owns it: the org and the person the
+// call states, and the forge login the forge agrees is theirs. Whatever the body says
+// about who the run is for is checked against those, never taken.
+func routedAs(ctx context.Context, in *client.RouteRunIn) (client.RouteRunIn, error) {
+	org, err := callerOrg(ctx, in.Org)
+	if err != nil {
+		return client.RouteRunIn{}, err
+	}
+	actor, err := callerActor(ctx, in.Actor)
+	if err != nil {
+		return client.RouteRunIn{}, err
+	}
+	run := *in
+	if run.ForgeActor, err = coding.RoutedForgeActor(ctx, run); err != nil {
+		return client.RouteRunIn{}, err
+	}
+	run.Org, run.Actor = org, actor
+	return run, nil
 }
 
 // sessionActor is the actor a session is keyed on when a sibling opens it over
@@ -229,6 +248,20 @@ func callerOrg(ctx context.Context, named string) (string, error) {
 		return "", zip.ErrForbidden("agents: the org named is not the caller's")
 	}
 	return org, nil
+}
+
+// callerActor is the person a routed run is attributed to: the caller's, which the
+// argument may repeat and never contradict. The delivery activity states this
+// person as its caller (it has no request behind it), so an actor taken from the
+// body would let a caller have the run's grant and completion act as someone else,
+// and, on a run on GitHub, open its pull request as them. A call that states
+// nobody carries no actor, and one that names a person it does not state is refused.
+func callerActor(ctx context.Context, named string) (string, error) {
+	user := strings.TrimSpace(cloud.Who(ctx).User)
+	if named = strings.TrimSpace(named); named != "" && named != user {
+		return "", zip.ErrForbidden("agents: the actor named is not the caller")
+	}
+	return user, nil
 }
 
 // codingLog is how coding talks in this process. Deps used to carry a logger and

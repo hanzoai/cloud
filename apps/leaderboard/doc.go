@@ -15,6 +15,7 @@
 //	GET  /v1/leaderboard/pulse        the PUBLIC pulse: activity and spread as counts over time (pulse.go)
 //	GET  /v1/leaderboard/galaxy       the PUBLIC galaxy: every ranked org as a star, opaque and masked (galaxy.go)
 //	GET  /v1/leaderboard/feed         the PUBLIC live feed, Server-Sent Events, masked (feed.go)
+//	GET  /v1/leaderboard/badge/:handle the PUBLIC rank SVG badge for a listed org, hourly-cached (badge.go)
 //	GET  /v1/leaderboard/activity     per-day series for a heatmap + timeline (authorized subject)
 //	GET  /v1/leaderboard/beta         the hanzo.ai/beta waitlist ranked by one score (beta.go)
 //	GET  /v1/leaderboard/optin        the caller's opt-in + their org's opt-in

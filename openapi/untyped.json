@@ -1,5 +1,5 @@
 {
-  "operations": 831,
+  "operations": 832,
   "products": {
     "account": 2,
     "ad": 1,
@@ -36,7 +36,7 @@
     "iam": 71,
     "index": 3,
     "knowledge": 1,
-    "leaderboard": 1,
+    "leaderboard": 2,
     "legal": 1,
     "meet": 2,
     "metrics": 11,

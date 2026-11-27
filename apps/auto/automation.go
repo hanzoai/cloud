@@ -805,6 +805,9 @@ func (o ops) createAutomation(ctx context.Context, in *automationIn) (*Automatio
 	if err := d.check(); err != nil {
 		return nil, err
 	}
+	if err := d.routable(); err != nil {
+		return nil, err
+	}
 	if err := ahead(d.Schedule, time.Now()); err != nil {
 		return nil, err
 	}
@@ -939,6 +942,9 @@ func (o ops) updateAutomation(ctx context.Context, in *automationPatch) (*Automa
 		}
 	}
 	if defines {
+		if err := d.routable(); err != nil {
+			return nil, err
+		}
 		if err := mayPost(ctx, d); err != nil {
 			return nil, err
 		}

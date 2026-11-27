@@ -176,8 +176,10 @@ func TestTheCatalogNamesThePlanAndCommerceReads(t *testing.T) {
 		"/v1/plan/health":             false,
 		"/v1/commerce/catalog":        true,
 		"/v1/billing/plans":           false,
-		"/v1/leaderboard/standing":    false,
-		"/v1/commerce/catalog/models": true,
+		"/v1/leaderboard/standing":           false,
+		"/v1/leaderboard/badge/zeekay.svg":   true,
+		"/v1/reward/badge/zeekay.svg":        true,
+		"/v1/commerce/catalog/models":        true,
 	} {
 		if got := pol.Catalog(path); got != want {
 			t.Errorf("Catalog(%q) = %v, want %v", path, got, want)

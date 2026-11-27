@@ -125,11 +125,12 @@ func realGitSandbox(t *testing.T) (sandbox, string, *pod) {
 
 // TestWorkspaceClone_MainMasterAndEmptyRemotes verifies end-to-end workspace
 // clone + branch creation + commit + push across:
-//  (a) a repository whose default branch is main,
-//  (b) a repository whose default branch is master (both when BaseBranch is
-//      omitted and when "main" was passed as a default fallback), and
-//  (c) a brand-new empty bare repository with 0 commits / unborn HEAD (both
-//      when BaseBranch is omitted and when "main" was passed).
+//
+//	(a) a repository whose default branch is main,
+//	(b) a repository whose default branch is master (both when BaseBranch is
+//	    omitted and when "main" was passed as a default fallback), and
+//	(c) a brand-new empty bare repository with 0 commits / unborn HEAD (both
+//	    when BaseBranch is omitted and when "main" was passed).
 func TestWorkspaceClone_MainMasterAndEmptyRemotes(t *testing.T) {
 	cases := []struct {
 		name          string

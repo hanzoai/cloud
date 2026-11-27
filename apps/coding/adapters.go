@@ -3,6 +3,7 @@ package coding
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/hanzoai/cloud/client/task"
 	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/sdk/plane"
+	"github.com/zap-proto/zip"
 )
 
 // adapters.go binds coding's clients to the apps that OWN them — across the
@@ -329,6 +331,27 @@ func Enqueue(ctx context.Context, in client.RouteRunIn, log func(msg string, kv 
 		Pull: in.Pull, Made: in.Made, Read: in.Read, Dir: in.Dir,
 		ReadOnly: in.ReadOnly,
 	})
+}
+
+// RoutedForgeActor is the forge login a routed run on the forge acts as, the one
+// that opens its pull request: the caller's own, as the forge resolves them. The
+// body may repeat it and never contradict it. A run in a made workspace acts as the
+// machine, a run on GitHub (Home) opens its proposal on a token minted again as its
+// person, and a run with no repository opens none, so none of them has a forge
+// login to state.
+func RoutedForgeActor(ctx context.Context, in client.RouteRunIn) (string, error) {
+	named := strings.TrimSpace(in.ForgeActor)
+	if in.Made || strings.TrimSpace(in.Home) != "" || strings.TrimSpace(in.Repo) == "" {
+		return named, nil
+	}
+	login, err := resolveActor(ctx)
+	if err != nil {
+		return "", err
+	}
+	if named != "" && named != login {
+		return "", zip.ErrForbidden("coding: the forge login named is not the caller's")
+	}
+	return login, nil
 }
 
 var enqueueOnce sync.Once

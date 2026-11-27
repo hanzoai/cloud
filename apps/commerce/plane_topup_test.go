@@ -77,6 +77,7 @@ func servePlane(t *testing.T) rig {
 		t.Fatalf("Embed: %v", err)
 	}
 	PublishEmbedded(emb)
+	bootLinks(t)
 	t.Cleanup(func() {
 		PublishEmbedded(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

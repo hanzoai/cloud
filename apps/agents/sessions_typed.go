@@ -100,6 +100,12 @@ type eventIn struct {
 	// what an agent writing its own transcript wants; naming one is for a surface
 	// recording on somebody else's behalf.
 	Actor string `json:"actor,omitempty" url:"-"`
+	// RequestID names this append so it can be made again safely: a second append
+	// to the same session with the same id stores nothing and answers with the
+	// turn the first one stored; the same id with another turn is refused 422. Up
+	// to 256 bytes, no control characters. Leave it out and every append is its own
+	// turn.
+	RequestID string `json:"requestId,omitempty" url:"-"`
 }
 
 // AppendEvent records one turn of a session's transcript and answers 201 with it.
@@ -115,6 +121,12 @@ type eventIn struct {
 // that still had the secret in it once, and this way the author learns which
 // value to rotate. The refusal carries every finding: the rule, the severity, the
 // line, a MASKED preview and the fingerprint. The secret is never in the answer.
+//
+// A TURN THAT NAMES ITSELF IS STORED ONCE. With a `requestId`, a repeat of the
+// append (a client retrying after a 5xx or a timeout) answers 201 with the turn
+// the first request stored and changes nothing: no second turn, no second frame
+// on the stream, no second move of progress. The same id with another kind, actor
+// or payload is another request under a reused id, refused 422.
 func (o sessionOps) appendEvent(ctx context.Context, in *eventIn) (*eventView, error) {
 	sto, org, err := tenantStore(ctx, &o.s.State)
 	if err != nil {
@@ -161,12 +173,23 @@ func (o sessionOps) appendEvent(ctx context.Context, in *eventIn) (*eventView, e
 	if len(actor) > maxActor {
 		return nil, zip.ErrBadRequest("actor too long")
 	}
+	request, err := requestID(in.RequestID)
+	if err != nil {
+		return nil, err
+	}
 	e, err := sto.AppendEvent(ctx, Event{
 		ID: mint.ID("evt"), SessionID: in.ID, Org: org, Kind: kind, Actor: actor,
-		Payload: string(in.Payload), CreatedAt: time.Now().Unix(),
+		Payload: string(in.Payload), CreatedAt: time.Now().Unix(), RequestID: request,
 	})
+	if errors.Is(err, errRequestReused) {
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
+	}
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "append: %v", err)
+	}
+	if e.Replay {
+		v := toEventView(e)
+		return &v, nil
 	}
 	publishEvent(o.s, x, e)
 	if kind == KindProgress {

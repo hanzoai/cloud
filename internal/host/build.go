@@ -185,6 +185,9 @@ var publicCatalog = map[string]int{
 	"/v1/billing/catalog":       300,
 	"/v1/billing/discovery":     300,
 	"/.well-known/agent-skills": 300,
+	// Public SVG README badges: one shared hourly copy per handle/options across origins.
+	"/v1/leaderboard/badge": 3600,
+	"/v1/reward/badge":      3600,
 }
 
 // staticEdgePolicy projects the static env/flag edge config into the boot-default

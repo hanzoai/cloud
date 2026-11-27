@@ -273,7 +273,7 @@ func planeChannelsConnect(ctx context.Context, in *client.PlaneChannelConnectIn)
 	}
 
 	// Secondary path for Hanzo org when OAuth app lives on post.hanzo.ai frontend.
-	if (org == "hanzo" || org == authz.AdminOrg) && mounted.KMS != nil && in.Credential == nil {
+	if (org == "hanzo" || org == authz.AdminOrg) && mounted.KMS != nil && in.Credential == nil && unconfigured(cerr) {
 		if authURL, ferr := connectViaPostUI(ctx, prov, groupName, strings.TrimSpace(in.Return)); ferr == nil && authURL != "" {
 			return &client.PlaneChannelConnectOut{
 				AuthorizeURL: authURL,
@@ -287,6 +287,18 @@ func planeChannelsConnect(ctx context.Context, in *client.PlaneChannelConnectIn)
 		return nil, cerr
 	}
 	return nil, providerNotConfiguredErr(prov)
+}
+
+// unconfigured is whether the provider declined because it holds no app for the
+// network, or is not deployed here at all: the answers the post UI may stand in
+// for. A refusal is the caller's own, and a provider that failed to answer has
+// said nothing, so neither is offered a second door.
+func unconfigured(err error) bool {
+	if err == nil || errors.Is(err, cloud.ErrNoPeer) {
+		return true
+	}
+	var he *zip.HTTPError
+	return errors.As(err, &he) && he.Status == http.StatusServiceUnavailable
 }
 
 func connectViaPostUI(ctx context.Context, provider, group, redirectURL string) (string, error) {

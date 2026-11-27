@@ -73,6 +73,7 @@ var portedDirs = []string{
 	"apps/coding/inbox.go",
 	"apps/coding/ledger.go",
 	"apps/coding/park.go",
+	"apps/commerce/planlink_store.go",
 	"apps/company",
 	"apps/compliance",
 	"apps/cyber/store.go",

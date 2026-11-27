@@ -3,7 +3,6 @@ package auto
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 
 	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/script"
@@ -30,7 +29,7 @@ func planeProviderRun(ctx context.Context, in *client.ProviderRunIn) (*client.Pr
 		return nil, zip.ErrForbidden("provider run: no org on the call")
 	}
 	if !script.Has(in.Provider) {
-		return nil, zip.Errorf(http.StatusNotFound, "unknown provider %q", in.Provider)
+		return nil, script.Missing(in.Provider)
 	}
 	var auth any
 	if len(in.Auth) > 0 {

@@ -115,6 +115,8 @@ type AgentStarted struct {
 	// Skipped says why no Dev run started for a person IAM could not vouch for
 	// either way; the automation stays on and its next run asks again.
 	Skipped string `json:"skipped,omitempty"`
+	// Plan says the Dev run started in plan mode: it can change nothing.
+	Plan bool `json:"plan,omitempty"`
 }
 
 // errUnvouched ends a run whose person IAM could not answer for: skipped, not
@@ -153,6 +155,8 @@ type AgentFinish struct {
 	Error   string `json:"error,omitempty"`
 	Notify  bool   `json:"notify,omitempty"`
 	Name    string `json:"name,omitempty"`
+	// Plan is the Dev run's mode (AgentStarted.Plan): its summary says so.
+	Plan bool `json:"plan,omitempty"`
 	// Stop ends the Dev run, which is still going: the step gave up on it.
 	Stop bool `json:"stop,omitempty"`
 }
@@ -237,7 +241,7 @@ func runAgent(ctx workflow.Context, in FlowRunInput, runID string, step FlowStep
 	}
 
 	summary := finishAgent(ctx, AgentFinish{
-		Owner: in.Owner, FlowID: in.FlowID, RunID: runID, Session: started.Session,
+		Owner: in.Owner, FlowID: in.FlowID, RunID: runID, Session: started.Session, Plan: started.Plan,
 		Outcome: seen.Outcome, Answer: seen.Answer, Error: seen.Error, Stop: seen.stop,
 		Notify: boolInput(input, "notify"), Name: strInput(input, "name"),
 	})
@@ -260,7 +264,7 @@ func finishAgent(ctx workflow.Context, in AgentFinish) string {
 	})
 	var summary string
 	if err := workflow.ExecuteActivity(endCtx, FinishAgentActivity, in).Get(endCtx, &summary); err != nil {
-		return summarize(in.Outcome, in.Answer, in.Error)
+		return in.summary()
 	}
 	return summary
 }
@@ -274,7 +278,7 @@ func StartAgentActivity(ctx context.Context, in AgentStart) (AgentStarted, error
 		return AgentStarted{}, ErrNotMounted
 	}
 	if run, err := s.State.store.GetRun(ctx, in.Owner, in.RunID); err == nil && run.Session != "" {
-		return AgentStarted{Session: run.Session}, nil
+		return AgentStarted{Session: run.Session, Plan: storedPlan(ctx, s, in)}, nil
 	}
 	// What runs is what the automation says NOW, read in one transaction with the
 	// person who said it — never the step a schedule was armed with, which an edit
@@ -340,7 +344,7 @@ func StartAgentActivity(ctx context.Context, in AgentStart) (AgentStarted, error
 		// The run exists; losing its link loses the transcript, not the work.
 		s.Log.Warn("auto: the Dev run's session was not recorded", "org", in.Owner, "run", in.RunID, "session", started.SessionID, "err", err)
 	}
-	return AgentStarted{Session: started.SessionID}, nil
+	return AgentStarted{Session: started.SessionID, Plan: task.Mode == modePlan}, nil
 }
 
 // AwaitAgentActivity follows a session for up to awaitSlice: it reads the turn
@@ -385,7 +389,7 @@ func AwaitAgentActivity(ctx context.Context, in AgentAwait) (AgentProgress, erro
 // could not keep. The notice is best effort: a run that worked is not failed by a
 // message that did not go.
 func FinishAgentActivity(ctx context.Context, in AgentFinish) (string, error) {
-	summary := summarize(in.Outcome, in.Answer, in.Error)
+	summary := in.summary()
 	s := mounted
 	if s == nil {
 		return summary, nil

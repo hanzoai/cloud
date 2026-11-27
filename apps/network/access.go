@@ -49,9 +49,10 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// inviteRef is where KMS holds the one key this package seals under: the HMAC of an
-// invite code is taken under it, and so is every count of an address or an
-// identifier, under a label of its own.
+// inviteRef is where KMS holds the one key this package seals under: the HMAC of
+// an invite code, the HMAC of a waitlist identifier (under its own domain) and
+// every count of an address or an identifier (under a derived key) all come from
+// it. No second secret is needed.
 const inviteRef = "network/invite-hmac"
 
 // The limits. Each says what it stops and the arithmetic it rests on.
@@ -215,12 +216,26 @@ func (o ops) home(ctx context.Context) (string, error) {
 // can reach never does, and while no key is sealed it answers 503 as a deployment that
 // is not configured, having made nothing. KMS that cannot answer, or holds a key that is
 // not one, is 503 too.
+//
+// The KMS read acts for the brand, on the same context as the Base calls: the key
+// belongs to the brand's tenant, and a stranger — or a member of another org — has
+// no org for a plane call to act for. brandContext states the brand from the server's
+// own config, starting from no caller, so no header or principal can redirect the
+// read. It does not change who the operator is: the issue path keeps its principal
+// for the audit, only the KMS call is addressed to the brand.
+//
+// The two 503s stay distinct. No key sealed yet is a configuration answer; a KMS
+// that cannot answer, or a context it will not serve, is the generic one. A store
+// may answer a tenant miss and a refusal alike, so the anonymous body names
+// neither the secret ref nor the org in either case.
 func (o ops) door(ctx context.Context, provision bool) (string, []byte, error) {
 	org, err := o.brandOf()
 	if err != nil {
 		return "", nil, err
 	}
-	key, err := o.s.State.seal.Get(ctx, o.s.KMS, provision)
+	fctx, done := brandContext(ctx, org)
+	defer done()
+	key, err := o.s.State.seal.Get(fctx, o.s.KMS, provision)
 	switch {
 	case errors.Is(err, secret.ErrBusy):
 		// Another pod is sealing the key this moment: nothing was minted here; try again.

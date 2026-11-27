@@ -265,6 +265,41 @@
         "x-tool": true
       }
     },
+    "/v1/leaderboard/badge/{handle}": {
+      "get": {
+        "operationId": "get_leaderboard_badge_by_handle",
+        "summary": "The README badge of a listed org's leaderboard rank, as an SVG",
+        "description": "Public once the org opts into the public leaderboard (PUT /v1/leaderboard/optin or PUT /v1/leaderboard/optin/org). Name the handle or org slug with the .svg extension. theme=dark|light, style=flat|card, fields= and label= (at most 24 characters) choose the look. Cached hourly in-process and at the edge (stale-while-revalidate 24h) and answers 304 to a matching ETag; every word on it is escaped. An unlisted org and an unknown handle are the same 404. No credential is needed.",
+        "tags": [
+          "leaderboard"
+        ],
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "image/svg+xml": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-public": true
+      }
+    },
     "/v1/leaderboard/beta": {
       "get": {
         "operationId": "get_leaderboard_beta",

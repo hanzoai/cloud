@@ -70,7 +70,6 @@ func TestTheFreePlanPaysOrIsAskedToUpgrade(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		app := newApp(t)
-		engineFor(ctx, t, "acme")
 		taken := planned(t, false, nil, false)
 		if counted, err := gateRun(mounted, ctx, "acme"); err != nil || counted || feeFor(ctx, mounted, "acme") <= 0 {
 			t.Fatalf("a funded free org = counted %v, %v, fee %d", counted, err, feeFor(ctx, mounted, "acme"))
@@ -79,6 +78,7 @@ func TestTheFreePlanPaysOrIsAskedToUpgrade(t *testing.T) {
 			t.Fatal("a free org's run was counted against a plan allowance")
 		}
 		planned(t, false, nil, true)
+		engineFor(ctx, t, "acme")
 		_, err := gateRun(mounted, ctx, "acme")
 		if he := refusal(t, err); he.Status != http.StatusPaymentRequired || he.Code != "paid_plan_required" {
 			t.Fatalf("an unfunded free org = %+v", he)
@@ -116,9 +116,9 @@ func TestASkippedStartGivesItsRunBack(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		app := newApp(t)
+		taken := planned(t, true, &client.Allowance{Plan: "pro", Limit: 50, Used: 1}, false)
 		engineFor(ctx, t, "acme")
 		devPlane(t, client.TurnEvents{})
-		taken := planned(t, true, &client.Allowance{Plan: "pro", Limit: 50, Used: 1}, false)
 		a := decode[Automation](t, ask(t, app, http.MethodPost, "/v1/auto/automations", "acme", map[string]any{"name": "a", "instructions": "x"}))
 		first := ask(t, app, http.MethodPost, "/v1/auto/automations/"+a.ID+"/run", "acme", nil)
 		second := decode[runStarted](t, ask(t, app, http.MethodPost, "/v1/auto/automations/"+a.ID+"/run", "acme", nil))

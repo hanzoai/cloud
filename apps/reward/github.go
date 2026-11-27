@@ -677,7 +677,7 @@ func badgeKinds(text string) []string {
 			found = append(found, "profile")
 		case host == "api.hanzo.ai" && rankImage.MatchString(path):
 			found = append(found, "rank")
-		case (host == "hanzo.ai" || host == "www.hanzo.ai") && (path == "/badges/built-with-hanzo.svg" || path == "/badges/built-with-hanzo-dark.svg"):
+		case (host == "hanzo.ai" || host == "www.hanzo.ai" || host == "hanzo.app") && isBuiltBadgePath(path):
 			found = append(found, "built")
 		}
 	}
@@ -688,6 +688,17 @@ func badgeKinds(text string) []string {
 		}
 	}
 	return kinds
+}
+
+func isBuiltBadgePath(path string) bool {
+	switch path {
+	case "/badges/built-with-hanzo.svg",
+		"/badges/built-with-hanzo-dark.svg",
+		"/badges/built-with-hanzo-light.svg",
+		"/badges/built-with-hanzo-shields.svg":
+		return true
+	}
+	return false
 }
 
 // badge verifies, against GitHub's API, that a project's README links Hanzo, and

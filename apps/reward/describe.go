@@ -35,7 +35,7 @@ func init() {
 		{http.MethodGet, "/v1/reward/profile/:handle", "A person's public rewards profile",
 			"Public. Reads a person's level, lifetime points, badges and counts by pillar by the handle they chose, once they turned their profile on. A private profile and an unknown handle are the same 404."},
 		{http.MethodGet, "/v1/reward/badge/:handle", "The README badge of a person's level, as an SVG",
-			"Public once the person turns their profile on. Name the handle with the .svg extension. theme=dark|light and style=flat|card choose the look. The image is never cached by a shared cache and answers 304 to a matching ETag, and every word on it is escaped."},
+			"Public once the person turns their profile on. Name the handle with the .svg extension. theme=dark|light and style=flat|card choose the look. Cached hourly in-process and at the edge (stale-while-revalidate 24h) and answers 304 to a matching ETag, and every word on it is escaped."},
 
 		{http.MethodGet, "/v1/admin/reward/programs", "List the reward programs (SuperAdmin)",
 			"SuperAdmin only. Lists every program with its rules, budget, levels, badges and email templates."},

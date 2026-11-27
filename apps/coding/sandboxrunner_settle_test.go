@@ -243,7 +243,6 @@ func TestCloneTakesOneCommitWithItsFiles(t *testing.T) {
 	}
 }
 
-
 // Cloning must leave an unavailable LFS object as its checked-in pointer.
 // Disable global config so the test does not rely on a developer's LFS setup.
 func TestCloneKeepsMissingLFSPointer(t *testing.T) {

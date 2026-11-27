@@ -29,7 +29,7 @@ func newApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{}); err != nil {
+	if err := Use(app, cloud.Deps{}, func(id string) bool { return id == "shopify" }); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	return app
@@ -87,5 +87,24 @@ func TestRunWire(t *testing.T) {
 	}
 	if out.Ok || out.Error == "" || !strings.Contains(out.Error, "no_such_action") {
 		t.Fatalf("want ok:false naming the action, got %+v", out)
+	}
+}
+
+// A connector the provider app knows but this runtime has no program for is not an
+// "unknown provider": it is known, and has no action that runs here yet. A name no
+// connector carries keeps the 404.
+func TestRunWire_AKnownConnectorWithNoProgramIsNotUnknown(t *testing.T) {
+	app := newApp(t)
+
+	code, body := post(t, app, "/v1/auto/provider/shopify/run", "acme", map[string]any{"action": "x"})
+	if code != http.StatusUnprocessableEntity {
+		t.Fatalf("known connector with no program want 422, got %d (%s)", code, body)
+	}
+	if !strings.Contains(string(body), "shopify is a known connector but has no action that runs here yet") || strings.Contains(string(body), "unknown provider") {
+		t.Fatalf("the refusal must say the connector is known, got %s", body)
+	}
+	code, body = post(t, app, "/v1/auto/provider/nope/run", "acme", map[string]any{"action": "x"})
+	if code != http.StatusNotFound || !strings.Contains(string(body), `unknown provider \"nope\"`) {
+		t.Fatalf("a nonsense id want 404 unknown provider, got %d (%s)", code, body)
 	}
 }

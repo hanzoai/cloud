@@ -86,6 +86,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Get("/pulse", o.pulse)
 	g.Get("/galaxy", o.galaxy)
 	g.Raw(http.MethodGet, "/feed", cloud.Handle(s, feed))
+	g.Raw(http.MethodGet, "/badge/:handle", cloud.Handle(s, badge))
 	g.Get("/activity", o.activity)
 	g.Get("/optin", o.getOptin)
 	g.Put("/optin", o.putUserOptin)

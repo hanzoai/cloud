@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud/sdk/mint"
@@ -132,6 +133,9 @@ func (o ops) dispatch(ctx context.Context, in *SourceDispatch) (*SourceRoute, er
 func (o ops) dispatchFor(ctx context.Context, sto *Store, subject string, in *SourceDispatch) (*SourceRoute, error) {
 	r, err := sto.Get(ctx, subject, in.ID)
 	if errors.Is(err, errNotFound) {
+		if strings.HasPrefix(in.ID, "tgt_") {
+			return nil, zip.ErrNotFound("source not found: this takes a source id (src_…), not a machine target; to run work on a linked machine call create_agent_coding with targetId and dir")
+		}
 		return nil, zip.ErrNotFound("source not found")
 	}
 	if err != nil {

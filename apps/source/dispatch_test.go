@@ -224,3 +224,28 @@ func TestDispatchRefusals(t *testing.T) {
 		}
 	})
 }
+
+// A machine target id is not a source id. The refusal says so and names the
+// operation that runs work on a linked machine; any other unknown id keeps the
+// plain refusal.
+func TestDispatchOfAMachineTargetNamesTheRightOperation(t *testing.T) {
+	sqlite(t, func(t *testing.T) {
+		x := newReady(t)
+		post := func(id string) (int, string) {
+			return x.r.as("POST", "/v1/sources/"+id+"/dispatch", "alice", "acme", map[string]string{"provider": "claude", "instance": "claude-1"})
+		}
+		code, body := post("tgt_0123456789abcdef")
+		if code != 404 {
+			t.Fatalf("target id: want 404, got %d %s", code, body)
+		}
+		for _, want := range []string{"source not found", "src_", "create_agent_coding", "targetId", "dir"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("target id refusal %s lacks %q", body, want)
+			}
+		}
+		code, body = post("src_0123456789abcdef")
+		if code != 404 || strings.Contains(body, "create_agent_coding") || !strings.Contains(body, "source not found") {
+			t.Errorf("source id: want the plain 404, got %d %s", code, body)
+		}
+	})
+}

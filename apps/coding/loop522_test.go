@@ -123,8 +123,8 @@ func TestKeptOnLoop(t *testing.T) {
 
 func TestNarrating(t *testing.T) {
 	for answer, want := range map[string]bool{
-		"Fix it to match.":          true,
-		"Now let me run the tests:": true,
+		"Fix it to match.":                                                                true,
+		"Now let me run the tests:":                                                       true,
 		"Let me check what other files exist in `apps/coding/`:":                          true,
 		"Run `gofmt` and `go test ./apps/coding/...`.":                                    true,
 		"Commit and push to `agent/fix-522-read-loop`.":                                   true,

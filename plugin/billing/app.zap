@@ -273,6 +273,13 @@ struct PaymentConfig {
     Cards         list<bytes> @56
 }
 
+struct PlanLinkState {
+    Link      bytes       @0
+    Plans     list<bytes> @8
+    CanLink   bool        @16
+    CanUnlink bool        @17
+}
+
 struct PriceQuote {
     Amount            i64  @0
     Decimals          i64  @8
@@ -374,6 +381,7 @@ struct Tier {
     Tier         bytes @24
     Balance      bytes @32
     PlanName     text  @40
+    PlanHolder   text  @48
 }
 
 struct TokenSupplied {
@@ -533,6 +541,10 @@ struct ledgerPage {
     Currency text @0
     Limit    text @8
     Offset   text @16
+}
+
+struct linkBody {
+    From text @0
 }
 
 struct methodRef {
@@ -708,6 +720,17 @@ interface billing {
     # id belonging to another tenant is not found rather than found and then filtered.
     # A named handler, not a closure, so zipdoc can lift this prose into the registry.
     getInvoice(req: InvoiceRef) returns (rep: Invoice)
+    # Answers the plan the org you act in borrows, and the plans you could lend it.
+    # `link` is the plan this org uses, omitted when it uses none; `live` is false once the
+    # plan it was lent from has lapsed, and the link then confers nothing. Any member of the
+    # org may read it. `plans` is every live paid plan YOU hold — your own wallet in the
+    # shared signup org and each org you own — whoever else is in the org, with `org` naming
+    # the org one is already lent to. `canLink` and `canUnlink` say what you may do from
+    # here, by the rules the writes enforce: link a plan if you are an owner or admin of an
+    # org that may borrow, holds no live paid plan of its own and borrows none; end the link
+    # if you are an owner or admin of the org or hold the plan it is lent from.
+    # A named handler, not a closure, so zipdoc can lift this prose into the registry.
+    getPlanLink() returns (rep: PlanLinkState)
     # Answers the caller's billing accounts: the org itself, its currency, when it
     # was opened, and the caller's own standing in it.
     # The standing is the caller's, resolved from the validated principal here and
@@ -970,6 +993,18 @@ interface billing {
     # would mint a second number for one debt.
     # A named handler, not a closure, so zipdoc can lift this prose into the registry.
     issueInvoice(req: InvoiceRef) returns (rep: Invoice)
+    # Uses a plan you hold on the org you act in.
+    # The whole org is covered by it, and one plan is lent to at most one org. You must be
+    # an owner or admin of the org, and `from` must be one of your own `plans`: your own
+    # wallet in the shared signup org, or an org you own. The org keeps its own wallet and
+    # its own included allowance; a plan lent to it is never its to cancel. Refusals: 403
+    # when you are not an owner or admin; 400 `no_plan_to_link` when `from` is not a live
+    # paid plan you hold; 400 `org_cannot_link` for the shared signup org, a held or reserved
+    # org, or the plan's own org; 409 `org_has_plan` when the org already holds a live paid
+    # plan of its own; 409 `plan_already_linked` when the plan is lent to another org; 409
+    # `org_already_linked` when the org already uses one. It is on the audit trail.
+    # A named handler, not a closure, so zipdoc can lift this prose into the registry.
+    linkPlan(req: linkBody) returns (rep: PlanLinkState)
     # Changes one spend cap: raise or lower the ceiling, flip enforcement, retune
     # the rate limit.
     # Only the fields the body carries move. Every mutable field is optional, and an
@@ -1178,6 +1213,16 @@ interface billing {
     # held by a wallet the caller may not change, is not found.
     # A named handler, not a closure, so zipdoc can lift this prose into the registry.
     resizeSubscription(req: resize) returns (rep: Subscription)
+    # Stops using a linked plan.
+    # Without a query it ends the link of the org you act in: an owner or admin of the org
+    # may, and so may the person who holds the account the plan is lent from. With
+    # `from=<account>` it ends the link that account's plan is lent through, from whatever
+    # org you act in — so someone removed from the borrowing org can still take their plan
+    # back — and `from` must be one of your own `plans`. Ending a link frees the plan to be
+    # lent again. Answers 404 when nothing is linked and 403 when it is not yours to end. It
+    # is on the audit trail.
+    # A named handler, not a closure, so zipdoc can lift this prose into the registry.
+    unlinkPlan() returns (rep: PlanLinkState)
     # Voids a draft or issued invoice — the cancel. It is the org admin's act; a
     # member is refused 403.
     # A paid invoice cannot be voided: money has moved, and the correction for that
@@ -1188,14 +1233,14 @@ interface billing {
 }
 
 # ---------------------------------------------------------------------
-# 59 op(s) here. What follows is what this schema does not carry.
+# 62 op(s) here. What follows is what this schema does not carry.
 #
 # blocked (3) — the op is absent; the field has no wire form:
 #   get_billing_checkouts_by_id  checkoutView.Links  map[string]string  (map)
 #   patch_billing_checkouts_by_id  checkoutView  billing.checkoutView  (reaches one)
 #   post_billing_checkouts  checkoutView  billing.checkoutView  (reaches one)
 #
-# opaque (49) — crosses, arrives without its name:
+# opaque (51) — crosses, arrives without its name:
 #   AgentOrder.Token  client.TokenRoom
 #   AgentPayment.Error  client.AgentError
 #   AgentPayment.Invoice  client.Invoice
@@ -1215,6 +1260,8 @@ interface billing {
 #   PaymentConfig.Cards  client.PaymentCard (list element)
 #   PaymentConfig.PayPal  client.PayPalPublicConfig
 #   PaymentConfig.Stripe  client.StripePublicConfig
+#   PlanLinkState.Link  client.PlanLink
+#   PlanLinkState.Plans  client.LendablePlan (list element)
 #   RaiseIn.Lines  client.InvoiceLine (list element)
 #   Recharge.Results  client.Recharged (list element)
 #   Rollup.Balance  client.RollupBalance

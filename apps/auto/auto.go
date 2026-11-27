@@ -129,7 +129,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// route DISTINCT from every automations route (no /v1/auto/* wildcard here, so no
 	// shadow), and was a separate Wire entry purely for that one route — fold it in as a
 	// terminal sub-mount so connector catalogue + execution are ONE automations subsystem.
-	if err := script.Use(app, deps); err != nil {
+	if err := script.Use(app, deps, provider.Registered); err != nil {
 		return err
 	}
 	return nil

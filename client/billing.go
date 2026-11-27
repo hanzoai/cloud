@@ -1121,8 +1121,12 @@ type Tier struct {
 	Balance      TierBalance `json:"balance"`
 	// PlanName is the display name of the served plan ("Unlimited"), "" with no
 	// plan. A plan only the plan authority knows has no catalog name, so a reader
-	// shows this, not the tier. Last, for the ZAP wire.
+	// shows this, not the tier.
 	PlanName string `json:"planName,omitempty"`
+	// PlanHolder is the canonical account claim ("person:hanzo/james", "org:acme")
+	// whose live paid subscription this org borrows through a plan link; absent when
+	// the subject uses its own books or holds no plan. Appended last for the ZAP wire.
+	PlanHolder string `json:"planHolder,omitempty"`
 }
 
 // RollupIn asks for one subject's month. Plan overrides which plan the figures
@@ -1485,6 +1489,15 @@ type PlanRow struct {
 	Entitlements string `json:"entitlements,omitempty"`
 	// Replaces are the slugs the plan was sold under before it was renamed.
 	Replaces []string `json:"replaces,omitempty"`
+	// Multiplier is the plan's usage multiple relative to the 1× Pro baseline
+	// (1, 5, 10, 25; nil for Free and Unlimited). Appended last for ZAP wire.
+	Multiplier *int `json:"multiplier,omitempty"`
+	// UsagePolicy distinguishes "daily" (Free), "metered" (Pro..Ultimate), and
+	// "unlimited" (Unlimited) so nil Multiplier is never ambiguous.
+	UsagePolicy string `json:"usagePolicy,omitempty"`
+	// Capabilities is the JSON object of admin-editable comparison matrix cells
+	// (agentExecution, parallelExecution, inferencePriority, researchCapacity, support).
+	Capabilities string `json:"capabilities,omitempty"`
 }
 
 // PlanRows is every row of the plan authority, ordered by slug.
@@ -1543,6 +1556,14 @@ type PlanSet struct {
 	// Replaces are the slugs the plan was sold under before it was renamed; absent
 	// keeps the row's, and an empty list removes them.
 	Replaces []string `json:"replaces,omitempty"`
+	// Multiplier is the usage multiple relative to the 1× Pro baseline; absent
+	// keeps the row's, 0 clears it. Appended last for ZAP wire.
+	Multiplier *int `json:"multiplier,omitempty"`
+	// UsagePolicy is "daily", "metered", or "unlimited"; empty keeps the row's.
+	UsagePolicy string `json:"usagePolicy,omitempty"`
+	// Capabilities is a JSON object of string->string capability cells; empty
+	// keeps the row's, "{}" clears it.
+	Capabilities string `json:"capabilities,omitempty"`
 }
 
 // ---- billing.coupon — the plan coupons a SuperAdmin keeps ------------------
