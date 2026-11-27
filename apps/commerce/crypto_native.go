@@ -203,7 +203,6 @@ func nativeSupportedChain(cp processor.CryptoProcessor, chain string) bool {
 // back to or merging Stripe processor crypto configuration.
 func nativeCryptoOptions(ctx context.Context) (*client.CryptoOptions, error) {
 	watched := liveWatchedAssets()
-	healAllWatchedCollisions(ctx)
 
 	var custodyErr error
 	if len(watched) == 0 {
@@ -213,6 +212,11 @@ func nativeCryptoOptions(ctx context.Context) (*client.CryptoOptions, error) {
 	seen := map[string]bool{}
 	assets := make([]client.CryptoPair, 0, len(watched))
 	var anyCustodyErr error
+	type custodyResult struct {
+		cp  processor.CryptoProcessor
+		err error
+	}
+	custodyByToken := map[string]custodyResult{}
 
 	for _, a := range watched {
 		chain := strings.ToLower(strings.TrimSpace(a.Chain))
@@ -226,12 +230,16 @@ func nativeCryptoOptions(ctx context.Context) (*client.CryptoOptions, error) {
 				continue
 			}
 		} else {
-			cp, err := nativeCustodyProcessor(ctx, token)
-			if err != nil {
-				anyCustodyErr = err
+			res, cached := custodyByToken[token]
+			if !cached {
+				res.cp, res.err = nativeCustodyProcessor(ctx, token)
+				custodyByToken[token] = res
+			}
+			if res.err != nil {
+				anyCustodyErr = res.err
 				continue
 			}
-			if !nativeSupportedChain(cp, chain) {
+			if !nativeSupportedChain(res.cp, chain) {
 				continue
 			}
 			if !strings.HasPrefix(strings.ToLower(a.Contract), "kraken:") && isAssetAmbiguous(ctx, a) {
@@ -437,10 +445,14 @@ func nativeCryptoMint(ctx context.Context, org *organization.Organization, in *c
 			strings.ToUpper(token), chain)
 	}
 
-	healExpiredSharedAddresses(ctx, chain, token)
-	if !asset.Pooled() && !strings.HasPrefix(strings.ToLower(asset.Contract), "kraken:") && isAssetAmbiguous(ctx, asset) {
-		RecordCryptoEvent("unavailable", chain, token)
-		return nil, zip.Errorf(503, "Crypto deposits on %s are temporarily unavailable while custody addresses reconcile. Use another chain or card.", chain)
+	var existingAll []orgIntent
+	var existingAllErr error
+	if !asset.Pooled() {
+		existingAll, existingAllErr = listAssetIntentsAllOrgs(chain, token)
+		if !strings.HasPrefix(strings.ToLower(asset.Contract), "kraken:") && isAssetAmbiguousInList(asset, existingAll, existingAllErr) {
+			RecordCryptoEvent("unavailable", chain, token)
+			return nil, zip.Errorf(503, "Crypto deposits on %s are temporarily unavailable while custody addresses reconcile. Use another chain or card.", chain)
+		}
 	}
 
 	minCents := minimumDepositCents(asset.Terms)
@@ -467,7 +479,7 @@ func nativeCryptoMint(ctx context.Context, org *organization.Organization, in *c
 
 	// Reuse the caller's own open, unexpired intent for the same (payer, chain, token, planId)
 	// so page refreshes neither spray MPC keygens nor exhaust pooled destination tags.
-	if existing := reusableIntentFor(ctx, db, asset, payer, chain, token, pq.slug); existing != nil {
+	if existing := reusableIntentFor(ctx, db, asset, payer, chain, token, pq.slug, existingAll, existingAllErr); existing != nil {
 		if amountCents > 0 && existing.Amount != amountCents {
 			existing.Amount = amountCents
 			if hasPlan {
@@ -503,7 +515,7 @@ func nativeCryptoMint(ctx context.Context, org *organization.Organization, in *c
 			return nil, zip.Errorf(400, "unsupported chain %q", chain)
 		}
 		mintCtx := processor.WithAddressFree(processor.WithToken(ctx, token), func(addr string) bool {
-			return !addressClaimedElsewhere(ctx, asset, addr, org.Name, payer, "")
+			return !addressClaimedInList(existingAll, existingAllErr, asset, addr, org.Name, payer, "")
 		})
 		wallet, err = cp.GenerateAddress(mintCtx, payer, chain)
 		if err != nil {
@@ -572,7 +584,7 @@ func applyPlanMetadata(intent *cryptopaymentintent.CryptoPaymentIntent, pq planQ
 	intent.Metadata["chargeCents"] = pq.chargeCents
 }
 
-func reusableIntentFor(ctx context.Context, db *commercedatastore.Datastore, asset depositwatch.Asset, payer, chain, token, wantPlan string) *cryptopaymentintent.CryptoPaymentIntent {
+func reusableIntentFor(ctx context.Context, db *commercedatastore.Datastore, asset depositwatch.Asset, payer, chain, token, wantPlan string, existingAll []orgIntent, existingAllErr error) *cryptopaymentintent.CryptoPaymentIntent {
 	rows := make([]*cryptopaymentintent.CryptoPaymentIntent, 0)
 	keys, err := cryptopaymentintent.Query(db).
 		Filter("CustomerRef=", payer).
@@ -609,7 +621,7 @@ func reusableIntentFor(ctx context.Context, db *commercedatastore.Datastore, ass
 		if r.Metadata != nil {
 			orgName, _ = r.Metadata["org"].(string)
 		}
-		if !asset.Pooled() && addressClaimedElsewhere(ctx, asset, r.DepositAddress, orgName, payer, r.Id()) {
+		if !asset.Pooled() && addressClaimedInList(existingAll, existingAllErr, asset, r.DepositAddress, orgName, payer, r.Id()) {
 			continue
 		}
 		return r

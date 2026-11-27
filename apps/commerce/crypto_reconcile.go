@@ -87,48 +87,106 @@ func listAssetIntentsAllOrgs(chain, token string) ([]orgIntent, error) {
 	if _, err := organization.Query(commercedatastore.New(context.Background())).GetAll(&orgs); err != nil {
 		return nil, err
 	}
-	var out []orgIntent
+	names := make([]string, 0, len(orgs))
+	seen := make(map[string]struct{}, len(orgs))
 	for _, o := range orgs {
 		name := strings.TrimSpace(o.Name)
 		if name == "" {
 			continue
 		}
-		db := commercedatastore.New(commercensctx.WithNamespace(context.Background(), name))
-		rows := make([]*cryptopaymentintent.CryptoPaymentIntent, 0)
-		keys, err := cryptopaymentintent.Query(db).
-			Filter("Chain=", strings.ToLower(strings.TrimSpace(chain))).
-			Filter("Token=", strings.ToLower(strings.TrimSpace(token))).
-			GetAll(&rows)
-		if err != nil {
-			return nil, err
+		if _, dup := seen[name]; dup {
+			continue
 		}
-		for idx := range rows {
-			if idx >= len(keys) {
-				break
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil, nil
+	}
+
+	cleanChain := strings.ToLower(strings.TrimSpace(chain))
+	cleanToken := strings.ToLower(strings.TrimSpace(token))
+
+	workers := 16
+	if len(names) < workers {
+		workers = len(names)
+	}
+	jobs := make(chan string, len(names))
+	for _, n := range names {
+		jobs <- n
+	}
+	close(jobs)
+
+	var (
+		mu       sync.Mutex
+		wg       sync.WaitGroup
+		out      []orgIntent
+		firstErr error
+	)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for name := range jobs {
+				mu.Lock()
+				failed := firstErr != nil
+				mu.Unlock()
+				if failed {
+					return
+				}
+				db := commercedatastore.New(commercensctx.WithNamespace(context.Background(), name))
+				rows := make([]*cryptopaymentintent.CryptoPaymentIntent, 0)
+				keys, err := cryptopaymentintent.Query(db).
+					Filter("Chain=", cleanChain).
+					Filter("Token=", cleanToken).
+					GetAll(&rows)
+				if err != nil {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = err
+					}
+					mu.Unlock()
+					return
+				}
+				if len(rows) == 0 {
+					continue
+				}
+				local := make([]orgIntent, 0, len(rows))
+				for idx := range rows {
+					if idx >= len(keys) {
+						break
+					}
+					loaded := cryptopaymentintent.New(db)
+					if gerr := loaded.GetById(db.EncodeKey(keys[idx])); gerr != nil {
+						continue
+					}
+					local = append(local, orgIntent{org: name, db: db, intent: loaded})
+				}
+				if len(local) > 0 {
+					mu.Lock()
+					out = append(out, local...)
+					mu.Unlock()
+				}
 			}
-			loaded := cryptopaymentintent.New(db)
-			if gerr := loaded.GetById(db.EncodeKey(keys[idx])); gerr != nil {
-				continue
-			}
-			out = append(out, orgIntent{org: name, db: db, intent: loaded})
-		}
+		}()
+	}
+	wg.Wait()
+	if firstErr != nil {
+		return nil, firstErr
 	}
 	return out, nil
 }
 
-// addressClaimedElsewhere reports whether any deposit intent across ANY organization
-// (other than exceptID or the same (orgName, payer)) already holds `address` on `asset`.
-// Because depositledger.Watched scans all orgs and all statuses, sharing a non-pooled
-// address across two distinct subjects wedges the asset's RPC scan pass.
-func addressClaimedElsewhere(_ context.Context, asset depositwatch.Asset, address, orgName, payer, exceptID string) bool {
+// addressClaimedInList evaluates addressClaimedElsewhere against a preloaded all-org
+// snapshot so callers checking multiple candidate addresses do not re-scan every org.
+func addressClaimedInList(all []orgIntent, listErr error, asset depositwatch.Asset, address, orgName, payer, exceptID string) bool {
 	if asset.Pooled() || strings.TrimSpace(address) == "" {
 		return false
 	}
-	target := asset.Identity(address, "")
-	all, err := listAssetIntentsAllOrgs(asset.Chain, asset.Token)
-	if err != nil {
+	if listErr != nil {
 		return true // fail closed if datastore cannot be enumerated
 	}
+	target := asset.Identity(address, "")
 	for _, item := range all {
 		r := item.intent
 		if r.Id() == exceptID || strings.TrimSpace(r.DepositAddress) == "" {
@@ -148,14 +206,23 @@ func addressClaimedElsewhere(_ context.Context, asset depositwatch.Asset, addres
 	return false
 }
 
-// isAssetAmbiguous reports whether two distinct subjects still claim the same non-pooled
-// deposit identity across organizations for `asset`.
-func isAssetAmbiguous(_ context.Context, asset depositwatch.Asset) bool {
-	if asset.Pooled() {
+// addressClaimedElsewhere reports whether any deposit intent across ANY organization
+// (other than exceptID or the same (orgName, payer)) already holds `address` on `asset`.
+// Because depositledger.Watched scans all orgs and all statuses, sharing a non-pooled
+// address across two distinct subjects wedges the asset's RPC scan pass.
+func addressClaimedElsewhere(_ context.Context, asset depositwatch.Asset, address, orgName, payer, exceptID string) bool {
+	if asset.Pooled() || strings.TrimSpace(address) == "" {
 		return false
 	}
 	all, err := listAssetIntentsAllOrgs(asset.Chain, asset.Token)
-	if err != nil {
+	return addressClaimedInList(all, err, asset, address, orgName, payer, exceptID)
+}
+
+func isAssetAmbiguousInList(asset depositwatch.Asset, all []orgIntent, listErr error) bool {
+	if asset.Pooled() {
+		return false
+	}
+	if listErr != nil {
 		return true
 	}
 	ownerByID := map[string]string{}
@@ -172,6 +239,16 @@ func isAssetAmbiguous(_ context.Context, asset depositwatch.Asset) bool {
 		ownerByID[id] = owner
 	}
 	return false
+}
+
+// isAssetAmbiguous reports whether two distinct subjects still claim the same non-pooled
+// deposit identity across organizations for `asset`.
+func isAssetAmbiguous(_ context.Context, asset depositwatch.Asset) bool {
+	if asset.Pooled() {
+		return false
+	}
+	all, err := listAssetIntentsAllOrgs(asset.Chain, asset.Token)
+	return isAssetAmbiguousInList(asset, all, err)
 }
 
 // healAllWatchedCollisions retires unfunded, expired duplicate Kraken shared-address
